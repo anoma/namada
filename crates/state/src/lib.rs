@@ -29,7 +29,6 @@ pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
     MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreRef, StoreType,
 };
-use namada_parameters::{self};
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
@@ -585,7 +584,6 @@ pub mod testing {
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
-    use namada_core::hash::Sha256Hasher;
     use namada_core::time::DateTimeUtc;
     use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
 

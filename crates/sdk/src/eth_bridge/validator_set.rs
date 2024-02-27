@@ -598,25 +598,30 @@ where
         // update epoch in the contract
         args.epoch = Some(new_epoch);
 
-        let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
-            &args,
-            Arc::clone(&eth_client),
-            client,
-            |transf_result| {
-                let Some(receipt) = transf_result else {
-                    tracing::warn!("No transfer receipt received from the Ethereum node");
-                    last_call_succeeded = false;
-                    return;
-                };
-                last_call_succeeded = receipt.is_successful();
-                if last_call_succeeded {
-                    tracing::info!(?receipt, "Ethereum transfer succeeded");
-                    tracing::info!(?new_epoch, "Updated the validator set");
-                } else {
-                    tracing::error!(?receipt, "Ethereum transfer failed");
-                }
-            },
-        ).await;
+        let result =
+            relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
+                &args,
+                Arc::clone(&eth_client),
+                client,
+                |transf_result| {
+                    let Some(receipt) = transf_result else {
+                        tracing::warn!(
+                            "No transfer receipt received from the Ethereum \
+                             node"
+                        );
+                        last_call_succeeded = false;
+                        return;
+                    };
+                    last_call_succeeded = receipt.is_successful();
+                    if last_call_succeeded {
+                        tracing::info!(?receipt, "Ethereum transfer succeeded");
+                        tracing::info!(?new_epoch, "Updated the validator set");
+                    } else {
+                        tracing::error!(?receipt, "Ethereum transfer failed");
+                    }
+                },
+            )
+            .await;
 
         if let Err(err) = result {
             // only print errors, do not exit

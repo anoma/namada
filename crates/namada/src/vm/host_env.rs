@@ -2,7 +2,6 @@
 //! within a virtual machine.
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
@@ -582,7 +581,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
@@ -625,7 +623,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (key, gas) = env
@@ -658,7 +655,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (key, gas) = env
@@ -703,7 +699,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
@@ -729,7 +724,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (prefix, gas) = env
@@ -766,7 +760,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
@@ -846,7 +839,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (key, gas) = env
@@ -889,7 +881,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (key, gas) = env
@@ -925,7 +916,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     // Get the token if the key is a balance or minter key
@@ -983,7 +973,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (key, gas) = env
@@ -1014,7 +1003,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (event, gas) = env
@@ -1039,7 +1027,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (event_type, gas) = env
@@ -1310,7 +1297,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1349,7 +1335,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1388,7 +1373,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1425,7 +1409,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (addr, gas) = env
@@ -1461,7 +1444,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (addr, gas) = env
@@ -1511,7 +1493,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (code_hash, gas) = env
@@ -1556,7 +1537,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1579,7 +1559,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1598,7 +1577,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     tx_charge_gas::<MEM, D, H, CA>(
@@ -1619,7 +1597,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1639,7 +1616,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1662,7 +1638,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1679,7 +1654,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1707,7 +1681,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     // Gas for getting the native token address from storage
@@ -1734,7 +1707,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let state = env.state();
@@ -1767,7 +1739,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1791,7 +1762,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1810,7 +1780,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1845,7 +1814,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1868,7 +1836,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1899,7 +1866,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1917,7 +1883,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1945,7 +1910,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -1989,7 +1953,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -2067,7 +2030,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (str, _gas) = env
@@ -2088,7 +2050,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     use std::rc::Rc;
@@ -2119,7 +2080,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let code_hash = Hash::try_from(code_hash)
@@ -2204,7 +2164,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let (hash_list, gas) = env
@@ -2272,7 +2231,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     CA: WasmCacheAccess,
 {
     let _sentinel = unsafe { env.ctx.sentinel.get() };
@@ -2355,7 +2313,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -2383,7 +2340,6 @@ where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
-
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -2398,8 +2354,6 @@ where
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
-    use std::collections::BTreeSet;
-
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
     use crate::vm::wasm::memory::WasmMemory;

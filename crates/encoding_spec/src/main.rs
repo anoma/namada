@@ -17,7 +17,6 @@
 
 use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
-use std::iter::Extend;
 
 use borsh::schema::{BorshSchemaContainer, Declaration, Definition};
 use borsh::{schema, schema_container_of};
@@ -288,10 +287,10 @@ fn definition_to_table(name: &Declaration, def: schema::Definition) -> Table {
             (desc, rows)
         }
         schema::Definition::Sequence {
-            length_width,
+            length_width: 0,
             length_range,
             elements,
-        } if length_width == 0 => {
+        } => {
             let rows = None;
             let desc = format!(
                 "Fixed-size array with {} elements of {}",
@@ -330,7 +329,7 @@ fn definition_to_table(name: &Declaration, def: schema::Definition) -> Table {
         } => {
             let mut rows = madato::types::Table::default();
             // build rows for: Variant, Name, Type
-            for (_, (variant, name, type_name)) in variants.iter().enumerate() {
+            for (variant, name, type_name) in variants.iter() {
                 rows.push(TableRow::from_iter([
                     ("Prefix byte".into(), variant.to_string()),
                     ("Name".into(), name.clone()),

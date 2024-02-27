@@ -300,7 +300,7 @@ fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
     quote! {
         impl #struct_def_ident {
             /// A list of all storage keys
-            pub const ALL: &[&'static str] = {
+            pub const ALL: &'static [&'static str] = {
                 let #struct_def_ident {
                     #ident_list
                 } = Self::VALUES;
@@ -389,7 +389,7 @@ mod test_proc_macros {
         let expected_impl = quote! {
             impl Keys {
                 /// A list of all storage keys
-                pub const ALL: &[&'static str] = {
+                pub const ALL: &'static [&'static str] = {
                     let Keys { bird, is, the, word } = Self::VALUES;
                     &[bird, is, the, word]
                 };
@@ -520,7 +520,7 @@ mod test_proc_macros {
         let expected_impl = quote! {
             impl Keys {
                 /// A list of all storage keys
-                pub const ALL: &[&'static str] = {
+                pub const ALL: &'static [&'static str] = {
                     let Keys { param1, param2 } = Self::VALUES;
                     &[param1, param2]
                 };

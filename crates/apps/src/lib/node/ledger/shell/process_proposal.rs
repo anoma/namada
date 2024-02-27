@@ -2,16 +2,8 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::core::hints;
-use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
-use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::pos::PosQueries;
-use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::tx_queue::TxInQueue;
-use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::state::{TempWlState, WlState};
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::vote_ext::ethereum_tx_data_variants;
 
@@ -662,25 +654,19 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::core::ethereum_events::EthereumEvent;
     use namada::core::key::*;
     use namada::core::storage::Epoch;
-    use namada::core::time::DateTimeUtc;
+    use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{
-        Code, Data, Section, SignableEthMessage, Signature, Signed,
-    };
-    use namada::vote_ext::{
-        bridge_pool_roots, ethereum_events, EthereumTxData,
-    };
-    use namada::{replay_protection, token};
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature, Signed};
+    use namada::vote_ext::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
-        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        ProcessProposal, TestError, TestShell,
+        deactivate_bridge, gen_keypair, get_bp_bytes_to_sign, ProcessProposal,
+        TestError, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
     use crate::wallet;

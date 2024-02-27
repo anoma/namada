@@ -11,7 +11,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use bech32::{self, FromBase32, ToBase32, Variant};
+use bech32::{FromBase32, ToBase32, Variant};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

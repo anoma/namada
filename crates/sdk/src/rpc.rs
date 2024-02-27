@@ -685,7 +685,7 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
     let block = &blocks
-        .get(0)
+        .first()
         .ok_or_else(|| {
             TError::server(
                 "Unable to find a block applying the given transaction"

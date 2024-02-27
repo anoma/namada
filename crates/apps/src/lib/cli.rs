@@ -2926,7 +2926,6 @@ pub mod cmds {
 
 pub mod args {
     use std::collections::HashMap;
-    use std::convert::TryFrom;
     use std::env;
     use std::net::SocketAddr;
     use std::path::PathBuf;
@@ -6336,7 +6335,7 @@ pub mod args {
 
             let find_viewing_key = |w: &mut Wallet<CliWalletUtils>| {
                 w.find_viewing_key(&self.viewing_key.raw)
-                    .map(Clone::clone)
+                    .copied()
                     .unwrap_or_else(|_| {
                         eprintln!(
                             "Unknown viewing key {}",

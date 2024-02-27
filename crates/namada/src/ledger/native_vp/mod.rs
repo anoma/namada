@@ -632,8 +632,6 @@ where
 pub(super) mod testing {
     use std::collections::HashMap;
 
-    use borsh::BorshDeserialize;
-
     use super::*;
 
     #[derive(Debug, Default)]

@@ -640,7 +640,6 @@ mod test_bridge_pool_vp {
     use std::cell::RefCell;
     use std::env::temp_dir;
 
-    use borsh::BorshDeserialize;
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::validity_predicate::VpSentinel;
     use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
@@ -655,7 +654,6 @@ mod test_bridge_pool_vp {
 
     use super::*;
     use crate::address::testing::{nam, wnam};
-    use crate::address::InternalAddress;
     use crate::eth_bridge_pool::{GasFee, TransferToEthereum};
     use crate::hash::Hash;
     use crate::ledger::gas::VpGasMeter;

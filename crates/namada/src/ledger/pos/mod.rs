@@ -2,8 +2,6 @@
 
 pub mod vp;
 
-use std::convert::TryFrom;
-
 use namada_core::address;
 pub use namada_core::dec::Dec;
 pub use namada_core::key::common;

@@ -185,10 +185,7 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use namada_core::storage::BlockHeight;
-    use namada_core::{address, token};
+    use namada_core::address;
     use namada_proof_of_stake::parameters::OwnedPosParams;
     use namada_proof_of_stake::storage::write_pos_params;
 

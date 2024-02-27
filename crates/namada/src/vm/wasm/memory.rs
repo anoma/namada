@@ -453,9 +453,7 @@ impl<T: Tunables> Tunables for Limit<T> {
 
 #[cfg(test)]
 pub mod tests {
-    use wasmer::{
-        wat2wasm, BaseTunables, Cranelift, Instance, Module, Store, Target,
-    };
+    use wasmer::{wat2wasm, Cranelift, Instance, Module, Store};
 
     use super::*;
 

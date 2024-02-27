@@ -141,7 +141,7 @@ mod test {
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
-    use namada_sdk::tendermint_rpc::{self, Error as RpcError, Response};
+    use namada_sdk::tendermint_rpc::{Error as RpcError, Response};
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
@@ -258,7 +258,7 @@ mod test {
 
         async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>
         where
-            R: tendermint_rpc::SimpleRequest,
+            R: namada_sdk::tendermint_rpc::SimpleRequest,
         {
             Ok(R::Response::from_string("TODO").unwrap().into())
         }

@@ -215,7 +215,7 @@ fn vp_implicit(c: &mut Criterion) {
 
     let reveal_pk = shell.generate_tx(
         TX_REVEAL_PK_WASM,
-        &implicit_account.to_public(),
+        implicit_account.to_public(),
         None,
         None,
         vec![],

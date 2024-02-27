@@ -545,6 +545,12 @@ impl FromStr for DenominatedAmount {
 
 impl PartialOrd for DenominatedAmount {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DenominatedAmount {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.denom < other.denom {
             let diff = other.denom.0 - self.denom.0;
             let (div, rem) =
@@ -554,12 +560,12 @@ impl PartialOrd for DenominatedAmount {
             } else {
                 div + Uint::one()
             };
-            let ord = self.amount.raw.partial_cmp(&div_ceil);
-            if let Some(Ordering::Equal) = ord {
+            let ord = self.amount.raw.cmp(&div_ceil);
+            if let Ordering::Equal = ord {
                 if rem.is_zero() {
-                    Some(Ordering::Equal)
+                    Ordering::Equal
                 } else {
-                    Some(Ordering::Greater)
+                    Ordering::Greater
                 }
             } else {
                 ord
@@ -573,23 +579,17 @@ impl PartialOrd for DenominatedAmount {
             } else {
                 div + Uint::one()
             };
-            let ord = div_ceil.partial_cmp(&other.amount.raw);
-            if let Some(Ordering::Equal) = ord {
+            let ord = div_ceil.cmp(&other.amount.raw);
+            if let Ordering::Equal = ord {
                 if rem.is_zero() {
-                    Some(Ordering::Equal)
+                    Ordering::Equal
                 } else {
-                    Some(Ordering::Less)
+                    Ordering::Less
                 }
             } else {
                 ord
             }
         }
-    }
-}
-
-impl Ord for DenominatedAmount {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
     }
 }
 

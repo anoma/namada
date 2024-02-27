@@ -10,10 +10,8 @@ use namada::ethereum_bridge::protocol::transactions::validator_set_update::sign_
 pub use namada::ethereum_bridge::protocol::validation::VoteExtensionError;
 use namada::tx::Signed;
 use namada::vote_ext::{
-    bridge_pool_roots, ethereum_events, validator_set_update, EthereumTxData,
-    VoteExtension,
+    bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
 };
-use namada_sdk::eth_bridge::EthBridgeQueries;
 
 use super::*;
 use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;

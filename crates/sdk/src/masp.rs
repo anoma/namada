@@ -538,7 +538,7 @@ impl Unscanned {
     where
         I: IntoIterator<Item = IndexedNoteEntry>,
     {
-        self.txs.extend(items.into_iter());
+        self.txs.extend(items);
     }
 
     fn contains_height(&self, height: u64) -> bool {
@@ -1310,7 +1310,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let Some(denom) = query_denom(client, token).await else {
                 return Err(Error::Query(QueryError::General(format!(
                     "denomination for token {token}"
-                ))))
+                ))));
             };
             for position in MaspDigitPos::iter() {
                 let asset_type =
@@ -1377,7 +1377,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         {
             // Query for the ID of the last accepted transaction
             let Some((token, denom, position, ep, conv, path)) =
-                query_conversion(client, asset_type).await else { return };
+                query_conversion(client, asset_type).await
+            else {
+                return;
+            };
             self.asset_types.insert(
                 asset_type,
                 AssetData {
@@ -2038,9 +2041,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Convert transaction amount into MASP types
         let Some(denom) = query_denom(context.client(), token).await else {
-            return Err(TransferErr::General(Error::from(QueryError::General(format!(
-                "denomination for token {token}"
-            )))))
+            return Err(TransferErr::General(Error::from(
+                QueryError::General(format!("denomination for token {token}")),
+            )));
         };
         let (asset_types, masp_amount) = {
             let mut shielded = context.shielded_mut().await;
@@ -2848,19 +2851,16 @@ pub mod testing {
     use std::sync::Mutex;
 
     use bls12_381::{G1Affine, G2Affine};
-    use masp_primitives::asset_type::AssetType;
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
     use masp_primitives::ff::Field;
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::Signature;
-    use masp_primitives::sapling::{
-        Diversifier, Node, ProofGenerationKey, Rseed,
-    };
+    use masp_primitives::sapling::{ProofGenerationKey, Rseed};
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
     use masp_proofs::bellman::groth16::Proof;
-    use proptest::collection::SizeRange;
     use proptest::prelude::*;
+    use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
     use proptest::{collection, option, prop_compose};
 

@@ -73,10 +73,7 @@ where
     .timeout(deadline, || async {
         let fut_syncing = client.syncing();
         let fut_block_num = client.get_block_number();
-        let Ok(status) = futures::try_join!(
-            fut_syncing,
-            fut_block_num,
-        ) else {
+        let Ok(status) = futures::try_join!(fut_syncing, fut_block_num,) else {
             return ControlFlow::Continue(());
         };
         ControlFlow::Break(match status {

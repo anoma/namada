@@ -127,7 +127,7 @@ where
                 }
             } else if is_any_token_parameter_key(key).is_some() {
                 return self.is_valid_parameter(tx_data);
-            } else if key.segments.get(0)
+            } else if key.segments.first()
                 == Some(
                     &Address::Internal(InternalAddress::Multitoken).to_db_key(),
                 )
@@ -213,17 +213,15 @@ where
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
-    use std::collections::BTreeSet;
 
     use borsh_ext::BorshSerializeExt;
     use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_state::testing::TestState;
     use namada_tx::data::TxType;
-    use namada_tx::{Code, Data, Section, Signature, Tx};
+    use namada_tx::{Code, Data, Section, Signature};
 
     use super::*;
-    use crate::address::{Address, InternalAddress};
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
@@ -231,10 +229,7 @@ mod tests {
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::ibc::storage::ibc_token;
     use crate::storage::TxIndex;
-    use crate::token::storage_key::{
-        balance_key, minted_balance_key, minter_key,
-    };
-    use crate::token::Amount;
+    use crate::token::storage_key::{balance_key, minted_balance_key};
     use crate::vm::wasm::compilation_cache::common::testing::cache as wasm_cache;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Multitoken);

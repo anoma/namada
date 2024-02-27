@@ -485,13 +485,11 @@ impl SignableBytes for &crate::keccak::KeccakHash {
 /// Helpers for testing with keys.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use borsh::BorshDeserialize;
     use proptest::prelude::*;
     use rand::prelude::{StdRng, ThreadRng};
     use rand::{thread_rng, SeedableRng};
 
-    use super::SigScheme;
-    use crate::key::*;
+    use super::*;
 
     /// Generate an arbitrary public key
     pub fn arb_pk<S: SigScheme>()

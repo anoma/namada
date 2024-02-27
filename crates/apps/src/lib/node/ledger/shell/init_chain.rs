@@ -6,13 +6,12 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::account::protocol_pk_key;
-use namada::core::address::Address;
 use namada::core::hash::Hash as CodeHash;
-use namada::core::time::{DateTimeUtc, TimeZone, Utc};
+use namada::core::time::{TimeZone, Utc};
 use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
-use namada::state::{DBIter, StorageHasher, StorageWrite, DB};
+use namada::state::StorageWrite;
 use namada::token::{credit_tokens, write_denom};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -27,7 +26,6 @@ use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
-use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 
@@ -186,10 +184,7 @@ where
         #[cfg(any(test, feature = "testing"))] _num_validators: u64,
     ) -> ControlFlow<()> {
         let ts: protobuf::Timestamp = init.time.into();
-        let initial_height = init
-            .initial_height
-            .try_into()
-            .expect("Unexpected block height");
+        let initial_height = init.initial_height.into();
         // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
         let genesis_time: DateTimeUtc = (Utc
             .timestamp_opt(ts.seconds, ts.nanos as u32))
@@ -280,8 +275,8 @@ where
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<(), Vec<u8>> {
         use std::collections::hash_map::Entry;
-        let Some(vp_filename) =
-            self.validate(
+        let Some(vp_filename) = self
+            .validate(
                 genesis
                     .vps
                     .wasm
@@ -289,8 +284,10 @@ where
                     .map(|conf| conf.filename.clone())
                     .ok_or_else(|| {
                         Panic::MissingVpWasmConfig(name.to_string())
-                }))
-                .or_placeholder(None)? else {
+                    }),
+            )
+            .or_placeholder(None)?
+        else {
             return self.proceed_with(vec![]);
         };
         let code = match vp_cache.entry(vp_filename.clone()) {
@@ -320,10 +317,13 @@ where
         } = params;
         let mut is_implicit_vp_stored = false;
 
-        let Some(checksums) = self.validate(
-            wasm_loader::Checksums::read_checksums(&self.wasm_dir)
-                .map_err(|_| Panic::ChecksumsFile)
-        ).or_placeholder(None)? else {
+        let Some(checksums) = self
+            .validate(
+                wasm_loader::Checksums::read_checksums(&self.wasm_dir)
+                    .map_err(|_| Panic::ChecksumsFile),
+            )
+            .or_placeholder(None)?
+        else {
             return self.proceed_with(());
         };
 
@@ -455,15 +455,20 @@ where
         for (token_alias, TokenBalances(balances)) in &genesis.balances.token {
             tracing::debug!("Initializing token balances {token_alias}");
 
-            let Some(token_address) = self.validate(genesis
-                .tokens
-                .token
-                .get(token_alias)
-                .ok_or_else(|| Panic::MissingTokenConfig(token_alias.to_string()))
-                .map(|conf| &conf.address)
-            )
-            .or_placeholder(None)? else {
-                continue
+            let Some(token_address) = self
+                .validate(
+                    genesis
+                        .tokens
+                        .token
+                        .get(token_alias)
+                        .ok_or_else(|| {
+                            Panic::MissingTokenConfig(token_alias.to_string())
+                        })
+                        .map(|conf| &conf.address),
+                )
+                .or_placeholder(None)?
+            else {
+                continue;
             };
 
             let mut total_token_balance = token::Amount::zero();
@@ -936,12 +941,11 @@ mod test {
     use std::str::FromStr;
 
     use namada::core::string_encoding::StringEncoded;
-    use namada::state::DBIter;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;
     use crate::config::genesis::{transactions, GenesisAddress};
-    use crate::node::ledger::shell::test_utils::{self, TestShell};
+    use crate::node::ledger::shell::test_utils::TestShell;
     use crate::wallet::defaults;
 
     /// Test that the init-chain handler never commits changes directly to the
@@ -993,10 +997,9 @@ mod test {
             *vp_cache.get("vp_user.wasm").expect("Test failed"),
             Vec::<u8>::new()
         );
-        let [Panic::ReadingWasm(_, _)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::ReadingWasm(_, _)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
 
@@ -1004,10 +1007,9 @@ mod test {
         genesis.vps.wasm.remove("vp_user").expect("Test failed");
         let code = initializer.lookup_vp("vp_user", &genesis, &mut vp_cache);
         assert_eq!(code, ControlFlow::Continue(vec![]));
-        let [Panic::MissingVpWasmConfig(_)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::MissingVpWasmConfig(_)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
     }
@@ -1048,10 +1050,9 @@ mod test {
             .store_wasms(&genesis.get_chain_parameters(test_dir.path()));
         assert_eq!(res, ControlFlow::Continue(()));
         let errors = initializer.errors.iter().collect::<Vec<_>>();
-        let [
-            Error::ReadingWasm(_),
-            Error::LoadingWasm(_),
-        ]: [&Error; 2] = errors.try_into().expect("Test failed") else {
+        let [Error::ReadingWasm(_), Error::LoadingWasm(_)]: [&Error; 2] =
+            errors.try_into().expect("Test failed")
+        else {
             panic!("Test failed");
         };
         let expected_panics = vec![
@@ -1078,7 +1079,8 @@ mod test {
             Error::ReadingWasm(_),
             Error::LoadingWasm(_),
             Error::LoadingWasm(_),
-        ]: [&Error; 3] = errors.try_into().expect("Test failed") else {
+        ]: [&Error; 3] = errors.try_into().expect("Test failed")
+        else {
             panic!("Test failed");
         };
         let expected_panics = vec![Panic::MissingImplicitVP("None".into())];
@@ -1102,10 +1104,9 @@ mod test {
             .expect("Test failed");
         let res = initializer.init_token_balances(&genesis);
         assert_eq!(res, ControlFlow::Continue(()));
-        let [Panic::MissingTokenConfig(_)]: [Panic; 1] = initializer.panics
-            .clone()
-            .try_into()
-            .expect("Test failed") else {
+        let [Panic::MissingTokenConfig(_)]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed")
+        else {
             panic!("Test failed")
         };
     }

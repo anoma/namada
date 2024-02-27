@@ -151,9 +151,8 @@ mod tests {
 
     use namada::core::address;
     use namada::core::key::common::PublicKey;
-    use namada::core::storage::Epoch;
     use namada::gas::VpGasMeter;
-    use namada::ledger::pos::{PosParams, PosVP};
+    use namada::ledger::pos::PosVP;
     use namada::token;
     use namada_core::validity_predicate::VpSentinel;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
@@ -171,7 +170,6 @@ mod tests {
     };
     use super::*;
     use crate::native_vp::TestNativeVpEnv;
-    use crate::tx::tx_host_env;
 
     prop_state_machine! {
         #![proptest_config(Config {
@@ -473,8 +471,7 @@ mod tests {
             if self.invalid_pos_changes.is_empty()
                 && self.invalid_arbitrary_changes.is_empty()
             {
-                self.committed_valid_actions
-                    .extend(valid_actions_to_commit.into_iter());
+                self.committed_valid_actions.extend(valid_actions_to_commit);
             }
             self.invalid_pos_changes = vec![];
             self.invalid_arbitrary_changes = vec![];

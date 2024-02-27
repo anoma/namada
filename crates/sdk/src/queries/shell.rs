@@ -18,7 +18,7 @@ use namada_core::storage::{
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
-use namada_storage::{self, ResultExt, StorageRead};
+use namada_storage::{ResultExt, StorageRead};
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
 

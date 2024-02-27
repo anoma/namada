@@ -61,7 +61,7 @@ const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
-    match &key.segments.get(0) {
+    match &key.segments.first() {
         Some(DbKeySeg::AddressSeg(addr)) => addr == &ADDRESS,
         _ => false,
     }

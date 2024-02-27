@@ -529,7 +529,7 @@ impl AbstractPosState {
                 !is_withdrawable
             })
         }
-        records.withdrawn.extend(to_store.into_iter());
+        records.withdrawn.extend(to_store);
     }
 
     /// Get or insert default mutable records

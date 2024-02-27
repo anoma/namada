@@ -461,7 +461,7 @@ async fn write_tm_genesis(
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,
-        /// This parameter has no value anymore in Tendermint-core
+        // This parameter has no value anymore in Tendermint-core
         time_iota_ms: block::Size::default_time_iota_ms(),
     };
     genesis.consensus_params.block = size;

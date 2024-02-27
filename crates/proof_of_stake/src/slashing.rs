@@ -52,13 +52,7 @@ where
         for evidence in byzantine_validators {
             // dbg!(&evidence);
             tracing::info!("Processing evidence {evidence:?}.");
-            let evidence_height = match u64::try_from(evidence.height) {
-                Ok(height) => height,
-                Err(err) => {
-                    tracing::error!("Unexpected evidence block height {}", err);
-                    continue;
-                }
-            };
+            let evidence_height = u64::from(evidence.height);
             let evidence_epoch =
                 match pred_epochs.get_epoch(BlockHeight(evidence_height)) {
                     Some(epoch) => epoch,
@@ -1203,10 +1197,8 @@ where
         );
         let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
-        let infracting_stake = slashes.iter(storage)?.fold(
-            Ok(Dec::zero()),
-            |acc: namada_storage::Result<Dec>, res| {
-                let acc = acc?;
+        let infracting_stake =
+            slashes.iter(storage)?.try_fold(Dec::zero(), |acc, res| {
                 let (
                     NestedSubKey::Data {
                         key: validator,
@@ -1220,9 +1212,10 @@ where
                 // tracing::debug!("Val {} stake: {}", &validator,
                 // validator_stake);
 
-                Ok(acc + Dec::from(validator_stake))
-            },
-        )?;
+                Ok::<Dec, namada_storage::Error>(
+                    acc + Dec::from(validator_stake),
+                )
+            })?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
     let cubic_rate =
