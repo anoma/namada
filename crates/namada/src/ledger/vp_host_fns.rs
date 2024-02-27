@@ -188,7 +188,9 @@ where
             Ok(false)
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Temp { .. }) => {
+            Err(RuntimeError::ReadTemporaryValueError)
+        }
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
@@ -220,7 +222,9 @@ where
             Ok(false)
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+        Some(&write_log::StorageModification::Temp { .. }) => {
+            Err(RuntimeError::ReadTemporaryValueError)
+        }
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
