@@ -4,9 +4,8 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::state::{StorageRead, StorageWrite};
+use namada::state::StorageWrite;
 use namada::token::conversion::token_map_handle;
-use namada::token::storage_key::masp_token_map_key;
 use namada::token::{self, DenominatedAmount};
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
@@ -2131,15 +2130,15 @@ fn dynamic_assets() -> Result<()> {
     let token_map = token_map_handle();
     let test_tokens = {
         // Only distribute rewards for NAM tokens
-        let mut wls = node.shell.lock().unwrap().wl_storage;
-        let mut tokens = token_map
-            .iter(&wls)
+        let wls = &mut node.shell.lock().unwrap().wl_storage;
+        let tokens = token_map
+            .iter(wls)
             .unwrap()
             .map(|res| res.unwrap())
             .collect::<BTreeMap<_, _>>();
         for alias in tokens.keys() {
             if alias != &nam {
-                token_map.remove(&mut wls, alias).unwrap();
+                token_map.remove(wls, alias).unwrap();
             }
         }
         tokens

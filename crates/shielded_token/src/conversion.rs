@@ -9,7 +9,6 @@ use namada_core::types::address::{Address, MASP};
 use namada_core::types::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::types::hash::Hash;
-#[cfg(any(feature = "multicore", test))]
 use namada_core::types::uint::Uint;
 use namada_parameters as parameters;
 use namada_state::collections::{LazyCollection, LazyMap};
@@ -19,11 +18,11 @@ use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
 #[cfg(any(feature = "multicore", test))]
-use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
+use crate::storage_key::masp_assets_hash_key;
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
-    masp_max_reward_rate_key,
+    masp_max_reward_rate_key, masp_token_map_key,
 };
 
 type TokenMap = LazyMap<String, Address>;
@@ -230,7 +229,7 @@ where
     let mut masp_reward_keys = token_map
         .iter(wl_storage)?
         .map(|a| {
-            let (_, address) = a.unwrap();
+            let (_, address) = a.expect("The address should be stored");
             address
         })
         .collect::<Vec<_>>();
