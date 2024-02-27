@@ -793,7 +793,7 @@ mod tests {
 
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
-        dbg!(&keys_changed);
+        dbg!(keys_changed.iter().map(std::string::ToString::to_string).collect::<Vec<_>>());
         // let verifiers: BTreeSet<Address> = BTreeSet::default();
         let verifiers: BTreeSet<Address> = vp_env.get_verifiers();
         dbg!(&verifiers);
