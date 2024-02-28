@@ -54,7 +54,7 @@ use namada_core::address::{Address, MASP};
 use namada_core::dec::Dec;
 use namada_core::ibc::core::channel::types::msgs::PacketMsg;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_core::masp::{
+pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
