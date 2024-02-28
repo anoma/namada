@@ -52,7 +52,7 @@ use masp_proofs::prover::LocalTxProver;
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::{Address, MASP};
 use namada_core::dec::Dec;
-use namada_core::masp::{
+pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
