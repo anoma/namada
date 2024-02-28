@@ -1319,9 +1319,7 @@ mod tests {
             // Update the vp
             tx::ctx()
                 .write(
-                    &namada::core::types::storage::Key::validity_predicate(
-                        address,
-                    ),
+                    &namada::storage::Key::validity_predicate(address),
                     vp_hash,
                 )
                 .unwrap();
