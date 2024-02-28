@@ -19,6 +19,9 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::I128Sum;
 use namada_account::{InitAccount, UpdateAccount};
+use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::dec::Dec;
+use namada_core::hash::Hash;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
@@ -26,15 +29,12 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
-use namada_core::types::address::{Address, InternalAddress, MASP};
-use namada_core::types::dec::Dec;
-use namada_core::types::hash::Hash;
-use namada_core::types::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
-use namada_core::types::key::*;
-use namada_core::types::masp::{AssetData, TransferSource, TransferTarget};
-use namada_core::types::storage::Epoch;
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{storage, token};
+use namada_core::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
+use namada_core::key::*;
+use namada_core::masp::{AssetData, TransferSource, TransferTarget};
+use namada_core::storage::Epoch;
+use namada_core::time::DateTimeUtc;
+use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
 };

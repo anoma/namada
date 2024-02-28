@@ -9,15 +9,15 @@ use borsh_ext::BorshSerializeExt;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::eth_bridge_pool::{
+use namada_core::address::{Address, InternalAddress};
+use namada_core::eth_abi::Encode;
+use namada_core::eth_bridge_pool::{
     erc20_token_address, GasFee, PendingTransfer, TransferToEthereum,
     TransferToEthereumKind,
 };
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::voting_power::FractionalVotingPower;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::keccak::KeccakHash;
+use namada_core::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
@@ -744,9 +744,10 @@ mod recommendations {
     use std::collections::BTreeSet;
 
     use borsh::BorshDeserialize;
-    use namada_core::types::ethereum_events::Uint as EthUint;
-    use namada_core::types::storage::BlockHeight;
-    use namada_core::types::uint::{self, Uint, I256};
+    use namada_core::ethereum_events::Uint as EthUint;
+    use namada_core::storage::BlockHeight;
+    use namada_core::uint::{self, Uint, I256};
+    use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
@@ -756,8 +757,6 @@ mod recommendations {
     use crate::eth_bridge::storage::bridge_pool::{
         get_nonce_key, get_signed_root_key,
     };
-    use crate::eth_bridge::storage::proof::BridgePoolRootProof;
-    use crate::io::Io;
 
     const fn unsigned_transfer_fee() -> Uint {
         Uint::from_u64(37_500_u64)
@@ -1220,7 +1219,7 @@ mod recommendations {
 
     #[cfg(test)]
     mod test_recommendations {
-        use namada_core::types::address::Address;
+        use namada_core::address;
 
         use super::*;
         use crate::io::StdIo;
@@ -1243,7 +1242,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::types::address::nam(),
+                    token: address::testing::nam(),
                     amount: gas_amount.into(),
                     payer: bertha_address(),
                 },
@@ -1286,7 +1285,7 @@ mod recommendations {
             /// Add ETH to a conversion table.
             fn add_eth_to_conversion_table(&mut self) {
                 self.conversion_table.insert(
-                    namada_core::types::address::eth(),
+                    address::testing::eth(),
                     args::BpConversionTableEntry {
                         alias: "ETH".into(),
                         conversion_rate: 1e9, // 1 ETH = 1e9 GWEI
@@ -1311,7 +1310,7 @@ mod recommendations {
                     amount: Default::default(),
                 },
                 gas_fee: GasFee {
-                    token: namada_core::types::address::eth(),
+                    token: address::testing::eth(),
                     amount: 1_000_000_000_u64.into(), // 1 GWEI
                     payer: bertha_address(),
                 },
@@ -1347,8 +1346,7 @@ mod recommendations {
                 ctx.expected_eligible.push(EligibleRecommendation {
                     transfer_hash: ctx.pending.keccak256().to_string(),
                     cost: transfer_fee()
-                        - I256::try_from(ctx.pending.gas_fee.amount)
-                            .expect("Test failed"),
+                        - I256::from(ctx.pending.gas_fee.amount),
                     pending_transfer: ctx.pending.clone(),
                 });
             });
@@ -1544,14 +1542,14 @@ mod recommendations {
             let conversion_table = {
                 let mut t = HashMap::new();
                 t.insert(
-                    namada_core::types::address::apfel(),
+                    address::testing::apfel(),
                     args::BpConversionTableEntry {
                         alias: APFEL.into(),
                         conversion_rate: APF_RATE,
                     },
                 );
                 t.insert(
-                    namada_core::types::address::schnitzel(),
+                    address::testing::schnitzel(),
                     args::BpConversionTableEntry {
                         alias: SCHNITZEL.into(),
                         conversion_rate: SCH_RATE,
@@ -1566,15 +1564,13 @@ mod recommendations {
                 let transfer_paid_in_apfel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 1.into();
-                    pending.gas_fee.token =
-                        namada_core::types::address::apfel();
+                    pending.gas_fee.token = address::testing::apfel();
                     pending
                 };
                 let transfer_paid_in_schnitzel = {
                     let mut pending = ctx.pending.clone();
                     pending.transfer.amount = 2.into();
-                    pending.gas_fee.token =
-                        namada_core::types::address::schnitzel();
+                    pending.gas_fee.token = address::testing::schnitzel();
                     pending
                 };
                 // add the transfers to the pool, and expect them to
@@ -1591,8 +1587,7 @@ mod recommendations {
                         transfer_hash: pending.keccak256().to_string(),
                         cost: transfer_fee()
                             - I256::from((1e9 / rate).floor() as u64)
-                                * I256::try_from(pending.gas_fee.amount)
-                                    .expect("Test failed"),
+                                * I256::from(pending.gas_fee.amount),
                         pending_transfer: pending,
                     });
                 }

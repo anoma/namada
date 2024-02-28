@@ -4,16 +4,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
-use namada_core::types::address::Address;
-use namada_core::types::chain::ChainId;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{common, SchemeType};
-use namada_core::types::masp::PaymentAddress;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{storage, token};
+use namada_core::address::Address;
+use namada_core::chain::ChainId;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::keccak::KeccakHash;
+use namada_core::key::{common, SchemeType};
+use namada_core::masp::PaymentAddress;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::time::DateTimeUtc;
+use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -95,18 +95,18 @@ pub struct BpConversionTableEntry {
 impl NamadaTypes for SdkTypes {
     type AddrOrNativeToken = Address;
     type Address = Address;
-    type BalanceOwner = namada_core::types::masp::BalanceOwner;
+    type BalanceOwner = namada_core::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
     type EthereumAddress = ();
-    type Keypair = namada_core::types::key::common::SecretKey;
-    type PublicKey = namada_core::types::key::common::PublicKey;
-    type SpendingKey = namada_core::types::masp::ExtendedSpendingKey;
+    type Keypair = namada_core::key::common::SecretKey;
+    type PublicKey = namada_core::key::common::PublicKey;
+    type SpendingKey = namada_core::masp::ExtendedSpendingKey;
     type TendermintAddress = tendermint_rpc::Url;
-    type TransferSource = namada_core::types::masp::TransferSource;
-    type TransferTarget = namada_core::types::masp::TransferTarget;
-    type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
+    type TransferSource = namada_core::masp::TransferSource;
+    type TransferTarget = namada_core::masp::TransferTarget;
+    type ViewingKey = namada_core::masp::ExtendedViewingKey;
 }
 
 /// Common query arguments

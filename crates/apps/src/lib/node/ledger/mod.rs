@@ -14,11 +14,12 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
+use namada::core::storage::Key;
+use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
-use namada::types::storage::Key;
-use namada::types::time::DateTimeUtc;
-use namada_sdk::tendermint::abci::request::CheckTxKind;
+use namada::tendermint::abci::request::CheckTxKind;
+use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
@@ -66,16 +67,15 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 impl Shell {
     fn load_proposals(&mut self) {
         let proposals_key = governance_storage::get_commiting_proposals_prefix(
-            self.wl_storage.storage.last_epoch.0,
+            self.state.in_mem().last_epoch.0,
         );
 
-        let (proposal_iter, _) =
-            self.wl_storage.storage.iter_prefix(&proposals_key);
+        let (proposal_iter, _) = self.state.db_iter_prefix(&proposals_key);
         for (key, _, _) in proposal_iter {
             let key =
                 Key::from_str(key.as_str()).expect("Key should be parsable");
             if governance_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.wl_storage.storage.last_epoch.0
+                != self.state.in_mem().last_epoch.0
             {
                 // NOTE: `iter_prefix` iterate over the matching prefix. In this
                 // case  a proposal with grace_epoch 110 will be
@@ -753,8 +753,8 @@ pub fn test_genesis_files(
     genesis: config::genesis::chain::Finalized,
     wasm_dir: PathBuf,
 ) {
+    use namada::core::hash::Sha256Hasher;
     use namada::state::mockdb::MockDB;
-    use namada::types::hash::Sha256Hasher;
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service

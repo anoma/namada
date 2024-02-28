@@ -380,6 +380,7 @@ pub trait AppExt {
 /// Extensions for finding matching commands and arguments.
 /// The functions match commands and arguments defined in [`AppExt`].
 pub trait ArgMatchesExt {
+    #[allow(dead_code)]
     fn args_parse<T: Args>(&self) -> T;
 }
 

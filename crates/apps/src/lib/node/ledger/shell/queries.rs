@@ -2,11 +2,8 @@
 
 use namada::ledger::dry_run_tx;
 use namada::ledger::queries::{RequestCtx, ResponseQuery};
-use namada::token;
-use namada::types::address::Address;
 
 use super::*;
-use crate::node::ledger::response;
 
 impl<D, H> Shell<D, H>
 where
@@ -19,7 +16,7 @@ where
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
         let ctx = RequestCtx {
-            wl_storage: &self.wl_storage,
+            state: self.state.read_only(),
             event_log: self.event_log(),
             vp_wasm_cache: self.vp_wasm_cache.read_only(),
             tx_wasm_cache: self.tx_wasm_cache.read_only(),
@@ -56,7 +53,7 @@ where
     ) -> token::Amount {
         // Storage read must not fail, but there might be no value, in which
         // case default (0) is returned
-        token::read_balance(&self.wl_storage, token, owner)
+        token::read_balance(&self.state, token, owner)
             .expect("Token balance read in the protocol must not fail")
     }
 }
@@ -66,16 +63,14 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
+    use namada::core::storage::{BlockHash, Epoch};
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
-    use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::storage::{BlockHash, Epoch};
-    use namada_sdk::eth_bridge::{EthBridgeQueries, SendValsetUpd};
+    use namada_sdk::eth_bridge::SendValsetUpd;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::test_utils::get_pkh_from_address;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
@@ -99,7 +94,7 @@ mod test_queries {
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
-                    shell.wl_storage.storage.begin_block(
+                    shell.state.in_mem_mut().begin_block(
                         BlockHash::default(), curr_block_height.into()).unwrap();
 
                     if prev_epoch != Some(curr_epoch) {
@@ -107,7 +102,7 @@ mod test_queries {
                         shell.start_new_epoch_in(EPOCH_NUM_BLOCKS);
                     }
                     if let Some(b) =
-                        shell.wl_storage.storage.last_block.as_mut()
+                        shell.state.in_mem_mut().last_block.as_mut()
                     {
                         b.height = BlockHeight(curr_block_height - 1);
                     }
@@ -119,23 +114,23 @@ mod test_queries {
                     );
                     assert_eq!(
                         shell
-                            .wl_storage
+                            .state
                             .pos_queries()
                             .get_epoch(curr_block_height.into()),
                         Some(Epoch(curr_epoch))
                     );
                     assert_eq!(
                         shell
-                            .wl_storage
+                            .state
                             .ethbridge_queries()
                             .must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
                     let params =
-                        shell.wl_storage.pos_queries().get_pos_params();
+                        shell.state.pos_queries().get_pos_params();
                     let consensus_set: Vec<WeightedValidator> =
                         read_consensus_validator_set_addresses_with_stake(
-                            &shell.wl_storage,
+                            &shell.state,
                             Epoch::default(),
                         )
                         .unwrap()
@@ -144,7 +139,7 @@ mod test_queries {
 
                     let val1 = consensus_set[0].clone();
                     let pkh1 = get_pkh_from_address(
-                        &shell.wl_storage,
+                        &shell.state,
                         &params,
                         val1.address.clone(),
                         Epoch::default(),

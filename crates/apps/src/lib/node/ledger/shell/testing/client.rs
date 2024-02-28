@@ -1,6 +1,6 @@
 use clap::Command as App;
 use eyre::Report;
-use namada::types::io::Io;
+use namada::io::Io;
 use namada_sdk::error::Error as SdkError;
 
 use super::node::MockNode;

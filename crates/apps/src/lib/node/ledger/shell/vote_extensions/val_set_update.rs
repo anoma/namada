@@ -3,11 +3,7 @@
 
 use std::collections::HashMap;
 
-use namada::state::{DBIter, StorageHasher, DB};
-use namada::vote_ext::validator_set_update;
-
 use super::*;
-use crate::node::ledger::shell::Shell;
 
 impl<D, H> Shell<D, H>
 where
@@ -31,9 +27,9 @@ where
     > + '_ {
         vote_extensions.into_iter().map(|vote_extension| {
             validate_valset_upd_vext(
-                &self.wl_storage,
+                &self.state,
                 &vote_extension,
-                self.wl_storage.storage.get_current_epoch().0,
+                self.state.in_mem().get_current_epoch().0,
             )?;
             Ok(vote_extension)
         })
@@ -60,7 +56,7 @@ where
         vote_extensions: Vec<validator_set_update::SignedVext>,
     ) -> Option<validator_set_update::VextDigest> {
         #[allow(clippy::question_mark)]
-        if self.wl_storage.storage.last_block.is_none() {
+        if self.state.in_mem().last_block.is_none() {
             return None;
         }
 
@@ -113,6 +109,7 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
+    use namada::core::key::RefTo;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -122,7 +119,6 @@ mod test_vote_extensions {
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::types::key::RefTo;
     use namada::vote_ext::validator_set_update;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
@@ -142,12 +138,12 @@ mod test_vote_extensions {
         let eth_bridge_key =
             shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
-        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
+        let signing_epoch = shell.state.in_mem().get_current_epoch().0;
         let next_epoch = signing_epoch.next();
 
         let voting_powers = {
             shell
-                .wl_storage
+                .state
                 .ethbridge_queries()
                 .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
@@ -157,19 +153,17 @@ mod test_vote_extensions {
                 .collect()
         };
         #[allow(clippy::redundant_clone)]
-        let validator_set_update = Some(
-            validator_set_update::Vext {
-                voting_powers,
-                validator_addr: validator_addr.clone(),
-                // invalid epoch
-                signing_epoch: next_epoch,
-            }
-            .sign(eth_bridge_key),
-        );
+        let validator_set_update = validator_set_update::Vext {
+            voting_powers,
+            validator_addr: validator_addr.clone(),
+            // invalid epoch
+            signing_epoch: next_epoch,
+        }
+        .sign(eth_bridge_key);
         assert!(
             validate_valset_upd_vext(
-                &shell.wl_storage,
-                &validator_set_update.unwrap(),
+                &shell.state,
+                &validator_set_update,
                 signing_epoch,
             )
             .is_err()
@@ -186,11 +180,11 @@ mod test_vote_extensions {
             let bertha_addr = wallet::defaults::bertha_address();
             (test_utils::gen_secp256k1_keypair(), bertha_key, bertha_addr)
         };
-        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
+        let signing_epoch = shell.state.in_mem().get_current_epoch().0;
         let voting_powers = {
             let next_epoch = signing_epoch.next();
             shell
-                .wl_storage
+                .state
                 .ethbridge_queries()
                 .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
@@ -200,18 +194,16 @@ mod test_vote_extensions {
                 .collect()
         };
         #[allow(clippy::redundant_clone)]
-        let validator_set_update = Some(
-            validator_set_update::Vext {
-                voting_powers,
-                signing_epoch,
-                validator_addr: validator_addr.clone(),
-            }
-            .sign(&eth_bridge_key),
-        );
+        let validator_set_update = validator_set_update::Vext {
+            voting_powers,
+            signing_epoch,
+            validator_addr: validator_addr.clone(),
+        }
+        .sign(&eth_bridge_key);
         assert!(
             validate_valset_upd_vext(
-                &shell.wl_storage,
-                &validator_set_update.unwrap(),
+                &shell.state,
+                &validator_set_update,
                 signing_epoch,
             )
             .is_err()
@@ -228,13 +220,13 @@ mod test_vote_extensions {
 
         // validators from the current epoch sign over validator
         // set of the next epoch
-        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
+        let signing_epoch = shell.state.in_mem().get_current_epoch().0;
         assert_eq!(signing_epoch.0, 0);
 
         // remove all validators of the next epoch
         let validators_handle = consensus_validator_set_handle().at(&1.into());
         let consensus_in_mem = validators_handle
-            .iter(&shell.wl_storage)
+            .iter(&shell.state)
             .expect("Test failed")
             .map(|val| {
                 let (
@@ -250,7 +242,7 @@ mod test_vote_extensions {
         for (val_stake, val_position) in consensus_in_mem.into_iter() {
             validators_handle
                 .at(&val_stake)
-                .remove(&mut shell.wl_storage, &val_position)
+                .remove(&mut shell.state, &val_position)
                 .expect("Test failed");
         }
 
@@ -270,7 +262,7 @@ mod test_vote_extensions {
         let voting_powers = {
             let next_epoch = signing_epoch.next();
             shell
-                .wl_storage
+                .state
                 .ethbridge_queries()
                 .get_consensus_eth_addresses(Some(next_epoch))
                 .iter()
@@ -288,10 +280,10 @@ mod test_vote_extensions {
         assert!(vote_ext.data.voting_powers.is_empty());
 
         // we advance forward to the next epoch
-        let params = shell.wl_storage.pos_queries().get_pos_params();
+        let params = shell.state.pos_queries().get_pos_params();
         let mut consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
-                &shell.wl_storage,
+                &shell.state,
                 0.into(),
             )
             .unwrap()
@@ -300,7 +292,7 @@ mod test_vote_extensions {
         assert_eq!(consensus_set.len(), 1);
         let val1 = consensus_set.remove(0);
         let pkh1 = get_pkh_from_address(
-            &shell.wl_storage,
+            &shell.state,
             &params,
             val1.address,
             Epoch::default(),
@@ -320,16 +312,16 @@ mod test_vote_extensions {
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
             shell
-                .wl_storage
+                .state
                 .pos_queries()
                 .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
                 .is_err()
         );
-        let prev_epoch = shell.wl_storage.storage.get_current_epoch().0 - 1;
+        let prev_epoch = shell.state.in_mem().get_current_epoch().0 - 1;
         assert!(
             shell
                 .shell
-                .wl_storage
+                .state
                 .pos_queries()
                 .get_validator_from_protocol_pk(
                     &protocol_key.ref_to(),
@@ -340,12 +332,8 @@ mod test_vote_extensions {
 
         // check validation of the vext passes
         assert!(
-            validate_valset_upd_vext(
-                &shell.wl_storage,
-                &vote_ext,
-                signing_epoch
-            )
-            .is_ok()
+            validate_valset_upd_vext(&shell.state, &vote_ext, signing_epoch)
+                .is_ok()
         );
     }
 
@@ -360,13 +348,13 @@ mod test_vote_extensions {
         let eth_bridge_key =
             shell.mode.get_eth_bridge_keypair().expect("Test failed");
 
-        let signing_epoch = shell.wl_storage.storage.get_current_epoch().0;
+        let signing_epoch = shell.state.in_mem().get_current_epoch().0;
         #[allow(clippy::redundant_clone)]
         let validator_set_update = {
             let voting_powers = {
                 let next_epoch = signing_epoch.next();
                 shell
-                    .wl_storage
+                    .state
                     .ethbridge_queries()
                     .get_consensus_eth_addresses(Some(next_epoch))
                     .iter()
@@ -386,7 +374,7 @@ mod test_vote_extensions {
         };
         assert!(
             validate_valset_upd_vext(
-                &shell.wl_storage,
+                &shell.state,
                 &validator_set_update.unwrap(),
                 signing_epoch,
             )

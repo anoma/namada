@@ -1,10 +1,10 @@
 //! Transaction environment contains functions that can be called from
 //! inside a tx.
 
+use namada_core::address::Address;
 use namada_core::borsh::BorshSerialize;
-use namada_core::types::address::Address;
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage;
+use namada_core::ibc::IbcEvent;
+use namada_core::storage;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
 /// Transaction host functions

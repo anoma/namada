@@ -18,7 +18,7 @@ use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
 use itertools::{Either, Itertools};
-use namada::types::chain::ChainId;
+use namada::core::chain::ChainId;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
@@ -27,16 +27,15 @@ use namada_apps::config::genesis::utils::read_toml;
 use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
-use namada_core::types::address::Address;
-use namada_core::types::key::{RefTo, SchemeType};
-use namada_core::types::string_encoding::StringEncoded;
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::address::Address;
+use namada_core::key::{RefTo, SchemeType};
+use namada_core::string_encoding::StringEncoded;
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
 use once_cell::sync::Lazy;
 use rand::rngs::OsRng;
 use rand::Rng;
-use serde_json;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::{generate_bin_command, make_hermes_config};
@@ -369,7 +368,7 @@ pub fn network(
     {
         let base_dir = test_dir.path();
         let src_path =
-            wallet::wallet_file(&templates_dir.join("src").join("pre-genesis"));
+            wallet::wallet_file(templates_dir.join("src").join("pre-genesis"));
         let dest_dir = base_dir.join("pre-genesis");
         let dest_path = wallet::wallet_file(&dest_dir);
         println!(

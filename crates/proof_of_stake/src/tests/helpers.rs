@@ -1,14 +1,14 @@
 use std::cmp::max;
 use std::ops::Range;
 
-use namada_core::types::address::testing::address_from_simple_seed;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::testing::common_sk_from_simple_seed;
-use namada_core::types::key::{self, RefTo};
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-use namada_core::types::token::testing::arb_amount_non_zero_ceiled;
-use namada_state::testing::TestWlStorage;
+use namada_core::address::testing::address_from_simple_seed;
+use namada_core::dec::Dec;
+use namada_core::key::testing::common_sk_from_simple_seed;
+use namada_core::key::{self, RefTo};
+use namada_core::storage::Epoch;
+use namada_core::token;
+use namada_core::token::testing::arb_amount_non_zero_ceiled;
+use namada_state::testing::TestState;
 use proptest::prop_oneof;
 use proptest::strategy::{Just, Strategy};
 
@@ -48,7 +48,7 @@ pub fn test_slashes_with_unbonding_params()
 }
 
 pub fn get_tendermint_set_updates(
-    s: &TestWlStorage,
+    s: &TestState,
     params: &PosParams,
     Epoch(epoch): Epoch,
 ) -> Vec<ValidatorSetUpdate> {
@@ -61,9 +61,9 @@ pub fn get_tendermint_set_updates(
 }
 
 /// Advance to the next epoch. Returns the new epoch.
-pub fn advance_epoch(s: &mut TestWlStorage, params: &PosParams) -> Epoch {
-    s.storage.block.epoch = s.storage.block.epoch.next();
-    let current_epoch = s.storage.block.epoch;
+pub fn advance_epoch(s: &mut TestState, params: &PosParams) -> Epoch {
+    s.in_mem_mut().block.epoch = s.in_mem().block.epoch.next();
+    let current_epoch = s.in_mem().block.epoch;
     compute_and_store_total_consensus_stake(s, current_epoch).unwrap();
     copy_validator_sets_and_positions(
         s,

@@ -24,7 +24,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::storage::get_proposal_by_id(ctx.wl_storage, id)
+    namada_governance::storage::get_proposal_by_id(ctx.state, id)
 }
 
 /// Query all the votes for the given proposal id
@@ -36,7 +36,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::storage::get_proposal_votes(ctx.wl_storage, id)
+    namada_governance::storage::get_proposal_votes(ctx.state, id)
 }
 
 /// Get the governance parameters
@@ -47,7 +47,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::storage::get_parameters(ctx.wl_storage)
+    namada_governance::storage::get_parameters(ctx.state)
 }
 
 /// Get the governance proposal result stored in storage
@@ -59,5 +59,5 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::storage::get_proposal_result(ctx.wl_storage, id)
+    namada_governance::storage::get_proposal_result(ctx.state, id)
 }

@@ -1,5 +1,5 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::ethereum_events::EthereumEvent;
+use namada_core::ethereum_events::EthereumEvent;
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
@@ -51,11 +51,11 @@ pub struct EthMsg {
 mod tests {
     use std::collections::BTreeSet;
 
-    use namada_core::types::address;
-    use namada_core::types::ethereum_events::testing::{
+    use namada_core::address;
+    use namada_core::ethereum_events::testing::{
         arbitrary_nonce, arbitrary_single_transfer,
     };
-    use namada_core::types::storage::BlockHeight;
+    use namada_core::storage::BlockHeight;
 
     use super::*;
 

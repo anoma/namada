@@ -1,6 +1,6 @@
 extern crate alloc;
 
-pub use namada_core::{borsh, ibc, tendermint, tendermint_proto, types};
+pub use namada_core::*;
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {
@@ -36,13 +36,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::key::*;
-use namada_core::types::masp::{TransferSource, TransferTarget};
-use namada_core::types::token;
+use namada_core::key::*;
+use namada_core::masp::{TransferSource, TransferTarget};
 use namada_tx::data::wrapper::GasLimit;
 use namada_tx::Tx;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -229,15 +228,15 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     ) -> args::Redelegate {
         args::Redelegate {
             tx: self.tx_builder(),
-            /// Source validator address
+            // Source validator address
             src_validator,
-            /// Destination validator address
+            // Destination validator address
             dest_validator,
-            /// Owner of the bonds that are being redelegated
+            // Owner of the bonds that are being redelegated
             owner: source,
-            /// The amount of tokens to redelegate
+            // The amount of tokens to redelegate
             amount,
-            /// Path to the TX WASM code file
+            // Path to the TX WASM code file
             tx_code_path: PathBuf::from(TX_REDELEGATE_WASM),
         }
     }
@@ -763,17 +762,16 @@ pub mod testing {
     use ibc::primitives::proto::Any;
     use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
-    use namada_core::types::address::testing::{
+    use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
-    use namada_core::types::address::MASP;
-    use namada_core::types::eth_bridge_pool::PendingTransfer;
-    use namada_core::types::hash::testing::arb_hash;
-    use namada_core::types::storage::testing::arb_epoch;
-    use namada_core::types::token::testing::{
-        arb_denominated_amount, arb_transfer,
-    };
-    use namada_core::types::token::Transfer;
+    use namada_core::address::MASP;
+    use namada_core::eth_bridge_pool::PendingTransfer;
+    use namada_core::hash::testing::arb_hash;
+    use namada_core::key::testing::arb_common_keypair;
+    use namada_core::storage::testing::arb_epoch;
+    use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
+    use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
         arb_init_proposal, arb_vote_proposal,
     };
@@ -786,29 +784,31 @@ pub mod testing {
     };
     use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{option, prop_compose, prop_oneof};
+    use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use prost::Message;
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::chain::ChainId;
+    use crate::eth_bridge_pool::testing::arb_pending_transfer;
+    use crate::key::testing::arb_common_pk;
     use crate::masp::testing::{
         arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
     };
+    use crate::time::{DateTime, DateTimeUtc, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
         arb_consensus_key_change, arb_metadata_change, arb_redelegation,
         arb_withdraw,
     };
-    use crate::tx::{Code, Commitment, Header, MaspBuilder, Section};
-    use crate::types::chain::ChainId;
-    use crate::types::eth_bridge_pool::testing::arb_pending_transfer;
-    use crate::types::key::testing::arb_common_pk;
-    use crate::types::time::{DateTime, DateTimeUtc, Utc};
+    use crate::tx::{
+        Code, Commitment, Header, MaspBuilder, Section, Signature,
+    };
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     #[allow(clippy::large_enum_variant)]
     // To facilitate propagating debugging information
     pub enum TxData {
@@ -834,15 +834,18 @@ pub mod testing {
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
         IbcAny(Any),
-        Custom(Box<dyn std::fmt::Debug>),
+        Custom,
     }
 
     prop_compose! {
         // Generate an arbitrary commitment
         pub fn arb_commitment()(
-            hash in arb_hash(),
+            commitment in prop_oneof![
+                arb_hash().prop_map(Commitment::Hash),
+                collection::vec(arbitrary::any::<u8>(), 0..=1024).prop_map(Commitment::Id),
+            ],
         ) -> Commitment {
-            Commitment::Hash(hash)
+            commitment
         }
     }
 
@@ -852,6 +855,33 @@ pub mod testing {
             salt: [u8; 8],
             code in arb_commitment(),
             tag in option::of("[a-zA-Z0-9_]*"),
+        ) -> Code {
+            Code {
+                salt,
+                code,
+                tag,
+            }
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary uttf8 commitment
+        pub fn arb_utf8_commitment()(
+            commitment in prop_oneof![
+                arb_hash().prop_map(Commitment::Hash),
+                "[a-zA-Z0-9_]{0,1024}".prop_map(|x| Commitment::Id(x.into_bytes())),
+            ],
+        ) -> Commitment {
+            commitment
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary code section
+        pub fn arb_utf8_code()(
+            salt: [u8; 8],
+            code in arb_utf8_commitment(),
+            tag in option::of("[a-zA-Z0-9_]{0,1024}"),
         ) -> Code {
             Code {
                 salt,
@@ -986,7 +1016,7 @@ pub mod testing {
     }
 
     // Maximum number of notes to include in a transaction
-    const MAX_ASSETS: usize = 10;
+    const MAX_ASSETS: usize = 2;
 
     // Type of MASP transaction
     #[derive(Debug, Clone)]
@@ -1145,6 +1175,24 @@ pub mod testing {
             tx.add_data(init_proposal.clone());
             tx.add_code_from_hash(code_hash, Some(TX_INIT_PROPOSAL.to_owned()));
             (tx, TxData::InitProposal(init_proposal))
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary transaction with maybe a memo
+        pub fn arb_memoed_tx()(
+            (mut tx, tx_data) in arb_tx(),
+            memo in option::of(arb_utf8_code()),
+        ) -> (Tx, TxData) {
+            if let Some(memo) = memo {
+                let sechash = tx
+                    .add_section(Section::ExtraData(memo))
+                    .get_hash();
+                tx.set_memo_sechash(sechash);
+            } else {
+                tx.set_memo_sechash(Default::default());
+            }
+            (tx, tx_data)
         }
     }
 
@@ -1433,5 +1481,43 @@ pub mod testing {
             arb_pending_transfer_tx(),
             arb_ibc_any_tx(),
         ]
+    }
+
+    prop_compose! {
+        // Generate an arbitrary signature section
+        pub fn arb_signature(targets: Vec<namada_core::hash::Hash>)(
+            targets in Just(targets),
+            secret_keys in collection::btree_map(
+                arbitrary::any::<u8>(),
+                arb_common_keypair(),
+                1..3,
+            ),
+            signer in option::of(arb_non_internal_address()),
+        ) -> Signature {
+            if signer.is_some() {
+                Signature::new(targets, secret_keys, signer)
+            } else {
+                let secret_keys = secret_keys
+                    .into_values()
+                    .enumerate()
+                    .map(|(k, v)| (k as u8, v))
+                    .collect();
+                Signature::new(targets, secret_keys, signer)
+            }
+        }
+    }
+
+    prop_compose! {
+        // Generate an arbitrary signed tx
+        pub fn arb_signed_tx()(tx in arb_memoed_tx())(
+            sigs in collection::vec(arb_signature(tx.0.sechashes()), 0..3),
+            mut tx in Just(tx),
+        ) -> (Tx, TxData) {
+            for sig in sigs {
+                // Add all the generated signature sections
+                tx.0.add_section(Section::Signature(sig));
+            }
+            (tx.0, tx.1)
+        }
     }
 }
