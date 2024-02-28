@@ -1,5 +1,5 @@
-use namada_core::types::dec::Dec;
-use namada_core::types::uint::Uint;
+use namada_core::dec::Dec;
+use namada_core::uint::Uint;
 
 #[derive(Clone, Debug)]
 pub struct PDController {

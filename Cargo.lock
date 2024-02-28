@@ -4335,7 +4335,7 @@ dependencies = [
 
 [[package]]
 name = "namada_controller"
-version = "0.31.6"
+version = "0.32.1"
 dependencies = [
  "namada_core",
 ]
