@@ -101,7 +101,12 @@ where
         // Sub-system updates:
         // - Governance - applied first in case a proposal changes any of the
         //   other syb-systems
-        governance::finalize_block(self, emit_events, current_epoch, new_epoch)?;
+        governance::finalize_block(
+            self,
+            emit_events,
+            current_epoch,
+            new_epoch,
+        )?;
         // - Token
         token::finalize_block(&mut self.state, emit_events, new_epoch)?;
         // - PoS
