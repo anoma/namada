@@ -849,19 +849,19 @@ pub mod testing {
 
     /// BTC token address for testing
     pub fn btc() -> Address {
-        Address::decode("tnam1qy7jxng788scr4fdqxqxtc2ze2guq5478cml9cd9")
+        Address::decode("1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY")
             .expect("The token address decoding shouldn't fail")
     }
-
+    
     /// ETH token address for testing
     pub fn eth() -> Address {
-        Address::decode("tnam1qyr9vd8ltunq72qc7pk58v7jdsedt4mggqqpxs03")
+        Address::decode("0x742d35Cc6634C0532925a3b844Bc454e4438f44e")
             .expect("The token address decoding shouldn't fail")
     }
 
     /// DOT token address for testing
     pub fn dot() -> Address {
-        Address::decode("tnam1qx6k4wau5t6m8g2hjq55fje2ynpvh5t27s8p3p0l")
+        Address::decode("14Gfg8gV3KZ75jOnMYZDrVr8krh6kHD3g4GqazHXAXhkDsS")
             .expect("The token address decoding shouldn't fail")
     }
 
