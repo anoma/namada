@@ -1,7 +1,7 @@
 //! Proof-of-Stake storage keys and storage integration.
 
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Epoch, Key, KeySeg};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Epoch, Key, KeySeg};
 use namada_storage::collections::{lazy_map, lazy_vec};
 
 use super::ADDRESS;
@@ -61,7 +61,7 @@ const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
-    match &key.segments.get(0) {
+    match &key.segments.first() {
         Some(DbKeySeg::AddressSeg(addr)) => addr == &ADDRESS,
         _ => false,
     }

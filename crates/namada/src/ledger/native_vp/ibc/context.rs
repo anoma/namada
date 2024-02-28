@@ -3,21 +3,19 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
-use namada_core::types::storage::Epochs;
+use namada_core::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_state::{StorageError, StorageRead, StorageWrite};
+use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
 
+use crate::address::{Address, InternalAddress};
+use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
-use crate::state::{self as ledger_storage, StorageHasher};
+use crate::state::PrefixIter;
+use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::token::{
     self as token, burn_tokens, credit_tokens, transfer, Amount,
-};
-use crate::types::address::{Address, InternalAddress};
-use crate::types::ibc::IbcEvent;
-use crate::types::storage::{
-    BlockHash, BlockHeight, Epoch, Header, Key, TxIndex,
 };
 use crate::vm::WasmCacheAccess;
 
@@ -26,28 +24,26 @@ pub type Result<T> = std::result::Result<T, namada_state::StorageError>;
 
 /// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
-pub struct PseudoExecutionContext<'view, 'a, DB, H, CA>
+pub struct PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Temporary store for pseudo execution
     store: HashMap<Key, StorageModification>,
     /// Context to read the previous value
-    ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, S, CA>,
     /// IBC event
     pub event: BTreeSet<IbcEvent>,
 }
 
-impl<'view, 'a, DB, H, CA> PseudoExecutionContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Generate new pseudo execution context
-    pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA>) -> Self {
         Self {
             store: HashMap::new(),
             ctx,
@@ -69,14 +65,12 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageRead
-    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> StorageRead for PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
@@ -149,11 +143,9 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageWrite
-    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> StorageWrite for PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn write_bytes(
@@ -176,11 +168,10 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcStorageContext
-    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> IbcStorageContext
+    for PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
@@ -248,47 +239,42 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcCommonContext
-    for PseudoExecutionContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> IbcCommonContext
+    for PseudoExecutionContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
 }
 
 /// Ibc native vp validation context
 #[derive(Debug)]
-pub struct VpValidationContext<'view, 'a, DB, H, CA>
+pub struct VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Context to read the post value
-    ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, S, CA>,
 }
 
-impl<'view, 'a, DB, H, CA> VpValidationContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Generate a new ibc vp validation context
-    pub fn new(ctx: CtxPreStorageRead<'view, 'a, DB, H, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA>) -> Self {
         Self { ctx }
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageRead
-    for VpValidationContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> StorageRead for VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    type PrefixIter<'iter> = ledger_storage::PrefixIter<'iter, DB> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.ctx.read_bytes(key)
@@ -345,11 +331,9 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> StorageWrite
-    for VpValidationContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> StorageWrite for VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn write_bytes(
@@ -365,11 +349,10 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcStorageContext
-    for VpValidationContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> IbcStorageContext
+    for VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<()> {
@@ -425,11 +408,10 @@ where
     }
 }
 
-impl<'view, 'a, DB, H, CA> IbcCommonContext
-    for VpValidationContext<'view, 'a, DB, H, CA>
+impl<'view, 'a, S, CA> IbcCommonContext
+    for VpValidationContext<'view, 'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
 }

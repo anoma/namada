@@ -5,16 +5,16 @@ pub mod collection_validation;
 
 // TODO: this should be re-exported from namada_shielded_token
 use masp_primitives::transaction::Transaction;
+use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::hash::Hash;
 use namada_core::ibc::core::channel::types::msgs::PacketMsg;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::ibc::IbcEvent;
-use namada_core::types::storage::{
+use namada_core::ibc::IbcEvent;
+use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
-use namada_core::types::token::Transfer;
+use namada_core::token::Transfer;
 use namada_ibc::{decode_message, get_shielded_transfer, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;

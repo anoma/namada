@@ -1,3 +1,4 @@
+#![allow(clippy::non_canonical_partial_ord_impl)]
 //! The parameters used for the chain's genesis
 
 pub mod chain;
@@ -11,18 +12,19 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use namada::core::address::{Address, EstablishedAddress};
+use namada::core::chain::ProposalBytes;
+use namada::core::key::*;
+use namada::core::storage;
+use namada::core::string_encoding::StringEncoded;
+use namada::core::time::{DateTimeUtc, DurationSecs};
+use namada::core::token::Denomination;
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
 use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
-use namada::types::address::{Address, EstablishedAddress};
-use namada::types::chain::ProposalBytes;
-use namada::types::key::*;
-use namada::types::string_encoding::StringEncoded;
-use namada::types::time::{DateTimeUtc, DurationSecs};
-use namada::types::token::Denomination;
-use namada::types::{storage, token};
+use namada::token;
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
@@ -228,7 +230,7 @@ pub struct TokenAccount {
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub balances: HashMap<Address, token::Amount>,
     /// Token parameters
-    pub masp_params: Option<token::MaspParams>,
+    pub masp_params: Option<token::ShieldedParams>,
     /// Token inflation from the last epoch (read + write for every epoch)
     pub last_inflation: token::Amount,
     /// Token shielded ratio from the last epoch (read + write for every epoch)
@@ -312,13 +314,13 @@ pub fn make_dev_genesis(
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
+    use namada::core::address::testing::wnam;
+    use namada::core::chain::ChainIdPrefix;
+    use namada::core::ethereum_events::EthAddress;
+    use namada::core::key::*;
     use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
     use namada::ledger::pos::types::ValidatorMetaData;
     use namada::tx::standalone_signature;
-    use namada::types::address::wnam;
-    use namada::types::chain::ChainIdPrefix;
-    use namada::types::ethereum_events::EthAddress;
-    use namada::types::key::*;
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
@@ -400,7 +402,7 @@ pub fn make_dev_genesis(
             .validator_account
             .as_ref()
             .unwrap()
-            .get(0)
+            .first()
             .unwrap();
         let genesis_addr =
             GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
@@ -408,7 +410,7 @@ pub fn make_dev_genesis(
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
             let bond =
-                genesis.transactions.bond.as_mut().unwrap().get(0).unwrap();
+                genesis.transactions.bond.as_mut().unwrap().first().unwrap();
             bond.amount
         };
 
@@ -553,8 +555,8 @@ pub fn make_dev_genesis(
 #[cfg(test)]
 pub mod tests {
     use borsh_ext::BorshSerializeExt;
-    use namada::types::address::testing::gen_established_address;
-    use namada::types::key::*;
+    use namada::core::address::testing::gen_established_address;
+    use namada::core::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 

@@ -7,9 +7,9 @@ mod storage_key;
 mod types;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use namada_core::types::account::AccountPublicKeysMap;
-use namada_core::types::address::Address;
-use namada_core::types::key::common;
+pub use namada_core::account::AccountPublicKeysMap;
+use namada_core::address::Address;
+use namada_core::key::common;
 use serde::{Deserialize, Serialize};
 pub use storage::*;
 pub use storage_key::*;

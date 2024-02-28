@@ -1,6 +1,6 @@
 //! Cryptographic signature keys
 
-pub use namada_core::types::key::*;
+pub use namada_core::key::*;
 
 use super::*;
 

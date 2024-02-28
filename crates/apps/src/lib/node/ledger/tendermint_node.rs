@@ -4,10 +4,10 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh_ext::BorshSerializeExt;
-use namada::types::chain::ChainId;
-use namada::types::key::*;
-use namada::types::storage::BlockHeight;
-use namada::types::time::DateTimeUtc;
+use namada::core::chain::ChainId;
+use namada::core::key::*;
+use namada::core::storage::BlockHeight;
+use namada::core::time::DateTimeUtc;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -461,7 +461,7 @@ async fn write_tm_genesis(
         // gas is metered app-side, so we disable it
         // at the Tendermint level
         max_gas: -1,
-        /// This parameter has no value anymore in Tendermint-core
+        // This parameter has no value anymore in Tendermint-core
         time_iota_ms: block::Size::default_time_iota_ms(),
     };
     genesis.consensus_params.block = size;

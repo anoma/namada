@@ -19,6 +19,7 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
+use namada_core::address::Address;
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -45,12 +46,6 @@ use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
-use namada_core::types::address::Address;
-use namada_core::types::ibc::{
-    is_ibc_denom, is_nft_trace, IbcShieldedTransfer, MsgNftTransfer,
-    MsgTransfer, EVENT_ATTRIBUTE_SUCCESS, EVENT_TYPE_NFT_PACKET,
-    EVENT_TYPE_PACKET, EVENT_VALUE_SUCCESS,
-};
 use prost::Message;
 use thiserror::Error;
 
@@ -387,7 +382,13 @@ pub fn received_ibc_token(
                 TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
             prefixed_denom.add_trace_prefix(prefix);
         }
-        return Ok(storage::ibc_token(prefixed_denom.to_string()));
+        let token = if prefixed_denom.trace_path.is_empty() {
+            Address::decode(prefixed_denom.to_string())
+                .map_err(|e| Error::Trace(format!("Invalid base denom: {e}")))?
+        } else {
+            storage::ibc_token(prefixed_denom.to_string())
+        };
+        return Ok(token);
     }
 
     if let Some((trace_path, base_class_id, token_id)) =

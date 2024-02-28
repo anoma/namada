@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::io::Io;
+use namada::io::Io;
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;

@@ -1,7 +1,7 @@
 //! Token validity predicate queries
 
-use namada_core::types::address::Address;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::token;
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_token::{read_denom, read_total_supply};
 
@@ -22,7 +22,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_denom(ctx.wl_storage, &addr)
+    read_denom(ctx.state, &addr)
 }
 
 /// Get the total supply for a token address
@@ -34,14 +34,14 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_total_supply(ctx.wl_storage, &addr)
+    read_total_supply(ctx.state, &addr)
 }
 
 #[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use borsh::BorshDeserialize;
-    use namada_core::types::address::Address;
-    use namada_core::types::token;
+    use namada_core::address::Address;
+    use namada_core::token;
     use namada_token::storage_key::balance_key;
 
     use super::Token;

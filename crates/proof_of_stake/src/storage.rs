@@ -4,11 +4,11 @@
 use std::collections::{BTreeSet, HashSet};
 
 use namada_account::protocol_pk_key;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::{common, tm_consensus_key_raw_hash};
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::key::{common, tm_consensus_key_raw_hash};
+use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_governance::storage::get_max_proposal_period;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::collections::{LazyCollection, LazySet};
@@ -391,7 +391,7 @@ where
 pub fn read_validator_deltas_value<S>(
     storage: &S,
     validator: &Address,
-    epoch: &namada_core::types::storage::Epoch,
+    epoch: &namada_core::storage::Epoch,
 ) -> namada_storage::Result<Option<token::Change>>
 where
     S: StorageRead,
@@ -407,7 +407,7 @@ pub fn read_validator_stake<S>(
     storage: &S,
     params: &PosParams,
     validator: &Address,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
@@ -429,7 +429,7 @@ pub fn update_validator_deltas<S>(
     params: &OwnedPosParams,
     validator: &Address,
     delta: token::Change,
-    current_epoch: namada_core::types::storage::Epoch,
+    current_epoch: namada_core::storage::Epoch,
     offset_opt: Option<u64>,
 ) -> namada_storage::Result<()>
 where
@@ -453,7 +453,7 @@ where
 pub fn read_total_stake<S>(
     storage: &S,
     params: &PosParams,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
@@ -472,7 +472,7 @@ where
 /// Read all addresses from consensus validator set.
 pub fn read_consensus_validator_set_addresses<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
@@ -487,7 +487,7 @@ where
 /// Read all addresses from below-capacity validator set.
 pub fn read_below_capacity_validator_set_addresses<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
@@ -502,7 +502,7 @@ where
 /// Read all addresses from the below-threshold set
 pub fn read_below_threshold_validator_set_addresses<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
@@ -524,7 +524,7 @@ where
 /// Read all addresses from consensus validator set with their stake.
 pub fn read_consensus_validator_set_addresses_with_stake<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
@@ -554,7 +554,7 @@ where
 /// Count the number of consensus validators
 pub fn get_num_consensus_validators<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<u64>
 where
     S: StorageRead,
@@ -568,7 +568,7 @@ where
 /// Read all addresses from below-capacity validator set with their stake.
 pub fn read_below_capacity_validator_set_addresses_with_stake<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<BTreeSet<WeightedValidator>>
 where
     S: StorageRead,
@@ -598,7 +598,7 @@ where
 /// Read all validator addresses.
 pub fn read_all_validator_addresses<S>(
     storage: &S,
-    epoch: namada_core::types::storage::Epoch,
+    epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
@@ -615,7 +615,7 @@ pub fn update_total_deltas<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     delta: token::Change,
-    current_epoch: namada_core::types::storage::Epoch,
+    current_epoch: namada_core::storage::Epoch,
     offset_opt: Option<u64>,
 ) -> namada_storage::Result<()>
 where

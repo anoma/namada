@@ -3,9 +3,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use namada_core::types::address::{Address, InternalAddress};
-pub use namada_core::types::ibc::{IbcEvent, IbcShieldedTransfer};
-use namada_core::types::token::Amount;
+use namada_core::address::{Address, InternalAddress};
+pub use namada_core::ibc::{IbcEvent, IbcShieldedTransfer};
+use namada_core::token::Amount;
 pub use namada_ibc::storage::is_ibc_key;
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,

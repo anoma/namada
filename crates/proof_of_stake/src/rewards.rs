@@ -2,12 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use namada_core::ledger::inflation;
-use namada_core::types::address::{self, Address};
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token::{self, Amount};
-use namada_core::types::uint::{Uint, I256};
+use namada_core::address::{self, Address};
+use namada_core::dec::Dec;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::token::{self, Amount};
+use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
@@ -19,12 +18,12 @@ use crate::storage::{
     rewards_accumulator_handle, validator_commission_rate_handle,
     validator_rewards_products_handle, validator_state_handle,
 };
-use crate::token::credit_tokens;
 use crate::token::storage_key::minted_balance_key;
+use crate::token::{credit_tokens, inflation};
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
-    storage_key, InflationError, PosParams,
+    storage, storage_key, InflationError, PosParams,
 };
 
 /// This is equal to 0.01.
@@ -122,10 +121,50 @@ impl PosRewardsCalculator {
     }
 }
 
+/// Process the proposer and votes in the block to assign their PoS rewards.
+pub(crate) fn log_block_rewards<S>(
+    storage: &mut S,
+    votes: Vec<VoteInfo>,
+    height: BlockHeight,
+    current_epoch: Epoch,
+    new_epoch: bool,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    // Read the block proposer of the previously committed block in storage
+    // (n-1 if we are in the process of finalizing n right now).
+    match storage::read_last_block_proposer_address(storage)? {
+        Some(proposer_address) => {
+            tracing::debug!("Found last block proposer: {proposer_address}");
+            log_block_rewards_aux(
+                storage,
+                if new_epoch {
+                    current_epoch.prev()
+                } else {
+                    current_epoch
+                },
+                &proposer_address,
+                votes,
+            )?;
+        }
+        None => {
+            if height > BlockHeight::default().next_height() {
+                tracing::error!(
+                    "Can't find the last block proposer at height {height}"
+                );
+            } else {
+                tracing::debug!("No last block proposer at height {height}");
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Tally a running sum of the fraction of rewards owed to each validator in
 /// the consensus set. This is used to keep track of the rewards due to each
 /// consensus validator over the lifetime of an epoch.
-pub fn log_block_rewards<S>(
+pub(crate) fn log_block_rewards_aux<S>(
     storage: &mut S,
     epoch: impl Into<Epoch>,
     proposer_address: &Address,

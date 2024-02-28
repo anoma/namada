@@ -1,6 +1,6 @@
-use namada_core::types::address::Address;
-use namada_core::types::key::common;
-use namada_core::types::storage::{self, DbKeySeg};
+use namada_core::address::Address;
+use namada_core::key::common;
+use namada_core::storage::{self, DbKeySeg};
 use namada_macros::StorageKeys;
 use namada_storage::collections::lazy_map::LazyMap;
 use namada_storage::collections::{lazy_map, LazyCollection};

@@ -1,5 +1,5 @@
 //! Provides functionality for managing validator keys
-use namada_core::types::key::{common, SchemeType};
+use namada_core::key::{common, SchemeType};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

@@ -1,10 +1,10 @@
 //! Storage API for querying data about Proof-of-stake related
 //! data. This includes validator and epoch related data.
 
-use namada_core::types::address::Address;
-use namada_core::types::chain::ProposalBytes;
-use namada_core::types::storage::{BlockHeight, Epoch};
-use namada_core::types::{key, token};
+use namada_core::address::Address;
+use namada_core::chain::ProposalBytes;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::{key, token};
 use namada_parameters::storage::get_max_proposal_bytes_key;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::StorageRead;
@@ -82,9 +82,7 @@ pub struct PosQueriesHook<'db, S> {
 
 impl<'db, S> Clone for PosQueriesHook<'db, S> {
     fn clone(&self) -> Self {
-        Self {
-            storage: self.storage,
-        }
+        *self
     }
 }
 
@@ -116,7 +114,7 @@ where
         let epoch =
             epoch.unwrap_or_else(|| self.storage.get_block_epoch().unwrap());
         ConsensusValidators {
-            wl_storage: self.storage,
+            state: self.storage,
             validator_set: consensus_validator_set_handle().at(&epoch),
         }
     }
@@ -259,7 +257,7 @@ pub struct ConsensusValidators<'db, S>
 where
     S: StorageRead,
 {
-    wl_storage: &'db S,
+    state: &'db S,
     validator_set: ConsensusValidatorSet,
 }
 
@@ -273,7 +271,7 @@ where
         &'this self,
     ) -> impl Iterator<Item = WeightedValidator> + 'db {
         self.validator_set
-            .iter(self.wl_storage)
+            .iter(self.state)
             .expect("Must be able to iterate over consensus validators")
             .map(|res| {
                 let (

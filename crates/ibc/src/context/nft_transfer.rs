@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use namada_core::address::Address;
 use namada_core::ibc::apps::nft_transfer::context::{
     NftTransferExecutionContext, NftTransferValidationContext,
 };
@@ -13,9 +14,8 @@ use namada_core::ibc::apps::nft_transfer::types::{
 };
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
-use namada_core::types::token::Amount;
+use namada_core::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use namada_core::token::Amount;
 
 use super::common::IbcCommonContext;
 use crate::storage;

@@ -1,4 +1,5 @@
 use core::time::Duration;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use ibc_testkit::testapp::ibc::clients::mock::client_state::{
@@ -6,6 +7,12 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::{
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+use namada::core::address::{self, Address, InternalAddress};
+use namada::core::hash::Hash;
+use namada::core::storage::{
+    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
+};
+use namada::core::time::DurationSecs;
 use namada::gas::TxGasMeter;
 use namada::governance::parameters::GovernanceParameters;
 use namada::ibc::apps::transfer::types::error::TokenTransferError;
@@ -48,6 +55,7 @@ pub use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::Timestamp;
+use namada::ibc::MsgTransfer;
 use namada::ledger::gas::VpGasMeter;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
@@ -67,22 +75,16 @@ use namada::ledger::parameters::storage::{
     get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
 };
 use namada::ledger::parameters::EpochDuration;
-use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::tx_env::TxEnv;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::OwnedPosParams;
-use namada::state::Sha256Hasher;
+use namada::state::testing::TestState;
 use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::Tx;
-use namada::types::address::{self, Address, InternalAddress};
-use namada::types::hash::Hash;
-use namada::types::ibc::MsgTransfer;
-use namada::types::storage::{
-    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
-};
-use namada::types::time::DurationSecs;
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_core::validity_predicate::VpSentinel;
+use namada_sdk::state::StateRead;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerializeExt;
 
@@ -93,7 +95,7 @@ pub const ANY_DENOMINATION: u8 = 4;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
-    pub ibc: Ibc<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
+    pub ibc: Ibc<'a, TestState, WasmCacheRwAccess>,
 }
 
 impl<'a> TestIbcVp<'a> {
@@ -110,8 +112,7 @@ impl<'a> TestIbcVp<'a> {
 }
 
 pub struct TestMultitokenVp<'a> {
-    pub multitoken_vp:
-        MultitokenVp<'a, MockDB, Sha256Hasher, WasmCacheRwAccess>,
+    pub multitoken_vp: MultitokenVp<'a, TestState, WasmCacheRwAccess>,
 }
 
 impl<'a> TestMultitokenVp<'a> {
@@ -133,8 +134,8 @@ pub fn validate_ibc_vp_from_tx<'a>(
     tx: &'a Tx,
 ) -> std::result::Result<bool, namada::ledger::native_vp::ibc::Error> {
     let (verifiers, keys_changed) = tx_env
-        .wl_storage
-        .write_log
+        .state
+        .write_log()
         .verifiers_and_changed_keys(&tx_env.verifiers);
     let addr = Address::Internal(InternalAddress::Ibc);
     if !verifiers.contains(&addr) {
@@ -146,15 +147,17 @@ pub fn validate_ibc_vp_from_tx<'a>(
     let (vp_wasm_cache, _vp_cache_dir) =
         wasm::compilation_cache::common::testing::cache();
 
+    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        &TxGasMeter::new_from_sub_limit(1_000_000.into()),
+    ));
+    let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.wl_storage.storage,
-        &tx_env.wl_storage.write_log,
+        &tx_env.state,
         tx,
         &TxIndex(0),
-        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-            1_000_000.into(),
-        )),
+        &gas_meter,
+        &sentinel,
         &keys_changed,
         &verifiers,
         vp_wasm_cache,
@@ -171,8 +174,8 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     target: &Key,
 ) -> std::result::Result<bool, MultitokenVpError> {
     let (verifiers, keys_changed) = tx_env
-        .wl_storage
-        .write_log
+        .state
+        .write_log()
         .verifiers_and_changed_keys(&tx_env.verifiers);
     if !keys_changed.contains(target) {
         panic!(
@@ -184,15 +187,17 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     let (vp_wasm_cache, _vp_cache_dir) =
         wasm::compilation_cache::common::testing::cache();
 
+    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        &TxGasMeter::new_from_sub_limit(1_000_000.into()),
+    ));
+    let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(
         &ADDRESS,
-        &tx_env.wl_storage.storage,
-        &tx_env.wl_storage.write_log,
+        &tx_env.state,
         tx,
         &TxIndex(0),
-        VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-            1_000_000.into(),
-        )),
+        &gas_meter,
+        &sentinel,
         &keys_changed,
         &verifiers,
         vp_wasm_cache,
@@ -209,11 +214,11 @@ pub fn init_storage() -> (Address, Address) {
     let code_hash = Hash::sha256(&code);
 
     tx_host_env::with(|env| {
-        ibc::init_genesis_storage(&mut env.wl_storage);
+        ibc::init_genesis_storage(&mut env.state);
         let gov_params = GovernanceParameters::default();
-        gov_params.init_storage(&mut env.wl_storage).unwrap();
+        gov_params.init_storage(&mut env.state).unwrap();
         pos::test_utils::test_init_genesis(
-            &mut env.wl_storage,
+            &mut env.state,
             OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
             Epoch(1),
@@ -221,15 +226,15 @@ pub fn init_storage() -> (Address, Address) {
         .unwrap();
         // store wasm code
         let key = Key::wasm_code(&code_hash);
-        env.wl_storage.storage.write(&key, code.clone()).unwrap();
+        env.state.db_write(&key, code.clone()).unwrap();
 
         // block header to check timeout timestamp
-        env.wl_storage
-            .storage
+        env.state
+            .in_mem_mut()
             .set_header(tm_dummy_header())
             .unwrap();
-        env.wl_storage
-            .storage
+        env.state
+            .in_mem_mut()
             .begin_block(BlockHash::default(), BlockHeight(1))
             .unwrap();
     });
@@ -243,13 +248,11 @@ pub fn init_storage() -> (Address, Address) {
     let key = token::storage_key::balance_key(&token, &account);
     let init_bal = Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {
-        env.wl_storage
-            .storage
-            .write(&denom_key, &token_denom.serialize_to_vec())
+        env.state
+            .db_write(&denom_key, &token_denom.serialize_to_vec())
             .unwrap();
-        env.wl_storage
-            .storage
-            .write(&key, &init_bal.serialize_to_vec())
+        env.state
+            .db_write(&key, &init_bal.serialize_to_vec())
             .unwrap();
     });
 
@@ -261,29 +264,29 @@ pub fn init_storage() -> (Address, Address) {
     };
     let bytes = epoch_duration.serialize_to_vec();
     tx_host_env::with(|env| {
-        env.wl_storage.storage.write(&key, &bytes).unwrap();
+        env.state.db_write(&key, &bytes).unwrap();
     });
 
     // max_expected_time_per_block
     let time = DurationSecs::from(Duration::new(60, 0));
     let key = get_max_expected_time_per_block_key();
-    let bytes = namada::types::encode(&time);
+    let bytes = namada::core::encode(&time);
     tx_host_env::with(|env| {
-        env.wl_storage.storage.write(&key, &bytes).unwrap();
+        env.state.db_write(&key, &bytes).unwrap();
     });
 
     // commit the initialized token and account
     tx_host_env::with(|env| {
-        env.wl_storage.commit_tx();
-        env.wl_storage.commit_block().unwrap();
+        env.state.commit_tx();
+        env.state.commit_block().unwrap();
 
         // block header to check timeout timestamp
-        env.wl_storage
-            .storage
+        env.state
+            .in_mem_mut()
             .set_header(tm_dummy_header())
             .unwrap();
-        env.wl_storage
-            .storage
+        env.state
+            .in_mem_mut()
             .begin_block(BlockHash::default(), BlockHeight(2))
             .unwrap();
     });
@@ -312,10 +315,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     // client update time
     let key = client_update_timestamp_key(&client_id);
     let time = tx_host_env::with(|env| {
-        let header = env
-            .wl_storage
-            .storage
-            .get_block_header(None)
+        let header = StateRead::get_block_header(&env.state, None)
             .unwrap()
             .0
             .unwrap();
@@ -326,7 +326,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     // client update height
     let key = client_update_height_key(&client_id);
     let height = tx_host_env::with(|env| {
-        let height = env.wl_storage.storage.get_block_height().0;
+        let height = env.state.in_mem().get_block_height().0;
         Height::new(0, height.0).expect("invalid height")
     });
     let bytes = height.encode_vec();

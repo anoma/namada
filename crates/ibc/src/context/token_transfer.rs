@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use namada_core::address::Address;
 use namada_core::ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
@@ -13,10 +14,9 @@ use namada_core::ibc::apps::transfer::types::{
 use namada_core::ibc::core::channel::types::error::ChannelError;
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::ibc::IBC_ESCROW_ADDRESS;
-use namada_core::types::uint::Uint;
-use namada_trans_token::{read_denom, Amount, Denomination};
+use namada_core::ibc::IBC_ESCROW_ADDRESS;
+use namada_core::uint::Uint;
+use namada_token::{read_denom, Amount, Denomination};
 
 use super::common::IbcCommonContext;
 use crate::storage;

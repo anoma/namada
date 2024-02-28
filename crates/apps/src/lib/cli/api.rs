@@ -1,5 +1,5 @@
+use namada::io::Io;
 use namada::tendermint_rpc::HttpClient;
-use namada::types::io::Io;
 use namada_sdk::error::Error;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::wait_until_node_is_synched;

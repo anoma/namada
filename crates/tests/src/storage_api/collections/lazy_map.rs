@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::convert::TryInto;
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::types::address::{self, Address};
-    use namada::types::storage;
+    use namada::core::address::{self, Address};
+    use namada::core::storage;
     use namada_tx_prelude::collections::{LazyCollection, LazyMap};
     use namada_tx_prelude::storage::KeySeg;
     use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};
@@ -154,9 +153,7 @@ mod tests {
                 Transition::CommitTx | Transition::CommitTxAndBlock => {
                     let valid_actions_to_commit =
                         std::mem::take(&mut state.valid_transitions);
-                    state
-                        .committed_transitions
-                        .extend(valid_actions_to_commit.into_iter());
+                    state.committed_transitions.extend(valid_actions_to_commit);
                 }
                 _ => state.valid_transitions.push(transition.clone()),
             }
@@ -243,7 +240,7 @@ mod tests {
             match &transition {
                 Transition::CommitTx => {
                     // commit the tx without committing the block
-                    tx_host_env::with(|env| env.wl_storage.commit_tx());
+                    tx_host_env::with(|env| env.state.commit_tx());
                 }
                 Transition::CommitTxAndBlock => {
                     // commit the tx and the block

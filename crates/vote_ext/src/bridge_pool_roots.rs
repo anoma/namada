@@ -5,11 +5,11 @@
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::key::common;
-use namada_core::types::key::common::Signature;
-use namada_core::types::storage::BlockHeight;
+use namada_core::key::common;
+use namada_core::key::common::Signature;
+use namada_core::storage::BlockHeight;
 use namada_tx::Signed;
 
 /// A vote extension containing a validator's signature

@@ -126,6 +126,10 @@ macro_rules! try_match_segments {
                 );
             }
         )*
+
+        return Err(
+            $crate::queries::router::Error::WrongPath($request.path.clone()))
+            .into_storage_result();
     };
 
     // Terminal tail call, invoked after when all the args in the current
@@ -401,7 +405,7 @@ macro_rules! pattern_and_handler_to_method {
                 `storage_value` and `storage_prefix`) from `storage_value`."]
             pub async fn storage_value<CLIENT>(&self, client: &CLIENT,
                 data: Option<Vec<u8>>,
-                height: Option<namada_core::types::storage::BlockHeight>,
+                height: Option<namada_core::storage::BlockHeight>,
                 prove: bool,
                 $( $param: &$param_ty ),*
             )
@@ -453,7 +457,7 @@ macro_rules! pattern_and_handler_to_method {
                 `storage_value` and `storage_prefix`) from `" $handle "`."]
             pub async fn $handle<CLIENT>(&self, client: &CLIENT,
                 data: Option<Vec<u8>>,
-                height: Option<namada_core::types::storage::BlockHeight>,
+                height: Option<namada_core::storage::BlockHeight>,
                 prove: bool,
                 $( $param: &$param_ty ),*
             )
@@ -844,8 +848,8 @@ macro_rules! router {
 #[cfg(test)]
 mod test_rpc_handlers {
     use borsh_ext::BorshSerializeExt;
-    use namada_core::types::storage::Epoch;
-    use namada_core::types::token;
+    use namada_core::storage::Epoch;
+    use namada_core::token;
     use namada_state::{DBIter, StorageHasher, DB};
 
     use crate::queries::{
@@ -971,8 +975,8 @@ mod test_rpc_handlers {
 /// ```
 #[cfg(test)]
 mod test_rpc {
-    use namada_core::types::storage::Epoch;
-    use namada_core::types::token;
+    use namada_core::storage::Epoch;
+    use namada_core::token;
 
     use super::test_rpc_handlers::*;
 
@@ -1009,10 +1013,10 @@ mod test_rpc {
 
 #[cfg(test)]
 mod test {
+    use namada_core::storage::Epoch;
     use namada_core::tendermint::block;
-    use namada_core::types::storage::Epoch;
-    use namada_core::types::token;
-    use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada_core::token;
+    use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 
     use super::test_rpc::TEST_RPC;
     use crate::queries::testing::TestClient;
@@ -1032,7 +1036,26 @@ mod test {
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,
-            wl_storage: &client.wl_storage,
+            state: &client.state,
+            vp_wasm_cache: (),
+            tx_wasm_cache: (),
+            storage_read_past_height_limit: None,
+        };
+        let result = TEST_RPC.handle(ctx, &request);
+        assert!(result.is_err());
+
+        // Test request with another invalid path.
+        // The key difference here is that we are testing
+        // an invalid path in a nested segment.
+        let request = RequestQuery {
+            path: "/b/4".to_owned(),
+            data: Default::default(),
+            height: block::Height::from(0_u32),
+            prove: Default::default(),
+        };
+        let ctx = RequestCtx {
+            event_log: &client.event_log,
+            state: &client.state,
             vp_wasm_cache: (),
             tx_wasm_cache: (),
             storage_read_past_height_limit: None,
@@ -1049,7 +1072,7 @@ mod test {
         };
         let ctx = RequestCtx {
             event_log: &client.event_log,
-            wl_storage: &client.wl_storage,
+            state: &client.state,
             vp_wasm_cache: (),
             tx_wasm_cache: (),
             storage_read_past_height_limit: None,

@@ -18,11 +18,12 @@ testing = ["namada_core/testing", "ibc-testkit", "proptest"]
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
-namada_trans_token = { path = "../trans_token" }
+namada_token = { path = "../token" }
 
 borsh.workspace = true
 ibc.workspace = true

@@ -10,16 +10,16 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::Account;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::hash::Hash;
-use namada_core::types::key::common;
-use namada_core::types::storage::{
+use namada_core::address::{Address, InternalAddress};
+use namada_core::hash::Hash;
+use namada_core::key::common;
+use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
-use namada_core::types::token::{
+use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
-use namada_core::types::{storage, token};
+use namada_core::{storage, token};
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -685,7 +685,7 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
     let block = &blocks
-        .get(0)
+        .first()
         .ok_or_else(|| {
             TError::server(
                 "Unable to find a block applying the given transaction"

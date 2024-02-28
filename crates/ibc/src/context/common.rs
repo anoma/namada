@@ -2,6 +2,7 @@
 
 use core::time::Duration;
 
+use namada_core::address::Address;
 use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
 use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 use namada_core::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
@@ -25,14 +26,13 @@ use namada_core::ibc::core::host::types::identifiers::{
 };
 use namada_core::ibc::primitives::proto::{Any, Protobuf};
 use namada_core::ibc::primitives::Timestamp;
+use namada_core::ibc::{NftClass, NftMetadata};
+use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
-use namada_core::types::address::Address;
-use namada_core::types::ibc::{NftClass, NftMetadata};
-use namada_core::types::storage::{BlockHeight, Key};
-use namada_core::types::time::DurationSecs;
+use namada_core::time::DurationSecs;
 use namada_parameters::storage::get_max_expected_time_per_block_key;
-use namada_trans_token::storage_key::balance_key;
-use namada_trans_token::Amount;
+use namada_token::storage_key::balance_key;
+use namada_token::Amount;
 use prost::Message;
 use sha2::Digest;
 
@@ -299,10 +299,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             .time
             .try_into()
             .expect("The time should be converted");
-        let next_validators_hash = header
-            .next_validators_hash
-            .try_into()
-            .expect("The hash should be converted");
+        let next_validators_hash = header.next_validators_hash.into();
         let consensus_state: TmConsensusState = TmConsensusStateType::new(
             commitment_root,
             time,
