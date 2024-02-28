@@ -28,9 +28,8 @@ use crate::vp::TestVpEnv;
 static mut CTX: Ctx = unsafe { Ctx::new() };
 
 /// Tx execution context provides access to host env functions
-#[allow(static_mut_refs)]
 pub fn ctx() -> &'static mut Ctx {
-    unsafe { &mut CTX }
+    unsafe { &mut *std::ptr::addr_of_mut!(CTX) }
 }
 
 /// This module combines the native host function implementations from
