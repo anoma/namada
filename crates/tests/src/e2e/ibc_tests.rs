@@ -1469,7 +1469,8 @@ fn shielded_transfer_back(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Receive the token on Chain A
-    let height = submit_ibc_tx(test_a, msg.to_any(), ALBERT, ALBERT_KEY, false)?;
+    let height =
+        submit_ibc_tx(test_a, msg.to_any(), ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;

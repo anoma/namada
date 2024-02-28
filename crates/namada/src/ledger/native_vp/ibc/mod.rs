@@ -404,12 +404,12 @@ mod tests {
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key,
-        ibc_trace_key, next_sequence_ack_key, next_sequence_recv_key,
-        next_sequence_send_key, nft_class_key, nft_metadata_key, receipt_key,
+        ack_key, channel_counter_key, channel_key, client_connections_key,
+        client_counter_key, client_state_key, client_update_height_key,
+        client_update_timestamp_key, commitment_key, connection_counter_key,
+        connection_key, consensus_state_key, ibc_trace_key,
+        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        nft_class_key, nft_metadata_key, receipt_key,
     };
     use crate::ibc::{NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
