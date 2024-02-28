@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.31.8
+
+Namada 0.31.8 is a patch release that prevents issues with incompatible WASM compilation cache.
+
+### IMPROVEMENTS
+
+- Added WASM cache versioning to avoid issues on updates that don't have
+  compatible binary format. ([\#2757](https://github.com/anoma/namada/pull/2757))
+
 ## v0.31.7
 
 Namada 0.31.7 is a patch release that contains code refactors, various fixes and improvements.
