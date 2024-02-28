@@ -1,12 +1,12 @@
 //! Tools for accessing the storage subspaces of the Ethereum
 //! bridge pool
 
-use namada_core::types::eth_bridge_pool::Segments;
-pub use namada_core::types::eth_bridge_pool::{
+use namada_core::eth_bridge_pool::Segments;
+pub use namada_core::eth_bridge_pool::{
     get_key_from_hash, get_pending_key, is_pending_transfer_key,
     BRIDGE_POOL_ADDRESS,
 };
-use namada_core::types::storage::{DbKeySeg, Key};
+use namada_core::storage::{DbKeySeg, Key};
 pub use namada_state::merkle_tree::eth_bridge_pool::BridgePoolTree;
 
 /// Get the storage key for the root of the Merkle tree

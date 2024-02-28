@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, read_dir};
 use std::io;
-use std::iter::Iterator;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
@@ -15,6 +14,15 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::core::address::{Address, InternalAddress, MASP};
+use namada::core::hash::Hash;
+use namada::core::ibc::{is_ibc_denom, IbcTokenHash};
+use namada::core::key::*;
+use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
+use namada::core::storage::{
+    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
+};
+use namada::core::token::{Change, MaspDigitPos};
 use namada::governance::cli::offline::{
     find_offline_proposal, find_offline_votes, read_offline_files,
     OfflineSignedProposal, OfflineVote,
@@ -29,6 +37,7 @@ use namada::governance::storage::proposal::{
 use namada::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
 };
+use namada::io::Io;
 use namada::ledger::events::Event;
 use namada::ledger::ibc::storage::{
     ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
@@ -38,16 +47,6 @@ use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
-use namada::types::address::{Address, InternalAddress, MASP};
-use namada::types::hash::Hash;
-use namada::types::ibc::{is_ibc_denom, IbcTokenHash};
-use namada::types::io::Io;
-use namada::types::key::*;
-use namada::types::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::types::storage::{
-    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
-};
-use namada::types::token::{Change, MaspDigitPos};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
@@ -87,6 +86,33 @@ pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
     display_line!(context.io(), "Last committed epoch: {}", epoch);
     epoch
+}
+
+/// Query and print some information to help discern when the next epoch will
+/// begin.
+pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    let (this_epoch_first_height, epoch_duration) =
+        rpc::query_next_epoch_info(context.client()).await.unwrap();
+
+    display_line!(
+        context.io(),
+        "First block height of this current epoch: {this_epoch_first_height}."
+    );
+    display_line!(
+        context.io(),
+        "Minimum number of blocks in an epoch: {}.",
+        epoch_duration.min_num_of_blocks
+    );
+    display_line!(
+        context.io(),
+        "Minimum amount of time for an epoch: {} seconds.",
+        epoch_duration.min_duration
+    );
+    display_line!(
+        context.io(),
+        "\nEarliest height at which the next epoch can begin is block {}.",
+        this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
+    );
 }
 
 /// Query and print node's status.
@@ -151,11 +177,16 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let _ = shielded.precompute_asset_types(context).await;
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
+    let _ = shielded
+        .precompute_asset_types(context.client(), tokens)
+        .await;
     // Obtain the effects of all shielded and transparent transactions
     let transfers = shielded
         .query_tx_deltas(
             context.client(),
+            context.io(),
             &query_owner,
             &query_token,
             &wallet.get_viewing_keys(),
@@ -348,7 +379,7 @@ pub async fn query_transparent_balance(
     args: args::QueryBalance,
 ) {
     let prefix = Key::from(
-        Address::Internal(namada::types::address::InternalAddress::Multitoken)
+        Address::Internal(namada::core::address::InternalAddress::Multitoken)
             .to_db_key(),
     );
     match (args.token, args.owner) {
@@ -450,10 +481,12 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
+    let token_map = query_tokens(context, None, None).await;
+    let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
         .await
-        .precompute_asset_types(context)
+        .precompute_asset_types(context.client(), tokens)
         .await;
     // Print the token balances by payment address
     for owner in owners {
@@ -897,13 +930,12 @@ pub async fn query_shielded_balance(
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        let fvks: Vec<_> = viewing_keys
-            .iter()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        shielded.fetch(context.client(), &[], &fvks).await.unwrap();
         // Precompute asset types to increase chances of success in decoding
-        let _ = shielded.precompute_asset_types(context).await;
+        let token_map = query_tokens(context, None, None).await;
+        let tokens = token_map.values().collect();
+        let _ = shielded
+            .precompute_asset_types(context.client(), tokens)
+            .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
@@ -1297,8 +1329,8 @@ pub async fn query_proposal_result(
                 false,
             );
 
-            if proposal.is_ok() {
-                proposal.unwrap()
+            if let Ok(proposal) = proposal {
+                proposal
             } else {
                 edisplay_line!(
                     context.io(),
@@ -1813,16 +1845,17 @@ pub async fn query_bonds(
             display_line!(
                 context.io(),
                 &mut w;
-                "  Remaining active bond from epoch {}: Δ {}",
+                "  Remaining active bond from epoch {}: Δ {} (slashed {})",
                 bond.start,
-                bond.amount.to_string_native()
+                bond.amount.to_string_native(),
+                bond.slashed_amount.unwrap_or_default().to_string_native()
             )?;
         }
         if !details.bonds_total.is_zero() {
             display_line!(
                 context.io(),
                 &mut w;
-                "Active (slashed) bonds total: {}",
+                "Active (slashable) bonds total: {}",
                 details.bonds_total_active().to_string_native()
             )?;
         }
@@ -1840,10 +1873,11 @@ pub async fn query_bonds(
                 display_line!(
                     context.io(),
                     &mut w;
-                    "  Withdrawable from epoch {} (active from {}): Δ {}",
+                    "  Withdrawable from epoch {} (active from {}): Δ {} (slashed {})",
                     unbond.withdraw,
                     unbond.start,
-                    unbond.amount.to_string_native()
+                    unbond.amount.to_string_native(),
+                    unbond.slashed_amount.unwrap_or_default().to_string_native()
                 )?;
             }
             display_line!(
@@ -1875,6 +1909,12 @@ pub async fn query_bonds(
         "All bonds total: {}",
         bonds_and_unbonds.bonds_total.to_string_native()
     )?;
+    display_line!(
+        context.io(),
+        &mut w;
+        "All bonds total slashed: {}",
+        bonds_and_unbonds.bonds_total_slashed.to_string_native()
+    )?;
 
     if bonds_and_unbonds.unbonds_total
         != bonds_and_unbonds.unbonds_total_slashed
@@ -1898,6 +1938,12 @@ pub async fn query_bonds(
         "All unbonds total withdrawable: {}",
         bonds_and_unbonds.total_withdrawable.to_string_native()
     )?;
+    display_line!(
+        context.io(),
+        &mut w;
+        "All unbonds total slashed: {}",
+        bonds_and_unbonds.unbonds_total_slashed.to_string_native()
+    )?;
     Ok(())
 }
 
@@ -1913,7 +1959,6 @@ pub async fn query_bonded_stake<N: Namada>(
 
     match args.validator {
         Some(validator) => {
-            let validator = validator;
             // Find bonded stake for the given validator
             let stake =
                 get_validator_stake(context.client(), epoch, &validator).await;
@@ -2215,7 +2260,6 @@ pub async fn query_and_print_metadata(
 pub async fn query_slashes<N: Namada>(context: &N, args: args::QuerySlashes) {
     match args.validator {
         Some(validator) => {
-            let validator = validator;
             // Find slashes for the given validator
             let slashes: Vec<Slash> = unwrap_client_response::<N::Client, _>(
                 RPC.vp()

@@ -3,9 +3,15 @@ use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::{InitAccount, UpdateAccount};
-use namada::core::types::key::{
-    common, SecretKey as SecretKeyInterface, SigScheme,
+use namada::core::address::{self, Address};
+use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
+use namada::core::hash::Hash;
+use namada::core::key::{
+    common, ed25519, secp256k1, PublicKey, RefTo,
+    SecretKey as SecretKeyInterface, SigScheme,
 };
+use namada::core::masp::{TransferSource, TransferTarget};
+use namada::core::storage::Key;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::storage::vote::ProposalVote;
@@ -31,12 +37,6 @@ use namada::tx::data::pos::{
     MetaDataChange, Redelegation, Withdraw,
 };
 use namada::tx::{Code, Section};
-use namada::types::address::{self, Address};
-use namada::types::eth_bridge_pool::{GasFee, PendingTransfer};
-use namada::types::hash::Hash;
-use namada::types::key::{ed25519, secp256k1, PublicKey, RefTo};
-use namada::types::masp::{TransferSource, TransferTarget};
-use namada::types::storage::Key;
 use namada_apps::bench_utils::{
     BenchShell, BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY,
     BERTHA_PAYMENT_ADDRESS, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
@@ -279,13 +279,12 @@ fn withdraw(c: &mut Criterion) {
                     };
 
                     shell.execute_tx(&unbond_tx);
-                    shell.wl_storage.commit_tx();
+                    shell.state.commit_tx();
 
                     // Advance Epoch for pipeline and unbonding length
-                    let params = proof_of_stake::storage::read_pos_params(
-                        &shell.wl_storage,
-                    )
-                    .unwrap();
+                    let params =
+                        proof_of_stake::storage::read_pos_params(&shell.state)
+                            .unwrap();
                     let advance_epochs =
                         params.pipeline_len + params.unbonding_len;
 
@@ -327,8 +326,8 @@ fn redelegate(c: &mut Criterion) {
             || {
                 let shell = BenchShell::default();
                 // Find the other genesis validator
-                let current_epoch = shell.wl_storage.get_block_epoch().unwrap();
-                let validators = namada::proof_of_stake::storage::read_consensus_validator_set_addresses(&shell.inner.wl_storage, current_epoch).unwrap();
+                let current_epoch = shell.state.get_block_epoch().unwrap();
+                let validators = namada::proof_of_stake::storage::read_consensus_validator_set_addresses(&shell.inner.state, current_epoch).unwrap();
                 let validator_2 = validators.into_iter().find(|addr| addr != &defaults::validator_address()).expect("There must be another validator to redelegate to");
                 // Prepare the redelegation tx
                 (shell, redelegation(validator_2))
@@ -479,7 +478,7 @@ fn init_proposal(c: &mut Criterion) {
                             let max_proposal_content_key =
                     namada::governance::storage::keys::get_max_proposal_content_key();
                             let max_code_size: u64 = shell
-                                .wl_storage
+                                .state
                                 .read(&max_code_size_key)
                                 .expect("Error while reading from storage")
                                 .expect(
@@ -487,7 +486,7 @@ fn init_proposal(c: &mut Criterion) {
                                      storage",
                                 );
                             let max_proposal_content_size: u64 = shell
-                                .wl_storage
+                                .state
                                 .read(&max_proposal_content_key)
                                 .expect("Error while reading from storage")
                                 .expect(
@@ -617,8 +616,8 @@ fn become_validator(c: &mut Criterion) {
         eth_cold_key,
         eth_hot_key,
         protocol_key,
-        commission_rate: namada::types::dec::Dec::default(),
-        max_commission_rate_change: namada::types::dec::Dec::default(),
+        commission_rate: namada::core::dec::Dec::default(),
+        max_commission_rate_change: namada::core::dec::Dec::default(),
         email: "null@null.net".to_string(),
         description: None,
         website: None,
@@ -645,9 +644,9 @@ fn become_validator(c: &mut Criterion) {
                 let mut shell = BenchShell::default();
                 // Initialize the account to be able to use it
                 shell
-                    .wl_storage
+                    .state
                     .write_bytes(
-                        &namada::types::storage::Key::validity_predicate(
+                        &namada::core::storage::Key::validity_predicate(
                             &address,
                         ),
                         vec![],
@@ -667,7 +666,7 @@ fn change_validator_commission(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
+            new_rate: namada::core::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,
@@ -794,8 +793,8 @@ fn ibc(c: &mut Criterion) {
                     match bench_name {
                         "open_connection" => {
                             let _ = shell.init_ibc_client_state(
-                                namada::core::types::storage::Key::from(
-                                    Address::Internal(namada::types::address::InternalAddress::Ibc).to_db_key(),
+                                namada::core::storage::Key::from(
+                                    Address::Internal(namada::core::address::InternalAddress::Ibc).to_db_key(),
                                 ),
                             );
                         }
@@ -832,11 +831,11 @@ fn unjail_validator(c: &mut Criterion) {
                 let mut shell = BenchShell::default();
 
                 // Jail the validator
-                let pos_params = read_pos_params(&shell.wl_storage).unwrap();
-                let current_epoch = shell.wl_storage.storage.block.epoch;
+                let pos_params = read_pos_params(&shell.state).unwrap();
+                let current_epoch = shell.state.in_mem().block.epoch;
                 let evidence_epoch = current_epoch.prev();
                 proof_of_stake::slashing::slash(
-                    &mut shell.wl_storage,
+                    &mut shell.state,
                     &pos_params,
                     current_epoch,
                     evidence_epoch,
@@ -847,7 +846,7 @@ fn unjail_validator(c: &mut Criterion) {
                 )
                 .unwrap();
 
-                shell.wl_storage.commit_tx();
+                shell.state.commit_tx();
                 shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.slash_processing_epoch_offset() {
@@ -866,17 +865,17 @@ fn tx_bridge_pool(c: &mut Criterion) {
     let shell = BenchShell::default();
 
     let data = PendingTransfer {
-        transfer: namada::types::eth_bridge_pool::TransferToEthereum {
-            kind: namada::types::eth_bridge_pool::TransferToEthereumKind::Erc20,
-            asset: read_native_erc20_address(&shell.wl_storage).unwrap(),
-            recipient: namada::types::ethereum_events::EthAddress([1u8; 20]),
+        transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+            kind: namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+            asset: read_native_erc20_address(&shell.state).unwrap(),
+            recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
             sender: defaults::albert_address(),
             amount: Amount::from(1),
         },
         gas_fee: GasFee {
             amount: Amount::from(100),
             payer: defaults::albert_address(),
-            token: shell.wl_storage.storage.native_token.clone(),
+            token: shell.state.in_mem().native_token.clone(),
         },
     };
     let tx = shell.generate_tx(
@@ -902,7 +901,7 @@ fn resign_steward(c: &mut Criterion) {
                 let mut shell = BenchShell::default();
                 namada::governance::pgf::storage::keys::stewards_handle()
                     .insert(
-                        &mut shell.wl_storage,
+                        &mut shell.state,
                         defaults::albert_address(),
                         StewardDetail::base(defaults::albert_address()),
                     )
@@ -931,7 +930,7 @@ fn update_steward_commission(c: &mut Criterion) {
                 let mut shell = BenchShell::default();
                 namada::governance::pgf::storage::keys::stewards_handle()
                     .insert(
-                        &mut shell.wl_storage,
+                        &mut shell.state,
                         defaults::albert_address(),
                         StewardDetail::base(defaults::albert_address()),
                     )
@@ -941,7 +940,7 @@ fn update_steward_commission(c: &mut Criterion) {
                     steward: defaults::albert_address(),
                     commission: HashMap::from([(
                         defaults::albert_address(),
-                        namada::types::dec::Dec::zero(),
+                        namada::core::dec::Dec::zero(),
                     )]),
                 };
                 let tx = shell.generate_tx(
@@ -995,16 +994,16 @@ fn reactivate_validator(c: &mut Criterion) {
                 let mut shell = BenchShell::default();
 
                 // Deactivate the validator
-                let pos_params = read_pos_params(&shell.wl_storage).unwrap();
-                let current_epoch = shell.wl_storage.storage.block.epoch;
+                let pos_params = read_pos_params(&shell.state).unwrap();
+                let current_epoch = shell.state.in_mem().block.epoch;
                 proof_of_stake::deactivate_validator(
-                    &mut shell.wl_storage,
+                    &mut shell.state,
                     &defaults::validator_address(),
                     current_epoch,
                 )
                 .unwrap();
 
-                shell.wl_storage.commit_tx();
+                shell.state.commit_tx();
                 shell.commit_block();
                 // Advance by slash epoch offset epochs
                 for _ in 0..=pos_params.pipeline_len {
@@ -1054,10 +1053,9 @@ fn claim_rewards(c: &mut Criterion) {
                     let mut shell = BenchShell::default();
 
                     // Advance Epoch for pipeline and unbonding length
-                    let params = proof_of_stake::storage::read_pos_params(
-                        &shell.wl_storage,
-                    )
-                    .unwrap();
+                    let params =
+                        proof_of_stake::storage::read_pos_params(&shell.state)
+                            .unwrap();
                     let advance_epochs =
                         params.pipeline_len + params.unbonding_len;
 

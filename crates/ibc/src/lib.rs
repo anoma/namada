@@ -18,6 +18,7 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
+use namada_core::address::{Address, MASP};
 use namada_core::ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
@@ -36,12 +37,7 @@ use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::core::router::types::module::ModuleId;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::ibc::{
-    get_shielded_transfer, is_ibc_denom, MsgShieldedTransfer,
-    EVENT_TYPE_DENOM_TRACE, EVENT_TYPE_PACKET,
-};
-use namada_core::types::masp::PaymentAddress;
+use namada_core::masp::PaymentAddress;
 use prost::Message;
 use thiserror::Error;
 
@@ -348,7 +344,12 @@ pub fn received_ibc_token(
             TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
         ibc_denom.add_trace_prefix(prefix);
     }
-    Ok(storage::ibc_token(ibc_denom.to_string()))
+    if ibc_denom.trace_path.is_empty() {
+        Address::decode(ibc_denom.to_string())
+            .map_err(|e| Error::Denom(format!("Invalid base denom: {e}")))
+    } else {
+        Ok(storage::ibc_token(ibc_denom.to_string()))
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

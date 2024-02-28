@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use borsh::BorshDeserialize;
-use namada::types::ethereum_events::EthereumEvent;
+use namada::core::ethereum_events::EthereumEvent;
 use tokio::sync::mpsc::Sender as BoundedSender;
 use tokio::sync::oneshot::{Receiver, Sender};
 use warp::reply::WithStatus;

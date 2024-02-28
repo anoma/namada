@@ -17,6 +17,7 @@ members = [
   "crates/merkle_tree",
   "crates/parameters",
   "crates/proof_of_stake",
+  "crates/replay_protection",
   "crates/sdk",
   "crates/namada",
   "crates/shielded_token",
@@ -52,7 +53,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.31.5"
+version = "0.31.7"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -114,8 +115,8 @@ ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 # branch = "murisi/namada-integration"
-masp_primitives = { git = "https://github.com/anoma/masp", tag = "v1.1.0" }
-masp_proofs = { git = "https://github.com/anoma/masp", tag = "v1.1.0", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"

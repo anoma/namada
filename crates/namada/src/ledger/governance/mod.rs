@@ -13,17 +13,17 @@ use namada_governance::utils::is_valid_validator_voting_period;
 use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
-use namada_state::StorageRead;
+use namada_state::{StateRead, StorageRead};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use self::utils::ReadType;
+use crate::address::{Address, InternalAddress};
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::ledger::{native_vp, pos};
+use crate::storage::{Epoch, Key};
 use crate::token;
-use crate::types::address::{Address, InternalAddress};
-use crate::types::storage::{Epoch, Key};
 use crate::vm::WasmCacheAccess;
 
 /// for handling Governance NativeVP errors
@@ -47,20 +47,18 @@ pub enum Error {
 }
 
 /// Governance VP
-pub struct GovernanceVp<'a, DB, H, CA>
+pub struct GovernanceVp<'a, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: namada_state::StorageHasher,
+    S: StateRead,
     CA: WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, DB, H, CA>,
+    pub ctx: Ctx<'a, S, CA>,
 }
 
-impl<'a, DB, H, CA> NativeVp for GovernanceVp<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for GovernanceVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -134,10 +132,9 @@ where
     }
 }
 
-impl<'a, DB, H, CA> GovernanceVp<'a, DB, H, CA>
+impl<'a, S, CA> GovernanceVp<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + namada_state::StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     fn is_valid_init_proposal_key_set(
@@ -379,7 +376,7 @@ where
             ProposalType::PGFPayment(fundings) => {
                 // collect all the funding target that we have to add and are
                 // unique
-                let are_continous_add_targets_unique = fundings
+                let are_continuous_add_targets_unique = fundings
                     .iter()
                     .filter_map(|funding| match funding {
                         PGFAction::Continuous(AddRemove::Add(target)) => {
@@ -391,7 +388,7 @@ where
 
                 // collect all the funding target that we have to remove and are
                 // unique
-                let are_continous_remove_targets_unique = fundings
+                let are_continuous_remove_targets_unique = fundings
                     .iter()
                     .filter_map(|funding| match funding {
                         PGFAction::Continuous(AddRemove::Remove(target)) => {
@@ -411,20 +408,20 @@ where
                 // check that they are unique by checking that the set of add
                 // plus the set of remove plus the set of retro is equal to the
                 // total fundings
-                let are_continous_fundings_unique =
-                    are_continous_add_targets_unique.len()
-                        + are_continous_remove_targets_unique.len()
+                let are_continuous_fundings_unique =
+                    are_continuous_add_targets_unique.len()
+                        + are_continuous_remove_targets_unique.len()
                         + total_retro_targerts
                         == fundings.len();
 
                 // can't remove and add the same target in the same proposal
-                let are_targets_unique = are_continous_add_targets_unique
-                    .intersection(&are_continous_remove_targets_unique)
+                let are_targets_unique = are_continuous_add_targets_unique
+                    .intersection(&are_continuous_remove_targets_unique)
                     .count() as u64
                     == 0;
 
                 Ok(is_total_fundings_valid
-                    && are_continous_fundings_unique
+                    && are_continuous_fundings_unique
                     && are_targets_unique)
             }
             _ => Ok(true), // default proposal
@@ -582,9 +579,9 @@ where
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
             tracing::info!(
-                "Proposal end ({end_epoch}) must be after start \
-                 ({start_epoch}) and start before current epoch \
-                 ({current_epoch})."
+                "Proposal end epoch ({end_epoch}) must be after the start \
+                 epoch ({start_epoch}), and the start epoch must be after the \
+                 current epoch ({current_epoch})."
             );
             return Ok(false);
         }
@@ -711,8 +708,7 @@ where
         delegation_address: &Address,
     ) -> Result<bool>
     where
-        DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-        H: 'static + namada_state::StorageHasher,
+        S: StateRead,
         CA: 'static + WasmCacheAccess,
     {
         if !address.eq(delegation_address) {

@@ -4,16 +4,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
-use namada_core::types::address::Address;
-use namada_core::types::chain::ChainId;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::key::{common, SchemeType};
-use namada_core::types::masp::PaymentAddress;
-use namada_core::types::storage::Epoch;
-use namada_core::types::time::DateTimeUtc;
-use namada_core::types::{storage, token};
+use namada_core::address::Address;
+use namada_core::chain::ChainId;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::keccak::KeccakHash;
+use namada_core::key::{common, SchemeType};
+use namada_core::masp::PaymentAddress;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::time::DateTimeUtc;
+use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -61,6 +61,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a viewing key
     type ViewingKey: Clone + std::fmt::Debug;
+    /// Represents a spending key
+    type SpendingKey: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
     type BalanceOwner: Clone + std::fmt::Debug;
     /// Represents a public key
@@ -93,17 +95,18 @@ pub struct BpConversionTableEntry {
 impl NamadaTypes for SdkTypes {
     type AddrOrNativeToken = Address;
     type Address = Address;
-    type BalanceOwner = namada_core::types::masp::BalanceOwner;
+    type BalanceOwner = namada_core::masp::BalanceOwner;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
-    type ConfigRpcTendermintAddress = tendermint_config::net::Address;
+    type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
     type EthereumAddress = ();
-    type Keypair = namada_core::types::key::common::SecretKey;
-    type PublicKey = namada_core::types::key::common::PublicKey;
-    type TendermintAddress = tendermint_config::net::Address;
-    type TransferSource = namada_core::types::masp::TransferSource;
-    type TransferTarget = namada_core::types::masp::TransferTarget;
-    type ViewingKey = namada_core::types::masp::ExtendedViewingKey;
+    type Keypair = namada_core::key::common::SecretKey;
+    type PublicKey = namada_core::key::common::PublicKey;
+    type SpendingKey = namada_core::masp::ExtendedSpendingKey;
+    type TendermintAddress = tendermint_rpc::Url;
+    type TransferSource = namada_core::masp::TransferSource;
+    type TransferTarget = namada_core::masp::TransferTarget;
+    type ViewingKey = namada_core::masp::ExtendedViewingKey;
 }
 
 /// Common query arguments
@@ -1806,6 +1809,23 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub owner: C::Address,
 }
 
+#[derive(Clone, Debug)]
+/// Sync notes from MASP owned by the provided spending /
+/// viewing keys. Syncing can be told to stop at a given
+/// block height.
+pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
+    /// The ledger address
+    pub ledger_address: C::TendermintAddress,
+    /// The number of txs to fetch before caching
+    pub batch_size: u64,
+    /// Height to sync up to. Defaults to most recent
+    pub last_query_height: Option<BlockHeight>,
+    /// Spending keys used to determine note ownership
+    pub spending_keys: Vec<C::SpendingKey>,
+    /// Viewing keys used to determine note ownership
+    pub viewing_keys: Vec<C::ViewingKey>,
+}
+
 /// Query PoS commission rate
 #[derive(Clone, Debug)]
 pub struct QueryCommissionRate<C: NamadaTypes = SdkTypes> {
@@ -2173,6 +2193,13 @@ pub struct KeyExport {
     pub alias: String,
 }
 
+/// Wallet key export arguments
+#[derive(Clone, Debug)]
+pub struct KeyConvert {
+    /// Key alias
+    pub alias: String,
+}
+
 /// Wallet key import arguments
 #[derive(Clone, Debug)]
 pub struct KeyImport {
@@ -2458,7 +2485,7 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
 
 /// IBC shielded transfer generation arguments
 #[derive(Clone, Debug)]
-pub struct GenIbcShieldedTransafer<C: NamadaTypes = SdkTypes> {
+pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     /// The query parameters.
     pub query: Query<C>,
     /// The output directory path to where serialize the data

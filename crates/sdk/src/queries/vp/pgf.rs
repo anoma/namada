@@ -1,4 +1,4 @@
-use namada_core::types::address::Address;
+use namada_core::address::Address;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
 use namada_governance::storage::proposal::StoragePgfFunding;
@@ -22,7 +22,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::pgf::storage::get_stewards(ctx.wl_storage)
+    namada_governance::pgf::storage::get_stewards(ctx.state)
 }
 
 /// Check if an address is a pgf steward
@@ -34,7 +34,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::pgf::storage::is_steward(ctx.wl_storage, &address)
+    namada_governance::pgf::storage::is_steward(ctx.state, &address)
 }
 
 /// Query the continuous pgf fundings
@@ -45,7 +45,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::pgf::storage::get_payments(ctx.wl_storage)
+    namada_governance::pgf::storage::get_payments(ctx.state)
 }
 
 /// Query the PGF parameters
@@ -56,5 +56,5 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::pgf::storage::get_parameters(ctx.wl_storage)
+    namada_governance::pgf::storage::get_parameters(ctx.state)
 }

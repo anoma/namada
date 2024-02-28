@@ -12,10 +12,10 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::types::address::{Address, DecodeError};
-use namada::types::io::Io;
-use namada::types::key::*;
-use namada::types::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
+use namada::core::address::{Address, DecodeError};
+use namada::core::key::*;
+use namada::core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
+use namada::io::Io;
 use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
@@ -28,6 +28,7 @@ use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
 use crate::client::utils::PRE_GENESIS_DIR;
+use crate::node::ledger::tendermint_node::validator_key_to_json;
 use crate::wallet::{
     self, read_and_confirm_encryption_password, CliWalletUtils,
 };
@@ -53,6 +54,9 @@ impl CliApi {
             )) => key_address_find(ctx, io, args),
             cmds::NamadaWallet::KeyExport(cmds::WalletExportKey(args)) => {
                 key_export(ctx, io, args)
+            }
+            cmds::NamadaWallet::KeyConvert(cmds::WalletConvertKey(args)) => {
+                key_convert(ctx, io, args)
             }
             cmds::NamadaWallet::KeyImport(cmds::WalletImportKey(args)) => {
                 key_import(ctx, io, args)
@@ -1243,6 +1247,25 @@ fn key_export(
             edisplay_line!(io, "{}", err);
             cli::safe_exit(1)
         })
+}
+
+/// Convert a consensus key to tendermint validator key in json format
+fn key_convert(
+    ctx: Context,
+    io: &impl Io,
+    args::KeyConvert { alias }: args::KeyConvert,
+) {
+    let alias = alias.to_lowercase();
+    let mut wallet = load_wallet(ctx);
+    let sk = wallet.find_secret_key(&alias, None);
+    let key: serde_json::Value = validator_key_to_json(&sk.unwrap()).unwrap();
+    let file_name = format!("priv_validator_key_{}.json", alias);
+    let file = File::create(&file_name).unwrap();
+    serde_json::to_writer_pretty(file, &key).unwrap_or_else(|err| {
+        edisplay_line!(io, "{}", err);
+        cli::safe_exit(1)
+    });
+    display_line!(io, "Converted to file {}", file_name);
 }
 
 /// Import a transparent keypair / MASP spending key from a file.

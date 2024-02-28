@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
@@ -11,11 +12,8 @@ use namada_core::ibc::core::host::types::path::{
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use namada_core::types::address::{
-    Address, InternalAddress, HASH_LEN, SHA_HASH_LEN,
-};
-use namada_core::types::ibc::IbcTokenHash;
-use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::ibc::IbcTokenHash;
+use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -29,7 +27,7 @@ const DENOM: &str = "ibc_denom";
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Storage key error: {0}")]
-    StorageKey(namada_core::types::storage::Error),
+    StorageKey(namada_core::storage::Error),
     #[error("Invalid Key: {0}")]
     InvalidKey(String),
     #[error("Port capability error: {0}")]

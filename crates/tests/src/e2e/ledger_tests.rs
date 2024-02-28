@@ -11,6 +11,7 @@
 #![allow(clippy::type_complexity)]
 
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -21,17 +22,17 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
+use namada::core::address::Address;
+use namada::core::storage::Epoch;
 use namada::governance::cli::onchain::{PgfFunding, StewardsUpdate};
 use namada::governance::storage::proposal::{PGFInternalTarget, PGFTarget};
 use namada::token;
-use namada::types::address::Address;
-use namada::types::storage::Epoch;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
-use namada_core::types::chain::ChainId;
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::chain::ChainId;
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
@@ -62,7 +63,7 @@ use crate::strings::{
 };
 use crate::{run, run_as};
 
-const ENV_VAR_NAMADA_ADD_PEER: &str = "NAMADA_ADD_PEER";
+const ENV_VAR_NAMADA_SEED_NODES: &str = "NAMADA_SEED_NODES";
 
 fn start_namada_ledger_node(
     test: &Test,
@@ -210,7 +211,6 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let _bg_validator_1 = validator_1.background();
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
-    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
     let non_validator_rpc = get_actor_rpc(&test, Who::NonValidator);
 
     // Find the block height on the validator
@@ -219,14 +219,12 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // Wait for the non-validator to be synced to at least the same height
     wait_for_block_height(&test, &non_validator_rpc, after_tx_height, 10)?;
 
-    let query_balance_args = |ledger_rpc| {
-        vec![
-            "balance", "--owner", ALBERT, "--token", NAM, "--node", ledger_rpc,
-        ]
-    };
-    for ledger_rpc in &[validator_0_rpc, validator_1_rpc, non_validator_rpc] {
+    let query_balance_args = ["balance", "--owner", ALBERT, "--token", NAM];
+    for who in
+        [Who::Validator(0), Who::Validator(1), Who::NonValidator].into_iter()
+    {
         let mut client =
-            run!(test, Bin::Client, query_balance_args(ledger_rpc), Some(40))?;
+            run_as!(test, who, Bin::Client, query_balance_args, Some(40))?;
         client.exp_string("nam: 2000010.1")?;
         client.assert_success();
     }
@@ -346,8 +344,8 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 }
 
 /// In this test we
-///   1. Run the ledger node until a pre-configured height,
-///      at which point it should suspend.
+///   1. Run the ledger node until a pre-configured height, at which point it
+///      should suspend.
 ///   2. Check that we can still query the ledger.
 ///   3. Check that we can shutdown the ledger normally afterwards.
 #[test]
@@ -540,7 +538,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "init-account",
             "--public-keys",
-            // Value obtained from `namada::types::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
             "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
             "--threshold",
             "1",
@@ -576,7 +574,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             let tx_args = if dry_run && tx_args[0] == "tx" {
                 continue;
             } else if dry_run {
-                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+                [tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
             };
@@ -698,6 +696,8 @@ fn ledger_txs_and_queries() -> Result<()> {
 /// operation is successful
 /// 2. Test that a tx requesting a disposable signer
 /// providing an insufficient unshielding fails
+/// 3. Submit another transaction with valid fee unshielding and an inner
+/// shielded transfer with the same source
 #[test]
 fn wrapper_disposable_signer() -> Result<()> {
     // Download the shielded pool parameters before starting node
@@ -722,27 +722,56 @@ fn wrapper_disposable_signer() -> Result<()> {
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    let tx_args = vec![
+        "add",
+        "--alias",
+        "alias_a",
+        "--value",
+        AA_VIEWING_KEY,
+        "--unsafe-dont-encrypt",
+    ];
+    let mut client = run!(test, Bin::Wallet, tx_args, Some(120))?;
+    client.assert_success();
+
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+
+    // Produce three different output descriptions to spend
+    for _ in 0..3 {
+        let tx_args = vec![
+            "transfer",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+        client.exp_string(TX_ACCEPTED)?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+    }
+
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
     let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        AA_PAYMENT_ADDRESS,
-        "--token",
-        NAM,
-        "--amount",
-        "50",
-        "--ledger-address",
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
         &validator_one_rpc,
     ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
 
-    client.exp_string(TX_ACCEPTED)?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec![
         "transfer",
         "--source",
@@ -753,6 +782,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-spending-key",
         A_SPENDING_KEY,
         "--disposable-gas-payer",
@@ -764,6 +795,9 @@ fn wrapper_disposable_signer() -> Result<()> {
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
     let tx_args = vec![
         "transfer",
         "--source",
@@ -774,6 +808,8 @@ fn wrapper_disposable_signer() -> Result<()> {
         NAM,
         "--amount",
         "1",
+        "--gas-limit",
+        "20000",
         "--gas-price",
         "90000000",
         "--gas-spending-key",
@@ -789,6 +825,32 @@ fn wrapper_disposable_signer() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
     client.exp_string("Error while processing transaction's fees")?;
 
+    // Try another valid fee unshielding and masp transaction in the same tx,
+    // with the same source. This tests that the client can properly
+    // construct multiple transactions together
+    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
+    let tx_args = vec![
+        "transfer",
+        "--source",
+        A_SPENDING_KEY,
+        "--target",
+        AB_PAYMENT_ADDRESS,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--gas-limit",
+        "20000",
+        "--gas-spending-key",
+        A_SPENDING_KEY,
+        "--disposable-gas-payer",
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
+
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
 
@@ -953,6 +1015,9 @@ fn pos_bonds() -> Result<()> {
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
             .background();
+
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    wait_for_block_height(&test, &rpc, 2, 30)?;
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
@@ -1445,9 +1510,11 @@ fn test_bond_queries() -> Result<()> {
     client.exp_string(
         "All bonds total active: 100188.000000\r
 All bonds total: 100188.000000\r
+All bonds total slashed: 0.000000\r
 All unbonds total active: 412.000000\r
 All unbonds total: 412.000000\r
-All unbonds total withdrawable: 412.000000\r",
+All unbonds total withdrawable: 412.000000\r
+All unbonds total slashed: 0.000000\r",
     )?;
     client.assert_success();
 
@@ -1544,8 +1611,8 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
-    // 3. Submit a delegation to the new validator
-    //    First, transfer some tokens to the validator's key for fees:
+    // 3. Submit a delegation to the new validator First, transfer some tokens
+    //    to the validator's key for fees:
     let tx_args = vec![
         "transfer",
         "--source",
@@ -2563,7 +2630,7 @@ fn proposal_offline() -> Result<()> {
     );
     let valid_proposal_json_path =
         test.test_dir.path().join("valid_proposal.json");
-    write_json_file(valid_proposal_json_path.as_path(), &valid_proposal_json);
+    write_json_file(valid_proposal_json_path.as_path(), valid_proposal_json);
 
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 3 {
@@ -2667,7 +2734,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use namada::types::key::{self, ed25519, SigScheme};
+    use namada::core::key::{self, ed25519, SigScheme};
     use namada_apps::client;
     use namada_apps::config::Config;
 
@@ -2964,13 +3031,12 @@ fn double_signing_gets_slashed() -> Result<()> {
 
 /// In this test we:
 /// 1. Run the ledger node
-/// 2. For some transactions that need signature authorization:
-///    2a. Generate a new key for an implicit account.
-///    2b. Send some funds to the implicit account.
-///    2c. Submit the tx with the implicit account as the source, that
-///        requires that the account has revealed its PK. This should be done
-///        by the client automatically.
-///    2d. Submit same tx again, this time the client shouldn't reveal again.
+/// 2. For some transactions that need signature authorization: 2a. Generate a
+///    new key for an implicit account. 2b. Send some funds to the implicit
+///    account. 2c. Submit the tx with the implicit account as the source, that
+///    requires that the account has revealed its PK. This should be done by the
+///    client automatically. 2d. Submit same tx again, this time the client
+///    shouldn't reveal again.
 #[test]
 fn implicit_account_reveal_pk() -> Result<()> {
     let test = setup::single_node_net()?;
@@ -3953,8 +4019,8 @@ fn proposal_change_shielded_reward() -> Result<()> {
 /// Test sync with a chain.
 ///
 /// The chain ID must be set via `NAMADA_CHAIN_ID` env var.
-/// Additionally, `NAMADA_ADD_PEER` maybe be specified with a string that must
-/// be parsable into `TendermintAddress`.
+/// Additionally, `NAMADA_SEED_NODES` maybe be specified with a comma-separated
+/// list of addresses that must be parsable into `TendermintAddress`.
 ///
 /// To run this test use `--ignored`.
 #[test]
@@ -3992,21 +4058,32 @@ fn test_sync_chain() -> Result<()> {
     join_network.exp_string("Successfully configured for chain")?;
     join_network.assert_success();
 
-    // Add peer if any given
-    if let Ok(add_peer) = std::env::var(ENV_VAR_NAMADA_ADD_PEER) {
+    if cfg!(debug_assertions) {
+        let res: Result<Vec<TendermintAddress>, _> =
+            deserialize_comma_separated_list(
+                "tcp://9202be72cfe612af24b43f49f53096fc5512cd7f@194.163.172.\
+                 168:26656,tcp://0edfd7e6a1a172864ddb76a10ea77a8bb242759a@65.\
+                 21.194.46:36656",
+            );
+        debug_assert!(res.is_ok(), "Expected Ok, got {res:#?}");
+    }
+    // Add seed nodes if any given
+    if let Ok(seed_nodes) = std::env::var(ENV_VAR_NAMADA_SEED_NODES) {
         let mut config = namada_apps::config::Config::load(
             base_dir,
             &test.net.chain_id,
             None,
         );
-        config.ledger.cometbft.p2p.persistent_peers.push(
-            TendermintAddress::from_str(&add_peer).unwrap_or_else(|_| {
-                panic!(
-                    "Invalid `{ENV_VAR_NAMADA_ADD_PEER}` value. Must be a \
-                     valid `TendermintAddress`."
-                )
-            }),
-        );
+        let seed_nodes: Vec<TendermintAddress> =
+            deserialize_comma_separated_list(&seed_nodes).unwrap_or_else(
+                |_| {
+                    panic!(
+                        "Invalid `{ENV_VAR_NAMADA_SEED_NODES}` value. Must be \
+                         a valid `TendermintAddress`."
+                    )
+                },
+            );
+        config.ledger.cometbft.p2p.seeds.extend(seed_nodes);
         config.write(base_dir, &test.net.chain_id, true).unwrap();
     }
 
@@ -4034,4 +4111,33 @@ fn test_sync_chain() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Deserialize a comma separated list of types that impl `FromStr` as a `Vec`
+/// from a string. Same as `tendermint-config/src/config.rs` list
+/// deserialization.
+fn deserialize_comma_separated_list<T, E>(
+    list: &str,
+) -> serde_json::Result<Vec<T>>
+where
+    T: FromStr<Err = E>,
+    E: Display,
+{
+    use serde::de::Error;
+
+    let mut result = vec![];
+
+    if list.is_empty() {
+        return Ok(result);
+    }
+
+    for item in list.split(',') {
+        result.push(
+            item.parse()
+                .map_err(|e| serde_json::Error::custom(format!("{e}")))
+                .unwrap(),
+        );
+    }
+
+    Ok(result)
 }

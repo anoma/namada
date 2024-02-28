@@ -1,11 +1,11 @@
+use namada_sdk::address::Address;
+pub use namada_sdk::eth_bridge_pool::{GasFee, TransferToEthereum};
+use namada_sdk::hash::Hash;
+use namada_sdk::key::common;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Signature, Tx, TxError};
-use namada_sdk::types::address::Address;
-pub use namada_sdk::types::eth_bridge_pool::{GasFee, TransferToEthereum};
-use namada_sdk::types::hash::Hash;
-use namada_sdk::types::key::common;
-use namada_sdk::types::storage::Epoch;
-use namada_sdk::types::token::DenominatedAmount;
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
@@ -23,10 +23,7 @@ impl BridgeTransfer {
         args: GlobalArgs,
     ) -> Self {
         let pending_transfer =
-            namada_sdk::types::eth_bridge_pool::PendingTransfer {
-                transfer,
-                gas_fee,
-            };
+            namada_sdk::eth_bridge_pool::PendingTransfer { transfer, gas_fee };
 
         Self(transaction::build_tx(
             args,

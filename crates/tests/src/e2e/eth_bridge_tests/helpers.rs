@@ -7,15 +7,15 @@ use data_encoding::HEXLOWER;
 use eyre::{eyre, Context, Result};
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Method, Request, StatusCode};
+use namada::core::address::{wnam, Address};
+use namada::core::ethereum_events::{
+    EthAddress, EthereumEvent, TransferToNamada, Uint,
+};
 use namada::ledger::eth_bridge::{
     wrapped_erc20s, ContractVersion, Contracts, EthereumBridgeParams,
     MinimumConfirmations, UpgradeableContract,
 };
 use namada::token;
-use namada::types::address::{wnam, Address};
-use namada::types::ethereum_events::{
-    EthAddress, EthereumEvent, TransferToNamada, Uint,
-};
 use namada_apps::config::ethereum_bridge;
 
 use crate::e2e::helpers::{

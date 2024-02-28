@@ -1,0 +1,1 @@
+- Refactored token crates. ([\#2493](https://github.com/anoma/namada/pull/2493))

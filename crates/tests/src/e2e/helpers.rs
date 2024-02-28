@@ -15,18 +15,18 @@ use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
+use namada::core::address::Address;
+use namada::core::key::*;
+use namada::core::storage::Epoch;
 use namada::ledger::queries::{Rpc, RPC};
 use namada::tendermint_rpc::HttpClient;
 use namada::token;
-use namada::types::address::Address;
-use namada::types::key::*;
-use namada::types::storage::Epoch;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
 use namada_apps::config::genesis::templates;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::config::{Config, TendermintMode};
-use namada_core::types::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::wallet::fs::FsWalletUtils;
 use namada_sdk::wallet::Wallet;
 use toml::Value;
@@ -177,7 +177,7 @@ pub fn get_actor_rpc(test: &Test, who: Who) -> String {
         Config::load(base_dir, &test.net.chain_id, Some(tendermint_mode));
     let socket_addr =
         convert_tm_addr_to_socket_addr(&config.ledger.cometbft.rpc.laddr);
-    format!("{}:{}", socket_addr.ip(), socket_addr.port())
+    format!("http://{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
 /// Get some nodes's wallet.
@@ -578,6 +578,7 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 fn make_hermes_chain_config(test: &Test) -> Value {
     let chain_id = test.net.chain_id.as_str();
     let rpc_addr = get_actor_rpc(test, Who::Validator(0));
+    let rpc_addr = rpc_addr.strip_prefix("http://").unwrap();
 
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));

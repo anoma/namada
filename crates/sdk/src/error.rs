@@ -1,10 +1,11 @@
 //! Generic Error Type for all of the Shared Crate
 
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::storage;
-use namada_core::types::storage::Epoch;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::event::EventError;
+use namada_core::storage;
+use namada_core::storage::Epoch;
 use namada_tx::Tx;
 use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;
@@ -58,23 +59,6 @@ pub enum PinnedBalanceError {
         "The supplied viewing key does not recognize payments to given address"
     )]
     InvalidViewingKey,
-}
-
-/// Errors to do with emitting events.
-#[derive(Error, Debug, Clone)]
-pub enum EventError {
-    /// Error when parsing an event type
-    #[error("Invalid event type")]
-    InvalidEventType,
-    /// Error when parsing attributes from an event JSON.
-    #[error("Json missing `attributes` field")]
-    MissingAttributes,
-    /// Missing key in attributes.
-    #[error("Attributes missing key: {0}")]
-    MissingKey(String),
-    /// Missing value in attributes.
-    #[error("Attributes missing value: {0}")]
-    MissingValue(String),
 }
 
 /// Errors that deal with querying some kind of data
@@ -162,12 +146,10 @@ pub enum TxSubmitError {
          be reactivated."
     )]
     ValidatorNotInactive(Address, Epoch),
-    /// Validator still frozen and ineligible to be unjailed
-    #[error(
-        "The validator address {0} is currently frozen and ineligible to be \
-         unjailed."
-    )]
-    ValidatorFrozenFromUnjailing(Address),
+    /// Validator is frozen and ineligible to be unjailed or have bonds
+    /// unbonded
+    #[error("The validator address {0} is currently frozen.")]
+    ValidatorFrozen(Address),
     /// The commission for the steward are not valid
     #[error("Invalid steward commission: {0}.")]
     InvalidStewardCommission(String),

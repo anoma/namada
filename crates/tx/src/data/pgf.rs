@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
+use namada_core::dec::Dec;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -33,8 +33,8 @@ pub struct UpdateStewardCommission {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for PGF
 pub mod tests {
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::dec::testing::arb_dec;
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::dec::testing::arb_dec;
     use proptest::{collection, prop_compose};
 
     use super::UpdateStewardCommission;

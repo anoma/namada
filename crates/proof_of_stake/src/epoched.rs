@@ -7,8 +7,7 @@ use std::marker::PhantomData;
 use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::storage::{self, Epoch};
-use namada_storage;
+use namada_core::storage::{self, Epoch};
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};
 use namada_storage::{StorageRead, StorageWrite};
@@ -1085,10 +1084,10 @@ pub trait EpochOffset:
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address::testing::established_address_1;
-    use namada_core::types::dec::Dec;
-    use namada_core::types::{key, token};
-    use namada_state::testing::TestWlStorage;
+    use namada_core::address::testing::established_address_1;
+    use namada_core::dec::Dec;
+    use namada_core::{key, token};
+    use namada_state::testing::TestState;
     use test_log::test;
 
     use super::*;
@@ -1392,8 +1391,8 @@ mod test {
         Ok(())
     }
 
-    fn init_storage() -> namada_storage::Result<TestWlStorage> {
-        let mut s = TestWlStorage::default();
+    fn init_storage() -> namada_storage::Result<TestState> {
+        let mut s = TestState::default();
         let gov_params =
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(&mut s)?;

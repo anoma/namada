@@ -1,6 +1,6 @@
 //! Runtime configuration for a validator node.
 #[allow(unused_imports)]
-use namada::types::ethereum_events::EthereumEvent;
+use namada::core::ethereum_events::EthereumEvent;
 use serde::{Deserialize, Serialize};
 
 /// Default [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/) endpoint used by the oracle

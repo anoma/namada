@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use itertools::Itertools;
+use namada_core::address::Address;
+use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -121,7 +122,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     type Error = ProposalError;
 
     fn try_from(value: PgfFundingProposal) -> Result<Self, Self::Error> {
-        let mut continous_fundings = value
+        let mut continuous_fundings = value
             .data
             .continuous
             .iter()
@@ -143,13 +144,13 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             .map(PGFAction::Retro)
             .collect::<BTreeSet<PGFAction>>();
 
-        continous_fundings.extend(retro_fundings);
+        continuous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
             id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::PGFPayment(continous_fundings), /* here continous_fundings is contains also the retro funding */
+            r#type: ProposalType::PGFPayment(continuous_fundings), /* here continuous_fundings also contains the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
@@ -223,6 +224,18 @@ pub enum AddRemove<T> {
     Remove(T),
 }
 
+impl<T> Display for AddRemove<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AddRemove::Add(address) => write!(f, "Add({})", &address),
+            AddRemove::Remove(address) => write!(f, "Remove({})", &address),
+        }
+    }
+}
+
 /// The target of a PGF payment
 #[derive(
     Debug,
@@ -257,6 +270,19 @@ impl PGFTarget {
         match self {
             PGFTarget::Internal(t) => t.amount,
             PGFTarget::Ibc(t) => t.amount,
+        }
+    }
+}
+
+impl Display for PGFTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PGFTarget::Internal(t) => {
+                write!(f, "Internal address={}, amount={}", t.target, t.amount)
+            }
+            PGFTarget::Ibc(t) => {
+                write!(f, "IBC address={}, amount={}", t.target, t.amount)
+            }
         }
     }
 }
@@ -385,14 +411,35 @@ impl ProposalType {
     pub fn is_default(&self) -> bool {
         matches!(self, ProposalType::Default(_))
     }
+
+    fn format_data(&self) -> String {
+        match self {
+            ProposalType::Default(Some(hash)) => format!("Hash: {}", &hash),
+            ProposalType::Default(None) => "".to_string(),
+            ProposalType::PGFSteward(addresses) => format!(
+                "Addresses:{}",
+                addresses
+                    .iter()
+                    .map(|add_remove| format!("\n  {}", &add_remove))
+                    .join("")
+            ),
+            ProposalType::PGFPayment(actions) => format!(
+                "Actions:{}",
+                actions
+                    .iter()
+                    .map(|action| format!("\n  {}", &action))
+                    .join("")
+            ),
+        }
+    }
 }
 
 impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProposalType::Default(_) => write!(f, "Default"),
-            ProposalType::PGFSteward(_) => write!(f, "Pgf steward"),
-            ProposalType::PGFPayment(_) => write!(f, "Pgf funding"),
+            ProposalType::PGFSteward(_) => write!(f, "PGF steward"),
+            ProposalType::PGFPayment(_) => write!(f, "PGF funding"),
         }
     }
 }
@@ -447,6 +494,17 @@ impl From<PgfContinuous> for PGFAction {
 impl From<PgfRetro> for PGFAction {
     fn from(value: PgfRetro) -> Self {
         PGFAction::Retro(value.target)
+    }
+}
+
+impl Display for PGFAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PGFAction::Continuous(add_remove) => {
+                write!(f, "Continuous: {}", &add_remove)
+            }
+            PGFAction::Retro(target) => write!(f, "Retroactive: {}", &target),
+        }
     }
 }
 
@@ -509,29 +567,23 @@ impl StorageProposal {
     pub fn to_string_with_status(&self, current_epoch: Epoch) -> String {
         format!(
             "Proposal Id: {}
-        {:2}Type: {}
-        {:2}Author: {}
-        {:2}Content: {:?}
-        {:2}Start Epoch: {}
-        {:2}End Epoch: {}
-        {:2}Grace Epoch: {}
-        {:2}Status: {}
-        ",
+Type: {}
+Author: {}
+Content: {:?}
+Start Epoch: {}
+End Epoch: {}
+Grace Epoch: {}
+Status: {}
+Data: {}",
             self.id,
-            "",
             self.r#type,
-            "",
             self.author,
-            "",
             self.content,
-            "",
             self.voting_start_epoch,
-            "",
             self.voting_end_epoch,
-            "",
             self.grace_epoch,
-            "",
-            self.get_status(current_epoch)
+            self.get_status(current_epoch),
+            self.r#type.format_data()
         )
     }
 }
@@ -565,10 +617,10 @@ impl Display for StorageProposal {
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and and strategies for governance proposals
 pub mod testing {
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::hash::testing::arb_hash;
-    use namada_core::types::storage::testing::arb_epoch;
-    use namada_core::types::token::testing::arb_amount;
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::hash::testing::arb_hash;
+    use namada_core::storage::testing::arb_epoch;
+    use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
     use proptest::{collection, option, prop_compose};
 
@@ -592,16 +644,55 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary PGF target
-        pub fn arb_pgf_target()(
+        /// Generate an arbitrary PGF internal target
+        pub fn arb_pgf_internal_target()(
             target in arb_non_internal_address(),
             amount in arb_amount(),
-        ) -> PGFTarget {
-            PGFTarget::Internal(PGFInternalTarget {
+        ) -> PGFInternalTarget {
+            PGFInternalTarget {
                 target,
                 amount,
-            })
+            }
         }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary port ID
+        pub fn arb_ibc_port_id()(id in "[a-zA-Z0-9_+.\\-\\[\\]#<>]{2,128}") -> PortId {
+            PortId::new(id).expect("generated invalid port ID")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary channel ID
+        pub fn arb_ibc_channel_id()(id: u64) -> ChannelId {
+            ChannelId::new(id)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary PGF IBC target
+        pub fn arb_pgf_ibc_target()(
+            target in "[a-zA-Z0-9_]*",
+            amount in arb_amount(),
+            port_id in arb_ibc_port_id(),
+            channel_id in arb_ibc_channel_id(),
+        ) -> PGFIbcTarget {
+            PGFIbcTarget {
+                target,
+                amount,
+                port_id,
+                channel_id,
+            }
+        }
+    }
+
+    /// Generate an arbitrary PGF target
+    pub fn arb_pgf_target() -> impl Strategy<Value = PGFTarget> {
+        prop_oneof![
+            arb_pgf_internal_target().prop_map(PGFTarget::Internal),
+            arb_pgf_ibc_target().prop_map(PGFTarget::Ibc),
+        ]
     }
 
     /// Generate an arbitrary PGF action

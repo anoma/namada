@@ -10,6 +10,13 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
+use namada::control_flow::time::Duration;
+use namada::core::ethereum_events::EthereumEvent;
+use namada::core::ethereum_structs;
+use namada::core::hash::Hash;
+use namada::core::key::tm_consensus_key_raw_hash;
+use namada::core::storage::{BlockHash, BlockHeight, Epoch, Header};
+use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::oracle::config::Config as OracleConfig;
 use namada::ledger::dry_run_tx;
 use namada::ledger::events::log::dumb_queries;
@@ -25,26 +32,19 @@ use namada::proof_of_stake::types::WeightedValidator;
 use namada::state::{LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
-use namada::tendermint_rpc::SimpleRequest;
-use namada::types::control_flow::time::Duration;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::ethereum_structs;
-use namada::types::hash::Hash;
-use namada::types::key::tm_consensus_key_raw_hash;
-use namada::types::storage::{BlockHash, BlockHeight, Epoch, Header};
-use namada::types::time::DateTimeUtc;
 use namada_sdk::queries::Client;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
 use regex::Regex;
 use tendermint_rpc::endpoint::block;
+use tendermint_rpc::SimpleRequest;
 use tokio::sync::mpsc;
 
+use crate::facade::tendermint;
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::{tendermint, tendermint_rpc};
 use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
     TestOracle, Web3Client, Web3Controller,
 };
@@ -319,7 +319,7 @@ impl MockNode {
     }
 
     pub fn current_epoch(&self) -> Epoch {
-        self.shell.lock().unwrap().wl_storage.storage.last_epoch
+        self.shell.lock().unwrap().state.in_mem().last_epoch
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
@@ -327,15 +327,15 @@ impl MockNode {
             let mut locked = self.shell.lock().unwrap();
 
             let next_epoch_height =
-                locked.wl_storage.storage.get_last_block_height() + 1;
-            locked.wl_storage.storage.next_epoch_min_start_height =
+                locked.state.in_mem().get_last_block_height() + 1;
+            locked.state.in_mem_mut().next_epoch_min_start_height =
                 next_epoch_height;
-            locked.wl_storage.storage.next_epoch_min_start_time =
+            locked.state.in_mem_mut().next_epoch_min_start_time =
                 DateTimeUtc::now();
             let next_epoch_min_start_height =
-                locked.wl_storage.storage.next_epoch_min_start_height;
+                locked.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
-                locked.wl_storage.storage.last_block.as_mut()
+                locked.state.in_mem_mut().last_block.as_mut()
             {
                 *height = next_epoch_min_start_height;
             }
@@ -348,8 +348,8 @@ impl MockNode {
         self.shell
             .lock()
             .unwrap()
-            .wl_storage
-            .storage
+            .state
+            .in_mem()
             .get_current_epoch()
             .0
     }
@@ -358,11 +358,11 @@ impl MockNode {
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();
-            let params = locked.wl_storage.pos_queries().get_pos_params();
-            let current_epoch = locked.wl_storage.storage.get_current_epoch().0;
+            let params = locked.state.pos_queries().get_pos_params();
+            let current_epoch = locked.state.in_mem().get_current_epoch().0;
             let consensus_set: Vec<WeightedValidator> =
                 read_consensus_validator_set_addresses_with_stake(
-                    &locked.wl_storage,
+                    &locked.state,
                     current_epoch,
                 )
                 .unwrap()
@@ -371,7 +371,7 @@ impl MockNode {
 
             let val1 = consensus_set[0].clone();
             let ck = validator_consensus_key_handle(&val1.address)
-                .get(&locked.wl_storage, current_epoch, &params)
+                .get(&locked.state, current_epoch, &params)
                 .unwrap()
                 .unwrap();
             (val1, ck)
@@ -399,11 +399,8 @@ impl MockNode {
         let (proposer_address, votes) = self.prepare_request();
 
         let mut locked = self.shell.lock().unwrap();
-        let height = locked
-            .wl_storage
-            .storage
-            .get_last_block_height()
-            .next_height();
+        let height =
+            locked.state.in_mem().get_last_block_height().next_height();
 
         // check if we have protocol txs to be included
         // in the finalize block request
@@ -438,7 +435,26 @@ impl MockNode {
             votes,
         };
 
-        locked.finalize_block(req).expect("Test failed");
+        let resp = locked.finalize_block(req).expect("Test failed");
+        let mut error_codes = resp
+            .events
+            .into_iter()
+            .map(|e| {
+                let code = ResultCode::from_u32(
+                    e.attributes
+                        .get("code")
+                        .map(|e| u32::from_str(e).unwrap())
+                        .unwrap_or_default(),
+                )
+                .unwrap();
+                if code == ResultCode::Ok {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Failed(code)
+                }
+            })
+            .collect::<Vec<_>>();
+        self.results.lock().unwrap().append(&mut error_codes);
         locked.commit();
 
         // Cache the block
@@ -501,7 +517,7 @@ impl MockNode {
 
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
-    fn submit_txs(&self, txs: Vec<Vec<u8>>) {
+    pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
         // The block space allocator disallows encrypted txs in certain blocks.
         // Advance to block height that allows txs.
         self.advance_to_allowed_block();
@@ -518,11 +534,8 @@ impl MockNode {
             ..Default::default()
         };
         let mut locked = self.shell.lock().unwrap();
-        let height = locked
-            .wl_storage
-            .storage
-            .get_last_block_height()
-            .next_height();
+        let height =
+            locked.state.in_mem().get_last_block_height().next_height();
         let (result, tx_results) = locked.process_proposal(req);
 
         let mut errors: Vec<_> = tx_results
@@ -552,7 +565,7 @@ impl MockNode {
             txs: txs
                 .clone()
                 .into_iter()
-                .zip(tx_results.into_iter())
+                .zip(tx_results)
                 .map(|(tx, result)| ProcessedTx {
                     tx: tx.into(),
                     result,
@@ -672,8 +685,8 @@ impl<'a> Client for &'a MockNode {
             self.shell
                 .lock()
                 .unwrap()
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.height)
@@ -690,7 +703,7 @@ impl<'a> Client for &'a MockNode {
         };
         let borrowed = self.shell.lock().unwrap();
         let ctx = RequestCtx {
-            wl_storage: &borrowed.wl_storage,
+            state: &borrowed.state,
             event_log: borrowed.event_log(),
             vp_wasm_cache: borrowed.vp_wasm_cache.read_only(),
             tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
@@ -723,16 +736,16 @@ impl<'a> Client for &'a MockNode {
             version: "test".to_string(),
             app_version: 0,
             last_block_height: locked
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.height.0 as u32)
                 .unwrap_or_default()
                 .into(),
             last_block_app_hash: locked
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .last_block
                 .as_ref()
                 .map(|b| b.hash.0)
@@ -816,7 +829,7 @@ impl<'a> Client for &'a MockNode {
                             block: 0,
                             app: 0,
                         }),
-                        chain_id: "Namada".try_into().unwrap(),
+                        chain_id: "Namada".into(),
                         height: encoded_event.0 as i64,
                         time: None,
                         last_block_id: None,

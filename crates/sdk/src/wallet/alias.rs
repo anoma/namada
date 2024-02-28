@@ -7,7 +7,7 @@ use std::io::Read;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::{Address, InternalAddress};
+use namada_core::address::{Address, InternalAddress};
 use serde::{Deserialize, Serialize};
 
 /// Aliases created from raw strings are kept in-memory as given, but their
@@ -87,7 +87,7 @@ impl PartialEq for Alias {
 
 impl PartialOrd for Alias {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.normalize().partial_cmp(&other.normalize())
+        Some(self.cmp(other))
     }
 }
 

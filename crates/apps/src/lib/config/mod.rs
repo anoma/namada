@@ -11,9 +11,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
-use namada::types::chain::ChainId;
-use namada::types::storage::BlockHeight;
-use namada::types::time::Rfc3339String;
+use namada::core::chain::ChainId;
+use namada::core::storage::BlockHeight;
+use namada::core::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -45,7 +45,7 @@ pub struct Config {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ValidatorLocalConfig {
     pub accepted_gas_tokens:
-        HashMap<namada::types::address::Address, namada::types::token::Amount>,
+        HashMap<namada::core::address::Address, namada::core::token::Amount>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

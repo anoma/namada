@@ -1,12 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::types::address;
-use namada::ledger::storage::TempWlStorage;
+use namada::core::address;
+use namada::core::key::RefTo;
+use namada::core::storage::BlockHeight;
+use namada::core::time::DateTimeUtc;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Signature;
-use namada::types::key::RefTo;
-use namada::types::storage::BlockHeight;
-use namada::types::time::DateTimeUtc;
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
@@ -15,7 +14,7 @@ fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();
     // Advance chain height to allow the inclusion of wrapper txs by the block
     // space allocator
-    shell.wl_storage.storage.last_block.as_mut().unwrap().height =
+    shell.state.in_mem_mut().last_block.as_mut().unwrap().height =
         BlockHeight(2);
 
     let mut tx = shell.generate_tx(
@@ -23,7 +22,7 @@ fn process_tx(c: &mut Criterion) {
         Transfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1).native_denominated(),
             key: None,
             shielded: None,
@@ -36,7 +35,7 @@ fn process_tx(c: &mut Criterion) {
     tx.update_header(namada::tx::data::TxType::Wrapper(Box::new(
         WrapperTx::new(
             Fee {
-                token: address::nam(),
+                token: address::testing::nam(),
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
             },
             defaults::albert_keypair().ref_to(),
@@ -60,10 +59,10 @@ fn process_tx(c: &mut Criterion) {
         b.iter_batched(
             || {
                 (
-                    shell.wl_storage.storage.tx_queue.clone(),
+                    shell.state.in_mem().tx_queue.clone(),
                     // Prevent block out of gas and replay protection
-                    TempWlStorage::new(&shell.wl_storage.storage),
-                    ValidationMeta::from(&shell.wl_storage),
+                    shell.state.with_temp_write_log(),
+                    ValidationMeta::from(shell.state.read_only()),
                     shell.vp_wasm_cache.clone(),
                     shell.tx_wasm_cache.clone(),
                     defaults::daewon_address(),
@@ -71,7 +70,7 @@ fn process_tx(c: &mut Criterion) {
             },
             |(
                 tx_queue,
-                mut temp_wl_storage,
+                mut temp_state,
                 mut validation_meta,
                 mut vp_wasm_cache,
                 mut tx_wasm_cache,
@@ -84,7 +83,7 @@ fn process_tx(c: &mut Criterion) {
                             &wrapper,
                             &mut tx_queue.iter(),
                             &mut validation_meta,
-                            &mut temp_wl_storage,
+                            &mut temp_state,
                             datetime,
                             &mut vp_wasm_cache,
                             &mut tx_wasm_cache,

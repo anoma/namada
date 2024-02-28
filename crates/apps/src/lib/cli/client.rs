@@ -1,5 +1,6 @@
 use color_eyre::eyre::Result;
-use namada::types::io::Io;
+use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada::io::Io;
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
@@ -315,6 +316,39 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&args.ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let chain_ctx = ctx.take_chain_or_exit();
+                        let vks = chain_ctx
+                            .wallet
+                            .get_viewing_keys()
+                            .values()
+                            .copied()
+                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+                            .chain(args.viewing_keys.into_iter().map(|vk| {
+                                ExtendedFullViewingKey::from(vk).fvk.vk
+                            }))
+                            .collect::<Vec<_>>();
+                        let sks = args
+                            .spending_keys
+                            .into_iter()
+                            .map(|sk| sk.into())
+                            .collect::<Vec<_>>();
+                        crate::client::masp::syncing(
+                            chain_ctx.shielded,
+                            &client,
+                            &io,
+                            args.batch_size,
+                            args.last_query_height,
+                            &sks,
+                            &vks,
+                        )
+                        .await?;
+                    }
                     // Eth bridge
                     Sub::AddToEthBridgePool(args) => {
                         let args = args.0;
@@ -403,6 +437,17 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_and_print_epoch(&namada).await;
+                    }
+                    Sub::QueryNextEpochInfo(QueryNextEpochInfo(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_and_print_next_epoch_info(&namada).await;
                     }
                     Sub::QueryStatus(QueryStatus(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -694,7 +739,7 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
-                    Sub::GenIbcShieldedTransafer(GenIbcShieldedTransafer(
+                    Sub::GenIbcShieldedTransfer(GenIbcShieldedTransfer(
                         args,
                     )) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
