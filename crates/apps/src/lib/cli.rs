@@ -4183,8 +4183,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be more than 0 and less than the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
@@ -4458,8 +4458,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be more than 0 and less than the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
@@ -4524,8 +4524,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be more than 0 and less than the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
