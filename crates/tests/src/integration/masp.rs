@@ -11,7 +11,7 @@ use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults::christel_keypair;
-use namada_core::types::dec::Dec;
+use namada_core::dec::Dec;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 
@@ -1378,7 +1378,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
             let tx_args = if dry_run && tx_args[0] == "transfer" {
-                vec![tx_args.clone(), vec!["--dry-run"]].concat()
+                [tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
             };
@@ -1965,8 +1965,8 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         .shell
         .lock()
         .unwrap()
-        .wl_storage
-        .storage
+        .state
+        .in_mem()
         .native_token
         .clone();
     let mut txs = vec![];
@@ -2130,7 +2130,7 @@ fn dynamic_assets() -> Result<()> {
     let token_map = token_map_handle();
     let test_tokens = {
         // Only distribute rewards for NAM tokens
-        let wls = &mut node.shell.lock().unwrap().wl_storage;
+        let wls = &mut node.shell.lock().unwrap().state;
         let tokens = token_map
             .iter(wls)
             .unwrap()
@@ -2228,7 +2228,7 @@ fn dynamic_assets() -> Result<()> {
         // epoch
         token_map
             .insert(
-                &mut node.shell.lock().unwrap().wl_storage,
+                &mut node.shell.lock().unwrap().state,
                 btc.clone(),
                 test_tokens[&btc].clone(),
             )
@@ -2399,7 +2399,7 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Stop distributing shielded rewards for NAM in next epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage;
+        let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
                 &token::storage_key::masp_max_reward_rate_key(
@@ -2461,7 +2461,7 @@ fn dynamic_assets() -> Result<()> {
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
         token_map
-            .remove(&mut node.shell.lock().unwrap().wl_storage, &btc)
+            .remove(&mut node.shell.lock().unwrap().state, &btc)
             .unwrap();
     }
 
@@ -2562,7 +2562,7 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Start distributing shielded rewards for NAM in next epoch
-        let storage = &mut node.shell.lock().unwrap().wl_storage;
+        let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
                 &token::storage_key::masp_max_reward_rate_key(

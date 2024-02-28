@@ -10,8 +10,10 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
+use namada_sdk::state::StateRead;
 use namada_sdk::tx::data::GasLimit;
 pub mod prepare_proposal;
+use namada::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
 mod stats;
@@ -21,9 +23,8 @@ pub mod testing;
 pub mod utils;
 mod vote_extensions;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::convert::{TryFrom, TryInto};
-use std::mem;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -31,7 +32,13 @@ use std::rc::Rc;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
-use namada::core::hints;
+use namada::core::address::Address;
+use namada::core::chain::ChainId;
+use namada::core::ethereum_events::EthereumEvent;
+use namada::core::key::*;
+use namada::core::storage::{BlockHeight, Key, TxIndex};
+use namada::core::time::DateTimeUtc;
+use namada::core::{address, hints};
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -45,29 +52,18 @@ use namada::ledger::protocol::{
     apply_wasm_tx, get_fee_unshielding_transaction,
     get_transfer_hash_from_storage, ShellParams,
 };
-use namada::ledger::{parameters, pos, protocol};
+use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
-use namada::proof_of_stake::slashing::{process_slashes, slash};
 use namada::proof_of_stake::storage::read_pos_params;
-use namada::proof_of_stake::{self};
 use namada::state::tx_queue::{ExpiredTx, TxInQueue};
-use namada::state::wl_storage::WriteLogAndStorage;
-use namada::state::write_log::WriteLog;
 use namada::state::{
-    DBIter, Sha256Hasher, State, StorageHasher, StorageRead, TempWlStorage,
-    WlStorage, DB, EPOCH_SWITCH_BLOCKS_DELAY,
+    DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
+    TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
 use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
-use namada::types::address;
-use namada::types::address::Address;
-use namada::types::chain::ChainId;
-use namada::types::ethereum_events::EthereumEvent;
-use namada::types::key::*;
-use namada::types::storage::{BlockHeight, Key, TxIndex};
-use namada::types::time::DateTimeUtc;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada::vote_ext::EthereumTxData;
@@ -78,7 +74,6 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
@@ -336,10 +331,7 @@ where
     /// The id of the current chain
     pub chain_id: ChainId,
     /// The persistent storage with write log
-    pub wl_storage: WlStorage<D, H>,
-    /// Byzantine validators given from ABCI++ `prepare_proposal` are stored in
-    /// this field. They will be slashed when we finalize the block.
-    byzantine_validators: Vec<Misbehavior>,
+    pub state: FullAccessState<D, H>,
     /// Path to the base directory with DB data and configs
     #[allow(dead_code)]
     pub(crate) base_dir: PathBuf,
@@ -364,7 +356,7 @@ where
 
 /// Merkle tree storage key filter. Return `false` for keys that shouldn't be
 /// merklized.
-pub fn is_merklized_storage_key(key: &namada_sdk::types::storage::Key) -> bool {
+pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
     !(token::storage_key::is_masp_key(key)
         && *key != token::storage_key::masp_convert_anchor_key()
         && *key != token::storage_key::masp_token_map_key()
@@ -421,33 +413,35 @@ where
             std::fs::create_dir(&base_dir)
                 .expect("Creating directory for Namada should not fail");
         }
-        let native_token = if cfg!(feature = "integration")
-            || (!cfg!(test) && !cfg!(feature = "benches"))
-        {
+
+        // For all tests except integration use hard-coded native token addr ...
+        #[cfg(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        ))]
+        let native_token = address::testing::nam();
+        // ... Otherwise, look it up from the genesis file
+        #[cfg(not(all(
+            any(test, feature = "testing", feature = "benches"),
+            not(feature = "integration"),
+        )))]
+        let native_token = {
             let chain_dir = base_dir.join(chain_id.as_str());
             let genesis =
                 genesis::chain::Finalized::read_toml_files(&chain_dir)
                     .expect("Missing genesis files");
             genesis.get_native_token().clone()
-        } else {
-            address::nam()
         };
 
         // load last state from storage
-        let mut storage = State::open(
+        let state = FullAccessState::open(
             db_path,
+            db_cache,
             chain_id.clone(),
             native_token,
-            db_cache,
             config.shell.storage_read_past_height_limit,
             is_merklized_storage_key,
         );
-        storage
-            .load_last_state()
-            .map_err(|e| {
-                tracing::error!("Cannot load the last state from the DB {}", e);
-            })
-            .expect("PersistentStorage cannot be initialized");
         let vp_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");
         let tx_wasm_cache_dir =
@@ -516,14 +510,9 @@ where
             TendermintMode::Seed => ShellMode::Seed,
         };
 
-        let wl_storage = WlStorage {
-            storage,
-            write_log: WriteLog::default(),
-        };
         let mut shell = Self {
             chain_id,
-            wl_storage,
-            byzantine_validators: vec![],
+            state,
             base_dir,
             wasm_dir,
             mode,
@@ -559,7 +548,7 @@ where
     /// Iterate over the wrapper txs in order
     #[allow(dead_code)]
     fn iter_tx_queue(&mut self) -> impl Iterator<Item = &TxInQueue> {
-        self.wl_storage.storage.tx_queue.iter()
+        self.state.in_mem().tx_queue.iter()
     }
 
     /// Load the Merkle root hash and the height of the last committed block, if
@@ -569,7 +558,7 @@ where
             last_block_height: tendermint::block::Height::from(0_u32),
             ..Default::default()
         };
-        let result = self.wl_storage.storage.get_state();
+        let result = self.state.in_mem().get_state();
 
         match result {
             Some((root, height)) => {
@@ -599,7 +588,7 @@ where
     where
         T: Clone + BorshDeserialize,
     {
-        let result = self.wl_storage.storage.read(key);
+        let result = self.state.db_read(key);
 
         match result {
             Ok((bytes, _gas)) => match bytes {
@@ -615,7 +604,7 @@ where
 
     /// Read the bytes for a storage key dropping any error
     pub fn read_storage_key_bytes(&self, key: &Key) -> Option<Vec<u8>> {
-        let result = self.wl_storage.storage.read(key);
+        let result = self.state.db_read(key);
 
         match result {
             Ok((bytes, _gas)) => bytes,
@@ -623,121 +612,12 @@ where
         }
     }
 
-    /// Apply PoS slashes from the evidence
-    fn record_slashes_from_evidence(&mut self) {
-        if !self.byzantine_validators.is_empty() {
-            let byzantine_validators =
-                mem::take(&mut self.byzantine_validators);
-            // TODO: resolve this unwrap() better
-            let pos_params = read_pos_params(&self.wl_storage).unwrap();
-            let current_epoch = self.wl_storage.storage.block.epoch;
-            for evidence in byzantine_validators {
-                // dbg!(&evidence);
-                tracing::info!("Processing evidence {evidence:?}.");
-                let evidence_height = match u64::try_from(evidence.height) {
-                    Ok(height) => height,
-                    Err(err) => {
-                        tracing::error!(
-                            "Unexpected evidence block height {}",
-                            err
-                        );
-                        continue;
-                    }
-                };
-                let evidence_epoch = match self
-                    .wl_storage
-                    .storage
-                    .block
-                    .pred_epochs
-                    .get_epoch(BlockHeight(evidence_height))
-                {
-                    Some(epoch) => epoch,
-                    None => {
-                        tracing::error!(
-                            "Couldn't find epoch for evidence block height {}",
-                            evidence_height
-                        );
-                        continue;
-                    }
-                };
-                // Disregard evidences that should have already been processed
-                // at this time
-                if evidence_epoch + pos_params.slash_processing_epoch_offset()
-                    - pos_params.cubic_slashing_window_length
-                    <= current_epoch
-                {
-                    tracing::info!(
-                        "Skipping outdated evidence from epoch \
-                         {evidence_epoch}"
-                    );
-                    continue;
-                }
-                let slash_type = match evidence.kind {
-                    MisbehaviorKind::DuplicateVote => {
-                        pos::types::SlashType::DuplicateVote
-                    }
-                    MisbehaviorKind::LightClientAttack => {
-                        pos::types::SlashType::LightClientAttack
-                    }
-                    MisbehaviorKind::Unknown => {
-                        tracing::error!("Unknown evidence: {:#?}", evidence);
-                        continue;
-                    }
-                };
-                let validator_raw_hash =
-                    tm_raw_hash_to_string(evidence.validator.address);
-                let validator =
-                    match proof_of_stake::storage::find_validator_by_raw_hash(
-                        &self.wl_storage,
-                        &validator_raw_hash,
-                    )
-                    .expect("Must be able to read storage")
-                    {
-                        Some(validator) => validator,
-                        None => {
-                            tracing::error!(
-                                "Cannot find validator's address from raw \
-                                 hash {}",
-                                validator_raw_hash
-                            );
-                            continue;
-                        }
-                    };
-                // Check if we're gonna switch to a new epoch after a delay
-                let validator_set_update_epoch =
-                    self.get_validator_set_update_epoch(current_epoch);
-                tracing::info!(
-                    "Slashing {} for {} in epoch {}, block height {} (current \
-                     epoch = {}, validator set update epoch = \
-                     {validator_set_update_epoch})",
-                    validator,
-                    slash_type,
-                    evidence_epoch,
-                    evidence_height,
-                    current_epoch
-                );
-                if let Err(err) = slash(
-                    &mut self.wl_storage,
-                    &pos_params,
-                    current_epoch,
-                    evidence_epoch,
-                    evidence_height,
-                    slash_type,
-                    &validator,
-                    validator_set_update_epoch,
-                ) {
-                    tracing::error!("Error in slashing: {}", err);
-                }
-            }
-        }
-    }
-
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::types::storage::Epoch,
-    ) -> namada_sdk::types::storage::Epoch {
-        if let Some(delay) = self.wl_storage.storage.update_epoch_blocks_delay {
+        current_epoch: namada_sdk::storage::Epoch,
+    ) -> namada_sdk::storage::Epoch {
+        if let Some(delay) = self.state.in_mem().update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
                 // upcoming epoch, we can still remove the validator
@@ -754,31 +634,17 @@ where
         }
     }
 
-    /// Process and apply slashes that have already been recorded for the
-    /// current epoch
-    fn process_slashes(&mut self) {
-        let current_epoch = self.wl_storage.storage.block.epoch;
-        if let Err(err) = process_slashes(&mut self.wl_storage, current_epoch) {
-            tracing::error!(
-                "Error while processing slashes queued for epoch {}: {}",
-                current_epoch,
-                err
-            );
-            panic!("Error while processing slashes");
-        }
-    }
-
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
     pub fn commit(&mut self) -> response::Commit {
         self.bump_last_processed_eth_block();
 
-        self.wl_storage
+        self.state
             .commit_block()
             .expect("Encountered a storage error while committing a block");
 
-        let merkle_root = self.wl_storage.storage.merkle_root();
-        let committed_height = self.wl_storage.storage.get_last_block_height();
+        let merkle_root = self.state.in_mem().merkle_root();
+        let committed_height = self.state.in_mem().get_last_block_height();
         tracing::info!(
             "Committed block hash: {merkle_root}, height: {committed_height}",
         );
@@ -815,7 +681,7 @@ where
                          block is {}",
                         eth_height
                     );
-                    self.wl_storage.storage.ethereum_height = Some(eth_height);
+                    self.state.in_mem_mut().ethereum_height = Some(eth_height);
                 }
                 None => tracing::info!(
                     "Ethereum oracle has not yet fully processed any Ethereum \
@@ -861,8 +727,8 @@ where
     fn broadcast_expired_txs(&mut self) {
         let eth_events = {
             let mut events: Vec<_> = self
-                .wl_storage
-                .storage
+                .state
+                .in_mem_mut()
                 .expired_txs_queue
                 .drain()
                 .map(|expired_tx| match expired_tx {
@@ -918,7 +784,7 @@ where
             // for the first time ever, in which case the chain hasn't been
             // initialized yet.
             let has_key = self
-                .wl_storage
+                .state
                 .has_key(&namada::eth_bridge::storage::active_key())
                 .expect(
                     "We should always be able to check whether a key exists \
@@ -931,33 +797,35 @@ where
                 );
                 return;
             }
-            let Some(config) = EthereumOracleConfig::read(&self.wl_storage) else {
-                tracing::info!("Not starting oracle as the Ethereum bridge config couldn't be found in storage");
+            let Some(config) = EthereumOracleConfig::read(&self.state) else {
+                tracing::info!(
+                    "Not starting oracle as the Ethereum bridge config \
+                     couldn't be found in storage"
+                );
                 return;
             };
-            let active =
-                if !self.wl_storage.ethbridge_queries().is_bridge_active() {
-                    if !changed_keys
-                        .contains(&namada::eth_bridge::storage::active_key())
-                    {
-                        tracing::info!(
-                            "Not starting oracle as the Ethereum bridge is \
-                             disabled"
-                        );
-                        return;
-                    } else {
-                        tracing::info!(
-                            "Disabling oracle as the bridge has been disabled"
-                        );
-                        false
-                    }
+            let active = if !self.state.ethbridge_queries().is_bridge_active() {
+                if !changed_keys
+                    .contains(&namada::eth_bridge::storage::active_key())
+                {
+                    tracing::info!(
+                        "Not starting oracle as the Ethereum bridge is \
+                         disabled"
+                    );
+                    return;
                 } else {
-                    true
-                };
+                    tracing::info!(
+                        "Disabling oracle as the bridge has been disabled"
+                    );
+                    false
+                }
+            } else {
+                true
+            };
 
             let start_block = self
-                .wl_storage
-                .storage
+                .state
+                .in_mem()
                 .ethereum_height
                 .clone()
                 .unwrap_or(config.eth_start_height);
@@ -1017,7 +885,7 @@ where
         //
         // NB: always keep this as the first tx check,
         // as it is a pretty cheap one
-        if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
+        if !validate_tx_bytes(&self.state, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
             response.code = ResultCode::TooLarge.into();
@@ -1049,8 +917,7 @@ where
         // Tx expiration
         if let Some(exp) = tx.header.expiration {
             let last_block_timestamp = self
-                .wl_storage
-                .storage
+                .state
                 .get_last_block_timestamp()
                 .expect("Failed to retrieve last block timestamp");
 
@@ -1101,9 +968,9 @@ where
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
                     );
                     if let Err(err) = validate_eth_events_vext(
-                        &self.wl_storage,
+                        &self.state,
                         &ext.0,
-                        self.wl_storage.storage.get_last_block_height(),
+                        self.state.in_mem().get_last_block_height(),
                     ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
@@ -1123,9 +990,9 @@ where
                         ),
                     );
                     if let Err(err) = validate_bp_roots_vext(
-                        &self.wl_storage,
+                        &self.state,
                         &ext.0,
-                        self.wl_storage.storage.get_last_block_height(),
+                        self.state.in_mem().get_last_block_height(),
                     ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
@@ -1145,7 +1012,7 @@ where
                         ),
                     );
                     if let Err(err) = validate_valset_upd_vext(
-                        &self.wl_storage,
+                        &self.state,
                         &ext,
                         // n.b. only accept validator set updates
                         // issued at the last committed epoch
@@ -1155,7 +1022,7 @@ where
                         // committed to storage, so `last_epoch`
                         // reflects the current value of the
                         // epoch.
-                        self.wl_storage.storage.last_epoch,
+                        self.state.in_mem().last_epoch,
                     ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
@@ -1190,8 +1057,7 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    namada::parameters::get_max_block_gas(&self.wl_storage)
-                        .unwrap(),
+                    namada::parameters::get_max_block_gas(&self.state).unwrap(),
                 );
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ResultCode::AllocationError.into();
@@ -1204,8 +1070,7 @@ where
                 // Replay protection check
                 let inner_tx_hash = tx.raw_header_hash();
                 if self
-                    .wl_storage
-                    .storage
+                    .state
                     .has_replay_protection_entry(&tx.raw_header_hash())
                     .expect("Error while checking inner tx hash key in storage")
                 {
@@ -1221,14 +1086,9 @@ where
                 let tx = Tx::try_from(tx_bytes)
                     .expect("Deserialization shouldn't fail");
                 let wrapper_hash = &tx.header_hash();
-                if self
-                    .wl_storage
-                    .storage
-                    .has_replay_protection_entry(wrapper_hash)
-                    .expect(
-                        "Error while checking wrapper tx hash key in storage",
-                    )
-                {
+                if self.state.has_replay_protection_entry(wrapper_hash).expect(
+                    "Error while checking wrapper tx hash key in storage",
+                ) {
                     response.code = ResultCode::ReplayTx.into();
                     response.log = format!(
                         "{INVALID_MSG}: Wrapper transaction hash {} already \
@@ -1242,7 +1102,7 @@ where
                 if let Err(e) = mempool_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
-                    &mut TempWlStorage::new(&self.wl_storage.storage),
+                    &mut self.state.with_temp_write_log(),
                     &mut self.vp_wasm_cache.clone(),
                     &mut self.tx_wasm_cache.clone(),
                 ) {
@@ -1285,9 +1145,9 @@ where
     {
         use namada::ledger::pos::namada_proof_of_stake;
 
-        let (current_epoch, _gas) = self.wl_storage.storage.get_current_epoch();
+        let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&self.wl_storage)
+            namada_proof_of_stake::storage::read_pos_params(&self.state)
                 .expect("Could not find the PoS parameters");
 
         let validator_set_update_fn = if is_genesis {
@@ -1297,7 +1157,7 @@ where
         };
 
         validator_set_update_fn(
-            &self.wl_storage,
+            &self.state,
             &pos_params,
             current_epoch,
             |update| {
@@ -1322,23 +1182,22 @@ where
     /// Retrieves the [`BlockHeight`] that is currently being decided.
     #[inline]
     pub fn get_current_decision_height(&self) -> BlockHeight {
-        self.wl_storage.get_current_decision_height()
+        self.state.get_current_decision_height()
     }
 
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
     /// within the current epoch.
     pub fn is_deciding_offset_within_epoch(&self, height_offset: u64) -> bool {
-        self.wl_storage
-            .is_deciding_offset_within_epoch(height_offset)
+        self.state.is_deciding_offset_within_epoch(height_offset)
     }
 }
 
 /// Checks that neither the wrapper nor the inner transaction have already
-/// been applied. Requires a [`TempWlStorage`] to perform the check during
+/// been applied. Requires a [`TempWlState`] to perform the check during
 /// block construction and validation
 pub fn replay_protection_checks<D, H>(
     wrapper: &Tx,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
+    temp_state: &mut TempWlState<D, H>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1347,7 +1206,7 @@ where
     let inner_tx_hash = wrapper.raw_header_hash();
     // Check the inner tx hash only against the storage, skip the write
     // log
-    if temp_wl_storage
+    if temp_state
         .has_committed_replay_protection_entry(&inner_tx_hash)
         .expect("Error while checking inner tx hash key in storage")
     {
@@ -1358,7 +1217,7 @@ where
     }
 
     let wrapper_hash = wrapper.header_hash();
-    if temp_wl_storage
+    if temp_state
         .has_replay_protection_entry(&wrapper_hash)
         .expect("Error while checking wrapper tx hash key in storage")
     {
@@ -1369,7 +1228,7 @@ where
     }
 
     // Write wrapper hash to WAL
-    temp_wl_storage
+    temp_state
         .write_tx_hash(wrapper_hash)
         .map_err(|e| Error::ReplayAttempt(e.to_string()))
 }
@@ -1378,7 +1237,7 @@ where
 fn mempool_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
+    temp_state: &mut TempWlState<D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<()>
@@ -1388,7 +1247,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        temp_wl_storage,
+        temp_state,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -1401,11 +1260,11 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_wl_storage,
+        temp_state,
         vp_wasm_cache,
         tx_wasm_cache,
     )?;
-    protocol::check_fees(temp_wl_storage, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(temp_state, wrapper).map_err(Error::TxApply)
 }
 
 /// Check the validity of the fee payment, including the minimum amounts
@@ -1414,7 +1273,7 @@ pub fn wrapper_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     minimum_gas_price: token::Amount,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
+    temp_state: &mut TempWlState<D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<()>
@@ -1426,7 +1285,7 @@ where
     match token::denom_to_amount(
         wrapper.fee.amount_per_gas_unit,
         &wrapper.fee.token,
-        temp_wl_storage,
+        temp_state,
     ) {
         Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
             // The fees do not match the minimum required
@@ -1452,7 +1311,7 @@ where
         fee_unshielding_validation(
             wrapper,
             transaction,
-            temp_wl_storage,
+            temp_state,
             vp_wasm_cache,
             tx_wasm_cache,
         )?;
@@ -1465,7 +1324,7 @@ where
 fn fee_unshielding_validation<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Transaction,
-    temp_wl_storage: &mut TempWlStorage<D, H>,
+    temp_state: &mut TempWlState<D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<()>
@@ -1479,9 +1338,9 @@ where
     // further validation
 
     // Validate data and generate unshielding tx
-    let transfer_code_hash = get_transfer_hash_from_storage(temp_wl_storage);
+    let transfer_code_hash = get_transfer_hash_from_storage(temp_state);
 
-    let descriptions_limit = temp_wl_storage
+    let descriptions_limit = temp_state
         .read(
             &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
         )
@@ -1497,7 +1356,7 @@ where
         )
         .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
 
-    let fee_unshielding_gas_limit: GasLimit = temp_wl_storage
+    let fee_unshielding_gas_limit: GasLimit = temp_state
         .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
         .expect("Error reading from storage")
         .expect("Missing fee unshielding gas limit in storage");
@@ -1510,14 +1369,14 @@ where
     // from being passed/triggering VPs) but we cannot
     // commit the tx write log yet cause the tx could still
     // be invalid.
-    temp_wl_storage.write_log.precommit_tx();
+    temp_state.write_log_mut().precommit_tx();
 
     let result = apply_wasm_tx(
         unshield,
         &TxIndex::default(),
         ShellParams::new(
-            &mut TxGasMeter::new(fee_unshielding_gas_limit),
-            temp_wl_storage,
+            &RefCell::new(TxGasMeter::new(fee_unshielding_gas_limit)),
+            temp_state,
             vp_wasm_cache,
             tx_wasm_cache,
         ),
@@ -1544,34 +1403,28 @@ where
 #[cfg(test)]
 mod test_utils {
     use std::ops::{Deref, DerefMut};
-    use std::path::PathBuf;
 
     use data_encoding::HEXUPPER;
+    use namada::core::ethereum_events::Uint;
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::key::*;
+    use namada::core::storage::{BlockHash, Epoch, Header};
+    use namada::core::time::DurationSecs;
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
-    use namada::state::{
-        LastBlock, Sha256Hasher, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
-    };
+    use namada::state::{LastBlock, StorageWrite};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::token::conversion::update_allowed_conversions;
-    use namada::tx::data::{Fee, TxType, WrapperTx};
+    use namada::tx::data::Fee;
     use namada::tx::{Code, Data};
-    use namada::types::address;
-    use namada::types::chain::ChainId;
-    use namada::types::ethereum_events::Uint;
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::key::*;
-    use namada::types::storage::{BlockHash, Epoch, Header};
-    use namada::types::time::{DateTimeUtc, DurationSecs};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint;
     use crate::facade::tendermint::abci::types::Misbehavior;
     use crate::facade::tendermint_proto::google::protobuf::Timestamp;
     use crate::facade::tendermint_proto::v0_37::abci::{
@@ -1661,7 +1514,7 @@ mod test_utils {
 
     /// Get the default bridge pool vext bytes to be signed.
     pub fn get_bp_bytes_to_sign() -> KeccakHash {
-        use namada::types::keccak::{Hasher, Keccak};
+        use namada::core::keccak::{Hasher, Keccak};
 
         let root = [0; 32];
         let nonce = Uint::from(0).to_bytes();
@@ -1747,7 +1600,7 @@ mod test_utils {
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
             );
-            shell.wl_storage.storage.block.height = height.into();
+            shell.state.in_mem_mut().block.height = height.into();
             (Self { shell }, receiver, eth_sender, control_receiver)
         }
 
@@ -1808,7 +1661,7 @@ mod test_utils {
                 });
             let results = tx_results
                 .into_iter()
-                .zip(req.txs.into_iter())
+                .zip(req.txs)
                 .map(|(res, tx_bytes)| ProcessedTx {
                     result: res,
                     tx: tx_bytes.into(),
@@ -1855,7 +1708,7 @@ mod test_utils {
         /// wrapper as parameter.
         #[cfg(test)]
         pub fn enqueue_tx(&mut self, tx: Tx, inner_tx_gas: Gas) {
-            self.shell.wl_storage.storage.tx_queue.push(TxInQueue {
+            self.shell.state.in_mem_mut().tx_queue.push(TxInQueue {
                 tx,
                 gas: inner_tx_gas,
             });
@@ -1863,9 +1716,9 @@ mod test_utils {
 
         /// Start a counter for the next epoch in `num_blocks`.
         pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
-            self.wl_storage.storage.next_epoch_min_start_height =
-                self.wl_storage.storage.get_last_block_height() + num_blocks;
-            self.wl_storage.storage.next_epoch_min_start_time =
+            self.state.in_mem_mut().next_epoch_min_start_height =
+                self.state.in_mem().get_last_block_height() + num_blocks;
+            self.state.in_mem_mut().next_epoch_min_start_time =
                 DateTimeUtc::now();
         }
 
@@ -1883,9 +1736,9 @@ mod test_utils {
             self.start_new_epoch_in(1);
 
             let next_epoch_min_start_height =
-                self.wl_storage.storage.next_epoch_min_start_height;
+                self.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
-                self.wl_storage.storage.last_block.as_mut()
+                self.state.in_mem_mut().last_block.as_mut()
             {
                 *height = next_epoch_min_start_height;
             } else {
@@ -1896,7 +1749,7 @@ mod test_utils {
             for _i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
                 self.finalize_and_commit(req.clone());
             }
-            self.wl_storage.storage.get_current_epoch().0
+            self.state.in_mem().get_current_epoch().0
         }
     }
 
@@ -1978,7 +1831,7 @@ mod test_utils {
             initial_height: 1_u32.into(),
         };
         test.init_chain(req, num_validators);
-        test.wl_storage.commit_block().expect("Test failed");
+        test.state.commit_block().expect("Test failed");
         (test, receiver, eth_sender, control_receiver)
     }
 
@@ -2043,7 +1896,7 @@ mod test_utils {
         use namada::eth_bridge::storage::active_key;
         use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
-            .wl_storage
+            .state
             .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
@@ -2067,7 +1920,7 @@ mod test_utils {
         );
         let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
         let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let native_token = address::nam();
+        let native_token = address::testing::nam();
         let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
             config::Ledger::new(
                 base_dir.clone(),
@@ -2082,8 +1935,8 @@ mod test_utils {
             tx_wasm_compilation_cache,
         );
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .begin_block(BlockHash::default(), BlockHeight(1))
             .expect("begin_block failed");
         let keypair = gen_keypair();
@@ -2103,15 +1956,15 @@ mod test_utils {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
 
-        shell.wl_storage.storage.tx_queue.push(TxInQueue {
+        shell.state.in_mem_mut().tx_queue.push(TxInQueue {
             tx: wrapper,
             gas: u64::MAX.into(),
         });
         // Artificially increase the block height so that chain
         // will read the new block when restarted
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .block
             .pred_epochs
             .new_epoch(BlockHeight(1));
@@ -2136,12 +1989,12 @@ mod test_utils {
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
         };
-        parameters::init_storage(&params, &mut shell.wl_storage)
+        parameters::init_storage(&params, &mut shell.state)
             .expect("Test failed");
-        // make wl_storage to update conversion for a new epoch
-        update_allowed_conversions(&mut shell.wl_storage)
+        // make state to update conversion for a new epoch
+        update_allowed_conversions(&mut shell.state)
             .expect("update conversions failed");
-        shell.wl_storage.commit_block().expect("commit failed");
+        shell.state.commit_block().expect("commit failed");
 
         // Drop the shell
         std::mem::drop(shell);
@@ -2169,7 +2022,7 @@ mod test_utils {
             vp_wasm_compilation_cache,
             tx_wasm_compilation_cache,
         );
-        assert!(!shell.wl_storage.storage.tx_queue.is_empty());
+        assert!(!shell.state.in_mem().tx_queue.is_empty());
     }
 
     pub(super) fn get_pkh_from_address<S>(
@@ -2198,11 +2051,7 @@ mod test_utils {
     ) {
         // Let the header time be always ahead of the next epoch min start time
         let header = Header {
-            time: shell
-                .wl_storage
-                .storage
-                .next_epoch_min_start_time
-                .next_second(),
+            time: shell.state.in_mem().next_epoch_min_start_time.next_second(),
             ..Default::default()
         };
         let mut req = FinalizeBlock {
@@ -2221,23 +2070,17 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::ledger::replay_protection;
+    use namada::core::storage::Epoch;
+    use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{
-        Code, Data, Section, SignableEthMessage, Signature, Signed, Tx,
-    };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::RefTo;
-    use namada::types::storage::{BlockHeight, Epoch};
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature, Signed};
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{parameters, token};
 
     use super::*;
-    use crate::node::ledger::shell::test_utils;
     use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::wallet;
 
@@ -2298,13 +2141,13 @@ mod shell_tests {
             transfers: vec![],
         };
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .expired_txs_queue
             .push(ExpiredTx::EthereumEvent(ethereum_event_0.clone()));
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .expired_txs_queue
             .push(ExpiredTx::EthereumEvent(ethereum_event_1.clone()));
 
@@ -2329,14 +2172,14 @@ mod shell_tests {
     /// not validated by `CheckTx`.
     #[test]
     fn test_outdated_nonce_mempool_validate() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .eth_events_queue
             // sent transfers to namada nonce to 5
             .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());
@@ -2420,7 +2263,7 @@ mod shell_tests {
         let eth_vext = EthereumTxData::EthEventsVext(
             ethereum_events::Vext {
                 validator_addr: address.clone(),
-                block_height: shell.wl_storage.storage.get_last_block_height(),
+                block_height: shell.state.in_mem().get_last_block_height(),
                 ethereum_events: vec![ethereum_event],
             }
             .sign(protocol_key)
@@ -2434,7 +2277,7 @@ mod shell_tests {
         let sig = Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig;
         let bp_vext = EthereumTxData::BridgePoolVext(
             bridge_pool_roots::Vext {
-                block_height: shell.wl_storage.storage.get_last_block_height(),
+                block_height: shell.state.in_mem().get_last_block_height(),
                 validator_addr: address,
                 sig,
             }
@@ -2548,7 +2391,7 @@ mod shell_tests {
                         token::Amount::from_uint(100, 0)
                             .expect("This can't fail"),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2587,7 +2430,7 @@ mod shell_tests {
                         token::Amount::from_uint(100, 0)
                             .expect("This can't fail"),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2659,7 +2502,7 @@ mod shell_tests {
                         token::Amount::from_uint(100, 0)
                             .expect("This can't fail"),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2676,12 +2519,11 @@ mod shell_tests {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestState::batch();
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key = replay_protection::last_key(&wrapper_hash);
         shell
-            .wl_storage
-            .storage
+            .state
             .write_replay_protection_entry(&mut batch, &wrapper_hash_key)
             .expect("Test failed");
 
@@ -2718,8 +2560,7 @@ mod shell_tests {
         // Write inner hash in storage
         let inner_hash_key = replay_protection::last_key(&inner_tx_hash);
         shell
-            .wl_storage
-            .storage
+            .state
             .write_replay_protection_entry(&mut batch, &inner_hash_key)
             .expect("Test failed");
 
@@ -2807,14 +2648,14 @@ mod shell_tests {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            parameters::get_max_block_gas(&shell.wl_storage).unwrap();
+            parameters::get_max_block_gas(&shell.state).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2847,7 +2688,7 @@ mod shell_tests {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2875,7 +2716,7 @@ mod shell_tests {
     #[test]
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
+        let apfel_denom = read_denom(&shell.state, &address::testing::apfel())
             .expect("unable to read denomination from storage")
             .expect("unable to find denomination of apfels");
 
@@ -2886,7 +2727,7 @@ mod shell_tests {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2921,7 +2762,7 @@ mod shell_tests {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2957,7 +2798,7 @@ mod shell_tests {
                     amount_per_gas_unit: DenominatedAmount::native(
                         1_000_000_000.into(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2993,7 +2834,7 @@ mod shell_tests {
                     amount_per_gas_unit: DenominatedAmount::native(
                         token::Amount::max(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -3026,7 +2867,7 @@ mod shell_tests {
         let max_tx_bytes: u32 = {
             let key = parameters::storage::get_max_tx_bytes_key();
             shell
-                .wl_storage
+                .state
                 .read(&key)
                 .expect("Failed to read from storage")
                 .expect("Max tx bytes should have been written to storage")
@@ -3040,7 +2881,7 @@ mod shell_tests {
                         amount_per_gas_unit: DenominatedAmount::native(
                             100.into(),
                         ),
-                        token: shell.wl_storage.storage.native_token.clone(),
+                        token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),

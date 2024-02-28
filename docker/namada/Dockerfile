@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.70.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.76.0 AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -29,7 +29,7 @@ WORKDIR /app
 
 RUN git clone -b v0.37.2 --single-branch https://github.com/cometbft/cometbft.git && cd cometbft && make build
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:bullseye-slim AS runtime
 ENV NAMADA_LOG_COLOR=false
 
 RUN apt-get update && apt-get install libcurl4-openssl-dev libudev-dev -y && apt-get clean

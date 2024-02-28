@@ -107,15 +107,10 @@ pub mod main {
         let shielded_token_kd_gain_key =
             token::storage_key::masp_kd_gain_key(&ibc_token);
 
-        let token_map_key = token::storage_key::masp_token_map_key();
-        let mut token_map: masp::TokenMap = ctx.read(&token_map_key)?.unwrap_or_default();
-        token_map.insert(ibc_denom, ibc_token);
-        ctx.write(&token_map_key, token_map)?;
+        let token_map = token::conversion::token_map_handle();
+        token_map.insert(ctx, ibc_denom, ibc_token)?;
 
-        ctx.write(
-            &shielded_token_last_inflation_key,
-            token::Amount::zero(),
-        )?;
+        ctx.write(&shielded_token_last_inflation_key, token::Amount::zero())?;
         ctx.write(
             &shielded_token_last_locked_amount_key,
             token::Amount::zero(),

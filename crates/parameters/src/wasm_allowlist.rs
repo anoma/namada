@@ -1,5 +1,5 @@
-use namada_core::types::hash::Hash;
-use namada_core::types::storage;
+use namada_core::hash::Hash;
+use namada_core::storage;
 use namada_storage::{Result, StorageRead};
 
 use crate::storage::{

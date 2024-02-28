@@ -12,17 +12,15 @@ use masp_primitives::transaction::components::sapling::fees::{
 };
 use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
-use namada_core::types::address::{
-    Address, ImplicitAddress, InternalAddress, MASP,
-};
-use namada_core::types::key::*;
-use namada_core::types::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
-use namada_core::types::sign::SignatureIndex;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
-use namada_core::types::token::Transfer;
-// use namada_core::types::storage::Key;
-use namada_core::types::token::{Amount, DenominatedAmount};
+use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
+use namada_core::key::*;
+use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
+use namada_core::sign::SignatureIndex;
+use namada_core::storage::Epoch;
+use namada_core::token;
+use namada_core::token::Transfer;
+// use namada_core::storage::Key;
+use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
@@ -42,12 +40,14 @@ use tokio::sync::RwLock;
 use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
+use crate::eth_bridge_pool::PendingTransfer;
+use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
 use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::rpc::validate_amount;
 use crate::tx::{
-    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
+    Commitment, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
@@ -57,7 +57,6 @@ use crate::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
-use crate::types::eth_bridge_pool::PendingTransfer;
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
@@ -349,7 +348,7 @@ pub async fn aux_signing_data(
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
             None => public_keys
-                .get(0)
+                .first()
                 .ok_or(TxSubmitError::InvalidFeePayer)?
                 .clone(),
         }
@@ -389,7 +388,7 @@ pub async fn init_validator_signing_data(
         match &args.wrapper_fee_payer {
             Some(keypair) => keypair.clone(),
             None => public_keys
-                .get(0)
+                .first()
                 .ok_or(TxSubmitError::InvalidFeePayer)?
                 .clone(),
         }
@@ -498,7 +497,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
         Some(diff) if !diff.is_zero() => {
             if let Some(spending_key) = args.fee_unshield.clone() {
                 // Unshield funds for fee payment
-                let target = namada_core::types::masp::TransferTarget::Address(
+                let target = namada_core::masp::TransferTarget::Address(
                     fee_payer_address.clone(),
                 );
                 let fee_amount = DenominatedAmount::new(
@@ -646,7 +645,7 @@ pub async fn wrap_tx(
         let mut hasher = sha2::Sha256::new();
         section.hash(&mut hasher);
         tx.add_section(section);
-        namada_core::types::hash::Hash(hasher.finalize().into())
+        namada_core::hash::Hash(hasher.finalize().into())
     });
 
     tx.add_wrapper(
@@ -778,9 +777,6 @@ fn format_outputs(output: &mut Vec<String>) {
         let key = key.trim().chars().take(MAX_KEY_LEN - 1).collect::<String>();
         // Trim value because we will insert spaces later
         value = value.trim();
-        if value.is_empty() {
-            value = "(none)"
-        }
         if value.chars().count() < MAX_VALUE_LEN {
             // No need to split the line in this case
             output[pos] = format!("{} | {} : {}", i, key, value);
@@ -932,6 +928,139 @@ impl<'a> Display for LedgerProposalType<'a> {
             }
             ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
             ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
+        }
+    }
+}
+
+fn proposal_type_to_ledger_vector(
+    proposal_type: &ProposalType,
+    tx: &Tx,
+    output: &mut Vec<String>,
+) {
+    match proposal_type {
+        ProposalType::Default(None) => {
+            output.push("Proposal type : Default".to_string())
+        }
+        ProposalType::Default(Some(hash)) => {
+            output.push("Proposal type : Default".to_string());
+            let extra = tx
+                .get_section(hash)
+                .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                .expect("unable to load vp code")
+                .code
+                .hash();
+            output
+                .push(format!("Proposal hash : {}", HEXLOWER.encode(&extra.0)));
+        }
+        ProposalType::PGFSteward(actions) => {
+            output.push("Proposal type : PGF Steward".to_string());
+            let mut actions = actions.iter().collect::<Vec<_>>();
+            // Print the test vectors in the same order as the serializations
+            actions.sort();
+            for action in actions {
+                match action {
+                    AddRemove::Add(addr) => {
+                        output.push(format!("Add : {}", addr))
+                    }
+                    AddRemove::Remove(addr) => {
+                        output.push(format!("Remove : {}", addr))
+                    }
+                }
+            }
+        }
+        ProposalType::PGFPayment(actions) => {
+            output.push("Proposal type : PGF Payment".to_string());
+            for action in actions {
+                match action {
+                    PGFAction::Continuous(AddRemove::Add(
+                        PGFTarget::Internal(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Add Continuous Payment".to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Continuous(AddRemove::Add(PGFTarget::Ibc(
+                        target,
+                    ))) => {
+                        output.push(
+                            "PGF Action : Add Continuous Payment".to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                    PGFAction::Continuous(AddRemove::Remove(
+                        PGFTarget::Internal(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Remove Continuous Payment"
+                                .to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Continuous(AddRemove::Remove(
+                        PGFTarget::Ibc(target),
+                    )) => {
+                        output.push(
+                            "PGF Action : Remove Continuous Payment"
+                                .to_string(),
+                        );
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                    PGFAction::Retro(PGFTarget::Internal(target)) => {
+                        output.push("PGF Action : Retro Payment".to_string());
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                    }
+                    PGFAction::Retro(PGFTarget::Ibc(target)) => {
+                        output.push("PGF Action : Retro Payment".to_string());
+                        output.push(format!("Target: {}", target.target));
+                        output.push(format!(
+                            "Amount: NAM {}",
+                            to_ledger_decimal(
+                                &target.amount.to_string_native()
+                            )
+                        ));
+                        output.push(format!("Port ID: {}", target.port_id));
+                        output
+                            .push(format!("Channel ID: {}", target.channel_id));
+                    }
+                }
+            }
         }
     }
 }
@@ -1094,11 +1223,12 @@ pub async fn to_ledger_vector(
 
         tv.output.push("Type : Init proposal".to_string());
         tv.output.push(format!("ID : {}", init_proposal_data.id));
+        proposal_type_to_ledger_vector(
+            &init_proposal_data.r#type,
+            tx,
+            &mut tv.output,
+        );
         tv.output.extend(vec![
-            format!(
-                "Proposal type : {}",
-                LedgerProposalType(&init_proposal_data.r#type, tx)
-            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
@@ -1114,11 +1244,12 @@ pub async fn to_ledger_vector(
 
         tv.output_expert
             .push(format!("ID : {}", init_proposal_data.id));
+        proposal_type_to_ledger_vector(
+            &init_proposal_data.r#type,
+            tx,
+            &mut tv.output_expert,
+        );
         tv.output_expert.extend(vec![
-            format!(
-                "Proposal type : {}",
-                LedgerProposalType(&init_proposal_data.r#type, tx)
-            ),
             format!("Author : {}", init_proposal_data.author),
             format!(
                 "Voting start epoch : {}",
@@ -1506,30 +1637,24 @@ pub async fn to_ledger_vector(
         tv.output.extend(vec!["Type : Change metadata".to_string()]);
 
         let mut other_items = vec![];
+        other_items.push(format!("Validator : {}", metadata_change.validator));
         if let Some(email) = metadata_change.email {
-            other_items.push(format!("New email : {}", email));
+            other_items.push(format!("Email : {}", email));
         }
         if let Some(description) = metadata_change.description {
-            if description.is_empty() {
-                other_items.push("Description removed".to_string());
-            } else {
-                other_items.push(format!("New description : {}", description));
-            }
+            other_items.push(format!("Description : {}", description));
         }
         if let Some(website) = metadata_change.website {
-            if website.is_empty() {
-                other_items.push("Website removed".to_string());
-            } else {
-                other_items.push(format!("New website : {}", website));
-            }
+            other_items.push(format!("Website : {}", website));
         }
         if let Some(discord_handle) = metadata_change.discord_handle {
-            if discord_handle.is_empty() {
-                other_items.push("Discord handle removed".to_string());
-            } else {
-                other_items
-                    .push(format!("New discord handle : {}", discord_handle));
-            }
+            other_items.push(format!("Discord handle : {}", discord_handle));
+        }
+        if let Some(avatar) = metadata_change.avatar {
+            other_items.push(format!("Avatar : {}", avatar));
+        }
+        if let Some(commission_rate) = metadata_change.commission_rate {
+            other_items.push(format!("Commission rate : {}", commission_rate));
         }
 
         tv.output.extend(other_items.clone());
@@ -1657,15 +1782,19 @@ pub async fn to_ledger_vector(
             format!("Type : Update Steward Commission"),
             format!("Steward : {}", update.steward),
         ]);
-        for (address, dec) in &update.commission {
-            tv.output.push(format!("Commission : {} {}", address, dec));
+        let mut commission = update.commission.iter().collect::<Vec<_>>();
+        // Print the test vectors in the same order as the serializations
+        commission.sort_by(|(a, _), (b, _)| a.cmp(b));
+        for (address, dec) in &commission {
+            tv.output.push(format!("Validator : {}", address));
+            tv.output.push(format!("Commission Rate : {}", dec));
         }
 
         tv.output_expert
             .push(format!("Steward : {}", update.steward));
-        for (address, dec) in &update.commission {
-            tv.output_expert
-                .push(format!("Commission : {} {}", address, dec));
+        for (address, dec) in &commission {
+            tv.output_expert.push(format!("Validator : {}", address));
+            tv.output_expert.push(format!("Commission Rate : {}", dec));
         }
     } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
         let address = Address::try_from_slice(
@@ -1720,6 +1849,30 @@ pub async fn to_ledger_vector(
     } else {
         tv.name = "Custom_0".to_string();
         tv.output.push("Type : Custom".to_string());
+    }
+
+    if tx.memo_sechash() != &namada_core::hash::Hash::default() {
+        match tx
+            .get_section(tx.memo_sechash())
+            .unwrap()
+            .extra_data_sec()
+            .unwrap()
+            .code
+        {
+            Commitment::Hash(hash) => {
+                tv.output
+                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
+                tv.output_expert
+                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
+            }
+            Commitment::Id(id) => {
+                let memo = String::from_utf8(id).map_err(|err| {
+                    Error::from(EncodingError::Conversion(err.to_string()))
+                })?;
+                tv.output.push(format!("Memo : {}", memo));
+                tv.output_expert.push(format!("Memo : {}", memo));
+            }
+        }
     }
 
     if let Some(wrapper) = tx.header.wrapper() {

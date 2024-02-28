@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
 use serde::{Deserialize, Serialize};
 
 use crate::pgf::REWARD_DISTRIBUTION_LIMIT;

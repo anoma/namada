@@ -9,7 +9,6 @@
 //! To keep the temporary files created by a test, use env var
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 
-use core::convert::TryFrom;
 use core::str::FromStr;
 use core::time::Duration;
 use std::collections::{BTreeSet, HashMap};
@@ -17,6 +16,10 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use namada::core::address::{Address, InternalAddress};
+use namada::core::key::PublicKey;
+use namada::core::storage::{BlockHeight, Epoch, Key};
+use namada::core::token::Amount;
 use namada::governance::cli::onchain::PgfFunding;
 use namada::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
 use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
@@ -63,10 +66,6 @@ use namada::ledger::storage::ics23_specs::ibc_proof_specs;
 use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
-use namada::types::address::{Address, InternalAddress};
-use namada::types::key::PublicKey;
-use namada::types::storage::{BlockHeight, Epoch, Key};
-use namada::types::token::Amount;
 use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
@@ -78,7 +77,7 @@ use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
-use namada_core::types::string_encoding::StringEncoded;
+use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
 use prost::Message;
@@ -168,6 +167,7 @@ fn run_ledger_ibc() -> Result<()> {
     // The balance should not be changed
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
+    // Shielded transfer 10 BTC from Chain A to Chain B
     shielded_transfer(
         &test_a,
         &test_b,
@@ -179,6 +179,25 @@ fn run_ledger_ibc() -> Result<()> {
         &channel_id_b,
     )?;
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Shielded transfer 5 BTC back from Chain B to the origin-specific account
+    // on Chain A
+    shielded_transfer_back(
+        &test_a,
+        &test_b,
+        &client_id_a,
+        &client_id_b,
+        &port_id_a,
+        &channel_id_a,
+        &port_id_b,
+        &channel_id_b,
+    )?;
+    check_shielded_balances_after_back(
+        &port_id_b,
+        &channel_id_b,
+        &test_a,
+        &test_b,
+    )?;
 
     // Skip tests for closing a channel and timeout_on_close since the transfer
     // channel cannot be closed
@@ -1496,6 +1515,102 @@ fn shielded_transfer(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn shielded_transfer_back(
+    test_a: &Test,
+    test_b: &Test,
+    client_id_a: &ClientId,
+    client_id_b: &ClientId,
+    port_id_a: &PortId,
+    channel_id_a: &ChannelId,
+    port_id_b: &PortId,
+    channel_id_b: &ChannelId,
+) -> Result<()> {
+    // Get masp proof for the following IBC transfer from the destination chain
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    // It will send 5 BTC from Chain B to PA(A) on Chain A
+    // Chain A will receive Chain A's BTC
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let output_folder = test_b.test_dir.path().to_string_lossy();
+    // PA(A) on Chain A will receive BTC on chain A
+    let token_addr = find_address(test_a, BTC)?;
+    let ibc_token = format!("{port_id_b}/{channel_id_b}/{token_addr}");
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        AA_PAYMENT_ADDRESS,
+        "--token",
+        &ibc_token,
+        "--amount",
+        "5",
+        "--port-id",
+        port_id_a.as_ref(),
+        "--channel-id",
+        channel_id_a.as_ref(),
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    // Send a token from SP(B) on Chain B to PA(A) on Chain A
+    let height = transfer(
+        test_b,
+        B_SPENDING_KEY,
+        AA_PAYMENT_ADDRESS,
+        &ibc_token,
+        "5",
+        ALBERT_KEY,
+        port_id_b,
+        channel_id_b,
+        Some(&file_path.to_string_lossy()),
+        None,
+        None,
+        false,
+    )?;
+    let events = get_events(test_b, height)?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+
+    let height_b = query_height(test_b)?;
+    let proof_commitment_on_b =
+        get_commitment_proof(test_b, &packet, height_b)?;
+    // the message member names are confusing, "_a" means the source
+    let msg = MsgRecvPacket {
+        packet,
+        proof_commitment_on_a: proof_commitment_on_b,
+        proof_height_on_a: height_b,
+        signer: signer(),
+    };
+    // Update the client state of Chain B on Chain A
+    update_client_with_height(test_b, test_a, client_id_a, height_b)?;
+    // Receive the token on Chain A
+    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    let events = get_events(test_a, height)?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+
+    // get the proof on Chain A
+    let height_a = query_height(test_a)?;
+    let proof_acked_on_a = get_ack_proof(test_a, &packet, height_a)?;
+    // the message member names are confusing, "_b" means the destination
+    let msg = MsgAcknowledgement {
+        packet,
+        acknowledgement: ack.try_into().expect("invalid ack"),
+        proof_acked_on_b: proof_acked_on_a,
+        proof_height_on_b: height_a,
+        signer: signer(),
+    };
+    // Update the client state of Chain A on Chain B
+    update_client_with_height(test_a, test_b, client_id_b, height_a)?;
+    // Acknowledge on Chain B
+    submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+
+    Ok(())
+}
+
 fn get_shielded_transfer_path(client: &mut NamadaCmd) -> Result<PathBuf> {
     let (_unread, matched) =
         client.exp_regex("Output IBC shielded transfer .*")?;
@@ -2108,6 +2223,72 @@ fn check_shielded_balances(
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
     client.assert_success();
+    Ok(())
+}
+
+/// Check balances after IBC shielded transfer after transfer back
+fn check_shielded_balances_after_back(
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    test_a: &Test,
+    test_b: &Test,
+) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(test_a, BTC)?.to_string();
+    // Check the balance on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AB_VIEWING_KEY,
+        "--node",
+        &rpc_b,
+    ];
+    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+    let ibc_denom = format!("{src_port_id}/{src_channel_id}/btc");
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AB_VIEWING_KEY,
+        "--token",
+        &token_addr,
+        "--no-conversions",
+        "--node",
+        &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 5");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
+
+    // Check the balance on Chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AA_VIEWING_KEY,
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AA_VIEWING_KEY,
+        "--token",
+        &token_addr,
+        "--no-conversions",
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
+    client.exp_string("btc: 5")?;
+    client.assert_success();
+
     Ok(())
 }
 

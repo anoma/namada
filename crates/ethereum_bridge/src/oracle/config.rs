@@ -1,8 +1,8 @@
 //! Configuration for an oracle.
 use std::num::NonZeroU64;
 
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::ethereum_structs;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::ethereum_structs;
 
 /// Configuration for an oracle.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]

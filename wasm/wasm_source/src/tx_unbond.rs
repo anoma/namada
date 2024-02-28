@@ -25,16 +25,18 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
     use std::collections::BTreeSet;
 
+    use namada::core::dec::Dec;
+    use namada::ledger::gas::VpGasMeter;
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::{
         bond_handle, read_consensus_validator_set_addresses_with_stake,
         read_total_stake, read_validator_stake, unbond_handle,
     };
     use namada::proof_of_stake::types::{GenesisValidator, WeightedValidator};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
+    use namada::validity_predicate::VpSentinel;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -44,7 +46,6 @@ mod tests {
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
-    use namada_tx_prelude::{token, BorshSerializeExt};
     use proptest::prelude::*;
 
     use super::*;
@@ -114,7 +115,7 @@ mod tests {
             init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         let native_token = tx_host_env::with(|tx_env| {
-            let native_token = tx_env.wl_storage.storage.native_token.clone();
+            let native_token = tx_env.state.in_mem().native_token.clone();
             if is_delegation {
                 let source = unbond.source.as_ref().unwrap();
                 tx_env.spawn_accounts([source]);
@@ -340,8 +341,12 @@ mod tests {
 
         // Use the tx_env to run PoS VP
         let tx_env = tx_host_env::take();
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &tx_env.gas_meter.borrow(),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-        let result = vp_env.validate_tx(PosVP::new);
+        let result = vp_env.validate_tx(&gas_meter, &sentinel, PosVP::new);
         let result =
             result.expect("Validation of valid changes must not fail!");
         assert!(

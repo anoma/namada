@@ -2,9 +2,9 @@
 
 use masp_primitives::bls12_381::Scalar;
 use masp_primitives::sapling::Nullifier;
-use namada_core::types::address::{self, Address};
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::{self, DbKeySeg, KeySeg};
+use namada_core::address::{self, Address};
+use namada_core::hash::Hash;
+use namada_core::storage::{self, DbKeySeg, KeySeg};
 use namada_trans_token::storage_key::parameter_prefix;
 
 /// Key segment prefix for pinned shielded transactions

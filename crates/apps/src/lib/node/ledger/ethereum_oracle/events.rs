@@ -1,4 +1,5 @@
 pub mod eth_events {
+    #![allow(dead_code)]
     use std::fmt::Debug;
     use std::str::FromStr;
 
@@ -7,14 +8,14 @@ pub mod eth_events {
         ValidatorSetUpdateFilter,
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
-    use namada::types::address::Address;
-    use namada::types::ethereum_events::{
+    use namada::core::address::Address;
+    use namada::core::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada, Uint,
     };
-    use namada::types::ethereum_structs;
-    use namada::types::hash::Hash;
-    use namada::types::keccak::KeccakHash;
-    use namada::types::token::Amount;
+    use namada::core::ethereum_structs;
+    use namada::core::hash::Hash;
+    use namada::core::keccak::KeccakHash;
+    use namada::core::token::Amount;
     use num256::Uint256;
     use thiserror::Error;
 
@@ -119,6 +120,7 @@ pub mod eth_events {
         }
     }
 
+    #[allow(unused_macros)]
     macro_rules! parse_method {
         ($name:ident -> $type:ty) => {
             fn $name(self) -> Result<$type> {
@@ -176,7 +178,7 @@ pub mod eth_events {
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
             let uint = {
-                use namada::types::uint::Uint as NamadaUint;
+                use namada::core::uint::Uint as NamadaUint;
                 let mut num_buf = [0; 32];
                 self.to_little_endian(&mut num_buf);
                 NamadaUint::from_little_endian(&num_buf)

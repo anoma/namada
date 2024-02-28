@@ -6,18 +6,17 @@
 //!
 //! The state machine moves through the following state DAG:
 //!
-//! 1. [`BuildingEncryptedTxBatch`] - the initial state. In
-//!    this state, we populate a block with DKG encrypted txs.
-//!    This state supports two modes of operation, which you can
-//!    think of as two sub-states:
+//! 1. [`BuildingEncryptedTxBatch`] - the initial state. In this state, we
+//!    populate a block with DKG encrypted txs. This state supports two modes of
+//!    operation, which you can think of as two sub-states:
 //!   * [`WithoutEncryptedTxs`] - When this mode is active, no encrypted txs are
 //!     included in a block proposal.
 //!   * [`WithEncryptedTxs`] - When this mode is active, we are able to include
 //!     encrypted txs in a block proposal.
-//! 2. [`BuildingDecryptedTxBatch`] - the second state. In
-//!    this state, we populate a block with DKG decrypted txs.
-//! 3. [`BuildingProtocolTxBatch`] - the third state. In
-//!    this state, we populate a block with protocol txs.
+//! 2. [`BuildingDecryptedTxBatch`] - the second state. In this state, we
+//!    populate a block with DKG decrypted txs.
+//! 3. [`BuildingProtocolTxBatch`] - the third state. In this state, we populate
+//!    a block with protocol txs.
 
 mod decrypted_txs;
 mod encrypted_txs;

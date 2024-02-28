@@ -1,20 +1,20 @@
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::UpdateAccount;
-use namada::core::types::address::{self, Address};
-use namada::core::types::key::{
-    common, SecretKey as SecretKeyInterface, SigScheme,
+use namada::core::address::{self, Address};
+use namada::core::hash::Hash;
+use namada::core::key::{
+    common, ed25519, SecretKey as SecretKeyInterface, SigScheme,
 };
+use namada::core::storage::{Key, TxIndex};
 use namada::governance::storage::vote::ProposalVote;
 use namada::governance::VoteProposalData;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::token::{Amount, Transfer};
 use namada::tx::data::pos::{Bond, CommissionChange};
 use namada::tx::{Code, Section};
-use namada::types::hash::Hash;
-use namada::types::key::ed25519;
-use namada::types::storage::{Key, TxIndex};
 use namada::vm::wasm::run;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, TX_BOND_WASM,
@@ -42,7 +42,7 @@ fn vp_user(c: &mut Criterion) {
         Transfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -57,7 +57,7 @@ fn vp_user(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: defaults::albert_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -138,12 +138,15 @@ fn vp_user(c: &mut Criterion) {
         let mut shell = BenchShell::default();
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
+                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                ));
                 assert!(
                     // NOTE: the wasm code is always in cache so we don't
                     // include here the cost to read and compile the vp code
@@ -152,11 +155,8 @@ fn vp_user(c: &mut Criterion) {
                         signed_tx,
                         &TxIndex(0),
                         &defaults::albert_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
+                        &shell.state,
+                        &gas_meter,
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
@@ -188,7 +188,7 @@ fn vp_implicit(c: &mut Criterion) {
         Transfer {
             source: Address::from(&implicit_account.to_public()),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(500).native_denominated(),
             key: None,
             shielded: None,
@@ -203,7 +203,7 @@ fn vp_implicit(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: Address::from(&implicit_account.to_public()),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -215,7 +215,7 @@ fn vp_implicit(c: &mut Criterion) {
 
     let reveal_pk = shell.generate_tx(
         TX_REVEAL_PK_WASM,
-        &implicit_account.to_public(),
+        implicit_account.to_public(),
         None,
         None,
         vec![],
@@ -272,37 +272,37 @@ fn vp_implicit(c: &mut Criterion) {
         if bench_name != "reveal_pk" {
             // Reveal public key
             shell.execute_tx(&reveal_pk);
-            shell.wl_storage.commit_tx();
+            shell.state.commit_tx();
             shell.commit_block();
         }
 
         if bench_name == "transfer" || bench_name == "pos" {
             // Transfer some tokens to the implicit address
             shell.execute_tx(&received_transfer);
-            shell.wl_storage.commit_tx();
+            shell.state.commit_tx();
             shell.commit_block();
         }
 
         // Run the tx to validate
         shell.execute_tx(tx);
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
+                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                ));
                 assert!(
                     run::vp(
                         vp_code_hash,
                         tx,
                         &TxIndex(0),
                         &Address::from(&implicit_account.to_public()),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
+                        &shell.state,
+                        &gas_meter,
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
@@ -331,7 +331,7 @@ fn vp_validator(c: &mut Criterion) {
         Transfer {
             source: defaults::validator_address(),
             target: defaults::bertha_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -346,7 +346,7 @@ fn vp_validator(c: &mut Criterion) {
         Transfer {
             source: defaults::bertha_address(),
             target: defaults::validator_address(),
-            token: address::nam(),
+            token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
             key: None,
             shielded: None,
@@ -383,7 +383,7 @@ fn vp_validator(c: &mut Criterion) {
         TX_CHANGE_VALIDATOR_COMMISSION_WASM,
         CommissionChange {
             validator: defaults::validator_address(),
-            new_rate: namada::types::dec::Dec::new(6, 2).unwrap(),
+            new_rate: namada::core::dec::Dec::new(6, 2).unwrap(),
         },
         None,
         None,
@@ -438,23 +438,23 @@ fn vp_validator(c: &mut Criterion) {
 
         shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
-            .wl_storage
-            .write_log
+            .state
+            .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
+                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                ));
                 assert!(
                     run::vp(
                         vp_code_hash,
                         signed_tx,
                         &TxIndex(0),
                         &defaults::validator_address(),
-                        &shell.wl_storage.storage,
-                        &shell.wl_storage.write_log,
-                        &mut VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new_from_sub_limit(u64::MAX.into())
-                        ),
+                        &shell.state,
+                        &gas_meter,
                         &keys_changed,
                         &verifiers,
                         shell.vp_wasm_cache.clone(),

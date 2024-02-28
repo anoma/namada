@@ -3,7 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use namada_core::types::storage::{self, DbKeySeg, KeySeg};
+use namada_core::storage::{self, DbKeySeg, KeySeg};
 use thiserror::Error;
 
 use super::super::Result;
@@ -213,7 +213,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address::{self, Address};
+    use namada_core::address::{self, Address};
 
     use super::*;
     use crate::testing::TestStorage;
