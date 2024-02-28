@@ -660,30 +660,3 @@ impl PartialEq for SignedAmount {
         }
     }
 }
-
-impl SignedAmount {
-    fn checked_add(&self, rhs: Self) -> Option<Self> {
-        match (self, rhs) {
-            (Self::Positive(lhs), Self::Positive(rhs)) => {
-                let tmp = lhs.checked_add(rhs)?;
-                Some(Self::Positive(tmp))
-            }
-            (Self::Positive(lhs), Self::Negative(rhs)) => {
-                match lhs.checked_sub(rhs) {
-                    Some(diff) => Some(Self::Positive(diff)),
-                    None => Some(Self::Negative(rhs - *lhs)),
-                }
-            }
-            (Self::Negative(lhs), Self::Positive(rhs)) => {
-                match rhs.checked_sub(*lhs) {
-                    Some(diff) => Some(Self::Positive(diff)),
-                    None => Some(Self::Negative(*lhs - rhs)),
-                }
-            }
-            (Self::Negative(lhs), Self::Negative(rhs)) => {
-                let tmp = lhs.checked_add(rhs)?;
-                Some(Self::Negative(tmp))
-            }
-        }
-    }
-}

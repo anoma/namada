@@ -12,6 +12,7 @@ use ethabi::ethereum_types::U256;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use num_traits::{CheckedAdd, CheckedSub};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -289,6 +290,26 @@ impl Amount {
             floor_div
         };
         Self { raw }
+    }
+}
+
+impl CheckedAdd for Amount {
+    fn checked_add(&self, amount: &Self) -> Option<Self> {
+        self.raw.checked_add(amount.raw).and_then(|result| {
+            if result <= uint::MAX_VALUE {
+                Some(Self { raw: result })
+            } else {
+                None
+            }
+        })
+    }
+}
+
+impl CheckedSub for Amount {
+    fn checked_sub(&self, amount: &Self) -> Option<Self> {
+        self.raw
+            .checked_sub(amount.raw)
+            .map(|result| Self { raw: result })
     }
 }
 
