@@ -1,0 +1,43 @@
+---
+version: "3.9"
+
+x-common-env: &cenv
+  CHAIN_ID: shielded-expedition.88f17d1d14
+  NAMADA_BASE_DIR: /home/namada/
+  NAMADA_LOG: info
+  CMT_LOG_LEVEL: p2p:none,pex:error
+  NAMADA_CMT_STDOUT: true
+
+services:
+  namada-init:
+    container_name: namada-init
+    image: ghcr.io/anoma/namada:namada-v0.31.6
+    command: client utils join-network --chain-id shielded-expedition.88f17d1d14
+    environment:
+      <<: *cenv
+    network_mode: "host"
+    volumes:
+      - namada_data:/home/namada/
+  namada-node:
+    container_name: namada-node
+    image: ghcr.io/anoma/namada:namada-v0.31.6
+    #build:
+    #  context: .
+    #  dockerfile: docker/namada/Dockerfile
+    command: node ledger run
+    # restart: always
+    environment:
+      <<: *cenv
+    network_mode: "host"
+    volumes:
+      - namada_data:/home/namada/
+    depends_on:
+      - namada-init
+
+volumes:
+  namada_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/namada_data
