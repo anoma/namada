@@ -170,6 +170,39 @@ impl WriteLog {
         }
     }
 
+    /// Read a non-temporary value at the given key and return the value and the
+    /// gas cost, returns [`None`] if the key is not present in the write
+    /// log
+    pub fn read_persistent(
+        &self,
+        key: &storage::Key,
+    ) -> (Option<&StorageModification>, u64) {
+        for bucket in [
+            &self.tx_write_log,
+            &self.tx_precommit_write_log,
+            &self.block_write_log,
+        ] {
+            if let Some(modification) = bucket.get(key) {
+                let gas = match modification {
+                    StorageModification::Write { ref value } => {
+                        key.len() + value.len()
+                    }
+                    StorageModification::Delete => key.len(),
+                    StorageModification::InitAccount { ref vp_code_hash } => {
+                        key.len() + vp_code_hash.len()
+                    }
+                    StorageModification::Temp { .. } => continue,
+                };
+                return (
+                    Some(modification),
+                    gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+                );
+            }
+        }
+
+        (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+    }
+
     /// Read a value before the latest tx execution at the given key and return
     /// the value and the gas cost, returns [`None`] if the key is not present
     /// in the write log
@@ -572,19 +605,15 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        for (key, modification) in &self.block_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
-            }
-        }
-        for (key, modification) in &self.tx_precommit_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
-            }
-        }
-        for (key, modification) in &self.tx_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
+        for bucket in [
+            &self.block_write_log,
+            &self.tx_precommit_write_log,
+            &self.tx_write_log,
+        ] {
+            for (key, modification) in bucket {
+                if key.split_prefix(prefix).is_some() {
+                    matches.insert(key.to_string(), modification.clone());
+                }
             }
         }
 
