@@ -852,7 +852,7 @@ pub mod testing {
         Address::decode("1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY")
             .expect("The token address decoding shouldn't fail")
     }
-    
+
     /// ETH token address for testing
     pub fn eth() -> Address {
         Address::decode("0x742d35Cc6634C0532925a3b844Bc454e4438f44e")
