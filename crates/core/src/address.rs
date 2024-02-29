@@ -8,7 +8,6 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -460,14 +459,14 @@ impl EstablishedAddressGen {
         &mut self,
         rng_source: impl AsRef<[u8]>,
     ) -> Address {
-        let gen_bytes = self.serialize_to_vec();
-        let bytes = [&gen_bytes, rng_source.as_ref()].concat();
-        let full_hash = Sha256::digest(&bytes);
-        // take first 20 bytes of the hash
-        let mut hash: [u8; HASH_LEN] = Default::default();
-        hash.copy_from_slice(&full_hash[..HASH_LEN]);
-        self.last_hash = full_hash.into();
-        Address::Established(EstablishedAddress { hash })
+        self.last_hash = {
+            let mut hasher_state = Sha256::new();
+            hasher_state.update(self.last_hash);
+            hasher_state.update(rng_source);
+            hasher_state.finalize()
+        }
+        .into();
+        Address::Established(self.last_hash.into())
     }
 }
 
@@ -586,6 +585,7 @@ impl InternalAddress {
 
 #[cfg(test)]
 pub mod tests {
+    use borsh_ext::BorshSerializeExt;
     use proptest::prelude::*;
 
     use super::*;
