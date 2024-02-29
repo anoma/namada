@@ -4156,7 +4156,7 @@ pub mod args {
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
 
-            if threshold <= Some(0) {
+            if threshold == Some(0) {
                 eprintln!("Threshold must be higher than 0.");
                 std::process::exit(1);
             }
@@ -4373,7 +4373,7 @@ pub mod args {
                 PathBuf::from(TX_BECOME_VALIDATOR_WASM);
             let threshold = THRESHOLD.parse(matches);
 
-            if threshold <= Some(0) {
+            if threshold == Some(0) {
                 eprintln!("Threshold must be higher than 0.");
                 std::process::exit(1);
             }
@@ -4492,9 +4492,16 @@ pub mod args {
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
 
-            if threshold <= Some(0) {
+            if threshold == Some(0) {
                 eprintln!("Threshold must be higher than 0.");
                 std::process::exit(1);
+            }
+            let num_keys = public_keys.len() as u8;
+            if let Some(threshold) = threshold {
+                if (num_keys >= 1) && (num_keys < threshold) {
+                    eprintln!("Threshold must be less than the number of public keys provided.");
+                    std::process::exit(1);
+                }
             }
 
             Self {
