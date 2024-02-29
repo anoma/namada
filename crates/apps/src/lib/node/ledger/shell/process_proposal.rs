@@ -2,16 +2,8 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::core::hints;
-use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
-use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::pos::PosQueries;
-use namada::ledger::protocol::get_fee_unshielding_transaction;
-use namada::ledger::storage::tx_queue::TxInQueue;
-use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::state::{TempWlStorage, WlStorage};
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::vote_ext::ethereum_tx_data_variants;
 
@@ -41,16 +33,16 @@ pub struct ValidationMeta {
     pub has_decrypted_txs: bool,
 }
 
-impl<D, H> From<&WlStorage<D, H>> for ValidationMeta
+impl<D, H> From<&WlState<D, H>> for ValidationMeta
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
-    fn from(wl_storage: &WlStorage<D, H>) -> Self {
+    fn from(state: &WlState<D, H>) -> Self {
         let max_proposal_bytes =
-            wl_storage.pos_queries().get_max_proposal_bytes().get();
+            state.pos_queries().get_max_proposal_bytes().get();
         let max_block_gas =
-            namada::parameters::get_max_block_gas(wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(state).unwrap();
         let encrypted_txs_bin =
             EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -94,7 +86,7 @@ where
         let native_block_proposer_address = {
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(&req.proposer_address);
-            find_validator_by_raw_hash(&self.wl_storage, tm_raw_hash_string)
+            find_validator_by_raw_hash(&self.state, tm_raw_hash_string)
                 .unwrap()
                 .expect(
                     "Unable to find native validator address of block \
@@ -166,9 +158,9 @@ where
         block_time: DateTimeUtc,
         block_proposer: &Address,
     ) -> (Vec<TxResult>, ValidationMeta) {
-        let mut tx_queue_iter = self.wl_storage.storage.tx_queue.iter();
-        let mut temp_wl_storage = TempWlStorage::new(&self.wl_storage.storage);
-        let mut metadata = ValidationMeta::from(&self.wl_storage);
+        let mut tx_queue_iter = self.state.in_mem().tx_queue.iter();
+        let mut temp_state = self.state.with_temp_write_log();
+        let mut metadata = ValidationMeta::from(self.state.read_only());
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
@@ -179,7 +171,7 @@ where
                     tx_bytes,
                     &mut tx_queue_iter,
                     &mut metadata,
-                    &mut temp_wl_storage,
+                    &mut temp_state,
                     block_time,
                     &mut vp_wasm_cache,
                     &mut tx_wasm_cache,
@@ -187,7 +179,7 @@ where
                 );
                 let error_code = ResultCode::from_u32(result.code).unwrap();
                 if let ResultCode::Ok = error_code {
-                    temp_wl_storage.write_log.commit_tx();
+                    temp_state.write_log_mut().commit_tx();
                 } else {
                     tracing::info!(
                         "Process proposal rejected an invalid tx. Error code: \
@@ -195,13 +187,13 @@ where
                         error_code,
                         result.info
                     );
-                    temp_wl_storage.write_log.drop_tx();
+                    temp_state.write_log_mut().drop_tx();
                 }
                 result
             })
             .collect();
         metadata.decrypted_queue_has_remaining_txs =
-            !self.wl_storage.storage.tx_queue.is_empty()
+            !self.state.in_mem().tx_queue.is_empty()
                 && tx_queue_iter.next().is_some();
         (tx_results, metadata)
     }
@@ -234,7 +226,7 @@ where
         tx_bytes: &[u8],
         tx_queue_iter: &mut impl Iterator<Item = &'a TxInQueue>,
         metadata: &mut ValidationMeta,
-        temp_wl_storage: &mut TempWlStorage<D, H>,
+        temp_state: &mut TempWlState<D, H>,
         block_time: DateTimeUtc,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
@@ -247,7 +239,7 @@ where
         //
         // NB: always keep this as the first tx check,
         // as it is a pretty cheap one
-        if !validate_tx_bytes(&self.wl_storage, tx_bytes.len())
+        if !validate_tx_bytes(&self.state, tx_bytes.len())
             .expect("Failed to get max tx bytes param from storage")
         {
             return TxResult {
@@ -350,11 +342,9 @@ where
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
                                 validate_eth_events_vext(
-                                    &self.wl_storage,
+                                    &self.state,
                                     &ext.0,
-                                    self.wl_storage
-                                        .storage
-                                        .get_last_block_height(),
+                                    self.state.in_mem().get_last_block_height(),
                                 )
                                 .map(|_| TxResult {
                                     code: ResultCode::Ok.into(),
@@ -378,11 +368,9 @@ where
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
                                 validate_bp_roots_vext(
-                                    &self.wl_storage,
+                                    &self.state,
                                     &ext.0,
-                                    self.wl_storage
-                                        .storage
-                                        .get_last_block_height(),
+                                    self.state.in_mem().get_last_block_height(),
                                 )
                                 .map(|_| TxResult {
                                     code: ResultCode::Ok.into(),
@@ -408,14 +396,14 @@ where
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
                             validate_valset_upd_vext(
-                                &self.wl_storage,
+                                &self.state,
                                 &ext,
                                 // n.b. only accept validator set updates
                                 // issued at
                                 // the current epoch (signing off on the
                                 // validators
                                 // of the next epoch)
-                                self.wl_storage.storage.get_current_epoch().0,
+                                self.state.in_mem().get_current_epoch().0,
                             )
                             .map(|_| TxResult {
                                 code: ResultCode::Ok.into(),
@@ -579,8 +567,7 @@ where
                 }
 
                 // Replay protection checks
-                if let Err(e) =
-                    super::replay_protection_checks(&tx, temp_wl_storage)
+                if let Err(e) = super::replay_protection_checks(&tx, temp_state)
                 {
                     return TxResult {
                         code: ResultCode::ReplayTx.into(),
@@ -594,8 +581,8 @@ where
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
                     &mut ShellParams::new(
-                        &mut tx_gas_meter,
-                        temp_wl_storage,
+                        &RefCell::new(tx_gas_meter),
+                        temp_state,
                         vp_wasm_cache,
                         tx_wasm_cache,
                     ),
@@ -634,7 +621,7 @@ fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
-    shell_params: &mut ShellParams<CA, TempWlStorage<D, H>>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -642,7 +629,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        shell_params.wl_storage,
+        shell_params.state,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -658,7 +645,7 @@ where
         shell_params,
     )?;
 
-    protocol::transfer_fee(shell_params.wl_storage, proposer, wrapper)
+    protocol::transfer_fee(shell_params.state, proposer, wrapper)
         .map_err(Error::TxApply)
 }
 
@@ -666,26 +653,19 @@ where
 /// are covered by the e2e tests.
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::ledger::replay_protection;
+    use namada::core::key::*;
+    use namada::core::storage::Epoch;
+    use namada::replay_protection;
     use namada::state::StorageWrite;
-    use namada::token;
     use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::{Fee, WrapperTx};
-    use namada::tx::{
-        Code, Data, Section, SignableEthMessage, Signature, Signed,
-    };
-    use namada::types::ethereum_events::EthereumEvent;
-    use namada::types::key::*;
-    use namada::types::storage::Epoch;
-    use namada::types::time::DateTimeUtc;
-    use namada::vote_ext::{
-        bridge_pool_roots, ethereum_events, EthereumTxData,
-    };
+    use namada::tx::data::Fee;
+    use namada::tx::{Code, Data, Signature, Signed};
+    use namada::vote_ext::{bridge_pool_roots, ethereum_events};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
-        self, deactivate_bridge, gen_keypair, get_bp_bytes_to_sign,
-        ProcessProposal, TestError, TestShell,
+        deactivate_bridge, gen_keypair, get_bp_bytes_to_sign, ProcessProposal,
+        TestError, TestShell,
     };
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
     use crate::wallet;
@@ -705,7 +685,7 @@ mod test_process_proposal {
         };
         let ext = ethereum_events::Vext {
             validator_addr: addr.clone(),
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             ethereum_events: vec![event],
         }
         .sign(protocol_key);
@@ -743,8 +723,8 @@ mod test_process_proposal {
     #[test]
     fn check_rejected_bp_roots_bridge_inactive() {
         let (mut shell, _a, _b, _c) = test_utils::setup_at_height(1);
-        shell.wl_storage.storage.block.height =
-            shell.wl_storage.storage.get_last_block_height();
+        shell.state.in_mem_mut().block.height =
+            shell.state.in_mem().get_last_block_height();
         shell.commit();
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let addr = shell.mode.get_validator_address().expect("Test failed");
@@ -755,7 +735,7 @@ mod test_process_proposal {
         )
         .sig;
         let vote_ext = bridge_pool_roots::Vext {
-            block_height: shell.wl_storage.storage.get_last_block_height(),
+            block_height: shell.state.in_mem().get_last_block_height(),
             validator_addr: addr.clone(),
             sig,
         }
@@ -915,7 +895,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Default::default(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 public_key,
                 Epoch(0),
@@ -967,7 +947,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::from_uint(100, 0).expect("Test failed"),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1027,11 +1007,11 @@ mod test_process_proposal {
         let keypair = gen_keypair();
         // reduce address balance to match the 100 token min fee
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
-            .wl_storage
+            .state
             .write(&balance_key, Amount::native_whole(99))
             .unwrap();
         let keypair = gen_keypair();
@@ -1041,7 +1021,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::from_uint(1, 0).expect("Test failed"),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1094,11 +1074,11 @@ mod test_process_proposal {
         let keypair = crate::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token min fee
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
-            .wl_storage
+            .state
             .write(&balance_key, Amount::native_whole(99))
             .unwrap();
         shell.commit();
@@ -1109,7 +1089,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::native_whole(1_000_100),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1167,7 +1147,7 @@ mod test_process_proposal {
                         amount_per_gas_unit: DenominatedAmount::native(
                             Amount::native_whole(i as u64),
                         ),
-                        token: shell.wl_storage.storage.native_token.clone(),
+                        token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
@@ -1228,7 +1208,7 @@ mod test_process_proposal {
                 amount_per_gas_unit: DenominatedAmount::native(
                     Default::default(),
                 ),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
             keypair.ref_to(),
             Epoch(0),
@@ -1283,7 +1263,7 @@ mod test_process_proposal {
                 amount_per_gas_unit: DenominatedAmount::native(
                     Default::default(),
                 ),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
             pk: keypair.ref_to(),
             epoch: Epoch(0),
@@ -1389,7 +1369,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::zero(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1406,12 +1386,11 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestState::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
         let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
         shell
-            .wl_storage
-            .storage
+            .state
             .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
@@ -1448,20 +1427,19 @@ mod test_process_proposal {
 
         // Add unshielded balance for fee payment
         let balance_key = token::storage_key::balance_key(
-            &shell.wl_storage.storage.native_token,
+            &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
         );
         shell
-            .wl_storage
-            .storage
-            .write(&balance_key, Amount::native_whole(1000).serialize_to_vec())
+            .state
+            .write(&balance_key, Amount::native_whole(1000))
             .unwrap();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1515,7 +1493,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::zero(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1532,11 +1510,10 @@ mod test_process_proposal {
         )));
 
         // Write inner hash to storage
-        let mut batch = namada::state::testing::TestStorage::batch();
+        let mut batch = namada::state::testing::TestState::batch();
         let hash_key = replay_protection::last_key(&wrapper.raw_header_hash());
         shell
-            .wl_storage
-            .storage
+            .state
             .write_replay_protection_entry(&mut batch, &hash_key)
             .expect("Test failed");
 
@@ -1576,7 +1553,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1596,7 +1573,7 @@ mod test_process_proposal {
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                token: shell.wl_storage.storage.native_token.clone(),
+                token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
             Epoch(0),
@@ -1632,7 +1609,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         Amount::zero(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1694,7 +1671,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1737,7 +1714,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1782,14 +1759,14 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::parameters::get_max_block_gas(&shell.wl_storage).unwrap();
+            namada::parameters::get_max_block_gas(&shell.state).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1831,7 +1808,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -1868,7 +1845,7 @@ mod test_process_proposal {
     fn test_fee_non_whitelisted_token() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let apfel_denom = read_denom(&shell.wl_storage, &address::apfel())
+        let apfel_denom = read_denom(&shell.state, &address::testing::apfel())
             .expect("unable to read denomination from storage")
             .expect("unable to find denomination of apfels");
 
@@ -1879,7 +1856,7 @@ mod test_process_proposal {
                         100.into(),
                         apfel_denom,
                     ),
-                    token: address::apfel(),
+                    token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -1922,7 +1899,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -1967,7 +1944,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         1_000_000_000.into(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2012,7 +1989,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(
                         token::Amount::max(),
                     ),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
@@ -2058,7 +2035,7 @@ mod test_process_proposal {
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: shell.wl_storage.storage.native_token.clone(),
+                    token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2075,7 +2052,7 @@ mod test_process_proposal {
         )));
         let wrapper = wrapper.to_bytes();
         for height in [1u64, 2] {
-            if let Some(b) = shell.wl_storage.storage.last_block.as_mut() {
+            if let Some(b) = shell.state.in_mem_mut().last_block.as_mut() {
                 b.height = height.into();
             }
             let response = {
@@ -2113,7 +2090,7 @@ mod test_process_proposal {
         let max_tx_bytes: u32 = {
             let key = get_max_tx_bytes_key();
             shell
-                .wl_storage
+                .state
                 .read(&key)
                 .expect("Failed to read from storage")
                 .expect("Max tx bytes should have been written to storage")
@@ -2127,7 +2104,7 @@ mod test_process_proposal {
                         amount_per_gas_unit: DenominatedAmount::native(
                             100.into(),
                         ),
-                        token: shell.wl_storage.storage.native_token.clone(),
+                        token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
@@ -2176,14 +2153,14 @@ mod test_process_proposal {
     /// not validated by `ProcessProposal`.
     #[test]
     fn test_outdated_nonce_process_proposal() {
-        use namada::types::storage::InnerEthEventsQueue;
+        use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell
-            .wl_storage
-            .storage
+            .state
+            .in_mem_mut()
             .eth_events_queue
             // sent transfers to namada nonce to 5
             .transfers_to_namada = InnerEthEventsQueue::new_at(5.into());

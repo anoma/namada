@@ -1,4 +1,4 @@
-use namada_core::types::address::Address;
+use namada_core::address::Address;
 use namada_proof_of_stake::token::storage_key::{
     balance_key, minted_balance_key, minter_key,
 };

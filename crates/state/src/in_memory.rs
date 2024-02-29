@@ -1,0 +1,299 @@
+use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::time::DateTimeUtc;
+use namada_core::{encode, ethereum_structs};
+use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_merkle_tree::{MerkleRoot, MerkleTree};
+use namada_parameters::{EpochDuration, Parameters};
+use namada_storage::conversion_state::ConversionState;
+use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+use namada_storage::{
+    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
+    Header, Key, KeySeg, StorageHasher, TxIndex, BLOCK_HASH_LENGTH,
+    BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
+};
+
+use crate::{Error, Result};
+
+/// The ledger's state
+#[derive(Debug)]
+pub struct InMemory<H>
+where
+    H: StorageHasher,
+{
+    /// The ID of the chain
+    pub chain_id: ChainId,
+    /// The address of the native token - this is not stored in DB, but read
+    /// from genesis
+    pub native_token: Address,
+    /// Block storage data
+    pub block: BlockStorage<H>,
+    /// During `FinalizeBlock`, this is the header of the block that is
+    /// going to be committed. After a block is committed, this is reset to
+    /// `None` until the next `FinalizeBlock` phase is reached.
+    pub header: Option<Header>,
+    /// The most recently committed block, if any.
+    pub last_block: Option<LastBlock>,
+    /// The epoch of the most recently committed block. If it is `Epoch(0)`,
+    /// then no block may have been committed for this chain yet.
+    pub last_epoch: Epoch,
+    /// Minimum block height at which the next epoch may start
+    pub next_epoch_min_start_height: BlockHeight,
+    /// Minimum block time at which the next epoch may start
+    pub next_epoch_min_start_time: DateTimeUtc,
+    /// The current established address generator
+    pub address_gen: EstablishedAddressGen,
+    /// We delay the switch to a new epoch by the number of blocks set in here.
+    /// This is `Some` when minimum number of blocks has been created and
+    /// minimum time has passed since the beginning of the last epoch.
+    /// Once the value is `Some(0)`, we're ready to switch to a new epoch and
+    /// this is reset back to `None`.
+    pub update_epoch_blocks_delay: Option<u32>,
+    /// The shielded transaction index
+    pub tx_index: TxIndex,
+    /// The currently saved conversion state
+    pub conversion_state: ConversionState,
+    /// Wrapper txs to be decrypted in the next block proposal
+    pub tx_queue: TxQueue,
+    /// Queue of expired transactions that need to be retransmitted.
+    ///
+    /// These transactions do not need to be persisted, as they are
+    /// retransmitted at the **COMMIT** phase immediately following
+    /// the block when they were queued.
+    pub expired_txs_queue: ExpiredTxsQueue,
+    /// The latest block height on Ethereum processed, if
+    /// the bridge is enabled.
+    pub ethereum_height: Option<ethereum_structs::BlockHeight>,
+    /// The queue of Ethereum events to be processed in order.
+    pub eth_events_queue: EthEventsQueue,
+    /// How many block heights in the past can the storage be queried
+    pub storage_read_past_height_limit: Option<u64>,
+}
+
+/// Last committed block
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct LastBlock {
+    /// Block height
+    pub height: BlockHeight,
+    /// Block hash
+    pub hash: BlockHash,
+    /// Block time
+    pub time: DateTimeUtc,
+}
+
+/// The block storage data
+#[derive(Debug)]
+pub struct BlockStorage<H: StorageHasher> {
+    /// Merkle tree of all the other data in block storage
+    pub tree: MerkleTree<H>,
+    /// During `FinalizeBlock`, this is updated to be the hash of the block
+    /// that is going to be committed. If it is `BlockHash::default()`,
+    /// then no `FinalizeBlock` stage has been reached yet.
+    pub hash: BlockHash,
+    /// From the start of `FinalizeBlock` until the end of `Commit`, this is
+    /// height of the block that is going to be committed. Otherwise, it is the
+    /// height of the most recently committed block, or `BlockHeight::sentinel`
+    /// (0) if no block has been committed yet.
+    pub height: BlockHeight,
+    /// From the start of `FinalizeBlock` until the end of `Commit`, this is
+    /// height of the block that is going to be committed. Otherwise it is the
+    /// epoch of the most recently committed block, or `Epoch(0)` if no block
+    /// has been committed yet.
+    pub epoch: Epoch,
+    /// Results of applying transactions
+    pub results: BlockResults,
+    /// Predecessor block epochs
+    pub pred_epochs: Epochs,
+}
+
+impl<H> InMemory<H>
+where
+    H: StorageHasher,
+{
+    /// Create a new instance of the state
+    pub fn new(
+        chain_id: ChainId,
+        native_token: Address,
+        storage_read_past_height_limit: Option<u64>,
+    ) -> Self {
+        let block = BlockStorage {
+            tree: MerkleTree::default(),
+            hash: BlockHash::default(),
+            height: BlockHeight::default(),
+            epoch: Epoch::default(),
+            pred_epochs: Epochs::default(),
+            results: BlockResults::default(),
+        };
+        InMemory::<H> {
+            chain_id,
+            block,
+            header: None,
+            last_block: None,
+            last_epoch: Epoch::default(),
+            next_epoch_min_start_height: BlockHeight::default(),
+            next_epoch_min_start_time: DateTimeUtc::now(),
+            address_gen: EstablishedAddressGen::new(
+                "Privacy is a function of liberty.",
+            ),
+            update_epoch_blocks_delay: None,
+            tx_index: TxIndex::default(),
+            conversion_state: ConversionState::default(),
+            tx_queue: TxQueue::default(),
+            expired_txs_queue: ExpiredTxsQueue::default(),
+            native_token,
+            ethereum_height: None,
+            eth_events_queue: EthEventsQueue::default(),
+            storage_read_past_height_limit,
+        }
+    }
+
+    /// Returns the Merkle root hash and the height of the committed block. If
+    /// no block exists, returns None.
+    pub fn get_state(&self) -> Option<(MerkleRoot, u64)> {
+        if self.block.height.0 != 0 {
+            Some((self.block.tree.root(), self.block.height.0))
+        } else {
+            None
+        }
+    }
+
+    /// Find the root hash of the merkle tree
+    pub fn merkle_root(&self) -> MerkleRoot {
+        self.block.tree.root()
+    }
+
+    /// Set the block header.
+    /// The header is not in the Merkle tree as it's tracked by Tendermint.
+    /// Hence, we don't update the tree when this is set.
+    pub fn set_header(&mut self, header: Header) -> Result<()> {
+        self.header = Some(header);
+        Ok(())
+    }
+
+    /// Block data is in the Merkle tree as it's tracked by Tendermint in the
+    /// block header. Hence, we don't update the tree when this is set.
+    pub fn begin_block(
+        &mut self,
+        hash: BlockHash,
+        height: BlockHeight,
+    ) -> Result<()> {
+        self.block.hash = hash;
+        self.block.height = height;
+        Ok(())
+    }
+
+    /// Get the chain ID as a raw string
+    pub fn get_chain_id(&self) -> (String, u64) {
+        (
+            self.chain_id.to_string(),
+            CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
+    }
+
+    /// Get the block height
+    pub fn get_block_height(&self) -> (BlockHeight, u64) {
+        (
+            self.block.height,
+            BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
+    }
+
+    /// Get the block hash
+    pub fn get_block_hash(&self) -> (BlockHash, u64) {
+        (
+            self.block.hash.clone(),
+            BLOCK_HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
+    }
+
+    /// Get the current (yet to be committed) block epoch
+    pub fn get_current_epoch(&self) -> (Epoch, u64) {
+        (
+            self.block.epoch,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
+    }
+
+    /// Get the epoch of the last committed block
+    pub fn get_last_epoch(&self) -> (Epoch, u64) {
+        (
+            self.last_epoch,
+            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )
+    }
+
+    /// Initialize the first epoch. The first epoch begins at genesis time.
+    pub fn init_genesis_epoch(
+        &mut self,
+        initial_height: BlockHeight,
+        genesis_time: DateTimeUtc,
+        parameters: &Parameters,
+    ) -> Result<()> {
+        let EpochDuration {
+            min_num_of_blocks,
+            min_duration,
+        } = parameters.epoch_duration;
+        self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
+        self.next_epoch_min_start_time = genesis_time + min_duration;
+        self.block.pred_epochs = Epochs {
+            first_block_heights: vec![initial_height],
+        };
+        self.update_epoch_in_merkle_tree()
+    }
+
+    /// Get the current conversions
+    pub fn get_conversion_state(&self) -> &ConversionState {
+        &self.conversion_state
+    }
+
+    /// Update the merkle tree with epoch data
+    pub fn update_epoch_in_merkle_tree(&mut self) -> Result<()> {
+        let key_prefix: Key =
+            Address::Internal(InternalAddress::PoS).to_db_key().into();
+
+        let key = key_prefix
+            .push(&"epoch_start_height".to_string())
+            .map_err(Error::KeyError)?;
+        self.block
+            .tree
+            .update(&key, encode(&self.next_epoch_min_start_height))?;
+
+        let key = key_prefix
+            .push(&"epoch_start_time".to_string())
+            .map_err(Error::KeyError)?;
+        self.block
+            .tree
+            .update(&key, encode(&self.next_epoch_min_start_time))?;
+
+        let key = key_prefix
+            .push(&"current_epoch".to_string())
+            .map_err(Error::KeyError)?;
+        self.block.tree.update(&key, encode(&self.block.epoch))?;
+
+        Ok(())
+    }
+
+    /// Get the height of the last committed block or 0 if no block has been
+    /// committed yet. The first block is at height 1.
+    pub fn get_last_block_height(&self) -> BlockHeight {
+        self.last_block
+            .as_ref()
+            .map(|b| b.height)
+            .unwrap_or_default()
+    }
+
+    /// Get the oldest epoch where we can read a value
+    pub fn get_oldest_epoch(&self) -> Epoch {
+        let oldest_height = match self.storage_read_past_height_limit {
+            Some(limit) if limit < self.get_last_block_height().0 => {
+                (self.get_last_block_height().0 - limit).into()
+            }
+            _ => BlockHeight(1),
+        };
+        self.block
+            .pred_epochs
+            .get_epoch(oldest_height)
+            .unwrap_or_default()
+    }
+}

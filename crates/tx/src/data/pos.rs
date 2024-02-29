@@ -1,10 +1,10 @@
 //! Types used for PoS system transactions
 
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::key::{common, secp256k1};
-use namada_core::types::token;
+use namada_core::dec::Dec;
+use namada_core::key::{common, secp256k1};
+use namada_core::token;
 use serde::{Deserialize, Serialize};
 
 /// A tx data type to become a validator account.
@@ -214,10 +214,10 @@ pub struct ConsensusKeyChange {
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for proof-of-stake
 pub mod tests {
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::dec::testing::arb_dec;
-    use namada_core::types::key::testing::{arb_common_pk, arb_pk};
-    use namada_core::types::token::testing::arb_amount;
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::dec::testing::arb_dec;
+    use namada_core::key::testing::{arb_common_pk, arb_pk};
+    use namada_core::token::testing::arb_amount;
     use proptest::{option, prop_compose};
 
     use super::*;

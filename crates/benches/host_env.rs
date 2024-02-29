@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::types::account::AccountPublicKeysMap;
-use namada::core::types::address;
+use namada::core::account::AccountPublicKeysMap;
+use namada::core::address;
 use namada::ledger::storage::DB;
 use namada::token::{Amount, Transfer};
 use namada::tx::Signature;
@@ -21,7 +21,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
     let transfer_data = Transfer {
         source: defaults::albert_address(),
         target: defaults::bertha_address(),
-        token: address::nam(),
+        token: address::testing::nam(),
         amount: Amount::native_whole(500).native_denominated(),
         key: None,
         shielded: None,
@@ -183,7 +183,7 @@ fn write_log_read(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -194,13 +194,13 @@ fn write_log_read(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Bytes(throughput_len));
         // Generate random bytes for the value and write it to storage
         let value: Vec<u8> = (0..value_len).map(|_| rand::random()).collect();
-        shell.wl_storage.write_log.write(&key, value).unwrap();
+        shell.state.write_log_mut().write(&key, value).unwrap();
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
             |b| {
                 b.iter_with_large_drop(|| {
-                    shell.wl_storage.write_log.read(&key).0.unwrap()
+                    shell.state.write_log().read(&key).0.unwrap()
                 })
             },
         );
@@ -214,7 +214,7 @@ fn storage_read(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -228,19 +228,13 @@ fn storage_read(c: &mut Criterion) {
         // NOTE: just like for storage writes, we don't have control on when
         // data is actually flushed to disk, so just benchmark the read function
         // without caring if data is actually in memory or on disk
-        shell.wl_storage.storage.write(&key, &value).unwrap();
+        shell.state.db_write(&key, &value).unwrap();
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
             |b| {
                 b.iter_with_large_drop(|| {
-                    shell
-                        .wl_storage
-                        .storage
-                        .db
-                        .read_subspace_val(&key)
-                        .unwrap()
-                        .unwrap()
+                    shell.state.db().read_subspace_val(&key).unwrap().unwrap()
                 })
             },
         );
@@ -254,7 +248,7 @@ fn write_log_write(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -273,7 +267,7 @@ fn write_log_write(c: &mut Criterion) {
                         (0..value_len).map(|_| rand::random()).collect()
                     },
                     |value| {
-                        shell.wl_storage.write_log.write(&key, value).unwrap()
+                        shell.state.write_log_mut().write(&key, value).unwrap()
                     },
                     criterion::BatchSize::SmallInput,
                 )
@@ -289,7 +283,7 @@ fn storage_write(c: &mut Criterion) {
     let mut shell = BenchShell::default();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::types::storage::Key::parse(key).unwrap();
+        let key = namada::core::storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -298,7 +292,7 @@ fn storage_write(c: &mut Criterion) {
         // so we set this as the throughput parameter
         let throughput_len = value_len + key.len() as u64;
         group.throughput(criterion::Throughput::Bytes(throughput_len));
-        let block_height = shell.wl_storage.storage.block.height;
+        let block_height = shell.state.in_mem().block.height;
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),
@@ -315,9 +309,8 @@ fn storage_write(c: &mut Criterion) {
                         // just benchmark the write operation here without
                         // focusing on the hardware write
                         shell
-                            .wl_storage
-                            .storage
-                            .db
+                            .state
+                            .db_mut()
                             .write_subspace_val(block_height, &key, value, true)
                             .unwrap();
                     },

@@ -2,9 +2,9 @@
 //! Namada transaction.
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::address::Address;
-use namada_core::types::storage;
-use namada_core::types::token::Amount;
+use namada_core::address::Address;
+use namada_core::storage;
+use namada_core::token::Amount;
 
 /// Represents an arbitrary write to storage at the specified key. This should
 /// be used alongside the test `tx_write.wasm`.

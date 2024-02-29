@@ -8,12 +8,11 @@ use std::ops::ControlFlow;
 pub use ethers;
 use ethers::providers::Middleware;
 use itertools::Either;
-pub use namada_core::ledger::eth_bridge::{ADDRESS, INTERNAL_ADDRESS};
-pub use namada_core::types::ethereum_structs as structs;
+pub use namada_core::ethereum_structs as structs;
 pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 pub use namada_ethereum_bridge::storage::parameters::*;
 pub use namada_ethereum_bridge::storage::wrapped_erc20s;
-pub use namada_ethereum_bridge::*;
+pub use namada_ethereum_bridge::{ADDRESS, *};
 use num256::Uint256;
 
 use crate::control_flow::time::{
@@ -74,10 +73,7 @@ where
     .timeout(deadline, || async {
         let fut_syncing = client.syncing();
         let fut_block_num = client.get_block_number();
-        let Ok(status) = futures::try_join!(
-            fut_syncing,
-            fut_block_num,
-        ) else {
+        let Ok(status) = futures::try_join!(fut_syncing, fut_block_num,) else {
             return ControlFlow::Continue(());
         };
         ControlFlow::Break(match status {

@@ -5,8 +5,8 @@ use std::str::FromStr;
 use borsh::BorshSerialize;
 use color_eyre::eyre::Result;
 use eyre::Context;
-use namada_core::types::address::Address;
-use namada_core::types::{storage, token};
+use namada_core::address::Address;
+use namada_core::{storage, token};
 use namada_test_utils::tx_data::TxWriteData;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::storage::KeySeg;
@@ -41,7 +41,7 @@ pub fn init_multitoken_vp(test: &Test, rpc_addr: &str) -> Result<String> {
         ARBITRARY_SIGNER,
         "--public-key",
         // Value obtained from
-        // `namada::types::key::ed25519::tests::gen_keypair`
+        // `namada::core::key::ed25519::tests::gen_keypair`
         "001be519a321e29020fa3cbfbfd01bd5e92db134305609270b71dace25b5a21168",
         "--code-path",
         &multitoken_vp_wasm_path,

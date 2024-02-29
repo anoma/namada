@@ -4,10 +4,12 @@ use std::cmp::{self, Reverse};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use borsh::BorshDeserialize;
-use namada_core::types::address::Address;
-use namada_core::types::dec::Dec;
-use namada_core::types::storage::Epoch;
-use namada_core::types::token;
+use namada_core::address::Address;
+use namada_core::dec::Dec;
+use namada_core::key::tm_raw_hash_to_string;
+use namada_core::storage::{BlockHeight, Epoch};
+use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
+use namada_core::token;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedMap, NestedSubKey, SubKey,
 };
@@ -30,9 +32,103 @@ use crate::types::{
 use crate::validator_set_update::update_validator_set;
 use crate::{
     fold_and_slash_redelegated_bonds, get_total_consensus_stake,
-    jail_validator, storage_key, EagerRedelegatedUnbonds,
+    jail_validator, storage, storage_key, types, EagerRedelegatedUnbonds,
     FoldRedelegatedBondsResult, OwnedPosParams, PosParams,
 };
+
+/// Apply PoS slashes from the evidence
+pub(crate) fn record_slashes_from_evidence<S>(
+    storage: &mut S,
+    byzantine_validators: Vec<Misbehavior>,
+    pos_params: &PosParams,
+    current_epoch: Epoch,
+    validator_set_update_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    if !byzantine_validators.is_empty() {
+        let pred_epochs = storage.get_pred_epochs()?;
+        for evidence in byzantine_validators {
+            // dbg!(&evidence);
+            tracing::info!("Processing evidence {evidence:?}.");
+            let evidence_height = u64::from(evidence.height);
+            let evidence_epoch =
+                match pred_epochs.get_epoch(BlockHeight(evidence_height)) {
+                    Some(epoch) => epoch,
+                    None => {
+                        tracing::error!(
+                            "Couldn't find epoch for evidence block height {}",
+                            evidence_height
+                        );
+                        continue;
+                    }
+                };
+            // Disregard evidences that should have already been processed
+            // at this time
+            if evidence_epoch + pos_params.slash_processing_epoch_offset()
+                - pos_params.cubic_slashing_window_length
+                <= current_epoch
+            {
+                tracing::info!(
+                    "Skipping outdated evidence from epoch {evidence_epoch}"
+                );
+                continue;
+            }
+            let slash_type = match evidence.kind {
+                MisbehaviorKind::DuplicateVote => {
+                    types::SlashType::DuplicateVote
+                }
+                MisbehaviorKind::LightClientAttack => {
+                    types::SlashType::LightClientAttack
+                }
+                MisbehaviorKind::Unknown => {
+                    tracing::error!("Unknown evidence: {:#?}", evidence);
+                    continue;
+                }
+            };
+            let validator_raw_hash =
+                tm_raw_hash_to_string(evidence.validator.address);
+            let validator = match storage::find_validator_by_raw_hash(
+                storage,
+                &validator_raw_hash,
+            )? {
+                Some(validator) => validator,
+                None => {
+                    tracing::error!(
+                        "Cannot find validator's address from raw hash {}",
+                        validator_raw_hash
+                    );
+                    continue;
+                }
+            };
+            // Check if we're gonna switch to a new epoch after a delay
+            tracing::info!(
+                "Slashing {} for {} in epoch {}, block height {} (current \
+                 epoch = {}, validator set update epoch = \
+                 {validator_set_update_epoch})",
+                validator,
+                slash_type,
+                evidence_epoch,
+                evidence_height,
+                current_epoch
+            );
+            if let Err(err) = slash(
+                storage,
+                pos_params,
+                current_epoch,
+                evidence_epoch,
+                evidence_height,
+                slash_type,
+                &validator,
+                validator_set_update_epoch,
+            ) {
+                tracing::error!("Error in slashing: {}", err);
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Record a slash for a misbehavior that has been received from Tendermint and
 /// then jail the validator, removing it from the validator set. The slash rate
@@ -1101,10 +1197,8 @@ where
         );
         let processing_epoch = epoch + params.slash_processing_epoch_offset();
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
-        let infracting_stake = slashes.iter(storage)?.fold(
-            Ok(Dec::zero()),
-            |acc: namada_storage::Result<Dec>, res| {
-                let acc = acc?;
+        let infracting_stake =
+            slashes.iter(storage)?.try_fold(Dec::zero(), |acc, res| {
                 let (
                     NestedSubKey::Data {
                         key: validator,
@@ -1118,9 +1212,10 @@ where
                 // tracing::debug!("Val {} stake: {}", &validator,
                 // validator_stake);
 
-                Ok(acc + Dec::from(validator_stake))
-            },
-        )?;
+                Ok::<Dec, namada_storage::Error>(
+                    acc + Dec::from(validator_stake),
+                )
+            })?;
         sum_vp_fraction += infracting_stake / consensus_stake;
     }
     let cubic_rate =

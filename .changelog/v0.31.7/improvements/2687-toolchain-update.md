@@ -1,0 +1,1 @@
+- Moving to rust version 1.76.0 ([#2687](https://github.com/anoma/anoma/pull/2687))

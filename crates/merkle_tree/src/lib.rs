@@ -15,19 +15,17 @@ use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
 use ics23::commitment_proof::Proof as Ics23Proof;
 use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::ByteBuf;
-use namada_core::types::address::{Address, InternalAddress};
-use namada_core::types::eth_bridge_pool::{
-    is_pending_transfer_key, PendingTransfer,
-};
-use namada_core::types::hash::{Hash, StorageHasher};
-use namada_core::types::keccak::KeccakHash;
-use namada_core::types::storage::{
+use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
+use namada_core::hash::{Hash, StorageHasher};
+use namada_core::keccak::KeccakHash;
+use namada_core::storage::{
     self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
-use namada_core::types::{self, DecodeError};
+use namada_core::{decode, DecodeError};
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree
@@ -257,7 +255,7 @@ impl StoreType {
         if key.is_empty() {
             return Err(Error::EmptyKey("the key is empty".to_owned()));
         }
-        match key.segments.get(0) {
+        match key.segments.first() {
             Some(DbKeySeg::AddressSeg(Address::Internal(internal))) => {
                 match internal {
                     InternalAddress::PoS | InternalAddress::PosSlashPool => {
@@ -303,11 +301,11 @@ impl StoreType {
         bytes: T,
     ) -> std::result::Result<Store, DecodeError> {
         match self {
-            Self::Base => Ok(Store::Base(types::decode(bytes)?)),
-            Self::Account => Ok(Store::Account(types::decode(bytes)?)),
-            Self::Ibc => Ok(Store::Ibc(types::decode(bytes)?)),
-            Self::PoS => Ok(Store::PoS(types::decode(bytes)?)),
-            Self::BridgePool => Ok(Store::BridgePool(types::decode(bytes)?)),
+            Self::Base => Ok(Store::Base(decode(bytes)?)),
+            Self::Account => Ok(Store::Account(decode(bytes)?)),
+            Self::Ibc => Ok(Store::Ibc(decode(bytes)?)),
+            Self::PoS => Ok(Store::PoS(decode(bytes)?)),
+            Self::BridgePool => Ok(Store::BridgePool(decode(bytes)?)),
         }
     }
 }
@@ -1004,8 +1002,7 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
 #[cfg(test)]
 mod test {
     use ics23::HostFunctionsManager;
-    use namada_core::types::hash::Sha256Hasher;
-    use namada_core::types::storage::KeySeg;
+    use namada_core::hash::Sha256Hasher;
 
     use super::*;
     use crate::ics23_specs::{ibc_proof_specs, proof_specs};
@@ -1150,7 +1147,7 @@ mod test {
         };
         let proof = tree.get_sub_tree_proof(&ibc_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&ibc_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
+        let paths = [sub_key.to_string(), store_type.to_string()];
         let mut sub_root = ibc_val.clone();
         let mut value = ibc_val;
         // First, the sub proof is verified. Next the base proof is verified
@@ -1214,7 +1211,7 @@ mod test {
 
         let proof = tree.get_sub_tree_proof(&pos_key, proof).unwrap();
         let (store_type, sub_key) = StoreType::sub_key(&pos_key).unwrap();
-        let paths = vec![sub_key.to_string(), store_type.to_string()];
+        let paths = [sub_key.to_string(), store_type.to_string()];
         let mut sub_root = pos_val.clone();
         let mut value = pos_val;
         // First, the sub proof is verified. Next the base proof is verified

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::storage;
+use namada_core::storage;
 use namada_storage::collections::lazy_vec::{
     Index, LazyVec, SubKey, ValidationError,
 };

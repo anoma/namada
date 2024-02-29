@@ -10,10 +10,10 @@ use data_encoding::HEXLOWER;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::{self, FutureExt};
+use namada_core::eth_abi::EncodeCell;
+use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
-use namada_core::types::eth_abi::EncodeCell;
-use namada_core::types::ethereum_events::EthAddress;
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
@@ -24,7 +24,7 @@ use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{self, Duration, Instant};
 use crate::error::{Error as SdkError, EthereumBridgeError, QueryError};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
-use crate::eth_bridge::ethers::core::types::TransactionReceipt;
+use crate::eth_bridge::ethers::types::TransactionReceipt;
 use crate::eth_bridge::structs::Signature;
 use crate::internal_macros::{echo_error, trace_error};
 use crate::io::Io;
@@ -598,25 +598,30 @@ where
         // update epoch in the contract
         args.epoch = Some(new_epoch);
 
-        let result = relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
-            &args,
-            Arc::clone(&eth_client),
-            client,
-            |transf_result| {
-                let Some(receipt) = transf_result else {
-                    tracing::warn!("No transfer receipt received from the Ethereum node");
-                    last_call_succeeded = false;
-                    return;
-                };
-                last_call_succeeded = receipt.is_successful();
-                if last_call_succeeded {
-                    tracing::info!(?receipt, "Ethereum transfer succeeded");
-                    tracing::info!(?new_epoch, "Updated the validator set");
-                } else {
-                    tracing::error!(?receipt, "Ethereum transfer failed");
-                }
-            },
-        ).await;
+        let result =
+            relay_validator_set_update_once::<DoNotCheckNonce, _, _, _>(
+                &args,
+                Arc::clone(&eth_client),
+                client,
+                |transf_result| {
+                    let Some(receipt) = transf_result else {
+                        tracing::warn!(
+                            "No transfer receipt received from the Ethereum \
+                             node"
+                        );
+                        last_call_succeeded = false;
+                        return;
+                    };
+                    last_call_succeeded = receipt.is_successful();
+                    if last_call_succeeded {
+                        tracing::info!(?receipt, "Ethereum transfer succeeded");
+                        tracing::info!(?new_epoch, "Updated the validator set");
+                    } else {
+                        tracing::error!(?receipt, "Ethereum transfer failed");
+                    }
+                },
+            )
+            .await;
 
         if let Err(err) = result {
             // only print errors, do not exit

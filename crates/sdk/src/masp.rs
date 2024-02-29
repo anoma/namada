@@ -8,8 +8,6 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-// use async_std::io::prelude::WriteExt;
-// use async_std::io::{self};
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use itertools::Either;
@@ -50,16 +48,17 @@ use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
+#[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::types::address::{Address, MASP};
-use namada_core::types::dec::Dec;
-use namada_core::types::masp::{
+use namada_core::address::{Address, MASP};
+use namada_core::dec::Dec;
+pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
-use namada_core::types::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
-use namada_core::types::time::{DateTimeUtc, DurationSecs};
-use namada_core::types::uint::Uint;
+use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
+use namada_core::time::{DateTimeUtc, DurationSecs};
+use namada_core::uint::Uint;
 use namada_ibc::IbcMessage;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
@@ -71,8 +70,6 @@ use thiserror::Error;
 use token::storage_key::{balance_key, is_any_shielded_action_balance_key};
 use token::Amount;
 
-#[cfg(feature = "testing")]
-use crate::error::EncodingError;
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
 use crate::queries::Client;
@@ -88,16 +85,9 @@ use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 /// the default OS specific path is used.
 pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 
-/// Env var to either "save" proofs into files or to "load" them from
-/// files.
-pub const ENV_VAR_MASP_TEST_PROOFS: &str = "NAMADA_MASP_TEST_PROOFS";
-
 /// Randomness seed for MASP integration tests to build proofs with
 /// deterministic rng.
 pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
-
-/// A directory to save serialized proofs for tests.
-pub const MASP_TEST_PROOFS_DIR: &str = "test_fixtures/masp_proofs";
 
 /// The network to use for MASP
 #[cfg(feature = "mainnet")]
@@ -116,21 +106,13 @@ pub const CONVERT_NAME: &str = "masp-convert.params";
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<
     IndexedTx,
-    (
-        Epoch,
-        BTreeSet<namada_core::types::storage::Key>,
-        Transaction,
-    ),
+    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
 >;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
 pub type IndexedNoteEntry = (
     IndexedTx,
-    (
-        Epoch,
-        BTreeSet<namada_core::types::storage::Key>,
-        Transaction,
-    ),
+    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
 );
 
 /// Shielded transfer
@@ -155,14 +137,6 @@ pub struct MaspTokenRewardData {
     pub kp_gain: Dec,
     pub kd_gain: Dec,
     pub locked_amount_target: Uint,
-}
-
-#[cfg(feature = "testing")]
-#[derive(Clone, Copy, Debug)]
-enum LoadOrSaveProofs {
-    Load,
-    Save,
-    Neither,
 }
 
 /// A return type for gen_shielded_transfer
@@ -237,7 +211,9 @@ fn load_pvks() -> &'static PVKs {
 pub fn check_spend(
     spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
     sighash: &[u8; 32],
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -246,6 +222,7 @@ pub fn check_spend(
         Ok(zkproof) => zkproof,
         _ => return false,
     };
+
     ctx.check_spend(
         spend.cv,
         spend.anchor,
@@ -261,7 +238,9 @@ pub fn check_spend(
 /// check_output wrapper
 pub fn check_output(
     output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -276,13 +255,16 @@ pub fn check_output(
         Some(p) => p,
         None => return false,
     };
+
     ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
 }
 
 /// check convert wrapper
 pub fn check_convert(
     convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    ctx: &mut SaplingVerificationContext,
+    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
+    #[cfg(feature = "testing")]
+    ctx: &mut testing::MockSaplingVerificationContext,
     parameters: &PreparedVerifyingKey<Bls12>,
 ) -> bool {
     let zkproof =
@@ -291,6 +273,7 @@ pub fn check_convert(
         Ok(zkproof) => zkproof,
         _ => return false,
     };
+
     ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
 }
 
@@ -368,7 +351,10 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
         output_vk,
     } = load_pvks();
 
+    #[cfg(not(feature = "testing"))]
     let mut ctx = SaplingVerificationContext::new(true);
+    #[cfg(feature = "testing")]
+    let mut ctx = testing::MockSaplingVerificationContext::new(true);
     let spends_valid = sapling_bundle
         .shielded_spends
         .iter()
@@ -552,7 +538,7 @@ impl Unscanned {
     where
         I: IntoIterator<Item = IndexedNoteEntry>,
     {
-        self.txs.extend(items.into_iter());
+        self.txs.extend(items);
     }
 
     fn contains_height(&self, height: u64) -> bool {
@@ -884,8 +870,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         tx: &Tx,
         action_arg: ExtractShieldedActionArg<'args, C>,
         check_header: bool,
-    ) -> Result<(BTreeSet<namada_core::types::storage::Key>, Transaction), Error>
-    {
+    ) -> Result<(BTreeSet<namada_core::storage::Key>, Transaction), Error> {
         let maybe_transaction = if check_header {
             let tx_header = tx.header();
             // NOTE: simply looking for masp sections attached to the tx
@@ -1036,7 +1021,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         indexed_tx: IndexedTx,
         epoch: Epoch,
-        tx_changed_keys: &BTreeSet<namada_core::types::storage::Key>,
+        tx_changed_keys: &BTreeSet<namada_core::storage::Key>,
         shielded: &Transaction,
         vk: &ViewingKey,
         native_token: Address,
@@ -1325,7 +1310,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let Some(denom) = query_denom(client, token).await else {
                 return Err(Error::Query(QueryError::General(format!(
                     "denomination for token {token}"
-                ))))
+                ))));
             };
             for position in MaspDigitPos::iter() {
                 let asset_type =
@@ -1392,7 +1377,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         {
             // Query for the ID of the last accepted transaction
             let Some((token, denom, position, ep, conv, path)) =
-                query_conversion(client, asset_type).await else { return };
+                query_conversion(client, asset_type).await
+            else {
+                return;
+            };
             self.asset_types.insert(
                 asset_type,
                 AssetData {
@@ -1985,6 +1973,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.
+        let rng = StdRng::from_rng(OsRng).unwrap();
+        #[cfg(feature = "testing")]
         let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
@@ -2000,7 +1990,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             );
             StdRng::seed_from_u64(seed)
         } else {
-            StdRng::from_rng(OsRng).unwrap()
+            rng
         };
 
         // Now we build up the transaction within this object
@@ -2051,9 +2041,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Convert transaction amount into MASP types
         let Some(denom) = query_denom(context.client(), token).await else {
-            return Err(TransferErr::General(Error::from(QueryError::General(format!(
-                "denomination for token {token}"
-            )))))
+            return Err(TransferErr::General(Error::from(
+                QueryError::General(format!("denomination for token {token}")),
+            )));
         };
         let (asset_types, masp_amount) = {
             let mut shielded = context.shielded_mut().await;
@@ -2292,154 +2282,29 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
         }
 
-        // To speed up integration tests, we can save and load proofs
-        #[cfg(feature = "testing")]
-        let load_or_save = if let Ok(masp_proofs) =
-            env::var(ENV_VAR_MASP_TEST_PROOFS)
-        {
-            let parsed = match masp_proofs.to_ascii_lowercase().as_str() {
-                "load" => LoadOrSaveProofs::Load,
-                "save" => LoadOrSaveProofs::Save,
-                env_var => Err(Error::Other(format!(
-                    "Unexpected value for {ENV_VAR_MASP_TEST_PROOFS} env var. \
-                     Expecting \"save\" or \"load\", but got \"{env_var}\"."
-                )))?,
-            };
-            if env::var(ENV_VAR_MASP_TEST_SEED).is_err() {
-                Err(Error::Other(format!(
-                    "Ensure to set a seed with {ENV_VAR_MASP_TEST_SEED} env \
-                     var when using {ENV_VAR_MASP_TEST_PROOFS} for \
-                     deterministic proofs."
-                )))?;
-            }
-            parsed
-        } else {
-            LoadOrSaveProofs::Neither
-        };
-
         let builder_clone = builder.clone().map_builder(WalletMap);
-        #[cfg(feature = "testing")]
-        let builder_bytes = borsh::to_vec(&builder_clone).map_err(|e| {
-            Error::from(EncodingError::Conversion(e.to_string()))
-        })?;
-
-        let build_transfer = |prover: LocalTxProver| -> Result<
-            ShieldedTransfer,
-            builder::Error<std::convert::Infallible>,
-        > {
-            let (masp_tx, metadata) = builder
-                .build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
-            Ok(ShieldedTransfer {
-                builder: builder_clone,
-                masp_tx,
-                metadata,
-                epoch,
-            })
-        };
-
-        #[cfg(feature = "testing")]
-        {
-            let builder_hash =
-                namada_core::types::hash::Hash::sha256(&builder_bytes);
-
-            let saved_filepath = env::current_dir()
-                .map_err(|e| Error::Other(e.to_string()))?
-                // Two up from "tests" dir to the root dir
-                .parent()
-                .and_then(std::path::Path::parent)
-                .ok_or_else(|| {
-                    Error::Other("Can not get root dir".to_string())
-                })?
-                .join(MASP_TEST_PROOFS_DIR)
-                .join(format!("{builder_hash}.bin"));
-
-            if let LoadOrSaveProofs::Load = load_or_save {
-                let recommendation = format!(
-                    "Re-run the tests with {ENV_VAR_MASP_TEST_PROOFS}=save to \
-                     re-generate proofs."
-                );
-                let exp_str = format!(
-                    "Read saved MASP proofs from {}. {recommendation}",
-                    saved_filepath.to_string_lossy()
-                );
-                let loaded_bytes = tokio::fs::read(&saved_filepath)
-                    .await
-                    .map_err(|_e| Error::Other(exp_str))?;
-
-                let exp_str = format!(
-                    "Valid `ShieldedTransfer` bytes in {}. {recommendation}",
-                    saved_filepath.to_string_lossy()
-                );
-                let loaded: ShieldedTransfer =
-                    BorshDeserialize::try_from_slice(&loaded_bytes)
-                        .map_err(|_e| Error::Other(exp_str))?;
-
-                // Cache the generated transfer
-                let mut shielded_ctx = context.shielded_mut().await;
-                shielded_ctx
-                    .pre_cache_transaction(
-                        context,
-                        &loaded.masp_tx,
-                        source,
-                        target,
-                        token,
-                        epoch,
-                    )
-                    .await?;
-
-                Ok(Some(loaded))
-            } else {
-                // Build and return the constructed transaction
-                let built = build_transfer(
-                    context.shielded().await.utils.local_tx_prover(),
-                )?;
-                if let LoadOrSaveProofs::Save = load_or_save {
-                    let built_bytes = borsh::to_vec(&built).map_err(|e| {
-                        Error::from(EncodingError::Conversion(e.to_string()))
-                    })?;
-                    tokio::fs::write(&saved_filepath, built_bytes)
-                        .await
-                        .map_err(|e| Error::Other(e.to_string()))?;
-                }
-
-                // Cache the generated transfer
-                let mut shielded_ctx = context.shielded_mut().await;
-                shielded_ctx
-                    .pre_cache_transaction(
-                        context,
-                        &built.masp_tx,
-                        source,
-                        target,
-                        token,
-                        epoch,
-                    )
-                    .await?;
-
-                Ok(Some(built))
-            }
-        }
-
+        // Build and return the constructed transaction
         #[cfg(not(feature = "testing"))]
-        {
-            // Build and return the constructed transaction
-            let built = build_transfer(
-                context.shielded().await.utils.local_tx_prover(),
-            )?;
+        let prover = context.shielded().await.utils.local_tx_prover();
+        #[cfg(feature = "testing")]
+        let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
+        let (masp_tx, metadata) =
+            builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
 
-            let mut shielded_ctx = context.shielded_mut().await;
-            shielded_ctx
-                .pre_cache_transaction(
-                    context,
-                    &built.masp_tx,
-                    source,
-                    target,
-                    token,
-                    epoch,
-                )
-                .await?;
+        // Cache the generated transfer
+        let mut shielded_ctx = context.shielded_mut().await;
+        shielded_ctx
+            .pre_cache_transaction(
+                context, &masp_tx, source, target, token, epoch,
+            )
+            .await?;
 
-            Ok(Some(built))
-        }
+        Ok(Some(ShieldedTransfer {
+            builder: builder_clone,
+            masp_tx,
+            metadata,
+            epoch,
+        }))
     }
 
     // Updates the internal state with the data of the newly generated
@@ -2756,7 +2621,7 @@ enum ExtractShieldedActionArg<'args, C: Client + Sync> {
 async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     tx_data: &[u8],
     args: ExtractShieldedActionArg<'args, C>,
-) -> Result<(BTreeSet<namada_core::types::storage::Key>, Transaction), Error> {
+) -> Result<(BTreeSet<namada_core::storage::Key>, Transaction), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
@@ -2833,7 +2698,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
                             TxResult::from_str(&attribute.value).unwrap();
                         for ibc_event in &tx_result.ibc_events {
                             let event =
-                                namada_core::types::ibc::get_shielded_transfer(
+                                namada_core::ibc::get_shielded_transfer(
                                     ibc_event,
                                 )
                                 .ok()
@@ -2985,58 +2850,146 @@ pub mod testing {
     use std::ops::AddAssign;
     use std::sync::Mutex;
 
-    use masp_primitives::asset_type::AssetType;
+    use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
-    use masp_primitives::convert::AllowedConversion;
     use masp_primitives::ff::Field;
-    use masp_primitives::merkle_tree::MerklePath;
     use masp_primitives::sapling::prover::TxProver;
-    use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
-    use masp_primitives::sapling::{
-        Diversifier, Node, PaymentAddress, ProofGenerationKey, Rseed,
-    };
-    use masp_primitives::transaction::components::{I128Sum, GROTH_PROOF_SIZE};
-    use proptest::collection::SizeRange;
+    use masp_primitives::sapling::redjubjub::Signature;
+    use masp_primitives::sapling::{ProofGenerationKey, Rseed};
+    use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
+    use masp_proofs::bellman::groth16::Proof;
     use proptest::prelude::*;
+    use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
     use proptest::{collection, option, prop_compose};
 
     use super::*;
+    use crate::address::testing::arb_address;
     use crate::masp_primitives::consensus::BranchId;
     use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
+    use crate::masp_proofs::sapling::SaplingVerificationContextInner;
+    use crate::storage::testing::arb_epoch;
     use crate::token::testing::arb_denomination;
-    use crate::types::address::testing::arb_address;
-    use crate::types::storage::testing::arb_epoch;
 
-    #[derive(Debug, Clone)]
-    // Adapts a CSPRNG from a PRNG for proptesting
-    pub struct TestCsprng<R: RngCore>(R);
+    /// A context object for verifying the Sapling components of a single Zcash
+    /// transaction. Same as SaplingVerificationContext, but always assumes the
+    /// proofs to be valid.
+    pub struct MockSaplingVerificationContext {
+        inner: SaplingVerificationContextInner,
+        zip216_enabled: bool,
+    }
 
-    impl<R: RngCore> CryptoRng for TestCsprng<R> {}
-
-    impl<R: RngCore> RngCore for TestCsprng<R> {
-        fn next_u32(&mut self) -> u32 {
-            self.0.next_u32()
+    impl MockSaplingVerificationContext {
+        /// Construct a new context to be used with a single transaction.
+        pub fn new(zip216_enabled: bool) -> Self {
+            MockSaplingVerificationContext {
+                inner: SaplingVerificationContextInner::new(),
+                zip216_enabled,
+            }
         }
 
-        fn next_u64(&mut self) -> u64 {
-            self.0.next_u64()
-        }
-
-        fn fill_bytes(&mut self, dest: &mut [u8]) {
-            self.0.fill_bytes(dest)
-        }
-
-        fn try_fill_bytes(
+        /// Perform consensus checks on a Sapling SpendDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        #[allow(clippy::too_many_arguments)]
+        pub fn check_spend(
             &mut self,
-            dest: &mut [u8],
-        ) -> Result<(), rand::Error> {
-            self.0.try_fill_bytes(dest)
+            cv: jubjub::ExtendedPoint,
+            anchor: bls12_381::Scalar,
+            nullifier: &[u8; 32],
+            rk: PublicKey,
+            sighash_value: &[u8; 32],
+            spend_auth_sig: Signature,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            let zip216_enabled = true;
+            self.inner.check_spend(
+                cv,
+                anchor,
+                nullifier,
+                rk,
+                sighash_value,
+                spend_auth_sig,
+                zkproof,
+                &mut (),
+                |_, rk, msg, spend_auth_sig| {
+                    rk.verify_with_zip216(
+                        &msg,
+                        &spend_auth_sig,
+                        SPENDING_KEY_GENERATOR,
+                        zip216_enabled,
+                    )
+                },
+                |_, _proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on a Sapling SpendDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        #[allow(clippy::too_many_arguments)]
+        pub fn check_convert(
+            &mut self,
+            cv: jubjub::ExtendedPoint,
+            anchor: bls12_381::Scalar,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            self.inner.check_convert(
+                cv,
+                anchor,
+                zkproof,
+                &mut (),
+                |_, _proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on a Sapling OutputDescription, while
+        /// accumulating its value commitment inside the context for later use.
+        pub fn check_output(
+            &mut self,
+            cv: jubjub::ExtendedPoint,
+            cmu: bls12_381::Scalar,
+            epk: jubjub::ExtendedPoint,
+            zkproof: Proof<Bls12>,
+            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        ) -> bool {
+            self.inner.check_output(
+                cv,
+                cmu,
+                epk,
+                zkproof,
+                |_proof, _public_inputs| true,
+            )
+        }
+
+        /// Perform consensus checks on the valueBalance and bindingSig parts of
+        /// a Sapling transaction. All SpendDescriptions and
+        /// OutputDescriptions must have been checked before calling
+        /// this function.
+        pub fn final_check(
+            &self,
+            value_balance: I128Sum,
+            sighash_value: &[u8; 32],
+            binding_sig: Signature,
+        ) -> bool {
+            self.inner.final_check(
+                value_balance,
+                sighash_value,
+                binding_sig,
+                |bvk, msg, binding_sig| {
+                    bvk.verify_with_zip216(
+                        &msg,
+                        &binding_sig,
+                        VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
+                        self.zip216_enabled,
+                    )
+                },
+            )
         }
     }
 
@@ -3083,7 +3036,7 @@ pub mod testing {
     // An implementation of TxProver that does everything except generating
     // valid zero-knowledge proofs. Uses the supplied source of randomness to
     // carry out its operations.
-    pub struct MockTxProver<R: RngCore>(Mutex<R>);
+    pub struct MockTxProver<R: RngCore>(pub Mutex<R>);
 
     impl<R: RngCore> TxProver for MockTxProver<R> {
         type SaplingProvingContext = SaplingProvingContext;
@@ -3140,14 +3093,23 @@ pub mod testing {
             // Accumulate the value commitment in the context
             ctx.cv_sum += value_commitment;
 
-            Ok(([0u8; GROTH_PROOF_SIZE], value_commitment, rk))
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+            Ok((zkproof, value_commitment, rk))
         }
 
         fn output_proof(
             &self,
             ctx: &mut Self::SaplingProvingContext,
             _esk: jubjub::Fr,
-            _payment_address: PaymentAddress,
+            _payment_address: masp_primitives::sapling::PaymentAddress,
             _rcm: jubjub::Fr,
             asset_type: AssetType,
             value: u64,
@@ -3180,7 +3142,17 @@ pub mod testing {
             // check internal consistency.
             ctx.cv_sum -= value_commitment_point; // Outputs subtract from the total.
 
-            ([0u8; GROTH_PROOF_SIZE], value_commitment_point)
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+
+            (zkproof, value_commitment_point)
         }
 
         fn convert_proof(
@@ -3218,7 +3190,17 @@ pub mod testing {
             // Accumulate the value commitment in the context
             ctx.cv_sum += value_commitment;
 
-            Ok(([0u8; GROTH_PROOF_SIZE], value_commitment))
+            let mut zkproof = [0u8; GROTH_PROOF_SIZE];
+            let proof = Proof::<Bls12> {
+                a: G1Affine::generator(),
+                b: G2Affine::generator(),
+                c: G1Affine::generator(),
+            };
+            proof
+                .write(&mut zkproof[..])
+                .expect("should be able to serialize a proof");
+
+            Ok((zkproof, value_commitment))
         }
 
         fn binding_sig(
@@ -3273,6 +3255,33 @@ pub mod testing {
                 &mut *rng,
                 VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
             ))
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    // Adapts a CSPRNG from a PRNG for proptesting
+    pub struct TestCsprng<R: RngCore>(R);
+
+    impl<R: RngCore> CryptoRng for TestCsprng<R> {}
+
+    impl<R: RngCore> RngCore for TestCsprng<R> {
+        fn next_u32(&mut self) -> u32 {
+            self.0.next_u32()
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            self.0.next_u64()
+        }
+
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            self.0.fill_bytes(dest)
+        }
+
+        fn try_fill_bytes(
+            &mut self,
+            dest: &mut [u8],
+        ) -> Result<(), rand::Error> {
+            self.0.try_fill_bytes(dest)
         }
     }
 
@@ -3373,7 +3382,7 @@ pub mod testing {
     // Maximum value for a note partition
     const MAX_MONEY: u64 = 100;
     // Maximum number of partitions for a note
-    const MAX_SPLITS: usize = 10;
+    const MAX_SPLITS: usize = 3;
 
     prop_compose! {
         // Arbitrarily partition the given vector of integers into sets and sum

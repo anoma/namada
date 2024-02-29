@@ -97,8 +97,9 @@ where
                 })
                 .map_err(D::Error::custom)
         } else {
-            Err(DeserializeStoredKeypairError::MissingPrefix)
-                .map_err(D::Error::custom)
+            Err(D::Error::custom(
+                DeserializeStoredKeypairError::MissingPrefix,
+            ))
         }
     }
 }

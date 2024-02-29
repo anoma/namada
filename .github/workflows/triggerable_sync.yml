@@ -15,8 +15,8 @@ on:
         description: 'Chain ID'
         required: true
         type: string
-      add_peer:
-        description: "Optional address to add to Comet's P2P config (must be a valid `TendermintAddress`, e.g. `tcp://48d3626f425e44192f4ecf4f9f777b4d17c66ba6@54.195.145.177:26656`)."
+      seed_nodes:
+        description: "An optional list of seed node addresses (comma separated with no whitespace) to add to Comet's P2P config (must be a valid `TendermintAddress`es, e.g. `tcp://48d3626f425e44192f4ecf4f9f777b4d17c66ba6@54.195.145.177:26656`)."
         required: false
         default: ''
         type: string
@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2023-06-01]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         comet_bft: [0.37.2]
         name: ["Run chain sync test"]
@@ -109,7 +109,7 @@ jobs:
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_LOG_COLOR: "false"
-          NAMADA_ADD_PEER: "${{ inputs.add_peer }}"
+          NAMADA_SEED_NODES: "${{ inputs.seed_nodes }}"
           NAMADA_CHAIN_ID: "${{ inputs.chain_id }}"
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload logs

@@ -10,12 +10,12 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
-use namada::types::chain::ChainId;
-use namada::types::dec::Dec;
-use namada::types::key::*;
-use namada::types::string_encoding::StringEncoded;
-use namada::types::token;
-use namada::types::uint::Uint;
+use namada::core::chain::ChainId;
+use namada::core::dec::Dec;
+use namada::core::key::*;
+use namada::core::string_encoding::StringEncoded;
+use namada::core::token;
+use namada::core::uint::Uint;
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::wallet::{alias, Wallet};
 use prost::bytes::Bytes;
@@ -236,9 +236,6 @@ pub async fn join_network(
         });
 
     // Try to find validator data when using a pre-genesis validator
-    let validator_alias = validator_alias_and_pre_genesis_wallet
-        .as_ref()
-        .map(|(alias, _wallet)| alias.clone());
     let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
         |(_alias, wallet)| {
             let tendermint_node_key: common::SecretKey =
@@ -247,7 +244,8 @@ pub async fn join_network(
             (tendermint_node_key, consensus_key)
         },
     );
-    let node_mode = if validator_alias.is_some() {
+    let is_validator = validator_alias_and_pre_genesis_wallet.is_some();
+    let node_mode = if is_validator {
         TendermintMode::Validator
     } else {
         TendermintMode::Full

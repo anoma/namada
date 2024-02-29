@@ -42,7 +42,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         token::undenominated_transfer(
             ctx,
             sender,
-            &eth_bridge::ADDRESS,
+            &address::ETH_BRIDGE,
             &nam_addr,
             amount,
         )?;

@@ -1,5 +1,5 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::types::hash::Hash;
+use namada_core::hash::Hash;
 use serde::{Deserialize, Serialize};
 
 use crate::Tx;

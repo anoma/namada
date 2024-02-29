@@ -8,15 +8,15 @@ pub mod wrapper_tx {
 
     pub use ark_bls12_381::Bls12_381 as EllipticCurve;
     use masp_primitives::transaction::Transaction;
+    use namada_core::address::{Address, MASP};
     use namada_core::borsh::{
         BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
     };
-    use namada_core::types::address::{Address, MASP};
-    use namada_core::types::hash::Hash;
-    use namada_core::types::key::*;
-    use namada_core::types::storage::Epoch;
-    use namada_core::types::token::{Amount, DenominatedAmount, Transfer};
-    use namada_core::types::uint::Uint;
+    use namada_core::hash::Hash;
+    use namada_core::key::*;
+    use namada_core::storage::Epoch;
+    use namada_core::token::{Amount, DenominatedAmount, Transfer};
+    use namada_core::uint::Uint;
     use namada_gas::Gas;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
