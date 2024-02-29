@@ -324,11 +324,9 @@ where
 
             if let ShieldedActionOwner::Minted = counterpart {
                 // When receiving ibc transfers we mint and also shield so we
-                // have two credits, we need to mock the mint balance as a
-                // negative change even if it is positive
-                if let SignedAmount::Positive(amt) = diff {
-                    diff = SignedAmount::Negative(amt);
-                }
+                // have two credits/debits, we need to mock the mint balance as
+                // the opposite change
+                diff = diff.opposite();
             }
 
             result

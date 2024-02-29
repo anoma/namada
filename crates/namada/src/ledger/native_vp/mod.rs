@@ -713,4 +713,12 @@ impl SignedAmount {
             }
         }
     }
+
+    /// Get the additive inverse of the signed amount
+    pub fn opposite(&self) -> Self {
+        match self {
+            Self::Positive(amt) => Self::Negative(*amt),
+            Self::Negative(amt) => Self::Positive(*amt),
+        }
+    }
 }
