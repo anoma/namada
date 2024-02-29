@@ -13,7 +13,6 @@ use namada_core::types::address::{Address, InternalAddress};
 use namada_core::types::hash::Hash;
 use namada_core::types::ibc::IbcEvent;
 use namada_core::types::storage::Epochs;
-use namada_core::types::time::DateTimeUtc;
 use namada_core::types::token::DenominatedAmount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
@@ -169,7 +168,12 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
-    let timeout_timestamp = DateTimeUtc::now()
+    let timeout_timestamp = wl_storage
+        .storage
+        .header
+        .as_ref()
+        .expect("The header should exist")
+        .time
         + read_epoch_duration_parameter(wl_storage)?.min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;

@@ -146,6 +146,16 @@ where
             // the rewards in the current epoch.
             self.process_slashes();
             self.apply_inflation(current_epoch, &mut response)?;
+
+            // Take IBC events that may be emitted from PGF
+            for ibc_event in self.wl_storage.write_log_mut().take_ibc_events() {
+                let mut event = Event::from(ibc_event.clone());
+                // Add the height for IBC event query
+                let height =
+                    self.wl_storage.storage.get_last_block_height() + 1;
+                event["height"] = height.to_string();
+                response.events.push(event);
+            }
         }
 
         // Consensus set liveness check
