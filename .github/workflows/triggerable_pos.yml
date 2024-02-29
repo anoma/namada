@@ -15,15 +15,12 @@ on:
 
 env:
   RUSTC_WRAPPER: sccache
-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
+  SCCACHE_S3_USE_SSL: false
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
-  SCCACHE_BUCKET: namada-cache
-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
-  AWS_REGION: us-east-1
+  SCCACHE_BUCKET: github-runners-remote-cache-shared
+  AWS_REGION: us-east-2
 
 jobs:
   test-pos:
@@ -42,6 +39,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@master
+        with:
+          aws-region: us-east-2
+          role-to-assume: ${{ secrets.AWS_ROLE }}
       - name: Install libudev
         run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
@@ -50,7 +52,7 @@ jobs:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
+        uses: mozilla-actions/sccache-action@v0.0.4
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
         with:
