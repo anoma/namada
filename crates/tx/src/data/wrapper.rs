@@ -239,56 +239,6 @@ pub mod wrapper_tx {
             hasher
         }
 
-        /// Performs validation on the optional fee unshielding data carried by
-        /// the wrapper and generates the tx for execution.
-        pub fn check_and_generate_fee_unshielding(
-            &self,
-            transfer_code_hash: Hash,
-            transfer_code_tag: Option<String>,
-            descriptions_limit: u64,
-            unshield: Transaction,
-        ) -> Result<Tx, WrapperTxErr> {
-            // Check that the number of descriptions is within a certain limit
-            // to avoid a possible DoS vector
-            let sapling_bundle = unshield.sapling_bundle().ok_or(
-                WrapperTxErr::InvalidUnshield(
-                    "Missing required sapling bundle".to_string(),
-                ),
-            )?;
-            let spends = sapling_bundle.shielded_spends.len();
-            let converts = sapling_bundle.shielded_converts.len();
-            let outs = sapling_bundle.shielded_outputs.len();
-
-            let descriptions = spends
-                .checked_add(converts)
-                .ok_or_else(|| {
-                    WrapperTxErr::InvalidUnshield(
-                        "Descriptions overflow".to_string(),
-                    )
-                })?
-                .checked_add(outs)
-                .ok_or_else(|| {
-                    WrapperTxErr::InvalidUnshield(
-                        "Descriptions overflow".to_string(),
-                    )
-                })?;
-
-            if u64::try_from(descriptions)
-                .map_err(|e| WrapperTxErr::InvalidUnshield(e.to_string()))?
-                > descriptions_limit
-            {
-                return Err(WrapperTxErr::InvalidUnshield(
-                    "Descriptions exceed the maximum amount allowed"
-                        .to_string(),
-                ));
-            }
-            self.generate_fee_unshielding(
-                transfer_code_hash,
-                transfer_code_tag,
-                unshield,
-            )
-        }
-
         /// Generates the fee unshielding tx for execution.
         pub fn generate_fee_unshielding(
             &self,
