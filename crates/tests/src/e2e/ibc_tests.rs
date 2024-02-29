@@ -106,7 +106,8 @@ use crate::{run, run_as};
 fn run_ledger_ibc() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -1728,7 +1729,6 @@ fn shielded_transfer_timeout(
     let amount = Amount::native_whole(10).to_string_native();
     let token_addr = find_address(test_a, BTC)?.to_string();
     // the token is prefixed for refunding
-    let token = format!("{port_id_a}/{channel_id_a}/{token_addr}");
     let args = [
         "ibc-gen-shielded",
         "--output-folder-path",
@@ -1736,9 +1736,10 @@ fn shielded_transfer_timeout(
         "--target",
         AA_PAYMENT_ADDRESS,
         "--token",
-        &token,
+        &token_addr.to_string(),
         "--amount",
         &amount,
+        "--refund",
         "--port-id",
         port_id_a.as_ref(),
         "--channel-id",
@@ -2406,7 +2407,7 @@ fn check_shielded_balances_after_back(
         &rpc_a,
     ];
     let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("btc: 5")?;
+    client.exp_string("btc: 95")?;
     client.assert_success();
 
     Ok(())
