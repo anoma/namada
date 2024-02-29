@@ -114,18 +114,18 @@ where
             req.byzantine_validators,
         )?;
 
+        // Take IBC events that may be emitted from PGF
+        for ibc_event in self.state.write_log_mut().take_ibc_events() {
+            let mut event = Event::from(ibc_event.clone());
+            // Add the height for IBC event query
+            let height = self.state.in_mem().get_last_block_height() + 1;
+            event["height"] = height.to_string();
+            response.events.push(event);
+        }
+
         if new_epoch {
             // Apply PoS and PGF inflation
             self.apply_inflation(current_epoch)?;
-
-            // Take IBC events that may be emitted from PGF
-            for ibc_event in self.state.write_log_mut().take_ibc_events() {
-                let mut event = Event::from(ibc_event.clone());
-                // Add the height for IBC event query
-                let height = self.state.in_mem().get_last_block_height() + 1;
-                event["height"] = height.to_string();
-                response.events.push(event);
-            }
         }
 
         let mut stats = InternalStats::default();
