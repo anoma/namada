@@ -11,7 +11,6 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::primitives::Msg;
 use namada_core::ibc::IbcEvent;
 use namada_core::tendermint::Time as TmTime;
-use namada_core::time::DateTimeUtc;
 use namada_core::token::DenominatedAmount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
@@ -285,8 +284,13 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
-    let timeout_timestamp =
-        DateTimeUtc::now() + read_epoch_duration_parameter(state)?.min_duration;
+    let timeout_timestamp = state
+        .in_mem()
+        .header
+        .as_ref()
+        .expect("The header should exist")
+        .time
+        + read_epoch_duration_parameter(state)?.min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
     let ibc_message = MsgTransfer {
