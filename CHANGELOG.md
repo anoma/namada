@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## v0.31.9
+
+Namada 0.31.9 is a patch release that includes a fix of IBC timestamp and shielded context for dry-ran transactions and RocksDB update.
+
+### BUG FIXES
+
+- Fix the timeout timestamp for PGF over IBC
+  ([\#2774](https://github.com/anoma/namada/issues/2774))
+- Fixed a bug in the client for which the speculative
+  shielded context was updated event in a dry run.
+  ([\#2775](https://github.com/anoma/namada/pull/2775))
+
+### IMPROVEMENTS
+
+- Improve build time of git2 dependency by disabling the default features.
+  ([\#2724](https://github.com/anoma/namada/pull/2724))
+- Updated RocksDB dependency. For a shared libary users make sure to link
+  against version v8.10.0. ([\#2776](https://github.com/anoma/namada/pull/2776))
+
+### SDK
+
+- `gen_shielded_transfer` now takes an extra `update_ctx`
+  argument to conditionally update the shielded context.
+  ([\#2775](https://github.com/anoma/namada/pull/2775))
+
+### TESTING
+
+- Fix E2E test for PGF over IBC
+  ([\#2765](https://github.com/anoma/namada/issues/2765))
+
 ## v0.31.8
 
 Namada 0.31.8 is a patch release that prevents issues with incompatible WASM compilation cache and other minor issues.
