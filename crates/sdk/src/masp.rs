@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -64,6 +65,7 @@ use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
+use rayon::prelude::*;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
@@ -524,6 +526,7 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 
 /// Represents the changes that were made to a list of shielded accounts
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
+
 /// A cache of fetched indexed transactions.
 ///
 /// The cache is designed so that it either contains
@@ -531,6 +534,51 @@ pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 #[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
 pub struct Unscanned {
     txs: IndexedNoteData,
+}
+
+#[derive(Debug, Default)]
+/// Data returned by successfully scanning a tx
+struct ScannedData {
+    div_map: HashMap<usize, Diversifier>,
+    memo_map: HashMap<usize, MemoBytes>,
+    note_map: HashMap<usize, Note>,
+    nf_map: HashMap<Nullifier, usize>,
+    pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
+    vk_map: HashMap<usize, ViewingKey>,
+}
+
+impl ScannedData {
+    fn merge<U: ShieldedUtils>(&mut self, ctx: &mut ShieldedContext<U>) {
+        for (k, v) in self.note_map.drain() {
+            ctx.note_map.insert(k, v);
+        }
+        for (k, v) in self.nf_map.drain() {
+            ctx.nf_map.insert(k, v);
+        }
+        for (k, v) in self.pos_map.drain() {
+            let map = ctx.pos_map.entry(k).or_default();
+            for ix in v {
+                map.insert(ix);
+            }
+        }
+        for (k, v) in self.div_map.drain() {
+            ctx.div_map.insert(k, v);
+        }
+        for (k, v) in self.vk_map.drain() {
+            ctx.vk_map.insert(k, v);
+        }
+        for (k, v) in self.memo_map.drain() {
+            ctx.memo_map.insert(k, v);
+        }
+    }
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct DecryptedData {
+    tx: Transaction,
+    keys: BTreeSet<namada_core::storage::Key>,
+    delta: TransactionDelta,
+    epoch: Epoch,
 }
 
 impl Unscanned {
@@ -562,7 +610,7 @@ impl IntoIterator for Unscanned {
     }
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Copy, Clone)]
 /// The possible sync states of the shielded context
 pub enum ContextSyncStatus {
     /// The context contains only data that has been confirmed by the protocol
@@ -609,8 +657,68 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub tx_note_map: BTreeMap<IndexedTx, usize>,
     /// A cache of fetched indexed txs.
     pub unscanned: Unscanned,
+    /// We cannot update spent notes until all fetched notes have been
+    /// decrypted. This temporarily stores the relevant encrypted data in
+    /// case syncing is interrupted.
+    pub decrypted_note_cache: HashMap<(IndexedTx, ViewingKey), DecryptedData>,
     /// The sync state of the context
     pub sync_status: ContextSyncStatus,
+}
+
+/// A thread safe handle back to a shielded context
+#[derive(Clone)]
+pub struct ThreadHandle<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> {
+    // for safety, this field should not be accessible from the outside
+    inner: Arc<Mutex<&'shielded mut ShieldedContext<U>>>,
+}
+
+unsafe impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> Send for ThreadHandle<'shielded, U> {}
+unsafe impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> Sync for ThreadHandle<'shielded, U> {}
+
+impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> ThreadHandle<'shielded, U> {
+
+    pub fn new(ctx: &'shielded mut ShieldedContext<U>) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(ctx)),
+        }
+    }
+
+    fn get_note_pos(&self, indexed_tx: &IndexedTx) -> usize {
+        let locked = self.inner.lock().unwrap();
+        locked.tx_note_map[indexed_tx]
+    }
+
+    fn insert_decrypted_data(&self, key: (IndexedTx, ViewingKey), value: DecryptedData) {
+        let mut locked = self.inner.lock().unwrap();
+        locked.decrypted_note_cache.insert(key, value);
+    }
+
+    fn save(&self) -> std::io::Result<()> {
+        let locked = self.inner.lock().unwrap();
+        futures::executor::block_on(locked.save())
+    }
+
+    fn scanned(&self, indexed_tx: &IndexedTx) {
+        let mut locked = self.inner.lock().unwrap();
+        locked.unscanned.scanned(indexed_tx);
+    }
+
+    fn merge_scanned_data(&self, mut scanned_data: ScannedData) {
+        let mut locked = self.inner.lock().unwrap();
+        scanned_data.merge(*locked);
+    }
+
+    fn nullify_spent_notes(&self, native_token: &Address) -> Result<(), Error> {
+        let mut locked = self.inner.lock().unwrap();
+        locked.nullify_spent_notes(native_token)
+    }
+
+    fn update_vk_heights(&self, height: BlockHeight) {
+        let mut locked = self.inner.lock().unwrap();
+        for (_, h) in locked.vk_heights.iter_mut() {
+            *h = Some(height.into());
+        }
+    }
 }
 
 /// Default implementation to ease construction of TxContexts. Derive cannot be
@@ -633,6 +741,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
             unscanned: Default::default(),
+            decrypted_note_cache: Default::default(),
             sync_status: ContextSyncStatus::Confirmed,
         }
     }
@@ -662,7 +771,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Update the merkle tree of witnesses the first time we
-    /// scan a new MASP transaction.
+    /// scan a new MASP transaction. The witness map is maintained
+    /// to make it easier to construct note merkle paths in other
+    /// code. See
+    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
     fn update_witness_map(
         &mut self,
         indexed_tx: IndexedTx,
@@ -739,6 +851,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // get the bounds on the block heights to fetch
         let start_idx =
             std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
+        // Query for the last produced block height
+        let last_block_height = query_block(client)
+            .await?
+            .map_or_else(BlockHeight::first, |block| block.height);
+        let last_query_height = last_query_height.unwrap_or(last_block_height);
         // Load all transactions accepted until this point
         // N.B. the cache is a hash map
         self.unscanned.extend(
@@ -753,33 +870,53 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // persist the cache in case of interruptions.
         let _ = self.save().await;
 
-        let txs = logger.scan(self.unscanned.clone());
-        for (indexed_tx, (epoch, tx, stx)) in txs {
-            if Some(indexed_tx) > last_witnessed_tx {
-                self.update_witness_map(indexed_tx, &stx)?;
+        let unscanned = self.unscanned.clone();
+        for (indexed_tx, (_, _, stx)) in &unscanned.txs {
+            if Some(*indexed_tx) > last_witnessed_tx {
+                self.update_witness_map(*indexed_tx, stx)?;
             }
-            let mut vk_heights = BTreeMap::new();
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            for (vk, h) in vk_heights
-                .iter_mut()
-                .filter(|(_vk, h)| **h < Some(indexed_tx))
+        }
+        _ = self.utils.save(self).await;
+
+        let sync_status = self.sync_status;
+        let txs = logger.scan(unscanned);
+        let vk_heights = self.vk_heights.clone();
+        let ctx = ThreadHandle::new(self);
+        txs.par_bridge().try_for_each(|(indexed_tx, (epoch, tx, stx))| {
+            for (vk, _) in
+                vk_heights.iter().filter(|(_, h)| **h < Some(indexed_tx))
             {
-                self.scan_tx(
+                let delta = Self::scan_tx(
+                    ctx.clone(),
+                    sync_status,
                     indexed_tx,
-                    epoch,
-                    &tx,
                     &stx,
                     vk,
-                    native_token.clone(),
                 )?;
-                *h = Some(indexed_tx);
+                ctx.insert_decrypted_data(
+                    (indexed_tx, *vk),
+                    DecryptedData {
+                                              tx: stx.clone(),
+                                              keys: tx.clone(),
+                                              delta,
+                                              epoch,
+                                          },
+                );
             }
             // possibly remove unneeded elements from the cache.
-            self.unscanned.scanned(&indexed_tx);
-            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            let _ = self.save().await;
-        }
+            ctx.scanned(&indexed_tx);
+            _ = ctx.save();
+            Ok::<(), Error>(())
+        })?;
 
+        // TODO: This can possibly be improved. We will have unnecessary
+        // trial decryption attempts if syncing is
+        // interrupted and new keys are added.
+        ctx.update_vk_heights(last_query_height);
+        display_line!(logger.io(), "\nNullifying spent notes...");
+        ctx.nullify_spent_notes(&native_token)?;
+        display_line!(logger.io(), "Finished.");
+        _ = ctx.save();
         Ok(())
     }
 
@@ -790,14 +927,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &C,
         logger: &impl ProgressLogger<IO>,
         last_indexed_tx: Option<BlockHeight>,
-        last_query_height: Option<BlockHeight>,
+        last_query_height: BlockHeight,
     ) -> Result<IndexedNoteData, Error> {
-        // Query for the last produced block height
-        let last_block_height = query_block(client)
-            .await?
-            .map_or_else(BlockHeight::first, |block| block.height);
-        let last_query_height = last_query_height.unwrap_or(last_block_height);
-
         let mut shielded_txs = BTreeMap::new();
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
@@ -1009,27 +1140,22 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(result)
     }
 
-    /// Applies the given transaction to the supplied context. More precisely,
-    /// the shielded transaction's outputs are added to the commitment tree.
+    /// Applies the given transaction to the supplied context.
     /// Newly discovered notes are associated to the supplied viewing keys. Note
     /// nullifiers are mapped to their originating notes. Note positions are
-    /// associated to notes, memos, and diversifiers. And the set of notes that
-    /// we have spent are updated. The witness map is maintained to make it
-    /// easier to construct note merkle paths in other code. See
-    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
+    /// associated to notes, memos, and diversifiers.
     pub fn scan_tx(
-        &mut self,
+        ctx: ThreadHandle<U>,
+        sync_status: ContextSyncStatus,
         indexed_tx: IndexedTx,
-        epoch: Epoch,
-        tx_changed_keys: &BTreeSet<namada_core::storage::Key>,
         shielded: &Transaction,
         vk: &ViewingKey,
-        native_token: Address,
-    ) -> Result<(), Error> {
+    ) -> Result<TransactionDelta, Error> {
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
-        if let ContextSyncStatus::Confirmed = self.sync_status {
-            let mut note_pos = self.tx_note_map[&indexed_tx];
+        let mut scanned_data = ScannedData::default();
+        if let ContextSyncStatus::Confirmed = sync_status {
+            let mut note_pos = ctx.get_note_pos(&indexed_tx);
             // Listen for notes sent to our viewing keys, only if we are syncing
             // (i.e. in a confirmed status)
             for so in shielded
@@ -1038,7 +1164,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             {
                 // Let's try to see if this viewing key can decrypt latest
                 // note
-                let notes = self.pos_map.entry(*vk).or_default();
+                let notes = scanned_data.pos_map.entry(*vk).or_default();
                 let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
                 &NETWORK,
                 1.into(),
@@ -1057,12 +1183,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             Error::Other("Can not get nullifier".to_string())
                         })?,
                     );
-                    self.note_map.insert(note_pos, note);
-                    self.memo_map.insert(note_pos, memo);
+                    scanned_data.note_map.insert(note_pos, note);
+                    scanned_data.memo_map.insert(note_pos, memo);
                     // The payment address' diversifier is required to spend
                     // note
-                    self.div_map.insert(note_pos, *pa.diversifier());
-                    self.nf_map.insert(nf, note_pos);
+                    scanned_data.div_map.insert(note_pos, *pa.diversifier());
+                    scanned_data.nf_map.insert(nf, note_pos);
                     // Note the account changes
                     let balance = transaction_delta
                         .entry(*vk)
@@ -1077,61 +1203,134 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 .to_string(),
                         )
                     })?;
-                    self.vk_map.insert(note_pos, *vk);
+                    scanned_data.vk_map.insert(note_pos, *vk);
                 }
                 note_pos += 1;
             }
         }
+        ctx.merge_scanned_data(scanned_data);
+        Ok(transaction_delta)
+    }
 
-        // Cancel out those of our notes that have been spent
-        for ss in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_spends)
+    /// The set of notes that
+    /// we have spent are updated.
+    fn nullify_spent_notes(
+        &mut self,
+        native_token: &Address,
+    ) -> Result<(), Error> {
+        for ((indexed_tx, _vk), decrypted_data) in
+            self.decrypted_note_cache.drain()
         {
-            // If the shielded spend's nullifier is in our map, then target note
-            // is rendered unusable
-            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                self.spents.insert(*note_pos);
-                // Note the account changes
-                let balance = transaction_delta
-                    .entry(self.vk_map[note_pos])
-                    .or_insert_with(I128Sum::zero);
-                let note = self.note_map[note_pos];
+            let DecryptedData {
+                tx: shielded,
+                keys: tx_changed_keys,
+                delta: mut transaction_delta,
+                epoch,
+            } = decrypted_data;
 
-                *balance -= I128Sum::from_nonnegative(
-                    note.asset_type,
-                    note.value as i128,
-                )
-                .map_err(|()| {
-                    Error::Other(
-                        "found note with invalid value or asset type"
-                            .to_string(),
+            // Cancel out those of our notes that have been spent
+            for ss in shielded
+                .sapling_bundle()
+                .map_or(&vec![], |x| &x.shielded_spends)
+            {
+                // If the shielded spend's nullifier is in our map, then target
+                // note is rendered unusable
+                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                    self.spents.insert(*note_pos);
+                    // Note the account changes
+                    let balance = transaction_delta
+                        .entry(self.vk_map[note_pos])
+                        .or_insert_with(I128Sum::zero);
+                    let note = self.note_map[note_pos];
+
+                    *balance -= I128Sum::from_nonnegative(
+                        note.asset_type,
+                        note.value as i128,
                     )
-                })?;
-            }
-        }
-        // Record the changes to the transparent accounts
-        let mut transfer_delta = TransferDelta::new();
-
-        let balance_keys: Vec<_> = tx_changed_keys
-            .iter()
-            .filter_map(is_any_shielded_action_balance_key)
-            .collect();
-        let (source, token, amount) = match shielded.transparent_bundle() {
-            Some(transp_bundle) => {
-                // Shielding/Unshielding transfer
-                match (transp_bundle.vin.len(), transp_bundle.vout.len()) {
-                    (0, 0) => {
-                        return Err(Error::Other(
-                            "Expected shielding/unshielding transaction"
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
                                 .to_string(),
-                        ));
-                    }
-                    (_, 0) => {
-                        // Shielding, only if we are syncing. If in
-                        // speculative context do not update
-                        if let ContextSyncStatus::Confirmed = self.sync_status {
-                            let addresses = balance_keys
+                        )
+                    })?;
+                }
+            }
+            // Record the changes to the transparent accounts
+            let mut transfer_delta = TransferDelta::new();
+
+            let balance_keys: Vec<_> = tx_changed_keys
+                .iter()
+                .filter_map(is_any_shielded_action_balance_key)
+                .collect();
+            let (source, token, amount) = match shielded.transparent_bundle() {
+                Some(transp_bundle) => {
+                    // Shielding/Unshielding transfer
+                    match (transp_bundle.vin.len(), transp_bundle.vout.len()) {
+                        (0, 0) => {
+                            return Err(Error::Other(
+                                "Expected shielding/unshielding transaction"
+                                    .to_string(),
+                            ));
+                        }
+                        (_, 0) => {
+                            // Shielding, only if we are syncing. If in
+                            // speculative context do not update
+                            if let ContextSyncStatus::Confirmed =
+                                self.sync_status
+                            {
+                                let addresses = balance_keys
+                                    .iter()
+                                    .find(|addresses| {
+                                        if addresses[1] != &MASP {
+                                            let transp_addr_commit =
+                                                TransparentAddress(
+                                                    ripemd::Ripemd160::digest(
+                                                        sha2::Sha256::digest(
+                                                            &addresses[1]
+                                                                .serialize_to_vec(),
+                                                        ),
+                                                    )
+                                                        .into(),
+                                                );
+                                            // Vins contain the same address, so we
+                                            // can
+                                            // just examine the first one
+                                            transp_bundle.vin.first().is_some_and(
+                                                |vin| {
+                                                    vin.address
+                                                        == transp_addr_commit
+                                                },
+                                            )
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                    .ok_or_else(|| {
+                                        Error::Other(
+                                            "Could not find source of MASP tx"
+                                                .to_string(),
+                                        )
+                                    })?;
+
+                                let amount = transp_bundle.vin.iter().fold(
+                                    Amount::zero(),
+                                    |acc, vin| {
+                                        acc + Amount::from_u64(vin.value)
+                                    },
+                                );
+
+                                (
+                                    addresses[1].to_owned(),
+                                    addresses[0].to_owned(),
+                                    amount,
+                                )
+                            } else {
+                                return Ok(());
+                            }
+                        }
+                        (0, _) => {
+                            // Unshielding
+                            let token = balance_keys
                                 .iter()
                                 .find(|addresses| {
                                     if addresses[1] != &MASP {
@@ -1145,12 +1344,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                                 )
                                                 .into(),
                                             );
-                                        // Vins contain the same address, so we
+
+                                        // Vouts contain the same address, so we
                                         // can
                                         // just examine the first one
-                                        transp_bundle.vin.first().is_some_and(
-                                            |vin| {
-                                                vin.address
+                                        transp_bundle.vout.first().is_some_and(
+                                            |vout| {
+                                                vout.address
                                                     == transp_addr_commit
                                             },
                                         )
@@ -1160,94 +1360,44 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 })
                                 .ok_or_else(|| {
                                     Error::Other(
-                                        "Could not find source of MASP tx"
+                                        "Could not find target of MASP tx"
                                             .to_string(),
                                     )
-                                })?;
+                                })?[0];
 
                             let amount = transp_bundle
-                                .vin
+                                .vout
                                 .iter()
-                                .fold(Amount::zero(), |acc, vin| {
-                                    acc + Amount::from_u64(vin.value)
+                                .fold(Amount::zero(), |acc, vout| {
+                                    acc + Amount::from_u64(vout.value)
                                 });
-
-                            (
-                                addresses[1].to_owned(),
-                                addresses[0].to_owned(),
-                                amount,
-                            )
-                        } else {
-                            return Ok(());
+                            (MASP, token.to_owned(), amount)
+                        }
+                        (_, _) => {
+                            return Err(Error::Other(
+                                "MASP transaction cannot contain both \
+                                 transparent inputs and outputs"
+                                    .to_string(),
+                            ));
                         }
                     }
-                    (0, _) => {
-                        // Unshielding
-                        let token = balance_keys
-                            .iter()
-                            .find(|addresses| {
-                                if addresses[1] != &MASP {
-                                    let transp_addr_commit = TransparentAddress(
-                                        ripemd::Ripemd160::digest(
-                                            sha2::Sha256::digest(
-                                                &addresses[1]
-                                                    .serialize_to_vec(),
-                                            ),
-                                        )
-                                        .into(),
-                                    );
-
-                                    // Vouts contain the same address, so we
-                                    // can
-                                    // just examine the first one
-                                    transp_bundle.vout.first().is_some_and(
-                                        |vout| {
-                                            vout.address == transp_addr_commit
-                                        },
-                                    )
-                                } else {
-                                    false
-                                }
-                            })
-                            .ok_or_else(|| {
-                                Error::Other(
-                                    "Could not find target of MASP tx"
-                                        .to_string(),
-                                )
-                            })?[0];
-
-                        let amount = transp_bundle
-                            .vout
-                            .iter()
-                            .fold(Amount::zero(), |acc, vout| {
-                                acc + Amount::from_u64(vout.value)
-                            });
-                        (MASP, token.to_owned(), amount)
-                    }
-                    (_, _) => {
-                        return Err(Error::Other(
-                            "MASP transaction cannot contain both transparent \
-                             inputs and outputs"
-                                .to_string(),
-                        ));
-                    }
                 }
-            }
-            None => {
-                // Shielded transfer
-                (MASP, native_token, Amount::zero())
-            }
-        };
+                None => {
+                    // Shielded transfer
+                    (MASP, native_token.clone(), Amount::zero())
+                }
+            };
 
-        transfer_delta.insert(
-            source,
-            MaspChange {
-                asset: token,
-                change: -amount.change(),
-            },
-        );
-        self.delta_map
-            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
+            transfer_delta.insert(
+                source,
+                MaspChange {
+                    asset: token,
+                    change: -amount.change(),
+                },
+            );
+            self.delta_map
+                .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
+        }
         Ok(())
     }
 
@@ -2353,20 +2503,34 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             },
         );
         self.sync_status = ContextSyncStatus::Speculative;
+        for vk in &vks {
+            self.vk_heights.entry(*vk).or_default();
+        }
+        let ctx = ThreadHandle::new(self);
         for vk in vks {
-            self.vk_heights.entry(vk).or_default();
-
-            self.scan_tx(
+            let delta = Self::scan_tx(
+                ctx.clone(),
+                ContextSyncStatus::Speculative,
                 indexed_tx,
-                epoch,
-                &changed_balance_keys,
                 masp_tx,
                 &vk,
-                native_token.clone(),
             )?;
+
+            ctx.insert_decrypted_data(
+                (indexed_tx, vk),
+                DecryptedData {
+                        tx: masp_tx.clone(),
+                        keys: changed_balance_keys.clone(),
+                        delta,
+                        epoch,
+                    },
+            );
+
         }
+        ctx.nullify_spent_notes(&native_token)?;
         // Save the speculative state for future usage
-        self.save().await.map_err(|e| Error::Other(e.to_string()))?;
+        ctx.save()
+          .map_err(|e| Error::Other(e.to_string()))?;
 
         Ok(())
     }
@@ -3881,7 +4045,7 @@ pub enum ProgressType {
 
 pub trait ProgressLogger<IO: Io> {
     type Fetch: Iterator<Item = u64>;
-    type Scan: Iterator<Item = IndexedNoteEntry>;
+    type Scan: Iterator<Item = IndexedNoteEntry> + Send;
 
     fn io(&self) -> &IO;
 

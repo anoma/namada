@@ -4614,6 +4614,7 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "ripemd",
  "serde 1.0.193",
  "serde_json",

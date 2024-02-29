@@ -1470,6 +1470,15 @@ pub struct IndexedTx {
     pub index: TxIndex,
 }
 
+impl From<BlockHeight> for IndexedTx {
+    fn from(height: BlockHeight) -> Self {
+        Self {
+            height,
+            index: Default::default(),
+        }
+    }
+}
+
 #[cfg(test)]
 /// Tests and strategies for storage
 pub mod tests {

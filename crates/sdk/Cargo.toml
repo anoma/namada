@@ -94,6 +94,7 @@ paste.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand = { workspace = true, optional = true }
+rayon.workspace = true
 rand_core = { workspace = true, optional = true }
 ripemd.workspace = true
 serde.workspace = true
