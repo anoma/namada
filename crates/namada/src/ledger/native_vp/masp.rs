@@ -1,13 +1,16 @@
 //! MASP native VP
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::components::transparent::Authorization;
+use masp_primitives::transaction::components::{
+    I128Sum, TxIn, TxOut, ValueSum,
+};
 use masp_primitives::transaction::Transaction;
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
@@ -25,15 +28,12 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
-    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
-    masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key, minted_balance_key,
-    ShieldedActionOwner,
+    balance_key, is_any_token_balance_key, is_masp_allowed_key, is_masp_key,
+    is_masp_nullifier_key, is_masp_tx_pin_key, masp_commitment_anchor_key,
+    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
 };
 use token::Amount;
 
-use super::SignedAmount;
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
@@ -67,9 +67,10 @@ where
 // senders/receivers, their balance diff and whether this is positive or
 // negative diff
 #[derive(Default)]
-struct ChangedBalances<'vp> {
-    masp: BTreeSet<&'vp Address>,
-    other: BTreeMap<&'vp Address, BTreeMap<[u8; 20], SignedAmount>>,
+struct ChangedBalances {
+    tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
+    pre: BTreeMap<[u8; 20], ValueSum<Address, Amount>>,
+    post: BTreeMap<[u8; 20], ValueSum<Address, Amount>>,
 }
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
@@ -254,26 +255,19 @@ where
             .iter()
             .filter(|key| is_masp_tx_pin_key(key))
             .collect();
-        match pin_keys.len() {
-            0 => (),
-            1 => {
-                match self
-                    .ctx
-                    .read_post::<IndexedTx>(pin_keys.first().unwrap())?
-                {
-                    Some(IndexedTx { height, index })
-                        if height == self.ctx.get_block_height()?
-                            && index == self.ctx.get_tx_index()? => {}
-                    Some(_) => {
-                        return Err(Error::NativeVpError(
-                            native_vp::Error::SimpleMessage(
-                                "Invalid MASP pin key",
-                            ),
-                        ));
-                    }
-                    _ => (),
+        match &pin_keys[..] {
+            [] => (),
+            [pin_key] => match self.ctx.read_post::<IndexedTx>(pin_key)? {
+                Some(IndexedTx { height, index })
+                    if height == self.ctx.get_block_height()?
+                        && index == self.ctx.get_tx_index()? => {}
+                Some(_) => {
+                    return Err(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage("Invalid MASP pin key"),
+                    ));
                 }
-            }
+                None => (),
+            },
             _ => {
                 return Err(Error::NativeVpError(
                     native_vp::Error::SimpleMessage(
@@ -285,27 +279,17 @@ where
 
         let mut result = ChangedBalances::default();
         // Get the changed balance keys
-        let (masp_balances, counterparts_balances): (Vec<_>, Vec<_>) =
-            keys_changed
-                .iter()
-                .filter_map(is_any_shielded_action_balance_key)
-                .partition(|addresses| {
-                    addresses.1.to_address_ref() == &Address::Internal(Masp)
-                });
+        let counterparts_balances: Vec<_> = keys_changed
+            .iter()
+            .filter_map(is_any_token_balance_key)
+            .collect();
 
-        for (token, _) in masp_balances {
-            // NOTE: no need to extract the changes of the masp balances too,
-            // we'll examine those of the other transparent addresses and we'll
-            // check the match with the transparent bundle. The rest of the
-            // validation is up to the multitoken vp
-            result.masp.insert(token);
-        }
-
-        for (token, counterpart) in counterparts_balances {
-            let counterpart_balance_key = match counterpart {
-                ShieldedActionOwner::Owner(addr) => balance_key(token, addr),
-                ShieldedActionOwner::Minted => minted_balance_key(token),
-            };
+        for [token, counterpart] in counterparts_balances {
+            let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
+                "No denomination found in storage for the given token",
+            )?;
+            unepoched_tokens(token, denom, &mut result.tokens)?;
+            let counterpart_balance_key = balance_key(token, counterpart);
             let pre_balance: Amount = self
                 .ctx
                 .read_pre(&counterpart_balance_key)?
@@ -316,309 +300,16 @@ where
                 .unwrap_or_default();
             // Public keys must be the hash of the sources/targets
             let address_hash = <[u8; 20]>::from(ripemd::Ripemd160::digest(
-                sha2::Sha256::digest(
-                    &counterpart.to_address_ref().serialize_to_vec(),
-                ),
+                sha2::Sha256::digest(&counterpart.serialize_to_vec()),
             ));
-            let mut diff = match post_balance.checked_sub(pre_balance) {
-                Some(diff) => SignedAmount::Positive(diff),
-                None => SignedAmount::Negative(pre_balance - post_balance),
-            };
 
-            if let ShieldedActionOwner::Minted = counterpart {
-                // When receiving ibc transfers we mint and also shield so we
-                // have two credits, we need to mock the mint balance as a
-                // negative change even if it is positive
-                if let SignedAmount::Positive(amt) = diff {
-                    diff = SignedAmount::Negative(amt);
-                }
-            }
-
-            result
-                .other
-                .entry(token)
-                .or_insert(BTreeMap::default())
-                .insert(address_hash, diff);
+            *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
+                ValueSum::from_pair(token.clone(), pre_balance).unwrap();
+            *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
+                ValueSum::from_pair(token.clone(), post_balance).unwrap();
         }
 
         Ok(result)
-    }
-
-    fn validate_transparent_bundle(
-        &self,
-        shielded_tx: &Transaction,
-        changed_balances: ChangedBalances,
-        transparent_tx_pool: &mut I128Sum,
-        epoch: Epoch,
-        conversion_state: &ConversionState,
-    ) -> Result<bool> {
-        if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-            // Support structs to allow a valid check on the asset derivation.
-            // These also allow to check if some transparent inputs or outputs
-            // were not utilized for a given token which would lead to an
-            // inconsistent transparent balance of masp
-            let mut unprocessed_vins =
-                BTreeSet::from_iter(0..transp_bundle.vin.len());
-            let mut unprocessed_vouts =
-                BTreeSet::from_iter(0..transp_bundle.vout.len());
-
-            // Run the checks fore every token that involved the masp balances
-            for token in changed_balances.masp {
-                let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
-                    "No denomination found in storage for the given token",
-                )?;
-
-                let mut token_bundle_balances = BTreeMap::default();
-
-                // To help recognize asset types not in the conversion tree
-                let unepoched_tokens = unepoched_tokens(token, denom)?;
-
-                // Handle transparent input
-                // The following boundary condition must be satisfied: asset
-                // type must be properly derived
-                for (ref idx, vin) in transp_bundle.vin.iter().enumerate() {
-                    if !unprocessed_vins.contains(idx) {
-                        continue;
-                    }
-                    // Non-masp sources add to the transparent tx pool
-                    *transparent_tx_pool = transparent_tx_pool
-                        .checked_add(
-                            &I128Sum::from_nonnegative(
-                                vin.asset_type,
-                                vin.value as i128,
-                            )
-                            .ok()
-                            .ok_or_err_msg(
-                                "invalid value or asset type for amount",
-                            )?,
-                        )
-                        .ok_or_err_msg("Overflow in input sum")?;
-
-                    match conversion_state.assets.get(&vin.asset_type) {
-                        // Note how the asset's epoch must be equal to
-                        // the present: users must never be allowed to
-                        // backdate transparent
-                        // inputs to a transaction for they would then
-                        // be able to claim rewards while locking their
-                        // assets for negligible
-                        // time periods.
-                        Some((
-                            (address, asset_denom, digit),
-                            asset_epoch,
-                            _,
-                            _,
-                        )) if address == token
-                            && *asset_denom == denom
-                            && *asset_epoch == epoch =>
-                        {
-                            let amount = token::Amount::from_masp_denominated(
-                                vin.value, *digit,
-                            );
-                            let bref = token_bundle_balances
-                                .entry(vin.address.0)
-                                .or_insert(SignedAmount::Negative(
-                                    Amount::default(),
-                                ));
-                            *bref = bref
-                                .checked_add(SignedAmount::Negative(amount))
-                                .ok_or_else(|| {
-                                    Error::NativeVpError(
-                                        native_vp::Error::SimpleMessage(
-                                            "Overflow in bundle balance",
-                                        ),
-                                    )
-                                })?;
-                        }
-                        // Maybe the asset type has no attached epoch
-                        None if unepoched_tokens
-                            .contains_key(&vin.asset_type) =>
-                        {
-                            let (token, denom, digit) =
-                                &unepoched_tokens[&vin.asset_type];
-                            // Determine what the asset type would be if it
-                            // were epoched
-                            let epoched_asset_type = encode_asset_type(
-                                token.clone(),
-                                *denom,
-                                *digit,
-                                Some(epoch),
-                            )
-                            .wrap_err("unable to create asset type")?;
-                            if conversion_state
-                                .assets
-                                .contains_key(&epoched_asset_type)
-                            {
-                                // If such an epoched asset type is
-                                // available in the
-                                // conversion tree, then we must reject the
-                                // unepoched variant
-                                tracing::debug!(
-                                    "epoch is missing from asset type"
-                                );
-                                return Ok(false);
-                            } else {
-                                // Otherwise note the contribution to this
-                                // transparent input
-                                let amount =
-                                    token::Amount::from_masp_denominated(
-                                        vin.value, *digit,
-                                    );
-                                let bref = token_bundle_balances
-                                    .entry(vin.address.0)
-                                    .or_insert(SignedAmount::Negative(
-                                        Amount::default(),
-                                    ));
-                                *bref = bref
-                                    .checked_add(SignedAmount::Negative(amount))
-                                    .ok_or_else(|| {
-                                        Error::NativeVpError(
-                                            native_vp::Error::SimpleMessage(
-                                                "Overflow in bundle balance",
-                                            ),
-                                        )
-                                    })?;
-                            }
-                        }
-                        // unrecognized asset, will try with another token
-                        _ => continue,
-                    };
-
-                    unprocessed_vins.remove(idx);
-                }
-
-                // Handle transparent output
-                // The following boundary condition must be satisfied: asset
-                // type must be properly derived
-                for (ref idx, out) in transp_bundle.vout.iter().enumerate() {
-                    if !unprocessed_vouts.contains(idx) {
-                        continue;
-                    }
-                    // Non-masp destinations subtract from transparent tx
-                    // pool
-                    *transparent_tx_pool = transparent_tx_pool
-                        .checked_sub(
-                            &I128Sum::from_nonnegative(
-                                out.asset_type,
-                                out.value as i128,
-                            )
-                            .ok()
-                            .ok_or_err_msg(
-                                "invalid value or asset type for amount",
-                            )?,
-                        )
-                        .ok_or_err_msg("Underflow in output subtraction")?;
-
-                    match conversion_state.assets.get(&out.asset_type) {
-                        Some((
-                            (address, asset_denom, digit),
-                            asset_epoch,
-                            _,
-                            _,
-                        )) if address == token
-                            && *asset_denom == denom
-                            && *asset_epoch <= epoch =>
-                        {
-                            let amount = token::Amount::from_masp_denominated(
-                                out.value, *digit,
-                            );
-                            let bref = token_bundle_balances
-                                .entry(out.address.0)
-                                .or_insert(SignedAmount::Positive(
-                                    Amount::default(),
-                                ));
-                            *bref = bref
-                                .checked_add(SignedAmount::Positive(amount))
-                                .ok_or_else(|| {
-                                    Error::NativeVpError(
-                                        native_vp::Error::SimpleMessage(
-                                            "Overflow in bundle balance",
-                                        ),
-                                    )
-                                })?;
-                        }
-                        // Maybe the asset type has no attached epoch
-                        None if unepoched_tokens
-                            .contains_key(&out.asset_type) =>
-                        {
-                            // Otherwise note the contribution to this
-                            // transparent output
-                            let (_token, _denom, digit) =
-                                &unepoched_tokens[&out.asset_type];
-                            let amount = token::Amount::from_masp_denominated(
-                                out.value, *digit,
-                            );
-                            let bref = token_bundle_balances
-                                .entry(out.address.0)
-                                .or_insert(SignedAmount::Positive(
-                                    Amount::default(),
-                                ));
-                            *bref = bref
-                                .checked_add(SignedAmount::Positive(amount))
-                                .ok_or_else(|| {
-                                    Error::NativeVpError(
-                                        native_vp::Error::SimpleMessage(
-                                            "Overflow in bundle balance",
-                                        ),
-                                    )
-                                })?;
-                        }
-                        // unrecognized asset, will try with another token
-                        _ => continue,
-                    };
-
-                    unprocessed_vouts.remove(idx);
-                }
-
-                // Iterate over the delta balances described by the transparent
-                // bundle and verify that these match the actual modifications
-                // in storage NOTE: this effectively prevent the
-                // same addresses/tokens couples from being
-                // involved in other transparent transfers in the same tx since
-                // that would lead to a different change in their balances
-                for (address, delta_bundle) in token_bundle_balances {
-                    let delta_balance = changed_balances
-                        .other
-                        .get(token)
-                        .and_then(|map| map.get(&address));
-
-                    match delta_balance {
-                        Some(delta_balance)
-                            if delta_balance == &delta_bundle => {}
-                        _ => {
-                            tracing::debug!(
-                                "The transparent bundle modifications for \
-                                 token {}, address: {:?} don't match the \
-                                 actual changes in storage. Transparent \
-                                 bundle changes: {:?}, Storage changes: {:?}",
-                                token,
-                                address,
-                                delta_bundle,
-                                delta_balance
-                            );
-                            return Ok(false);
-                        }
-                    }
-                }
-            }
-            if !(unprocessed_vins.is_empty() && unprocessed_vouts.is_empty()) {
-                tracing::debug!(
-                    "Some transparent assets could not be recognized or were \
-                     not utilized"
-                );
-                return Ok(false);
-            }
-        } else if !changed_balances.masp.is_empty() {
-            // If no transparent bundle is present than no change to the
-            // transparent balances of masp is allowed
-            tracing::debug!(
-                "No transparent bundle was provided with the transaction but \
-                 the following masp balances were changed: {:#?}",
-                changed_balances.masp
-            );
-            return Ok(false);
-        }
-
-        Ok(true)
     }
 }
 
@@ -626,14 +317,245 @@ where
 fn unepoched_tokens(
     token: &Address,
     denom: token::Denomination,
-) -> Result<HashMap<AssetType, (Address, token::Denomination, MaspDigitPos)>> {
-    let mut unepoched_tokens = HashMap::new();
+    tokens: &mut BTreeMap<
+        AssetType,
+        (Address, token::Denomination, MaspDigitPos),
+    >,
+) -> Result<()> {
     for digit in MaspDigitPos::iter() {
         let asset_type = encode_asset_type(token.clone(), denom, digit, None)
             .wrap_err("unable to create asset type")?;
-        unepoched_tokens.insert(asset_type, (token.clone(), denom, digit));
+        tokens.insert(asset_type, (token.clone(), denom, digit));
     }
-    Ok(unepoched_tokens)
+    Ok(())
+}
+
+// Handle transparent input
+fn validate_transparent_input<A: Authorization>(
+    vin: &TxIn<A>,
+    changed_balances: &mut ChangedBalances,
+    transparent_tx_pool: &mut I128Sum,
+    epoch: Epoch,
+    conversion_state: &ConversionState,
+) -> Result<bool> {
+    // Non-masp sources add to the transparent tx pool
+    *transparent_tx_pool = transparent_tx_pool
+        .checked_add(
+            &I128Sum::from_nonnegative(vin.asset_type, vin.value as i128)
+                .ok()
+                .ok_or_err_msg("invalid value or asset type for amount")?,
+        )
+        .ok_or_err_msg("Overflow in input sum")?;
+
+    let bal_ref = changed_balances
+        .pre
+        .entry(vin.address.0)
+        .or_insert(ValueSum::zero());
+
+    match conversion_state.assets.get(&vin.asset_type) {
+        // Note how the asset's epoch must be equal to the present: users
+        // must never be allowed to backdate transparent inputs to a
+        // transaction for they would then be able to claim rewards while
+        // locking their assets for negligible time periods.
+        Some(((address, _asset_denom, digit), asset_epoch, _, _))
+            if *asset_epoch == epoch =>
+        {
+            let amount =
+                token::Amount::from_masp_denominated(vin.value, *digit);
+            *bal_ref = bal_ref
+                .checked_sub(
+                    &ValueSum::from_pair(address.clone(), amount).unwrap(),
+                )
+                .ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in bundle balance",
+                    ))
+                })?;
+        }
+        // Maybe the asset type has no attached epoch
+        None if changed_balances.tokens.contains_key(&vin.asset_type) => {
+            let (token, denom, digit) =
+                &changed_balances.tokens[&vin.asset_type];
+            // Determine what the asset type would be if it were epoched
+            let epoched_asset_type =
+                encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
+                    .wrap_err("unable to create asset type")?;
+            if conversion_state.assets.contains_key(&epoched_asset_type) {
+                // If such an epoched asset type is available in the
+                // conversion tree, then we must reject the unepoched
+                // variant
+                tracing::debug!("epoch is missing from asset type");
+                return Ok(false);
+            } else {
+                // Otherwise note the contribution to this transparent input
+                let amount =
+                    token::Amount::from_masp_denominated(vin.value, *digit);
+                *bal_ref = bal_ref
+                    .checked_sub(
+                        &ValueSum::from_pair(token.clone(), amount).unwrap(),
+                    )
+                    .ok_or_else(|| {
+                        Error::NativeVpError(native_vp::Error::SimpleMessage(
+                            "Overflow in bundle balance",
+                        ))
+                    })?;
+            }
+        }
+        // unrecognized asset
+        _ => return Ok(false),
+    };
+    Ok(true)
+}
+
+// Handle transparent output
+fn validate_transparent_output(
+    out: &TxOut,
+    changed_balances: &mut ChangedBalances,
+    transparent_tx_pool: &mut I128Sum,
+    epoch: Epoch,
+    conversion_state: &ConversionState,
+) -> Result<bool> {
+    // Non-masp destinations subtract from transparent tx pool
+    *transparent_tx_pool = transparent_tx_pool
+        .checked_sub(
+            &I128Sum::from_nonnegative(out.asset_type, out.value as i128)
+                .ok()
+                .ok_or_err_msg("invalid value or asset type for amount")?,
+        )
+        .ok_or_err_msg("Underflow in output subtraction")?;
+
+    let bal_ref = changed_balances
+        .post
+        .entry(out.address.0)
+        .or_insert(ValueSum::zero());
+
+    match conversion_state.assets.get(&out.asset_type) {
+        Some(((address, _asset_denom, digit), asset_epoch, _, _))
+            if *asset_epoch <= epoch =>
+        {
+            let amount =
+                token::Amount::from_masp_denominated(out.value, *digit);
+            *bal_ref = bal_ref
+                .checked_sub(
+                    &ValueSum::from_pair(address.clone(), amount).unwrap(),
+                )
+                .ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in bundle balance",
+                    ))
+                })?;
+        }
+        // Maybe the asset type has no attached epoch
+        None if changed_balances.tokens.contains_key(&out.asset_type) => {
+            // Otherwise note the contribution to this transparent output
+            let (token, _denom, digit) =
+                &changed_balances.tokens[&out.asset_type];
+            let amount =
+                token::Amount::from_masp_denominated(out.value, *digit);
+            *bal_ref = bal_ref
+                .checked_sub(
+                    &ValueSum::from_pair(token.clone(), amount).unwrap(),
+                )
+                .ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in bundle balance",
+                    ))
+                })?;
+        }
+        // unrecognized asset
+        _ => return Ok(false),
+    };
+    Ok(true)
+}
+
+// Update the transaction value pool and also ensure that the Transaction is
+// consistent with the balance changes. I.e. the transparent inputs are not more
+// than the initial balances and that the transparent outputs are not more than
+// the final balances.
+fn validate_transparent_bundle(
+    shielded_tx: &Transaction,
+    changed_balances: &mut ChangedBalances,
+    transparent_tx_pool: &mut I128Sum,
+    epoch: Epoch,
+    conversion_state: &ConversionState,
+) -> Result<bool> {
+    if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+        for vin in transp_bundle.vin.iter() {
+            if !validate_transparent_input(
+                vin,
+                changed_balances,
+                transparent_tx_pool,
+                epoch,
+                conversion_state,
+            )? {
+                return Ok(false);
+            }
+        }
+
+        for out in transp_bundle.vout.iter() {
+            if !validate_transparent_output(
+                out,
+                changed_balances,
+                transparent_tx_pool,
+                epoch,
+                conversion_state,
+            )? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
+}
+
+// Verify that the pre balance + the Sapling value balance = the post balance
+// using the decodings in tokens and conversion_state for assistance.
+fn verify_sapling_balancing_value(
+    pre: &ValueSum<Address, Amount>,
+    post: &ValueSum<Address, Amount>,
+    sapling_value_balance: &I128Sum,
+    target_epoch: Epoch,
+    tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
+    conversion_state: &ConversionState,
+) -> Result<bool> {
+    let mut acc = pre.clone();
+    for (asset_type, val) in sapling_value_balance.components() {
+        // Only assets with at most the target timestamp count
+        match conversion_state.assets.get(asset_type) {
+            Some(((address, _, digit), asset_epoch, _, _))
+                if *asset_epoch <= target_epoch =>
+            {
+                let decoded_change = token::Amount::from_masp_denominated(
+                    val.unsigned_abs() as u64,
+                    *digit,
+                );
+                let decoded_change =
+                    ValueSum::from_pair(address.clone(), decoded_change)
+                        .expect("expected this to fit");
+                if *val < 0 {
+                    acc += decoded_change;
+                } else {
+                    acc -= decoded_change;
+                }
+            }
+            None if tokens.contains_key(asset_type) => {
+                let (token, _denom, digit) = &tokens[asset_type];
+                let decoded_change = token::Amount::from_masp_denominated(
+                    val.unsigned_abs() as u64,
+                    *digit,
+                );
+                let decoded_change =
+                    ValueSum::from_pair(token.clone(), decoded_change)
+                        .expect("expected this to fit");
+                if *val < 0 {
+                    acc += decoded_change;
+                } else {
+                    acc -= decoded_change;
+                }
+            }
+            _ => return Ok(false),
+        }
+    }
+    Ok(acc == *post)
 }
 
 impl<'a, DB, H, CA> NativeVp for MaspVp<'a, DB, H, CA>
@@ -665,8 +587,28 @@ where
         let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
 
         // Check the validity of the keys and get the transfer data
-        let changed_balances =
+        let mut changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed)?;
+
+        let masp_address_hash = <[u8; 20]>::from(ripemd::Ripemd160::digest(
+            sha2::Sha256::digest(&Address::Internal(Masp).serialize_to_vec()),
+        ));
+        if !verify_sapling_balancing_value(
+            changed_balances
+                .pre
+                .get(&masp_address_hash)
+                .unwrap_or(&ValueSum::zero()),
+            changed_balances
+                .post
+                .get(&masp_address_hash)
+                .unwrap_or(&ValueSum::zero()),
+            &shielded_tx.sapling_value_balance(),
+            epoch,
+            &changed_balances.tokens,
+            conversion_state,
+        )? {
+            return Ok(false);
+        }
 
         // Checks on the sapling bundle
         // 1. The spend descriptions' anchors are valid
@@ -676,22 +618,19 @@ where
         // nullifier is being revealed by the tx
         // 4. The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
+        // Checks on the transparent bundle, if present
         if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
             && self.valid_convert_descriptions_anchor(&shielded_tx)?
             && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?
-            && self.valid_note_commitment_update(&shielded_tx)?)
+            && self.valid_note_commitment_update(&shielded_tx)?
+            && validate_transparent_bundle(
+                &shielded_tx,
+                &mut changed_balances,
+                &mut transparent_tx_pool,
+                epoch,
+                conversion_state,
+            )?)
         {
-            return Ok(false);
-        }
-
-        // Checks on the transparent bundle, if present
-        if !self.validate_transparent_bundle(
-            &shielded_tx,
-            changed_balances,
-            &mut transparent_tx_pool,
-            epoch,
-            conversion_state,
-        )? {
             return Ok(false);
         }
 
