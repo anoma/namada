@@ -477,17 +477,16 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.65.1"
+version = "0.69.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
+checksum = "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.1",
  "cexpr",
  "clang-sys",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
- "peeking_take_while",
- "prettyplease 0.2.15",
  "proc-macro2",
  "quote",
  "regex",
@@ -3760,8 +3759,8 @@ dependencies = [
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.11.0+8.1.1"
-source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
+version = "0.16.0+8.10.0"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=4dc7f4fdfa17e923d3078d51261e3db66707754d#4dc7f4fdfa17e923d3078d51261e3db66707754d"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -5413,12 +5412,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
-
-[[package]]
 name = "peg"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6266,8 +6259,8 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.21.0"
-source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
+version = "0.22.0"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=4dc7f4fdfa17e923d3078d51261e3db66707754d#4dc7f4fdfa17e923d3078d51261e3db66707754d"
 dependencies = [
  "libc",
  "librocksdb-sys",
