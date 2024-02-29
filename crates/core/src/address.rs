@@ -652,17 +652,13 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     use rand::prelude::ThreadRng;
     use rand::{thread_rng, RngCore};
 
-    let mut key_gen = EstablishedAddressGen::new(seed);
+    EstablishedAddressGen::new(seed).generate_address({
+        let mut thread_local_rng: ThreadRng = thread_rng();
+        let mut buffer = [0u8; 32];
 
-    let mut rng: ThreadRng = thread_rng();
-    let mut rng_bytes = [0u8; 32];
-    rng.fill_bytes(&mut rng_bytes[..]);
-    let rng_source = rng_bytes
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<Vec<String>>()
-        .join("");
-    key_gen.generate_address(rng_source)
+        thread_local_rng.fill_bytes(&mut buffer[..]);
+        buffer
+    })
 }
 
 /// Generate a new established address. Unlike `gen_established_address`, this
