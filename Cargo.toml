@@ -100,7 +100,7 @@ fd-lock = "3.0.12"
 flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
-git2 = "0.18.1"
+git2 = { version = "0.18.1", default-features = false }
 ibc = {version = "0.48.1", default-features = false, features = ["serde"]}
 ibc-derive = "0.4.0"
 ibc-testkit = {version = "0.48.1", default-features = false}
