@@ -214,7 +214,7 @@ mod tests {
         tx_host_env::init();
 
         let code = vec![];
-        tx::ctx().init_account(code, &None).unwrap();
+        tx::ctx().init_account(code, &None, &[]).unwrap();
     }
 
     #[test]
@@ -229,7 +229,7 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.state.write_bytes(&key, &code).unwrap();
         });
-        tx::ctx().init_account(code_hash, &None).unwrap();
+        tx::ctx().init_account(code_hash, &None, &[]).unwrap();
     }
 
     /// Test that a tx updating validity predicate that is not in the allowlist
@@ -329,7 +329,7 @@ mod tests {
         });
 
         // Initializing a new account with the VP should fail
-        tx::ctx().init_account(vp_hash, &None).unwrap();
+        tx::ctx().init_account(vp_hash, &None, &[]).unwrap();
     }
 
     #[test]

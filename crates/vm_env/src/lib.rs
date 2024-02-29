@@ -76,6 +76,8 @@ pub mod tx {
             code_hash_len: u64,
             code_tag_ptr: u64,
             code_tag_len: u64,
+            entropy_source_ptr: u64,
+            entropy_source_len: u64,
             result_ptr: u64,
         );
 

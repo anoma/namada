@@ -353,14 +353,14 @@ impl WriteLog {
         &mut self,
         storage_address_gen: &EstablishedAddressGen,
         vp_code_hash: Hash,
+        entropy_source: &[u8],
     ) -> (Address, u64) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
         let address_gen = self
             .address_gen
             .get_or_insert_with(|| storage_address_gen.clone());
-        let addr =
-            address_gen.generate_address("TODO more randomness".as_bytes());
+        let addr = address_gen.generate_address(entropy_source);
         let key = storage::Key::validity_predicate(&addr);
         let gas = (key.len() + vp_code_hash.len()) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
@@ -744,7 +744,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, gas) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, gas) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
         assert_eq!(
             gas,
@@ -777,7 +777,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // update should fail
@@ -796,7 +796,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
@@ -831,7 +831,7 @@ mod tests {
 
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
-        let (addr1, _) = state.write_log.init_account(&address_gen, vp1);
+        let (addr1, _) = state.write_log.init_account(&address_gen, vp1, &[]);
         state.write_log.commit_tx();
 
         // write values
