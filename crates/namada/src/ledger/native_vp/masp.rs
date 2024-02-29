@@ -11,12 +11,12 @@ use masp_primitives::transaction::components::transparent::Authorization;
 use masp_primitives::transaction::components::{
     I128Sum, TxIn, TxOut, ValueSum,
 };
-use masp_primitives::transaction::Transaction;
+use masp_primitives::transaction::{Transaction, TransparentAddress};
 use namada_core::types::address::Address;
 use namada_core::types::address::InternalAddress::Masp;
 use namada_core::types::masp::encode_asset_type;
 use namada_core::types::storage::{IndexedTx, Key};
-use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
+use namada_gas::{GasMetering, MASP_VERIFY_SHIELDED_TX_GAS};
 use namada_proof_of_stake::Epoch;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt};
@@ -69,8 +69,9 @@ where
 #[derive(Default)]
 struct ChangedBalances {
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
-    pre: BTreeMap<[u8; 20], ValueSum<Address, Amount>>,
-    post: BTreeMap<[u8; 20], ValueSum<Address, Amount>>,
+    decoder: BTreeMap<TransparentAddress, Address>,
+    pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
+    post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
 impl<'a, DB, H, CA> MaspVp<'a, DB, H, CA>
@@ -299,10 +300,13 @@ where
                 .read_post(&counterpart_balance_key)?
                 .unwrap_or_default();
             // Public keys must be the hash of the sources/targets
-            let address_hash = <[u8; 20]>::from(ripemd::Ripemd160::digest(
-                sha2::Sha256::digest(&counterpart.serialize_to_vec()),
+            let address_hash = TransparentAddress(<[u8; 20]>::from(
+                ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                    &counterpart.serialize_to_vec(),
+                )),
             ));
 
+            result.decoder.insert(address_hash, counterpart.clone());
             *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
                 ValueSum::from_pair(token.clone(), pre_balance).unwrap();
             *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
@@ -337,7 +341,11 @@ fn validate_transparent_input<A: Authorization>(
     transparent_tx_pool: &mut I128Sum,
     epoch: Epoch,
     conversion_state: &ConversionState,
+    signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<bool> {
+    // Ensure that the account of this transparent input has authorized this
+    // transaction
+    signers.insert(vin.address);
     // Non-masp sources add to the transparent tx pool
     *transparent_tx_pool = transparent_tx_pool
         .checked_add(
@@ -349,7 +357,7 @@ fn validate_transparent_input<A: Authorization>(
 
     let bal_ref = changed_balances
         .pre
-        .entry(vin.address.0)
+        .entry(vin.address)
         .or_insert(ValueSum::zero());
 
     match conversion_state.assets.get(&vin.asset_type) {
@@ -426,7 +434,7 @@ fn validate_transparent_output(
 
     let bal_ref = changed_balances
         .post
-        .entry(out.address.0)
+        .entry(out.address)
         .or_insert(ValueSum::zero());
 
     match conversion_state.assets.get(&out.asset_type) {
@@ -478,6 +486,7 @@ fn validate_transparent_bundle(
     transparent_tx_pool: &mut I128Sum,
     epoch: Epoch,
     conversion_state: &ConversionState,
+    signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<bool> {
     if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
         for vin in transp_bundle.vin.iter() {
@@ -487,6 +496,7 @@ fn validate_transparent_bundle(
                 transparent_tx_pool,
                 epoch,
                 conversion_state,
+                signers,
             )? {
                 return Ok(false);
             }
@@ -590,8 +600,10 @@ where
         let mut changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed)?;
 
-        let masp_address_hash = <[u8; 20]>::from(ripemd::Ripemd160::digest(
-            sha2::Sha256::digest(&Address::Internal(Masp).serialize_to_vec()),
+        let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &Address::Internal(Masp).serialize_to_vec(),
+            )),
         ));
         if !verify_sapling_balancing_value(
             changed_balances
@@ -609,6 +621,9 @@ where
         )? {
             return Ok(false);
         }
+
+        // The set of addresses that are required to authorize this transaction
+        let mut signers = BTreeSet::new();
 
         // Checks on the sapling bundle
         // 1. The spend descriptions' anchors are valid
@@ -629,11 +644,50 @@ where
                 &mut transparent_tx_pool,
                 epoch,
                 conversion_state,
+                &mut signers,
             )?)
         {
             return Ok(false);
         }
 
+        // Ensure that every account for which balance has gone down has
+        // authorized this transaction
+        for (addr, pre) in changed_balances.pre {
+            if changed_balances.post[&addr] < pre && addr != masp_address_hash {
+                signers.insert(addr);
+            }
+        }
+
+        // Ensure that this transaction is authorized by all involved parties
+        for signer in signers {
+            let Some(signer) = changed_balances.decoder.get(&signer) else {
+                return Ok(false);
+            };
+            let public_keys_index_map =
+                crate::account::public_keys_index_map(&self.ctx.pre(), signer)?;
+            let threshold = crate::account::threshold(&self.ctx.pre(), signer)?
+                .unwrap_or(1);
+            let max_signatures_per_transaction =
+                crate::parameters::max_signatures_per_transaction(
+                    &self.ctx.pre(),
+                )?;
+            let mut gas_meter = self.ctx.gas_meter.borrow_mut();
+            if tx_data
+                .verify_signatures(
+                    &[tx_data.raw_header_hash()],
+                    public_keys_index_map,
+                    &Some(signer.clone()),
+                    threshold,
+                    max_signatures_per_transaction,
+                    || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
+                )
+                .is_err()
+            {
+                return Ok(false);
+            }
+        }
+
+        // Ensure that the shielded transaction exactly balances
         match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
                 tracing::debug!(
