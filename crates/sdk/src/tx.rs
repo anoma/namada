@@ -848,28 +848,32 @@ pub async fn build_update_steward_commission(
     )
     .await?;
 
-    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
             context.io(),
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxSubmitError::InvalidSteward(
-            steward.clone(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidSteward(
+                steward.clone(),
+            )));
+        }
     };
 
     let commission = Commission::try_from(commission.as_ref())
         .map_err(|e| TxSubmitError::InvalidStewardCommission(e.to_string()))?;
 
-    if !commission.is_valid() && !tx_args.force {
+    if !commission.is_valid() {
         edisplay_line!(
             context.io(),
             "The sum of all percentage must not be greater than 1."
         );
-        return Err(Error::from(TxSubmitError::InvalidStewardCommission(
-            "Commission sum is greater than 1.".to_string(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidStewardCommission(
+                "Commission sum is greater than 1.".to_string(),
+            )));
+        }
     }
 
     let data = UpdateStewardCommission {
@@ -915,15 +919,17 @@ pub async fn build_resign_steward(
     )
     .await?;
 
-    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
             context.io(),
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxSubmitError::InvalidSteward(
-            steward.clone(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidSteward(
+                steward.clone(),
+            )));
+        }
     };
 
     build(
@@ -1307,21 +1313,21 @@ pub async fn build_redelegation(
         Some(pipeline_epoch),
     )
     .await?;
-    if dest_validator_state_at_pipeline == Some(ValidatorState::Inactive)
-        && !tx_args.force
-    {
+    if dest_validator_state_at_pipeline == Some(ValidatorState::Inactive) {
         edisplay_line!(
             context.io(),
             "WARNING: the given destination validator address {} is inactive \
-             at the pipeline epoch {}. If you would still like to bond to the \
-             inactive validator, use the --force option.",
+             at the pipeline epoch {}. If you would still like to redelegate \
+             to the inactive validator, use the --force option.",
             &dest_validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxSubmitError::ValidatorInactive(
-            dest_validator.clone(),
-            pipeline_epoch,
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::ValidatorInactive(
+                dest_validator.clone(),
+                pipeline_epoch,
+            )));
+        }
     }
 
     // There must be at least as many tokens in the bond as the requested
@@ -1712,7 +1718,7 @@ pub async fn query_unbonds(
                          occurred"
                     );
                 } else {
-                    return Err(Error::from(TxSubmitError::UnboundError));
+                    return Err(Error::from(TxSubmitError::UnbondError));
                 }
             }
             std::cmp::Ordering::Equal => {
@@ -1773,12 +1779,33 @@ pub async fn build_bond(
             .await?;
 
     // Check that the source address exists on chain
+    let mut is_src_also_val = false;
     let source = match source.clone() {
-        Some(source) => source_exists_or_err(source, tx_args.force, context)
-            .await
-            .map(Some),
+        Some(source) => {
+            is_src_also_val =
+                rpc::is_validator(context.client(), &source).await?;
+            source_exists_or_err(source, tx_args.force, context)
+                .await
+                .map(Some)
+        }
         None => Ok(source.clone()),
     }?;
+
+    // Check that the source is not a different validator bonding to validator
+    if is_src_also_val && source != Some(validator.clone()) {
+        edisplay_line!(
+            context.io(),
+            "The given source address {} is a validator. A validator is \
+             prohibited from bonding to another validator.",
+            &source.clone().unwrap()
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidBondPair(
+                source.clone().unwrap(),
+                validator.clone(),
+            )));
+        }
+    }
 
     // Give a bonding warning based on the pipeline state
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
@@ -1790,9 +1817,7 @@ pub async fn build_bond(
         Some(pipeline_epoch),
     )
     .await?;
-    if validator_state_at_pipeline == Some(ValidatorState::Inactive)
-        && !tx_args.force
-    {
+    if validator_state_at_pipeline == Some(ValidatorState::Inactive) {
         edisplay_line!(
             context.io(),
             "WARNING: the given validator address {} is inactive at the \
@@ -1801,10 +1826,12 @@ pub async fn build_bond(
             &validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxSubmitError::ValidatorInactive(
-            validator.clone(),
-            pipeline_epoch,
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::ValidatorInactive(
+                validator.clone(),
+                pipeline_epoch,
+            )));
+        }
     }
 
     let default_address = source.clone().unwrap_or(validator.clone());
