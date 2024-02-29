@@ -4,13 +4,12 @@ pub use namada_ibc::storage;
 use namada_ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
 };
-use namada_state::{StorageHasher, StorageWrite, WlStorage};
+use namada_state::State;
 
 /// Initialize storage in the genesis block.
-pub fn init_genesis_storage<DB, H>(storage: &mut WlStorage<DB, H>)
+pub fn init_genesis_storage<S>(storage: &mut S)
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: StorageHasher,
+    S: State,
 {
     // In ibc-go, u64 like a counter is encoded with big-endian:
     // https://github.com/cosmos/ibc-go/blob/89ffaafb5956a5ea606e1f1bf249c880bea802ed/modules/core/04-channel/keeper/keeper.go#L115

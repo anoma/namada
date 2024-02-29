@@ -2,15 +2,14 @@
 use std::collections::{BTreeSet, HashSet};
 
 use eyre::{eyre, Result};
-use namada_core::types::address::Address;
-use namada_core::types::hash::StorageHasher;
-use namada_core::types::storage::Key;
-use namada_ethereum_bridge;
+use namada_core::address::Address;
+use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
 use namada_tx::Tx;
 
 use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::state::StateRead;
 use crate::token::storage_key::{balance_key, is_balance_key};
 use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
@@ -21,20 +20,18 @@ use crate::vm::WasmCacheAccess;
 pub struct Error(#[from] eyre::Error);
 
 /// Validity predicate for the Ethereum bridge
-pub struct EthBridge<'ctx, DB, H, CA>
+pub struct EthBridge<'ctx, S, CA>
 where
-    DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, DB, H, CA>,
+    pub ctx: Ctx<'ctx, S, CA>,
 }
 
-impl<'ctx, DB, H, CA> EthBridge<'ctx, DB, H, CA>
+impl<'ctx, S, CA> EthBridge<'ctx, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     /// If the Ethereum bridge's escrow key was written to, we check
@@ -45,7 +42,7 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool, Error> {
         let escrow_key = balance_key(
-            &self.ctx.storage.native_token,
+            &self.ctx.state.in_mem().native_token,
             &crate::ethereum_bridge::ADDRESS,
         );
 
@@ -85,10 +82,9 @@ where
     }
 }
 
-impl<'a, DB, H, CA> NativeVp for EthBridge<'a, DB, H, CA>
+impl<'a, S, CA> NativeVp for EthBridge<'a, S, CA>
 where
-    DB: 'static + namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
-    H: 'static + StorageHasher,
+    S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
     type Error = Error;
@@ -115,8 +111,10 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        if !validate_changed_keys(&self.ctx.storage.native_token, keys_changed)?
-        {
+        if !validate_changed_keys(
+            &self.ctx.state.in_mem().native_token,
+            keys_changed,
+        )? {
             return Ok(false);
         }
 
@@ -165,32 +163,29 @@ fn validate_changed_keys(
 
 #[cfg(test)]
 mod tests {
-    use std::default::Default;
+    use std::cell::RefCell;
     use std::env::temp_dir;
 
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
+    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::Tx;
     use rand::Rng;
 
     use super::*;
+    use crate::address::testing::{established_address_1, nam, wnam};
     use crate::ethereum_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use crate::ethereum_bridge::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
     use crate::ethereum_bridge::storage::wrapped_erc20s;
+    use crate::ethereum_events;
+    use crate::ethereum_events::EthAddress;
     use crate::ledger::gas::VpGasMeter;
-    use crate::state::mockdb::MockDB;
-    use crate::state::write_log::WriteLog;
-    use crate::state::{Sha256Hasher, State, WlStorage};
+    use crate::storage::TxIndex;
     use crate::token::storage_key::minted_balance_key;
-    use crate::types::address::testing::established_address_1;
-    use crate::types::address::{nam, wnam};
-    use crate::types::ethereum_events;
-    use crate::types::ethereum_events::EthAddress;
-    use crate::types::storage::TxIndex;
     use crate::vm::wasm::VpCache;
     use crate::vm::WasmCacheRwAccess;
 
@@ -210,15 +205,15 @@ mod tests {
     }
 
     /// Initialize some dummy storage for testing
-    fn setup_storage() -> WlStorage<MockDB, Sha256Hasher> {
-        let mut wl_storage = WlStorage::<MockDB, Sha256Hasher>::default();
+    fn setup_storage() -> TestState {
+        let mut state = TestState::default();
 
         // setup a user with a balance
         let balance_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        wl_storage
+        state
             .write(
                 &balance_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE),
@@ -238,28 +233,27 @@ mod tests {
                 },
             },
         };
-        config.init_storage(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        wl_storage
+        config.init_storage(&mut state);
+        state.commit_block().expect("Test failed");
+        state
     }
 
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
-        storage: &'a State<MockDB, Sha256Hasher>,
-        write_log: &'a WriteLog,
+        state: &'a TestState,
+        gas_meter: &'a RefCell<VpGasMeter>,
+        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, MockDB, Sha256Hasher, WasmCacheRwAccess> {
+    ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
         Ctx::new(
             &crate::ethereum_bridge::ADDRESS,
-            storage,
-            write_log,
+            state,
             tx,
             &TxIndex(0),
-            VpGasMeter::new_from_tx_meter(&TxGasMeter::new_from_sub_limit(
-                u64::MAX.into(),
-            )),
+            gas_meter,
+            sentinel,
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),
@@ -354,14 +348,14 @@ mod tests {
     /// Test that escrowing Nam is accepted.
     #[test]
     fn test_escrow_nam_accepted() {
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
@@ -371,8 +365,8 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &escrow_key,
                 Amount::from(
@@ -387,11 +381,16 @@ mod tests {
 
         // set up the VP
         let tx = Tx::from_type(TxType::Raw);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
@@ -404,14 +403,14 @@ mod tests {
     /// Test that escrowing must increase the balance
     #[test]
     fn test_escrowed_nam_must_increase() {
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
@@ -421,8 +420,8 @@ mod tests {
 
         // do not credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &escrow_key,
                 Amount::from(BRIDGE_POOL_ESCROW_INITIAL_BALANCE)
@@ -435,11 +434,16 @@ mod tests {
 
         // set up the VP
         let tx = Tx::from_type(TxType::Raw);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),
@@ -453,14 +457,14 @@ mod tests {
     /// be triggered if escrowing occurs.
     #[test]
     fn test_escrowing_must_trigger_bridge_pool_vp() {
-        let mut wl_storage = setup_storage();
+        let mut state = setup_storage();
         // debit the user's balance
         let account_key = balance_key(
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &account_key,
                 Amount::from(ARBITRARY_OWNER_A_INITIAL_BALANCE - ESCROW_AMOUNT)
@@ -470,8 +474,8 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(
                 &escrow_key,
                 Amount::from(
@@ -486,11 +490,16 @@ mod tests {
 
         // set up the VP
         let tx = Tx::from_type(TxType::Raw);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
             ctx: setup_ctx(
                 &tx,
-                &wl_storage.storage,
-                &wl_storage.write_log,
+                &state,
+                &gas_meter,
+                &sentinel,
                 &keys_changed,
                 &verifiers,
             ),

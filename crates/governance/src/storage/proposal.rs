@@ -3,10 +3,10 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
+use namada_core::address::Address;
+use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::types::address::Address;
-use namada_core::types::hash::Hash;
-use namada_core::types::storage::Epoch;
+use namada_core::storage::Epoch;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -617,10 +617,10 @@ impl Display for StorageProposal {
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and and strategies for governance proposals
 pub mod testing {
-    use namada_core::types::address::testing::arb_non_internal_address;
-    use namada_core::types::hash::testing::arb_hash;
-    use namada_core::types::storage::testing::arb_epoch;
-    use namada_core::types::token::testing::arb_amount;
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::hash::testing::arb_hash;
+    use namada_core::storage::testing::arb_epoch;
+    use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
     use proptest::{collection, option, prop_compose};
 
@@ -644,16 +644,55 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary PGF target
-        pub fn arb_pgf_target()(
+        /// Generate an arbitrary PGF internal target
+        pub fn arb_pgf_internal_target()(
             target in arb_non_internal_address(),
             amount in arb_amount(),
-        ) -> PGFTarget {
-            PGFTarget::Internal(PGFInternalTarget {
+        ) -> PGFInternalTarget {
+            PGFInternalTarget {
                 target,
                 amount,
-            })
+            }
         }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary port ID
+        pub fn arb_ibc_port_id()(id in "[a-zA-Z0-9_+.\\-\\[\\]#<>]{2,128}") -> PortId {
+            PortId::new(id).expect("generated invalid port ID")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary channel ID
+        pub fn arb_ibc_channel_id()(id: u64) -> ChannelId {
+            ChannelId::new(id)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary PGF IBC target
+        pub fn arb_pgf_ibc_target()(
+            target in "[a-zA-Z0-9_]*",
+            amount in arb_amount(),
+            port_id in arb_ibc_port_id(),
+            channel_id in arb_ibc_channel_id(),
+        ) -> PGFIbcTarget {
+            PGFIbcTarget {
+                target,
+                amount,
+                port_id,
+                channel_id,
+            }
+        }
+    }
+
+    /// Generate an arbitrary PGF target
+    pub fn arb_pgf_target() -> impl Strategy<Value = PGFTarget> {
+        prop_oneof![
+            arb_pgf_internal_target().prop_map(PGFTarget::Internal),
+            arb_pgf_ibc_target().prop_map(PGFTarget::Ibc),
+        ]
     }
 
     /// Generate an arbitrary PGF action

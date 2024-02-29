@@ -9,13 +9,14 @@ pub mod vp;
 pub mod whitelist;
 pub mod wrapped_erc20s;
 
-use namada_core::ledger::eth_bridge::ADDRESS;
-use namada_core::types::address::Address;
-use namada_core::types::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::address::Address;
+use namada_core::storage::{DbKeySeg, Key, KeySeg};
 pub use namada_parameters::native_erc20_key;
 use namada_parameters::storage::*;
 use namada_parameters::ADDRESS as PARAM_ADDRESS;
 use namada_trans_token::storage_key::balance_key;
+
+use crate::ADDRESS;
 
 /// Key prefix for the storage subspace
 pub fn prefix() -> Key {
@@ -45,7 +46,7 @@ pub fn has_eth_addr_segment(key: &Key) -> bool {
 /// Returns whether a key belongs to this account or not
 pub fn is_eth_bridge_key(nam_addr: &Address, key: &Key) -> bool {
     key == &escrow_key(nam_addr)
-        || matches!(key.segments.get(0), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
+        || matches!(key.segments.first(), Some(first_segment) if first_segment == &ADDRESS.to_db_key())
         || wrapped_erc20s::has_erc20_segment(key)
 }
 
@@ -67,9 +68,9 @@ pub fn bridge_contract_key() -> Key {
 
 #[cfg(test)]
 mod test {
-    use namada_core::types::address;
-    use namada_core::types::address::nam;
-    use namada_core::types::ethereum_events::testing::arbitrary_eth_address;
+    use namada_core::address;
+    use namada_core::address::testing::nam;
+    use namada_core::ethereum_events::testing::arbitrary_eth_address;
 
     use super::*;
 

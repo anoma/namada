@@ -332,11 +332,11 @@ fn validate_pos_changes(
 #[cfg(test)]
 mod tests {
     use address::testing::arb_non_internal_address;
+    use namada::core::dec::Dec;
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::{self, TxType};
     use namada::tx::{Code, Data, Signature};
-    use namada::types::dec::Dec;
-    use namada::types::storage::Epoch;
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -377,7 +377,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -388,7 +388,7 @@ mod tests {
         tx_env.credit_tokens(&source, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -432,14 +432,14 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -489,7 +489,7 @@ mod tests {
         let keypair = key::testing::keypair_1();
         let public_key = keypair.ref_to();
         let target = address::testing::established_address_2();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage
@@ -501,7 +501,7 @@ mod tests {
         tx_env.credit_tokens(&vp_owner, &token, amount);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -584,7 +584,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -594,7 +594,7 @@ mod tests {
         tx_env.init_account_storage(&vp_owner, vec![public_key], 1);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -748,7 +748,7 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -758,7 +758,7 @@ mod tests {
         tx_env.init_account_storage(&validator, vec![public_key], 1);
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -844,7 +844,7 @@ mod tests {
         let public_key = secret_key.ref_to();
         let vp_owner: Address = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -855,7 +855,7 @@ mod tests {
 
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -1033,7 +1033,7 @@ mod tests {
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
         let bond_amount = token::Amount::from_uint(5_098_123, 0).unwrap();
         let unbond_amount = token::Amount::from_uint(3_098_123, 0).unwrap();
@@ -1044,7 +1044,7 @@ mod tests {
 
         // write the denomination of NAM into storage
         token::write_denom(
-            &mut tx_env.wl_storage,
+            &mut tx_env.state,
             &token,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         )
@@ -1109,7 +1109,7 @@ mod tests {
         let vp_owner = address::testing::established_address_1();
         let source = address::testing::established_address_2();
         let target = address::testing::established_address_3();
-        let token = address::nam();
+        let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
         // Spawn the accounts to be able to modify their storage

@@ -7,8 +7,8 @@ pub mod validator_set_update;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::types::chain::ChainId;
-use namada_core::types::key::common;
+use namada_core::chain::ChainId;
+use namada_core::key::common;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
 use namada_tx::{Signature, Signed, Tx, TxError};
@@ -113,15 +113,15 @@ impl TryFrom<&Tx> for EthereumTxData {
 
     fn try_from(tx: &Tx) -> Result<Self, TxError> {
         let TxType::Protocol(protocol_tx) = tx.header().tx_type else {
-                return Err(TxError::Deserialization(
-                    "Expected protocol tx type".into(),
-                ));
-            };
+            return Err(TxError::Deserialization(
+                "Expected protocol tx type".into(),
+            ));
+        };
         let Some(tx_data) = tx.data() else {
-                return Err(TxError::Deserialization(
-                    "Expected protocol tx type associated data".into(),
-                ));
-            };
+            return Err(TxError::Deserialization(
+                "Expected protocol tx type associated data".into(),
+            ));
+        };
         Self::deserialize(&protocol_tx.tx, &tx_data)
     }
 }

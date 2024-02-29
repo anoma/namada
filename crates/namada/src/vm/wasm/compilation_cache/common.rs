@@ -18,8 +18,8 @@ use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
-use crate::core::types::hash::Hash;
-use crate::types::control_flow::time::{ExponentialBackoff, SleepStrategy};
+use crate::control_flow::time::{ExponentialBackoff, SleepStrategy};
+use crate::core::hash::Hash;
 use crate::vm::wasm::run::untrusted_wasm_store;
 use crate::vm::wasm::{self, memory};
 use crate::vm::{WasmCacheAccess, WasmCacheRoAccess};
@@ -78,7 +78,19 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                 .with_scale(ModuleCacheScale),
         );
         let in_memory = Arc::new(RwLock::new(cache));
-        let dir = dir.into();
+
+        let target_hash = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::hash::DefaultHasher::new();
+            wasmer::Target::default().hash(&mut hasher);
+            hasher.finish()
+        };
+        let version = format!(
+            "{}_{:x}",
+            concat!(env!("CARGO_PKG_VERSION"), "_", env!("RUSTUP_TOOLCHAIN")),
+            target_hash,
+        );
+        let dir = dir.into().join(version);
 
         fs::create_dir_all(&dir)
             .expect("Couldn't create the wasm cache directory");

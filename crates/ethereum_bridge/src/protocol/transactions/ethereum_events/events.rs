@@ -5,22 +5,21 @@ use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
-use namada_core::hints;
-use namada_core::ledger::eth_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_core::types::address::Address;
-use namada_core::types::eth_abi::Encode;
-use namada_core::types::eth_bridge_pool::{
+use namada_core::address::Address;
+use namada_core::eth_abi::Encode;
+use namada_core::eth_bridge_pool::{
     erc20_nut_address, erc20_token_address, PendingTransfer,
     TransferToEthereumKind,
 };
-use namada_core::types::ethereum_events::{
+use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
 };
-use namada_core::types::ethereum_structs::EthBridgeEvent;
-use namada_core::types::storage::{BlockHeight, Key, KeySeg};
+use namada_core::ethereum_structs::EthBridgeEvent;
+use namada_core::hints;
+use namada_core::storage::{BlockHeight, Key, KeySeg};
 use namada_parameters::read_epoch_duration_parameter;
-use namada_state::{DBIter, StorageHasher, WlStorage, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 
@@ -31,13 +30,13 @@ use crate::storage::bridge_pool::{
 use crate::storage::eth_bridge_queries::{EthAssetMint, EthBridgeQueries};
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::{self as bridge_storage};
-use crate::token;
+use crate::{token, ADDRESS as BRIDGE_ADDRESS};
 
 /// Updates storage based on the given confirmed `event`. For example, for a
 /// confirmed [`EthereumEvent::TransfersToNamada`], mint the corresponding
 /// transferred assets to the appropriate receiver addresses.
 pub(super) fn act_on<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     event: EthereumEvent,
 ) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
@@ -47,7 +46,7 @@ where
     match event {
         EthereumEvent::TransfersToNamada { transfers, nonce } => {
             act_on_transfers_to_namada(
-                wl_storage,
+                state,
                 TransfersToNamada { transfers, nonce },
             )
         }
@@ -55,7 +54,7 @@ where
             ref transfers,
             ref relayer,
             ..
-        } => act_on_transfers_to_eth(wl_storage, transfers, relayer),
+        } => act_on_transfers_to_eth(state, transfers, relayer),
         _ => {
             tracing::debug!(?event, "No actions taken for Ethereum event");
             Ok(Default::default())
@@ -64,7 +63,7 @@ where
 }
 
 fn act_on_transfers_to_namada<'tx, D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     transfer_event: TransfersToNamada,
 ) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
@@ -75,15 +74,15 @@ where
     let mut changed_keys = BTreeSet::new();
     // we need to collect the events into a separate
     // buffer because of rust's borrowing rules :|
-    let confirmed_events: Vec<_> = wl_storage
-        .storage
+    let confirmed_events: Vec<_> = state
+        .in_mem_mut()
         .eth_events_queue
         .transfers_to_namada
         .push_and_iter(transfer_event)
         .collect();
     for TransfersToNamada { transfers, .. } in confirmed_events {
         update_transfers_to_namada_state(
-            wl_storage,
+            state,
             &mut changed_keys,
             transfers.iter(),
         )?;
@@ -96,7 +95,7 @@ where
 }
 
 fn update_transfers_to_namada_state<'tx, D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     changed_keys: &mut BTreeSet<Key>,
     transfers: impl IntoIterator<Item = &'tx TransferToNamada>,
 ) -> Result<()>
@@ -104,7 +103,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let wrapped_native_erc20 = read_native_erc20_address(wl_storage)?;
+    let wrapped_native_erc20 = read_native_erc20_address(state)?;
     for transfer in transfers {
         tracing::debug!(
             ?transfer,
@@ -117,7 +116,7 @@ where
         } = transfer;
         let mut changed = if asset != &wrapped_native_erc20 {
             let (asset_count, changed) =
-                mint_eth_assets(wl_storage, asset, receiver, amount)?;
+                mint_eth_assets(state, asset, receiver, amount)?;
             // TODO: query denomination of the whitelisted token from storage,
             // and print this amount with the proper formatting; for now, use
             // NAM's formatting
@@ -137,12 +136,7 @@ where
             }
             changed
         } else {
-            redeem_native_token(
-                wl_storage,
-                &wrapped_native_erc20,
-                receiver,
-                amount,
-            )?
+            redeem_native_token(state, &wrapped_native_erc20, receiver, amount)?
         };
         changed_keys.append(&mut changed)
     }
@@ -151,7 +145,7 @@ where
 
 /// Redeems `amount` of the native token for `receiver` from escrow.
 fn redeem_native_token<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     native_erc20: &EthAddress,
     receiver: &Address,
     amount: &token::Amount,
@@ -161,49 +155,41 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let eth_bridge_native_token_balance_key =
-        balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
+        balance_key(&state.in_mem().native_token, &BRIDGE_ADDRESS);
     let receiver_native_token_balance_key =
-        balance_key(&wl_storage.storage.native_token, receiver);
+        balance_key(&state.in_mem().native_token, receiver);
     let native_werc20_supply_key =
         minted_balance_key(&erc20_token_address(native_erc20));
 
-    update::amount(
-        wl_storage,
-        &eth_bridge_native_token_balance_key,
-        |balance| {
-            tracing::debug!(
-                %eth_bridge_native_token_balance_key,
-                ?balance,
-                "Existing value found",
-            );
-            balance.spend(amount)?;
-            tracing::debug!(
-                %eth_bridge_native_token_balance_key,
-                ?balance,
-                "New value calculated",
-            );
-            Ok(())
-        },
-    )?;
-    update::amount(
-        wl_storage,
-        &receiver_native_token_balance_key,
-        |balance| {
-            tracing::debug!(
-                %receiver_native_token_balance_key,
-                ?balance,
-                "Existing value found",
-            );
-            balance.receive(amount)?;
-            tracing::debug!(
-                %receiver_native_token_balance_key,
-                ?balance,
-                "New value calculated",
-            );
-            Ok(())
-        },
-    )?;
-    update::amount(wl_storage, &native_werc20_supply_key, |balance| {
+    update::amount(state, &eth_bridge_native_token_balance_key, |balance| {
+        tracing::debug!(
+            %eth_bridge_native_token_balance_key,
+            ?balance,
+            "Existing value found",
+        );
+        balance.spend(amount)?;
+        tracing::debug!(
+            %eth_bridge_native_token_balance_key,
+            ?balance,
+            "New value calculated",
+        );
+        Ok(())
+    })?;
+    update::amount(state, &receiver_native_token_balance_key, |balance| {
+        tracing::debug!(
+            %receiver_native_token_balance_key,
+            ?balance,
+            "Existing value found",
+        );
+        balance.receive(amount)?;
+        tracing::debug!(
+            %receiver_native_token_balance_key,
+            ?balance,
+            "New value calculated",
+        );
+        Ok(())
+    })?;
+    update::amount(state, &native_werc20_supply_key, |balance| {
         tracing::debug!(
             %native_werc20_supply_key,
             ?balance,
@@ -237,7 +223,7 @@ where
 /// If the given asset is not whitelisted or has exceeded the
 /// token caps, mint NUTs, too.
 fn mint_eth_assets<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     asset: &EthAddress,
     receiver: &Address,
     &amount: &token::Amount,
@@ -248,7 +234,7 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let asset_count = wl_storage
+    let asset_count = state
         .ethbridge_queries()
         .get_eth_assets_to_mint(asset, amount);
 
@@ -269,7 +255,7 @@ where
 
     for (token, ref amount) in assets_to_mint {
         let balance_key = balance_key(&token, receiver);
-        update::amount(wl_storage, &balance_key, |balance| {
+        update::amount(state, &balance_key, |balance| {
             tracing::debug!(
                 %balance_key,
                 ?balance,
@@ -286,7 +272,7 @@ where
         _ = changed_keys.insert(balance_key);
 
         let supply_key = minted_balance_key(&token);
-        update::amount(wl_storage, &supply_key, |supply| {
+        update::amount(state, &supply_key, |supply| {
             tracing::debug!(
                 %supply_key,
                 ?supply,
@@ -307,7 +293,7 @@ where
 }
 
 fn act_on_transfers_to_eth<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     transfers: &[TransferToEthereum],
     relayer: &Address,
 ) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
@@ -324,12 +310,12 @@ where
     // halts the Ethereum bridge, since nonces will fall out
     // of sync between Namada and Ethereum
     let nonce_key = get_nonce_key();
-    increment_bp_nonce(&nonce_key, wl_storage)?;
+    increment_bp_nonce(&nonce_key, state)?;
     changed_keys.insert(nonce_key);
 
     // all keys of pending transfers
     let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
-    let mut pending_keys: HashSet<Key> = wl_storage
+    let mut pending_keys: HashSet<Key> = state
         .iter_prefix(&prefix)
         .context("Failed to iterate over storage")?
         .map(|(k, _, _)| {
@@ -340,7 +326,7 @@ where
     // Remove the completed transfers from the bridge pool
     for event in transfers {
         let (pending_transfer, key) = if let Some((pending, key)) =
-            wl_storage.ethbridge_queries().lookup_transfer_to_eth(event)
+            state.ethbridge_queries().lookup_transfer_to_eth(event)
         {
             (pending, key)
         } else {
@@ -353,7 +339,7 @@ where
              and burning any Ethereum assets in Namada"
         );
         changed_keys.append(&mut update_transferred_asset_balances(
-            wl_storage,
+            state,
             &pending_transfer,
         )?);
         let pool_balance_key =
@@ -361,14 +347,14 @@ where
         let relayer_rewards_key =
             balance_key(&pending_transfer.gas_fee.token, relayer);
         // give the relayer the gas fee for this transfer.
-        update::amount(wl_storage, &relayer_rewards_key, |balance| {
+        update::amount(state, &relayer_rewards_key, |balance| {
             balance.receive(&pending_transfer.gas_fee.amount)
         })?;
         // the gas fee is removed from escrow.
-        update::amount(wl_storage, &pool_balance_key, |balance| {
+        update::amount(state, &pool_balance_key, |balance| {
             balance.spend(&pending_transfer.gas_fee.amount)
         })?;
-        wl_storage.delete(&key)?;
+        state.delete(&key)?;
         _ = pending_keys.remove(&key);
         _ = changed_keys.insert(key);
         _ = changed_keys.insert(pool_balance_key);
@@ -383,21 +369,21 @@ where
     }
 
     // TODO the timeout height is min_num_blocks of an epoch for now
-    let epoch_duration = read_epoch_duration_parameter(wl_storage)?;
+    let epoch_duration = read_epoch_duration_parameter(state)?;
     let timeout_offset = epoch_duration.min_num_of_blocks;
 
     // Check time out and refund
-    if wl_storage.storage.block.height.0 > timeout_offset {
+    if state.in_mem().block.height.0 > timeout_offset {
         let timeout_height =
-            BlockHeight(wl_storage.storage.block.height.0 - timeout_offset);
+            BlockHeight(state.in_mem().block.height.0 - timeout_offset);
         for key in pending_keys {
             let inserted_height = BlockHeight::try_from_slice(
-                &wl_storage.storage.block.tree.get(&key)?,
+                &state.in_mem().block.tree.get(&key)?,
             )
             .expect("BlockHeight should be decoded");
             if inserted_height <= timeout_height {
                 let (mut keys, mut new_tx_events) =
-                    refund_transfer(wl_storage, key)?;
+                    refund_transfer(state, key)?;
                 changed_keys.append(&mut keys);
                 tx_events.append(&mut new_tx_events);
             }
@@ -409,23 +395,23 @@ where
 
 fn increment_bp_nonce<D, H>(
     nonce_key: &Key,
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
 ) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let next_nonce = wl_storage
+    let next_nonce = state
         .ethbridge_queries()
         .get_bridge_pool_nonce()
         .checked_increment()
         .expect("Bridge pool nonce has overflowed");
-    wl_storage.write(nonce_key, next_nonce)?;
+    state.write(nonce_key, next_nonce)?;
     Ok(())
 }
 
 fn refund_transfer<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     key: Key,
 ) -> Result<(BTreeSet<Key>, BTreeSet<EthBridgeEvent>)>
 where
@@ -435,15 +421,15 @@ where
     let mut changed_keys = BTreeSet::default();
     let mut tx_events = BTreeSet::default();
 
-    let transfer = match wl_storage.read_bytes(&key)? {
+    let transfer = match state.read_bytes(&key)? {
         Some(v) => PendingTransfer::try_from_slice(&v[..])?,
         None => unreachable!(),
     };
-    changed_keys.append(&mut refund_transfer_fees(wl_storage, &transfer)?);
-    changed_keys.append(&mut refund_transferred_assets(wl_storage, &transfer)?);
+    changed_keys.append(&mut refund_transfer_fees(state, &transfer)?);
+    changed_keys.append(&mut refund_transferred_assets(state, &transfer)?);
 
     // Delete the key from the bridge pool
-    wl_storage.delete(&key)?;
+    state.delete(&key)?;
     _ = changed_keys.insert(key);
 
     // Emit expiration event
@@ -455,7 +441,7 @@ where
 }
 
 fn refund_transfer_fees<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     transfer: &PendingTransfer,
 ) -> Result<BTreeSet<Key>>
 where
@@ -468,10 +454,10 @@ where
         balance_key(&transfer.gas_fee.token, &transfer.gas_fee.payer);
     let pool_balance_key =
         balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
-    update::amount(wl_storage, &payer_balance_key, |balance| {
+    update::amount(state, &payer_balance_key, |balance| {
         balance.receive(&transfer.gas_fee.amount)
     })?;
-    update::amount(wl_storage, &pool_balance_key, |balance| {
+    update::amount(state, &pool_balance_key, |balance| {
         balance.spend(&transfer.gas_fee.amount)
     })?;
 
@@ -482,7 +468,7 @@ where
 }
 
 fn refund_transferred_assets<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     transfer: &PendingTransfer,
 ) -> Result<BTreeSet<Key>>
 where
@@ -491,7 +477,7 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let native_erc20_addr = match wl_storage
+    let native_erc20_addr = match state
         .read_bytes(&bridge_storage::native_erc20_key())?
     {
         Some(v) => EthAddress::try_from_slice(&v[..])?,
@@ -501,9 +487,9 @@ where
     };
     let (source, target) = if transfer.transfer.asset == native_erc20_addr {
         let escrow_balance_key =
-            balance_key(&wl_storage.storage.native_token, &BRIDGE_ADDRESS);
+            balance_key(&state.in_mem().native_token, &BRIDGE_ADDRESS);
         let sender_balance_key = balance_key(
-            &wl_storage.storage.native_token,
+            &state.in_mem().native_token,
             &transfer.transfer.sender,
         );
         (escrow_balance_key, sender_balance_key)
@@ -513,10 +499,10 @@ where
         let sender_balance_key = balance_key(&token, &transfer.transfer.sender);
         (escrow_balance_key, sender_balance_key)
     };
-    update::amount(wl_storage, &source, |balance| {
+    update::amount(state, &source, |balance| {
         balance.spend(&transfer.transfer.amount)
     })?;
-    update::amount(wl_storage, &target, |balance| {
+    update::amount(state, &target, |balance| {
         balance.receive(&transfer.transfer.amount)
     })?;
 
@@ -529,7 +515,7 @@ where
 /// Burns any transferred ERC20s other than wNAM. If NAM is transferred,
 /// update the wNAM supply key.
 fn update_transferred_asset_balances<D, H>(
-    wl_storage: &mut WlStorage<D, H>,
+    state: &mut WlState<D, H>,
     transfer: &PendingTransfer,
 ) -> Result<BTreeSet<Key>>
 where
@@ -538,7 +524,7 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let maybe_addr = wl_storage.read(&bridge_storage::native_erc20_key())?;
+    let maybe_addr = state.read(&bridge_storage::native_erc20_key())?;
     let Some(native_erc20_addr) = maybe_addr else {
         return Err(eyre::eyre!("Could not read wNam key from storage"));
     };
@@ -554,7 +540,7 @@ where
             unreachable!("Attempted to mint wNAM NUTs!");
         }
         let supply_key = minted_balance_key(&token);
-        update::amount(wl_storage, &supply_key, |supply| {
+        update::amount(state, &supply_key, |supply| {
             supply.receive(&transfer.transfer.amount)
         })?;
         _ = changed_keys.insert(supply_key);
@@ -565,13 +551,13 @@ where
     // other asset kinds must be burned
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
-    update::amount(wl_storage, &escrow_balance_key, |balance| {
+    update::amount(state, &escrow_balance_key, |balance| {
         balance.spend(&transfer.transfer.amount)
     })?;
     _ = changed_keys.insert(escrow_balance_key);
 
     let supply_key = minted_balance_key(&token);
-    update::amount(wl_storage, &supply_key, |supply| {
+    update::amount(state, &supply_key, |supply| {
         supply.spend(&transfer.transfer.amount)
     })?;
     _ = changed_keys.insert(supply_key);
@@ -585,37 +571,33 @@ mod tests {
     use std::collections::HashMap;
 
     use assert_matches::assert_matches;
-    use eyre::Result;
-    use namada_core::borsh::BorshSerializeExt;
-    use namada_core::types::address::testing::gen_implicit_address;
-    use namada_core::types::address::{gen_established_address, nam, wnam};
-    use namada_core::types::eth_bridge_pool::GasFee;
-    use namada_core::types::ethereum_events::testing::{
+    use namada_core::address::gen_established_address;
+    use namada_core::address::testing::{gen_implicit_address, nam, wnam};
+    use namada_core::eth_bridge_pool::GasFee;
+    use namada_core::ethereum_events::testing::{
         arbitrary_keccak_hash, arbitrary_nonce, DAI_ERC20_ETH_ADDRESS,
     };
-    use namada_core::types::time::DurationSecs;
-    use namada_core::types::token::Amount;
-    use namada_core::types::{address, eth_bridge_pool};
+    use namada_core::time::DurationSecs;
+    use namada_core::token::Amount;
+    use namada_core::{address, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
-    use namada_state::testing::TestWlStorage;
-    use namada_storage::mockdb::MockDBWriteBatch;
+    use namada_state::testing::TestState;
 
     use super::*;
     use crate::storage::bridge_pool::get_pending_key;
     use crate::storage::wrapped_erc20s;
     use crate::test_utils::{self, stored_keys_count};
 
-    fn init_storage(wl_storage: &mut TestWlStorage) {
+    fn init_storage(state: &mut TestState) {
         // set the timeout height offset
         let timeout_offset = 10;
         let epoch_duration = EpochDuration {
             min_num_of_blocks: timeout_offset,
             min_duration: DurationSecs(5),
         };
-        update_epoch_parameter(wl_storage, &epoch_duration)
-            .expect("Test failed");
+        update_epoch_parameter(state, &epoch_duration).expect("Test failed");
         // set native ERC20 token
-        wl_storage
+        state
             .write(&bridge_storage::native_erc20_key(), wnam())
             .expect("Test failed");
     }
@@ -690,7 +672,7 @@ mod tests {
     }
 
     fn init_bridge_pool_transfers<A>(
-        wl_storage: &mut TestWlStorage,
+        state: &mut TestState,
         assets_transferred: A,
     ) -> Vec<PendingTransfer>
     where
@@ -719,10 +701,7 @@ mod tests {
                 },
             };
             let key = get_pending_key(&transfer);
-            wl_storage
-                .storage
-                .write(&key, transfer.serialize_to_vec())
-                .expect("Test failed");
+            state.write(&key, &transfer).expect("Test failed");
 
             pending_transfers.push(transfer);
         }
@@ -730,11 +709,9 @@ mod tests {
     }
 
     #[inline]
-    fn init_bridge_pool(
-        wl_storage: &mut TestWlStorage,
-    ) -> Vec<PendingTransfer> {
+    fn init_bridge_pool(state: &mut TestState) -> Vec<PendingTransfer> {
         init_bridge_pool_transfers(
-            wl_storage,
+            state,
             (0..2)
                 .map(|i| {
                     (
@@ -753,7 +730,7 @@ mod tests {
     }
 
     fn init_balance(
-        wl_storage: &mut TestWlStorage,
+        state: &mut TestState,
         pending_transfers: &Vec<PendingTransfer>,
     ) {
         for transfer in pending_transfers {
@@ -761,12 +738,10 @@ mod tests {
             let payer = address::testing::established_address_2();
             let payer_key = balance_key(&transfer.gas_fee.token, &payer);
             let payer_balance = Amount::from(0);
-            wl_storage
-                .write(&payer_key, payer_balance)
-                .expect("Test failed");
+            state.write(&payer_key, payer_balance).expect("Test failed");
             let escrow_key =
                 balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
-            update::amount(wl_storage, &escrow_key, |balance| {
+            update::amount(state, &escrow_key, |balance| {
                 let gas_fee = Amount::from_u64(1);
                 balance.receive(&gas_fee)
             })
@@ -776,43 +751,41 @@ mod tests {
                 // native ERC20
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
-                wl_storage
+                state
                     .write(&sender_key, sender_balance)
                     .expect("Test failed");
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
                 let escrow_balance = Amount::from(10);
-                wl_storage
+                state
                     .write(&escrow_key, escrow_balance)
                     .expect("Test failed");
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
                 let sender_balance = Amount::from(0);
-                wl_storage
+                state
                     .write(&sender_key, sender_balance)
                     .expect("Test failed");
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
                 let escrow_balance = Amount::from(10);
-                wl_storage
+                state
                     .write(&escrow_key, escrow_balance)
                     .expect("Test failed");
-                update::amount(
-                    wl_storage,
-                    &minted_balance_key(&token),
-                    |supply| supply.receive(&transfer.transfer.amount),
-                )
+                update::amount(state, &minted_balance_key(&token), |supply| {
+                    supply.receive(&transfer.transfer.amount)
+                })
                 .expect("Test failed");
             };
         }
     }
 
     #[test]
-    /// Test that we do not make any changes to wl_storage when acting on most
+    /// Test that we do not make any changes to state when acting on most
     /// events
     fn test_act_on_does_nothing_for_other_events() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        let initial_stored_keys_count = stored_keys_count(&wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
+        let initial_stored_keys_count = stored_keys_count(&state);
         let events = vec![EthereumEvent::ValidatorSetUpdate {
             nonce: arbitrary_nonce(),
             bridge_validator_hash: arbitrary_keccak_hash(),
@@ -820,9 +793,9 @@ mod tests {
         }];
 
         for event in events {
-            act_on(&mut wl_storage, event.clone()).unwrap();
+            act_on(&mut state, event.clone()).unwrap();
             assert_eq!(
-                stored_keys_count(&wl_storage),
+                stored_keys_count(&state),
                 initial_stored_keys_count,
                 "storage changed unexpectedly while acting on event: {:#?}",
                 event
@@ -831,13 +804,13 @@ mod tests {
     }
 
     #[test]
-    /// Test that wl_storage is indeed changed when we act on a non-empty
+    /// Test that state is indeed changed when we act on a non-empty
     /// TransfersToNamada batch
     fn test_act_on_changes_storage_for_transfers_to_namada() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        let initial_stored_keys_count = stored_keys_count(&wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
+        state.commit_block().expect("Test failed");
+        let initial_stored_keys_count = stored_keys_count(&state);
         let amount = Amount::from(100);
         let receiver = address::testing::established_address_1();
         let transfers = vec![TransferToNamada {
@@ -850,12 +823,9 @@ mod tests {
             transfers,
         };
 
-        act_on(&mut wl_storage, event).unwrap();
+        act_on(&mut state, event).unwrap();
 
-        assert_eq!(
-            stored_keys_count(&wl_storage),
-            initial_stored_keys_count + 2
-        );
+        assert_eq!(stored_keys_count(&state), initial_stored_keys_count + 2);
     }
 
     /// Parameters to test minting DAI in Namada.
@@ -882,11 +852,11 @@ mod tests {
                 };
             assert_eq!(self.transferred_amount, nut_amount + erc20_amount);
 
-            let mut wl_storage = TestWlStorage::default();
-            test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+            let mut state = TestState::default();
+            test_utils::bootstrap_ethereum_bridge(&mut state);
             if !dai_token_cap.is_zero() {
                 test_utils::whitelist_tokens(
-                    &mut wl_storage,
+                    &mut state,
                     [(
                         DAI_ERC20_ETH_ADDRESS,
                         test_utils::WhitelistMeta {
@@ -905,7 +875,7 @@ mod tests {
             }];
 
             update_transfers_to_namada_state(
-                &mut wl_storage,
+                &mut state,
                 &mut BTreeSet::new(),
                 &transfers,
             )
@@ -923,9 +893,9 @@ mod tests {
                 let receiver_balance_key = balance_key(&wdai, &receiver);
                 let wdai_supply_key = minted_balance_key(&wdai);
 
-                for key in vec![receiver_balance_key, wdai_supply_key] {
+                for key in [receiver_balance_key, wdai_supply_key] {
                     let value: Option<token::Amount> =
-                        wl_storage.read(&key).unwrap();
+                        state.read(&key).unwrap();
                     if expected_amount.is_zero() {
                         assert_matches!(value, None);
                     } else {
@@ -973,12 +943,12 @@ mod tests {
     /// that pending transfers are deleted from the Bridge pool, the
     /// Bridge pool nonce is updated and escrowed assets are burned.
     fn test_act_on_changes_storage_for_transfers_to_eth() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        init_storage(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
+        state.commit_block().expect("Test failed");
+        init_storage(&mut state);
         let native_erc20 =
-            read_native_erc20_address(&wl_storage).expect("Test failed");
+            read_native_erc20_address(&state).expect("Test failed");
         let random_erc20 = EthAddress([0xff; 20]);
         let random_erc20_token = wrapped_erc20s::nut(&random_erc20);
         let random_erc20_2 = EthAddress([0xee; 20]);
@@ -992,7 +962,7 @@ mod tests {
             19,
         ]);
         let pending_transfers = init_bridge_pool_transfers(
-            &mut wl_storage,
+            &mut state,
             [
                 (native_erc20, TransferData::default()),
                 (random_erc20, TransferDataBuilder::new().kind_nut().build()),
@@ -1016,7 +986,7 @@ mod tests {
                 ),
             ],
         );
-        init_balance(&mut wl_storage, &pending_transfers);
+        init_balance(&mut state, &pending_transfers);
         let pending_keys: HashSet<Key> =
             pending_transfers.iter().map(get_pending_key).collect();
         let relayer = gen_established_address("random");
@@ -1038,20 +1008,20 @@ mod tests {
             &BRIDGE_POOL_ADDRESS,
         );
         let mut bp_nam_balance_pre = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&pool_nam_balance_key)
                 .expect("Test failed")
                 .expect("Test failed"),
         )
         .expect("Test failed");
         let mut bp_erc_balance_pre = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&pool_erc_balance_key)
                 .expect("Test failed")
                 .expect("Test failed"),
         )
         .expect("Test failed");
-        let (mut changed_keys, _) = act_on(&mut wl_storage, event).unwrap();
+        let (mut changed_keys, _) = act_on(&mut state, event).unwrap();
 
         for erc20 in [
             random_erc20_token,
@@ -1081,15 +1051,12 @@ mod tests {
 
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
         assert_eq!(
-            wl_storage
-                .iter_prefix(&prefix)
-                .expect("Test failed")
-                .count(),
+            state.iter_prefix(&prefix).expect("Test failed").count(),
             // NOTE: we should have one write -- the bridge pool nonce update
             1
         );
         let relayer_nam_balance = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&payer_nam_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
@@ -1097,7 +1064,7 @@ mod tests {
         .expect("Test failed");
         assert_eq!(relayer_nam_balance, Amount::from(3));
         let relayer_erc_balance = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&payer_erc_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
@@ -1106,14 +1073,14 @@ mod tests {
         assert_eq!(relayer_erc_balance, Amount::from(2));
 
         let bp_nam_balance_post = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&pool_nam_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
         )
         .expect("Test failed");
         let bp_erc_balance_post = Amount::try_from_slice(
-            &wl_storage
+            &state
                 .read_bytes(&pool_erc_balance_key)
                 .expect("Test failed: read error")
                 .expect("Test failed: no value in storage"),
@@ -1133,19 +1100,16 @@ mod tests {
     /// Test that the transfers time out in the bridge pool then the refund when
     /// we act on a TransfersToEthereum
     fn test_act_on_timeout_for_transfers_to_eth() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        init_storage(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
+        state.commit_block().expect("Test failed");
+        init_storage(&mut state);
         // Height 0
-        let pending_transfers = init_bridge_pool(&mut wl_storage);
-        init_balance(&mut wl_storage, &pending_transfers);
-        wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
-            .expect("Test failed");
+        let pending_transfers = init_bridge_pool(&mut state);
+        init_balance(&mut state, &pending_transfers);
+        state.commit_block().expect("Test failed");
         // pending transfers time out
-        wl_storage.storage.block.height += 10 + 1;
+        state.in_mem_mut().block.height += 10 + 1;
         // new pending transfer
         let transfer = PendingTransfer {
             transfer: eth_bridge_pool::TransferToEthereum {
@@ -1162,15 +1126,9 @@ mod tests {
             },
         };
         let key = get_pending_key(&transfer);
-        wl_storage
-            .storage
-            .write(&key, transfer.serialize_to_vec())
-            .expect("Test failed");
-        wl_storage
-            .storage
-            .commit_block(MockDBWriteBatch)
-            .expect("Test failed");
-        wl_storage.storage.block.height += 1;
+        state.write(&key, transfer).expect("Test failed");
+        state.commit_block().expect("Test failed");
+        state.in_mem_mut().block.height += 1;
 
         // This should only refund
         let event = EthereumEvent::TransfersToEthereum {
@@ -1178,15 +1136,12 @@ mod tests {
             transfers: vec![],
             relayer: gen_implicit_address(),
         };
-        let _ = act_on(&mut wl_storage, event).unwrap();
+        let _ = act_on(&mut state, event).unwrap();
 
         // The latest transfer is still pending
         let prefix = BRIDGE_POOL_ADDRESS.to_db_key().into();
         assert_eq!(
-            wl_storage
-                .iter_prefix(&prefix)
-                .expect("Test failed")
-                .count(),
+            state.iter_prefix(&prefix).expect("Test failed").count(),
             // NOTE: we should have two writes -- one of them being
             // the bridge pool nonce update
             2
@@ -1198,13 +1153,13 @@ mod tests {
             .fold(Amount::from(0), |acc, t| acc + t.gas_fee.amount);
         let payer = address::testing::established_address_2();
         let payer_key = balance_key(&nam(), &payer);
-        let value = wl_storage.read_bytes(&payer_key).expect("Test failed");
+        let value = state.read_bytes(&payer_key).expect("Test failed");
         let payer_balance =
             Amount::try_from_slice(&value.expect("Test failed"))
                 .expect("Test failed");
         assert_eq!(payer_balance, expected);
         let pool_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        let value = wl_storage.read_bytes(&pool_key).expect("Test failed");
+        let value = state.read_bytes(&pool_key).expect("Test failed");
         let pool_balance = Amount::try_from_slice(&value.expect("Test failed"))
             .expect("Test failed");
         assert_eq!(pool_balance, Amount::from(0));
@@ -1213,15 +1168,13 @@ mod tests {
         for transfer in pending_transfers {
             if transfer.transfer.asset == wnam() {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
-                let value =
-                    wl_storage.read_bytes(&sender_key).expect("Test failed");
+                let value = state.read_bytes(&sender_key).expect("Test failed");
                 let sender_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
                 assert_eq!(sender_balance, transfer.transfer.amount);
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
-                let value =
-                    wl_storage.read_bytes(&escrow_key).expect("Test failed");
+                let value = state.read_bytes(&escrow_key).expect("Test failed");
                 let escrow_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
@@ -1229,15 +1182,13 @@ mod tests {
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
-                let value =
-                    wl_storage.read_bytes(&sender_key).expect("Test failed");
+                let value = state.read_bytes(&sender_key).expect("Test failed");
                 let sender_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
                 assert_eq!(sender_balance, transfer.transfer.amount);
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
-                let value =
-                    wl_storage.read_bytes(&escrow_key).expect("Test failed");
+                let value = state.read_bytes(&escrow_key).expect("Test failed");
                 let escrow_balance =
                     Amount::try_from_slice(&value.expect("Test failed"))
                         .expect("Test failed");
@@ -1248,8 +1199,8 @@ mod tests {
 
     #[test]
     fn test_redeem_native_token() -> Result<()> {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
         let receiver = address::testing::established_address_1();
         let amount = Amount::from(100);
 
@@ -1259,7 +1210,7 @@ mod tests {
             &receiver,
         );
         assert!(
-            wl_storage
+            state
                 .read_bytes(&receiver_wnam_balance_key)
                 .unwrap()
                 .is_none()
@@ -1268,28 +1219,28 @@ mod tests {
         let bridge_pool_initial_balance = Amount::from(100_000_000);
         let bridge_pool_native_token_balance_key =
             token::storage_key::balance_key(
-                &wl_storage.storage.native_token,
+                &state.in_mem().native_token,
                 &BRIDGE_ADDRESS,
             );
         let bridge_pool_native_erc20_supply_key =
             minted_balance_key(&wrapped_erc20s::token(&wnam()));
         StorageWrite::write(
-            &mut wl_storage,
+            &mut state,
             &bridge_pool_native_token_balance_key,
             bridge_pool_initial_balance,
         )?;
         StorageWrite::write(
-            &mut wl_storage,
+            &mut state,
             &bridge_pool_native_erc20_supply_key,
             amount,
         )?;
         let receiver_native_token_balance_key = token::storage_key::balance_key(
-            &wl_storage.storage.native_token,
+            &state.in_mem().native_token,
             &receiver,
         );
 
         let changed_keys =
-            redeem_native_token(&mut wl_storage, &wnam(), &receiver, &amount)?;
+            redeem_native_token(&mut state, &wnam(), &receiver, &amount)?;
 
         assert_eq!(
             changed_keys,
@@ -1300,21 +1251,15 @@ mod tests {
             ])
         );
         assert_eq!(
-            StorageRead::read(
-                &wl_storage,
-                &bridge_pool_native_token_balance_key
-            )?,
+            StorageRead::read(&state, &bridge_pool_native_token_balance_key)?,
             Some(bridge_pool_initial_balance - amount)
         );
         assert_eq!(
-            StorageRead::read(&wl_storage, &receiver_native_token_balance_key)?,
+            StorageRead::read(&state, &receiver_native_token_balance_key)?,
             Some(amount)
         );
         assert_eq!(
-            StorageRead::read(
-                &wl_storage,
-                &bridge_pool_native_erc20_supply_key
-            )?,
+            StorageRead::read(&state, &bridge_pool_native_erc20_supply_key)?,
             Some(Amount::zero())
         );
 
@@ -1322,7 +1267,7 @@ mod tests {
         //
         // wNAM is never minted, it's converted back to NAM
         assert!(
-            wl_storage
+            state
                 .read_bytes(&receiver_wnam_balance_key)
                 .unwrap()
                 .is_none()
@@ -1334,16 +1279,16 @@ mod tests {
     /// Auxiliary function to test wrapped Ethereum ERC20s functionality.
     fn test_wrapped_erc20s_aux<F>(mut f: F)
     where
-        F: FnMut(&mut TestWlStorage, EthereumEvent),
+        F: FnMut(&mut TestState, EthereumEvent),
     {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
-        wl_storage.commit_block().expect("Test failed");
-        init_storage(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
+        state.commit_block().expect("Test failed");
+        init_storage(&mut state);
         let native_erc20 =
-            read_native_erc20_address(&wl_storage).expect("Test failed");
+            read_native_erc20_address(&state).expect("Test failed");
         let pending_transfers = init_bridge_pool_transfers(
-            &mut wl_storage,
+            &mut state,
             [
                 (native_erc20, TransferData::default()),
                 (
@@ -1372,7 +1317,7 @@ mod tests {
                 ),
             ],
         );
-        init_balance(&mut wl_storage, &pending_transfers);
+        init_balance(&mut state, &pending_transfers);
         let transfers = pending_transfers
             .into_iter()
             .map(|ref transfer| {
@@ -1386,7 +1331,7 @@ mod tests {
             transfers,
             relayer,
         };
-        f(&mut wl_storage, event)
+        f(&mut state, event)
     }
 
     #[test]
@@ -1401,7 +1346,7 @@ mod tests {
             kind: eth_bridge_pool::TransferToEthereumKind,
         }
 
-        test_wrapped_erc20s_aux(|wl_storage, event| {
+        test_wrapped_erc20s_aux(|state, event| {
             let transfers = match &event {
                 EthereumEvent::TransfersToEthereum { transfers, .. } => {
                     transfers.iter()
@@ -1409,7 +1354,7 @@ mod tests {
                 _ => panic!("Test failed"),
             };
             let native_erc20 =
-                read_native_erc20_address(wl_storage).expect("Test failed");
+                read_native_erc20_address(state).expect("Test failed");
             let deltas = transfers
                 .filter_map(
                     |event @ TransferToEthereum { asset, amount, .. }| {
@@ -1417,7 +1362,7 @@ mod tests {
                             return None;
                         }
                         let kind = {
-                            let (pending, _) = wl_storage
+                            let (pending, _) = state
                                 .ethbridge_queries()
                                 .lookup_transfer_to_eth(event)
                                 .expect("Test failed");
@@ -1431,13 +1376,13 @@ mod tests {
                                 wrapped_erc20s::nut(asset)
                             }
                         };
-                        let prev_balance = wl_storage
+                        let prev_balance = state
                             .read(&balance_key(
                                 &erc20_token,
                                 &BRIDGE_POOL_ADDRESS,
                             ))
                             .expect("Test failed");
-                        let prev_supply = wl_storage
+                        let prev_supply = state
                             .read(&minted_balance_key(&erc20_token))
                             .expect("Test failed");
                         Some(Delta {
@@ -1451,7 +1396,7 @@ mod tests {
                 )
                 .collect::<Vec<_>>();
 
-            _ = act_on(wl_storage, event).unwrap();
+            _ = act_on(state, event).unwrap();
 
             for Delta {
                 kind,
@@ -1479,11 +1424,11 @@ mod tests {
                     }
                 };
 
-                let balance: token::Amount = wl_storage
+                let balance: token::Amount = state
                     .read(&balance_key(&erc20_token, &BRIDGE_POOL_ADDRESS))
                     .expect("Read must succeed")
                     .expect("Balance must exist");
-                let supply: token::Amount = wl_storage
+                let supply: token::Amount = state
                     .read(&minted_balance_key(&erc20_token))
                     .expect("Read must succeed")
                     .expect("Balance must exist");
@@ -1500,44 +1445,44 @@ mod tests {
     /// Namada and instead are kept in escrow, under the Ethereum bridge
     /// account.
     fn test_wrapped_nam_not_burned() {
-        test_wrapped_erc20s_aux(|wl_storage, event| {
+        test_wrapped_erc20s_aux(|state, event| {
             let native_erc20 =
-                read_native_erc20_address(wl_storage).expect("Test failed");
+                read_native_erc20_address(state).expect("Test failed");
             let wnam = wrapped_erc20s::token(&native_erc20);
             let escrow_balance_key = balance_key(&nam(), &BRIDGE_ADDRESS);
 
             // check pre supply
             assert!(
-                wl_storage
+                state
                     .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
             assert!(
-                wl_storage
+                state
                     .read_bytes(&minted_balance_key(&wnam))
                     .expect("Test failed")
                     .is_none()
             );
 
             // check pre balance
-            let pre_escrowed_balance: token::Amount = wl_storage
+            let pre_escrowed_balance: token::Amount = state
                 .read(&escrow_balance_key)
                 .expect("Read must succeed")
                 .expect("Balance must exist");
 
-            _ = act_on(wl_storage, event).unwrap();
+            _ = act_on(state, event).unwrap();
 
             // check post supply - the wNAM minted supply should increase
             // by the transferred amount
             assert!(
-                wl_storage
+                state
                     .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
             assert_eq!(
-                wl_storage
+                state
                     .read::<Amount>(&minted_balance_key(&wnam))
                     .expect("Reading from storage should not fail")
                     .expect("The wNAM supply should have been updated"),
@@ -1545,7 +1490,7 @@ mod tests {
             );
 
             // check post balance
-            let post_escrowed_balance: token::Amount = wl_storage
+            let post_escrowed_balance: token::Amount = state
                 .read(&escrow_balance_key)
                 .expect("Read must succeed")
                 .expect("Balance must exist");
@@ -1560,8 +1505,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Attempted to mint wNAM NUTs!")]
     fn test_wnam_doesnt_mint_nuts() {
-        let mut wl_storage = TestWlStorage::default();
-        test_utils::bootstrap_ethereum_bridge(&mut wl_storage);
+        let mut state = TestState::default();
+        test_utils::bootstrap_ethereum_bridge(&mut state);
 
         let transfer = PendingTransfer {
             transfer: eth_bridge_pool::TransferToEthereum {
@@ -1578,6 +1523,6 @@ mod tests {
             },
         };
 
-        _ = update_transferred_asset_balances(&mut wl_storage, &transfer);
+        _ = update_transferred_asset_balances(&mut state, &transfer);
     }
 }

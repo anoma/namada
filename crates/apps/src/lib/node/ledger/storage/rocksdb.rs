@@ -48,24 +48,22 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
-use namada::eth_bridge::storage::proof::BridgePoolRootProof;
-use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::ledger::replay_protection;
-use namada::ledger::storage::tx_queue::TxQueue;
-use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
-use namada::state::types::PrefixIterator;
-use namada::state::{
-    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, StoreType, DB,
-};
-use namada::types;
-use namada::types::storage::{
+use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
 };
-use namada::types::time::DateTimeUtc;
-use namada::types::token::ConversionState;
-use namada::types::{ethereum_events, ethereum_structs};
+use namada::core::time::DateTimeUtc;
+use namada::core::{decode, encode, ethereum_events, ethereum_structs};
+use namada::eth_bridge::storage::proof::BridgePoolRootProof;
+use namada::ledger::eth_bridge::storage::bridge_pool;
+use namada::ledger::storage::tx_queue::TxQueue;
+use namada::replay_protection;
+use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
+use namada::state::{
+    BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
+    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
+};
+use namada::token::ConversionState;
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
@@ -339,7 +337,7 @@ impl RocksDB {
             .get_column_family(STATE_CF)
             .expect("State column family should exist");
 
-        let last_height: BlockHeight = types::decode(
+        let last_height: BlockHeight = decode(
             self.0
                 .get_cf(state_cf, "height")
                 .expect("Unable to read DB")
@@ -513,7 +511,7 @@ impl RocksDB {
         // three keys in storage we can only perform one rollback before
         // restarting the chain
         tracing::info!("Reverting non-height-prepended metadata keys");
-        batch.put_cf(state_cf, "height", types::encode(&previous_height));
+        batch.put_cf(state_cf, "height", encode(&previous_height));
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
@@ -556,14 +554,14 @@ impl RocksDB {
         tracing::info!("Restoring replay protection state");
         // Remove the "last" tx hashes
         for (ref hash_str, _, _) in self.iter_replay_protection() {
-            let hash = namada::core::types::hash::Hash::from_str(hash_str)
+            let hash = namada::core::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let key = replay_protection::last_key(&hash);
             batch.delete_cf(reprot_cf, key.to_string());
         }
 
         for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
-            let hash = namada::core::types::hash::Hash::from_str(hash_str)
+            let hash = namada::core::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let last_key = replay_protection::last_key(&hash);
             // Restore "buffer" bucket to "last"
@@ -684,7 +682,7 @@ impl DB for RocksDB {
             Some(bytes) => {
                 // TODO if there's an issue decoding this height, should we try
                 // load its predecessor instead?
-                types::decode(bytes).map_err(Error::CodingError)?
+                decode(bytes).map_err(Error::CodingError)?
             }
             None => return Ok(None),
         };
@@ -697,7 +695,7 @@ impl DB for RocksDB {
             .get_cf(block_cf, results_path)
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => return Ok(None),
         };
 
@@ -707,7 +705,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "next_epoch_min_start_height")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!(
                     "Couldn't load next epoch start height from the DB"
@@ -720,7 +718,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "next_epoch_min_start_time")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!(
                     "Couldn't load next epoch start time from the DB"
@@ -733,7 +731,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "update_epoch_blocks_delay")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!(
                     "Couldn't load epoch update block delay from the DB"
@@ -746,7 +744,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "conversion_state")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!("Couldn't load conversion state from the DB");
                 return Ok(None);
@@ -757,7 +755,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "tx_queue")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!("Couldn't load tx queue from the DB");
                 return Ok(None);
@@ -769,7 +767,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "ethereum_height")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!("Couldn't load ethereum height from the DB");
                 return Ok(None);
@@ -781,7 +779,7 @@ impl DB for RocksDB {
             .get_cf(state_cf, "eth_events_queue")
             .map_err(|e| Error::DBError(e.into_string()))?
         {
-            Some(bytes) => types::decode(bytes).map_err(Error::CodingError)?,
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!(
                     "Couldn't load the eth events queue from the DB"
@@ -830,7 +828,7 @@ impl DB for RocksDB {
                             match segments.get(3) {
                                 Some(&"root") => merkle_tree_stores.set_root(
                                     &st,
-                                    types::decode(bytes)
+                                    decode(bytes)
                                         .map_err(Error::CodingError)?,
                                 ),
                                 Some(&"store") => merkle_tree_stores
@@ -844,29 +842,21 @@ impl DB for RocksDB {
                         // the block header doesn't have to be restored
                     }
                     "hash" => {
-                        hash = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "time" => {
-                        time = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        time = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "epoch" => {
-                        epoch = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        epoch = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "pred_epochs" => {
-                        pred_epochs = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        )
+                        pred_epochs =
+                            Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "address_gen" => {
-                        address_gen = Some(
-                            types::decode(bytes).map_err(Error::CodingError)?,
-                        );
+                        address_gen =
+                            Some(decode(bytes).map_err(Error::CodingError)?);
                     }
                     _ => unknown_key_error(path)?,
                 },
@@ -886,7 +876,7 @@ impl DB for RocksDB {
                 {
                     merkle_tree_stores.set_root(
                         st,
-                        types::decode(bytes).map_err(Error::CodingError)?,
+                        decode(bytes).map_err(Error::CodingError)?,
                     );
                 }
                 let store_key = key_prefix.with_segment("store".to_owned());
@@ -972,7 +962,7 @@ impl DB for RocksDB {
         batch.0.put_cf(
             state_cf,
             "next_epoch_min_start_height",
-            types::encode(&next_epoch_min_start_height),
+            encode(&next_epoch_min_start_height),
         );
 
         if let Some(current_value) = self
@@ -990,7 +980,7 @@ impl DB for RocksDB {
         batch.0.put_cf(
             state_cf,
             "next_epoch_min_start_time",
-            types::encode(&next_epoch_min_start_time),
+            encode(&next_epoch_min_start_time),
         );
         if let Some(current_value) = self
             .0
@@ -1007,7 +997,7 @@ impl DB for RocksDB {
         batch.0.put_cf(
             state_cf,
             "update_epoch_blocks_delay",
-            types::encode(&update_epoch_blocks_delay),
+            encode(&update_epoch_blocks_delay),
         );
 
         // Save the conversion state when the epoch is updated
@@ -1027,7 +1017,7 @@ impl DB for RocksDB {
             batch.0.put_cf(
                 state_cf,
                 "conversion_state",
-                types::encode(conversion_state),
+                encode(conversion_state),
             );
         }
 
@@ -1040,19 +1030,13 @@ impl DB for RocksDB {
             // Write the predecessor value for rollback
             batch.0.put_cf(state_cf, "pred/tx_queue", pred_tx_queue);
         }
+        batch.0.put_cf(state_cf, "tx_queue", encode(&tx_queue));
         batch
             .0
-            .put_cf(state_cf, "tx_queue", types::encode(&tx_queue));
-        batch.0.put_cf(
-            state_cf,
-            "ethereum_height",
-            types::encode(&ethereum_height),
-        );
-        batch.0.put_cf(
-            state_cf,
-            "eth_events_queue",
-            types::encode(&eth_events_queue),
-        );
+            .put_cf(state_cf, "ethereum_height", encode(&ethereum_height));
+        batch
+            .0
+            .put_cf(state_cf, "eth_events_queue", encode(&eth_events_queue));
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let prefix_key = Key::from(height.to_db_key());
@@ -1070,7 +1054,7 @@ impl DB for RocksDB {
                     batch.0.put_cf(
                         block_cf,
                         root_key.to_string(),
-                        types::encode(merkle_tree_stores.root(st)),
+                        encode(merkle_tree_stores.root(st)),
                     );
                     let store_key = key_prefix.with_segment("store".to_owned());
                     batch.0.put_cf(
@@ -1097,60 +1081,48 @@ impl DB for RocksDB {
             let key = prefix_key
                 .push(&"hash".to_owned())
                 .map_err(Error::KeyError)?;
-            batch
-                .0
-                .put_cf(block_cf, key.to_string(), types::encode(&hash));
+            batch.0.put_cf(block_cf, key.to_string(), encode(&hash));
         }
         // Block time
         {
             let key = prefix_key
                 .push(&"time".to_owned())
                 .map_err(Error::KeyError)?;
-            batch
-                .0
-                .put_cf(block_cf, key.to_string(), types::encode(&time));
+            batch.0.put_cf(block_cf, key.to_string(), encode(&time));
         }
         // Block epoch
         {
             let key = prefix_key
                 .push(&"epoch".to_owned())
                 .map_err(Error::KeyError)?;
-            batch
-                .0
-                .put_cf(block_cf, key.to_string(), types::encode(&epoch));
+            batch.0.put_cf(block_cf, key.to_string(), encode(&epoch));
         }
         // Block results
         {
             let results_path = format!("results/{}", height.raw());
-            batch
-                .0
-                .put_cf(block_cf, results_path, types::encode(&results));
+            batch.0.put_cf(block_cf, results_path, encode(&results));
         }
         // Predecessor block epochs
         {
             let key = prefix_key
                 .push(&"pred_epochs".to_owned())
                 .map_err(Error::KeyError)?;
-            batch.0.put_cf(
-                block_cf,
-                key.to_string(),
-                types::encode(&pred_epochs),
-            );
+            batch
+                .0
+                .put_cf(block_cf, key.to_string(), encode(&pred_epochs));
         }
         // Address gen
         {
             let key = prefix_key
                 .push(&"address_gen".to_owned())
                 .map_err(Error::KeyError)?;
-            batch.0.put_cf(
-                block_cf,
-                key.to_string(),
-                types::encode(&address_gen),
-            );
+            batch
+                .0
+                .put_cf(block_cf, key.to_string(), encode(&address_gen));
         }
 
         // Block height
-        batch.0.put_cf(state_cf, "height", types::encode(&height));
+        batch.0.put_cf(state_cf, "height", encode(&height));
 
         Ok(())
     }
@@ -1200,7 +1172,7 @@ impl DB for RocksDB {
                 .map_err(|e| Error::DBError(e.into_string()))?;
             match bytes {
                 Some(b) => {
-                    let root = types::decode(b).map_err(Error::CodingError)?;
+                    let root = decode(b).map_err(Error::CodingError)?;
                     merkle_tree_stores.set_root(st, root);
                 }
                 None => return Ok(None),
@@ -1223,7 +1195,7 @@ impl DB for RocksDB {
 
     fn has_replay_protection_entry(
         &self,
-        hash: &namada::types::hash::Hash,
+        hash: &namada::core::hash::Hash,
     ) -> Result<bool> {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
@@ -1589,7 +1561,7 @@ impl DB for RocksDB {
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
         for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
-            let hash = namada::core::types::hash::Hash::from_str(hash_str)
+            let hash = namada::core::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let key = replay_protection::buffer_key(&hash);
             batch.0.delete_cf(replay_protection_cf, key.to_string());
@@ -1810,8 +1782,6 @@ fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
 
 #[cfg(unix)]
 mod imp {
-    use std::convert::TryInto;
-
     use rlimit::{Resource, Rlim};
 
     const DEFAULT_NOFILE_LIMIT: Rlim = Rlim::from_raw(16384);
@@ -1859,12 +1829,12 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::state::{MerkleTree, Sha256Hasher};
-    use namada::types::address::{
+    use namada::core::address::{
         gen_established_address, EstablishedAddressGen,
     };
-    use namada::types::hash::Hash;
-    use namada::types::storage::{BlockHash, Epoch, Epochs};
+    use namada::core::hash::Hash;
+    use namada::core::storage::{BlockHash, Epochs};
+    use namada::state::{MerkleTree, Sha256Hasher};
     use tempfile::tempdir;
     use test_log::test;
 
@@ -2025,7 +1995,7 @@ mod test {
         let keys_0 = vec![key_0_a, key_0_b, key_0_c];
         let keys_1 = vec![key_1_a, key_1_b, key_1_c];
         let keys_01 = vec![key_01_a];
-        let all_keys = vec![keys_0.clone(), keys_01, keys_1.clone()].concat();
+        let all_keys = [keys_0.clone(), keys_01, keys_1.clone()].concat();
 
         // Write the keys
         let mut batch = RocksDB::batch();
@@ -2223,7 +2193,7 @@ mod test {
             db.0.get_cf(state_cf, "conversion_state".as_bytes())
                 .unwrap()
                 .unwrap();
-        assert_eq!(conversion_state, types::encode(&conversion_state_0));
+        assert_eq!(conversion_state, encode(&conversion_state_0));
         for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
             assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
         }

@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use namada::bip39::{Language, Mnemonic};
-use namada::types::key::*;
+use namada::core::key::*;
 pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
@@ -288,7 +288,6 @@ pub fn read_and_confirm_encryption_password(
 mod tests {
     use namada::bip39::MnemonicType;
     use namada_sdk::wallet::WalletIo;
-    use rand_core;
 
     use super::CliWalletUtils;
 

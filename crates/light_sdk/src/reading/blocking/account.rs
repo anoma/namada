@@ -1,5 +1,5 @@
 use namada_sdk::account::Account;
-use namada_sdk::types::key::common;
+use namada_sdk::key::common;
 
 use super::*;
 

@@ -1,13 +1,13 @@
 use std::str::FromStr;
 
+use namada_sdk::address::Address;
 use namada_sdk::error::{EncodingError, Error};
 use namada_sdk::io::StdIo;
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc;
 use namada_sdk::state::LastBlock;
-use namada_sdk::types::address::Address;
-use namada_sdk::types::storage::BlockResults;
-use namada_sdk::types::token::{self, DenominatedAmount};
+use namada_sdk::storage::BlockResults;
+use namada_sdk::token::{self, DenominatedAmount};
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::HttpClient;
 use tokio::runtime::Runtime;

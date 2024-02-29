@@ -4,7 +4,6 @@ package = namada
 NAMADA_E2E_USE_PREBUILT_BINARIES ?= true
 NAMADA_E2E_DEBUG ?= true
 RUST_BACKTRACE ?= 1
-NAMADA_MASP_TEST_SEED ?= 0
 PROPTEST_CASES ?= 100
 # Disable shrinking in `make test-pos-sm` for CI runs. If the test fail in CI,
 # we only want to get the seed.
@@ -48,6 +47,7 @@ crates += namada_macros
 crates += namada_merkle_tree
 crates += namada_parameters
 crates += namada_proof_of_stake
+crates += namada_replay_protection
 crates += namada_sdk
 crates += namada_shielded_token
 crates += namada_state
@@ -148,14 +148,12 @@ test: test-unit test-e2e test-wasm test-benches
 
 test-coverage:
 	# Run integration tests separately because they require `integration`
-	# feature (and without coverage) and run them with pre-built MASP proofs
+	# feature (and without coverage)
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
-	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
-	NAMADA_MASP_TEST_PROOFS=load \
 	$(cargo) +$(nightly) test integration:: \
 		--features integration \
 		-- -Z unstable-options --report-time
@@ -175,23 +173,8 @@ test-e2e:
 	--nocapture \
 	-Z unstable-options --report-time
 
-# Run integration tests with pre-built MASP proofs
+# Run integration tests
 test-integration:
-	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
-	NAMADA_MASP_TEST_PROOFS=load \
-	make test-integration-slow
-
-# Clear pre-built proofs, run integration tests and save the new proofs
-test-integration-save-proofs:
-    # Clear old proofs first
-	rm -f test_fixtures/masp_proofs/*.bin || true
-	NAMADA_MASP_TEST_SEED=$(NAMADA_MASP_TEST_SEED) \
-	NAMADA_MASP_TEST_PROOFS=save \
-	TEST_FILTER=masp \
-	make test-integration-slow
-
-# Run integration tests without specifying any pre-built MASP proofs option
-test-integration-slow:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
 	$(cargo) +$(nightly) test $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \

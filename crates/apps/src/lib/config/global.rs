@@ -4,7 +4,7 @@ use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use namada::types::chain::ChainId;
+use namada::core::chain::ChainId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

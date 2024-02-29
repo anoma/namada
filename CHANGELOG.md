@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## v0.31.8
+
+Namada 0.31.8 is a patch release that prevents issues with incompatible WASM compilation cache and other minor issues.
+
+### BUG FIXES
+
+-  Downgrade nightly toolchain to `2024-02-10`.
+  ([\#2761](https://github.com/anoma/namada/pull/2761))
+
+### IMPROVEMENTS
+
+- Added WASM cache versioning to avoid issues on updates that don't have
+  compatible binary format. ([\#2757](https://github.com/anoma/namada/pull/2757))
+
+### SDK
+
+- Make more MASP types public.
+  ([\#2762](https://github.com/anoma/namada/pull/2762))
+
+## v0.31.7
+
+Namada 0.31.7 is a patch release that contains code refactors, various fixes and improvements.
+
+### BUG FIXES
+
+- Fix ibc-gen-shielded for shielded transfers back to the origin
+  ([\#2634](https://github.com/anoma/namada/issues/2634))
+- Fixed the default `--node` argument when no specified.
+  ([\#2701](https://github.com/anoma/namada/pull/2701))
+- Bail from router if a nester router segment is not matched.
+  ([\#2739](https://github.com/anoma/namada/pull/2739))
+
+### IMPROVEMENTS
+
+- Refactored sub-systems integration in the ABCI FinalizeBlock request handler.
+  ([\#2482](https://github.com/anoma/namada/pull/2482))
+- Refactored token crates. ([\#2493](https://github.com/anoma/namada/pull/2493))
+- Refactored core crate to flatten the modules structure.
+  ([\#2503](https://github.com/anoma/namada/pull/2503))
+- Refactored governance crate dependencies.
+  ([\#2506](https://github.com/anoma/namada/pull/2506))
+- Hid addresses used for testing from public API.
+  ([\#2507](https://github.com/anoma/namada/pull/2507))
+- Expanded the variety of test vectors generated for hardware
+  wallets and simplified their format in some places.
+  ([\#2588](https://github.com/anoma/namada/pull/2588))
+- Refactored the state crate.
+  ([\#2606](https://github.com/anoma/namada/pull/2606))
+- Add slashed bonds/unbonds info to the client.
+  ([\#2670](https://github.com/anoma/namada/pull/2670))
+- Moving to rust version 1.76.0 ([#2687](https://github.com/anoma/anoma/pull/2687))
+
+### TESTING
+
+- Implemented mock transaction prover and verifier for faster testing and lower
+  development time. ([\#2695](https://github.com/anoma/namada/pull/2695))
+
 ## v0.31.6
 
 Namada 0.31.6 is a patch release that contains various fixes and improvements.
