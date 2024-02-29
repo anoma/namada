@@ -356,8 +356,9 @@ impl WriteLog {
     ) -> (Address, u64) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
-        let address_gen =
-            self.address_gen.get_or_insert(storage_address_gen.clone());
+        let address_gen = self
+            .address_gen
+            .get_or_insert_with(|| storage_address_gen.clone());
         let addr =
             address_gen.generate_address("TODO more randomness".as_bytes());
         let key = storage::Key::validity_predicate(&addr);
