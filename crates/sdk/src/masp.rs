@@ -672,11 +672,18 @@ pub struct ThreadHandle<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> {
     inner: Arc<Mutex<&'shielded mut ShieldedContext<U>>>,
 }
 
-unsafe impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> Send for ThreadHandle<'shielded, U> {}
-unsafe impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> Sync for ThreadHandle<'shielded, U> {}
+unsafe impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> Send
+    for ThreadHandle<'shielded, U>
+{
+}
+unsafe impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> Sync
+    for ThreadHandle<'shielded, U>
+{
+}
 
-impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> ThreadHandle<'shielded, U> {
-
+impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync>
+    ThreadHandle<'shielded, U>
+{
     pub fn new(ctx: &'shielded mut ShieldedContext<U>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(ctx)),
@@ -688,7 +695,11 @@ impl<'shielded,  U: ShieldedUtils + MaybeSend + MaybeSync> ThreadHandle<'shielde
         locked.tx_note_map[indexed_tx]
     }
 
-    fn insert_decrypted_data(&self, key: (IndexedTx, ViewingKey), value: DecryptedData) {
+    fn insert_decrypted_data(
+        &self,
+        key: (IndexedTx, ViewingKey),
+        value: DecryptedData,
+    ) {
         let mut locked = self.inner.lock().unwrap();
         locked.decrypted_note_cache.insert(key, value);
     }
@@ -882,32 +893,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let txs = logger.scan(unscanned);
         let vk_heights = self.vk_heights.clone();
         let ctx = ThreadHandle::new(self);
-        txs.par_bridge().try_for_each(|(indexed_tx, (epoch, tx, stx))| {
-            for (vk, _) in
-                vk_heights.iter().filter(|(_, h)| **h < Some(indexed_tx))
-            {
-                let delta = Self::scan_tx(
-                    ctx.clone(),
-                    sync_status,
-                    indexed_tx,
-                    &stx,
-                    vk,
-                )?;
-                ctx.insert_decrypted_data(
-                    (indexed_tx, *vk),
-                    DecryptedData {
-                                              tx: stx.clone(),
-                                              keys: tx.clone(),
-                                              delta,
-                                              epoch,
-                                          },
-                );
-            }
-            // possibly remove unneeded elements from the cache.
-            ctx.scanned(&indexed_tx);
-            _ = ctx.save();
-            Ok::<(), Error>(())
-        })?;
+        txs.par_bridge()
+            .try_for_each(|(indexed_tx, (epoch, tx, stx))| {
+                for (vk, _) in
+                    vk_heights.iter().filter(|(_, h)| **h < Some(indexed_tx))
+                {
+                    let delta = Self::scan_tx(
+                        ctx.clone(),
+                        sync_status,
+                        indexed_tx,
+                        &stx,
+                        vk,
+                    )?;
+                    ctx.insert_decrypted_data(
+                        (indexed_tx, *vk),
+                        DecryptedData {
+                            tx: stx.clone(),
+                            keys: tx.clone(),
+                            delta,
+                            epoch,
+                        },
+                    );
+                }
+                // possibly remove unneeded elements from the cache.
+                ctx.scanned(&indexed_tx);
+                _ = ctx.save();
+                Ok::<(), Error>(())
+            })?;
 
         // TODO: This can possibly be improved. We will have unnecessary
         // trial decryption attempts if syncing is
@@ -2519,18 +2531,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             ctx.insert_decrypted_data(
                 (indexed_tx, vk),
                 DecryptedData {
-                        tx: masp_tx.clone(),
-                        keys: changed_balance_keys.clone(),
-                        delta,
-                        epoch,
-                    },
+                    tx: masp_tx.clone(),
+                    keys: changed_balance_keys.clone(),
+                    delta,
+                    epoch,
+                },
             );
-
         }
         ctx.nullify_spent_notes(&native_token)?;
         // Save the speculative state for future usage
-        ctx.save()
-          .map_err(|e| Error::Other(e.to_string()))?;
+        ctx.save().map_err(|e| Error::Other(e.to_string()))?;
 
         Ok(())
     }
