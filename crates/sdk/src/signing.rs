@@ -516,6 +516,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                         &target,
                         &args.fee_token,
                         fee_amount,
+                    !(args.dry_run || args.dry_run_wrapper)
                     )
                     .await
                 {

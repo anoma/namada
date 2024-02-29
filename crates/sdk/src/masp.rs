@@ -1944,6 +1944,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         target: &TransferTarget,
         token: &Address,
         amount: token::DenominatedAmount,
+        update_ctx: bool,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // No shielded components are needed when neither source nor destination
         // are shielded
@@ -2291,13 +2292,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let (masp_tx, metadata) =
             builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
 
-        // Cache the generated transfer
-        let mut shielded_ctx = context.shielded_mut().await;
-        shielded_ctx
-            .pre_cache_transaction(
-                context, &masp_tx, source, target, token, epoch,
-            )
-            .await?;
+        if update_ctx {
+            // Cache the generated transfer
+            let mut shielded_ctx = context.shielded_mut().await;
+            shielded_ctx
+                .pre_cache_transaction(
+                    context, &masp_tx, source, target, token, epoch,
+                )
+                .await?;
+        }
 
         Ok(Some(ShieldedTransfer {
             builder: builder_clone,

@@ -2181,6 +2181,7 @@ pub async fn build_ibc_transfer(
         &TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
         &args.token,
         validated_amount,
+        !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -2504,6 +2505,7 @@ pub async fn build_transfer<N: Namada>(
         &args.target,
         &args.token,
         validated_amount,
+        !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -2570,6 +2572,7 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
+    update_ctx: bool,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
@@ -2581,7 +2584,7 @@ async fn construct_shielded_parts<N: Namada>(
         .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, source, target, token, amount,
+            context, source, target, token, amount, update_ctx,
         )
         .await;
 
@@ -2877,6 +2880,7 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             &args.target,
             &token,
             validated_amount,
+            true,
         )
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
