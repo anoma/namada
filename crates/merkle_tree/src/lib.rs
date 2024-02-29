@@ -36,10 +36,17 @@ use thiserror::Error;
 pub trait SubTreeRead {
     /// Get the root of a subtree in raw bytes.
     fn root(&self) -> MerkleRoot;
+
+    /// Recompute the merkle root from the backing storage
+    /// and check it matches the saved root.
+    fn validate(&self) -> bool;
+
     /// Check if a key is present in the sub-tree
     fn subtree_has_key(&self, key: &Key) -> Result<bool>;
+
     /// Get the height at which the key is inserted
     fn subtree_get(&self, key: &Key) -> Result<Vec<u8>>;
+
     /// Get a membership proof for various key-value pairs
     fn subtree_membership_proof(
         &self,
@@ -104,6 +111,10 @@ pub enum Error {
     Ics23MultiLeaf,
     #[error("A Tendermint proof can only be constructed from an ICS23 proof.")]
     TendermintProof,
+    #[error(
+        "The merklized data did not produce that same hash as the stored root."
+    )]
+    RootValidationError,
 }
 
 /// Result for functions that may fail
@@ -565,6 +576,41 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.base.root().into()
     }
 
+    /// Recalculate the merkle tree root of storage and compare it against the
+    /// old value.
+    pub fn validate(&self) -> Result<()> {
+        if self.account.validate()
+            && self.ibc.validate()
+            && self.pos.validate()
+            && self.bridge_pool.validate()
+        {
+            let mut reconstructed = Smt::<H>::default();
+            reconstructed.update(
+                H::hash(StoreType::Account.to_string()).into(),
+                self.account.root().into(),
+            )?;
+            reconstructed.update(
+                H::hash(StoreType::PoS.to_string()).into(),
+                self.pos.root().into(),
+            )?;
+            reconstructed.update(
+                H::hash(StoreType::Ibc.to_string()).into(),
+                self.ibc.root().into(),
+            )?;
+            reconstructed.update(
+                H::hash(StoreType::BridgePool.to_string()).into(),
+                self.bridge_pool.root().into(),
+            )?;
+            if self.base.root() == reconstructed.root() {
+                Ok(())
+            } else {
+                Err(Error::RootValidationError)
+            }
+        } else {
+            Err(Error::RootValidationError)
+        }
+    }
+
     /// Get the root of a sub-tree
     pub fn sub_root(&self, store_type: &StoreType) -> MerkleRoot {
         self.tree(store_type).root()
@@ -890,6 +936,10 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
         Smt::<H>::root(self).into()
     }
 
+    fn validate(&self) -> bool {
+        Smt::<H>::validate(self)
+    }
+
     fn subtree_has_key(&self, key: &Key) -> Result<bool> {
         match self.get(&H::hash(key.to_string()).into()) {
             Ok(hash) => Ok(!hash.is_zero()),
@@ -955,6 +1005,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
 impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
     fn root(&self) -> MerkleRoot {
         Amt::<H>::root(self).into()
+    }
+
+    fn validate(&self) -> bool {
+        Amt::<H>::validate(self)
     }
 
     fn subtree_has_key(&self, key: &Key) -> Result<bool> {
@@ -1024,6 +1078,10 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
 impl<'a> SubTreeRead for &'a BridgePoolTree {
     fn root(&self) -> MerkleRoot {
         BridgePoolTree::root(self).into()
+    }
+
+    fn validate(&self) -> bool {
+        BridgePoolTree::validate(self)
     }
 
     fn subtree_has_key(&self, key: &Key) -> Result<bool> {
@@ -1118,6 +1176,7 @@ impl<'a> SubTreeWrite for &'a mut CommitDataRoot {
 
 #[cfg(test)]
 mod test {
+    use assert_matches::assert_matches;
     use ics23::HostFunctionsManager;
     use namada_core::hash::Sha256Hasher;
 
@@ -1233,6 +1292,40 @@ mod test {
             MerkleTree::<Sha256Hasher>::new(stores_read).unwrap();
         assert!(restored_tree.has_key(&ibc_key).unwrap());
         assert!(restored_tree.has_key(&pos_key).unwrap());
+    }
+
+    #[test]
+    fn test_validate_root() {
+        let mut tree = MerkleTree::<Sha256Hasher>::default();
+
+        let key_prefix: Key =
+            Address::Internal(InternalAddress::Ibc).to_db_key().into();
+        let ibc_key = key_prefix.push(&"test".to_string()).unwrap();
+        let key_prefix: Key =
+            Address::Internal(InternalAddress::PoS).to_db_key().into();
+        let pos_key = key_prefix.push(&"test".to_string()).unwrap();
+        let account_key_prefix: Key =
+            Address::Internal(InternalAddress::Masp).to_db_key().into();
+        let account_key = account_key_prefix.push(&"test".to_string()).unwrap();
+
+        let ibc_val = [1u8; 8].to_vec();
+        tree.update(&ibc_key, ibc_val.clone()).unwrap();
+        let pos_val = [2u8; 8].to_vec();
+        tree.update(&pos_key, pos_val).unwrap();
+        let account_val = [3u8; 16].to_vec();
+        tree.update(&account_key, account_val).unwrap();
+
+        assert!(tree.validate().is_ok());
+        let (store_type, sub_key) =
+            StoreType::sub_key(&ibc_key).expect("Test failed");
+        _ = tree
+            .tree_mut(&store_type)
+            .subtree_update(&sub_key, [2u8; 8].as_ref())
+            .expect("Test failed");
+        assert_matches!(
+            tree.validate().unwrap_err(),
+            Error::RootValidationError
+        );
     }
 
     #[test]

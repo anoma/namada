@@ -439,6 +439,7 @@ where
             db_cache,
             chain_id.clone(),
             native_token,
+            config.shell.validate_merkle_tree,
             config.shell.storage_read_past_height_limit,
             is_merklized_storage_key,
         );

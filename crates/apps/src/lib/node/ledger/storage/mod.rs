@@ -89,6 +89,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -141,6 +142,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -200,6 +202,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -222,6 +225,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -266,6 +270,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -338,6 +343,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -433,6 +439,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -557,6 +564,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             Some(5),
             is_merklized_storage_key,
         );
@@ -679,6 +687,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             is_merklized_storage_key,
         );
@@ -786,6 +795,7 @@ mod tests {
             None,
             ChainId::default(),
             address::testing::nam(),
+            false,
             None,
             // Only merkelize and persist diffs for `test_key_1`
             |key: &Key| -> bool { key == &test_key_1() },
