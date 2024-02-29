@@ -1,5 +1,5 @@
 //! Implementation of chain initialization for the Shell
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::ControlFlow;
 
 use masp_primitives::merkle_tree::CommitmentTree;
@@ -12,7 +12,7 @@ use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::StorageWrite;
-use namada::token::conversion::token_map_handle;
+use namada::token::storage_key::masp_token_map_key;
 use namada::token::{credit_tokens, write_denom};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -419,7 +419,7 @@ where
 
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
-        let token_map = token_map_handle();
+        let mut token_map = BTreeMap::new();
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
@@ -440,11 +440,12 @@ where
                 // add token addresses to the masp reward conversions lookup
                 // table.
                 let alias = alias.to_string();
-                token_map
-                    .insert(&mut self.state, alias, address.clone())
-                    .expect("Couldn't init token accounts");
+                token_map.insert(alias, address.clone());
             }
         }
+        self.state
+            .write(&masp_token_map_key(), token_map)
+            .expect("Couldn't init token accounts");
     }
 
     /// Init genesis token balances
@@ -937,7 +938,6 @@ impl<T> Policy<T> {
 
 #[cfg(all(test, not(feature = "integration")))]
 mod test {
-    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use namada::core::string_encoding::StringEncoded;

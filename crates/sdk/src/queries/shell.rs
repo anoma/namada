@@ -12,6 +12,7 @@ use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
+use namada_core::masp::TokenMap;
 use namada_core::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
@@ -19,7 +20,7 @@ use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
-use namada_token::conversion::token_map_handle;
+use namada_token::storage_key::masp_token_map_key;
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
 
@@ -229,10 +230,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let token_map = token_map_handle();
+    let token_map_key = masp_token_map_key();
+    let token_map: TokenMap =
+        ctx.state.read(&token_map_key)?.unwrap_or_default();
     let mut data = Vec::<MaspTokenRewardData>::new();
-    for res in token_map.iter(ctx.state)? {
-        let (name, token) = res.unwrap();
+    for (name, token) in token_map {
         let max_reward_rate = ctx
             .state
             .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(

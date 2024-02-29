@@ -1,17 +1,17 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::state::StorageWrite;
-use namada::token::conversion::token_map_handle;
+use namada::state::{StorageRead, StorageWrite};
+use namada::token::storage_key::masp_token_map_key;
 use namada::token::{self, DenominatedAmount};
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults::christel_keypair;
 use namada_core::dec::Dec;
+use namada_core::masp::TokenMap;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 
@@ -2127,21 +2127,26 @@ fn dynamic_assets() -> Result<()> {
     let btc = BTC.to_lowercase();
     let nam = NAM.to_lowercase();
 
-    let token_map = token_map_handle();
+    let token_map_key = masp_token_map_key();
     let test_tokens = {
         // Only distribute rewards for NAM tokens
-        let wls = &mut node.shell.lock().unwrap().state;
-        let tokens = token_map
-            .iter(wls)
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
             .unwrap()
-            .map(|res| res.unwrap())
-            .collect::<BTreeMap<_, _>>();
-        for alias in tokens.keys() {
-            if alias != &nam {
-                token_map.remove(wls, alias).unwrap();
-            }
-        }
-        tokens
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        let test_tokens = tokens.clone();
+        tokens.retain(|k, _v| *k == nam);
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens.clone())
+            .unwrap();
+        test_tokens
     };
     // add necessary viewing keys to shielded context
     run(
@@ -2226,12 +2231,20 @@ fn dynamic_assets() -> Result<()> {
     {
         // Start decoding and distributing shielded rewards for BTC in next
         // epoch
-        token_map
-            .insert(
-                &mut node.shell.lock().unwrap().state,
-                btc.clone(),
-                test_tokens[&btc].clone(),
-            )
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        tokens.insert(btc.clone(), test_tokens[&btc].clone());
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens)
             .unwrap();
     }
 
@@ -2460,8 +2473,20 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
-        token_map
-            .remove(&mut node.shell.lock().unwrap().state, &btc)
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        tokens.remove(&btc);
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens)
             .unwrap();
     }
 
