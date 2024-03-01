@@ -4,10 +4,9 @@ pub mod data;
 pub mod proto;
 mod types;
 
-use std::collections::HashMap;
-
 use data::TxType;
-use namada_core::event::{Event, EventLevel, EventType};
+use namada_core::event::extend::*;
+use namada_core::event::Event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
@@ -19,43 +18,22 @@ pub use types::{
 /// Creates a new event with the hash and height of the transaction
 /// already filled in
 pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
-    let mut event = match tx.header().tx_type {
+    let base_event = match tx.header().tx_type {
         TxType::Wrapper(_) => {
-            let mut event = Event {
-                event_type: EventType::Accepted,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx.header_hash().to_string();
-            event
+            Event::accepted_tx().compose(WithTxHash(tx.header_hash()))
         }
-        TxType::Decrypted(_) => {
-            let mut event = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx
-                .clone()
-                .update_header(TxType::Raw)
-                .header_hash()
-                .to_string();
-            event
-        }
+        TxType::Decrypted(_) => Event::applied_tx().compose(WithTxHash(
+            tx.clone().update_header(TxType::Raw).header_hash(),
+        )),
         TxType::Protocol(_) => {
-            let mut event = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx.header_hash().to_string();
-            event
+            Event::applied_tx().compose(WithTxHash(tx.header_hash()))
         }
         _ => unreachable!(),
     };
-    event["height"] = height.to_string();
-    event["log"] = "".to_string();
-    event
+    base_event
+        .compose(WithBlockHeight(height.into()))
+        .compose(WithLog(String::new()))
+        .into()
 }
 
 #[cfg(test)]
