@@ -465,8 +465,7 @@ jobs:
           pwd
           make build-light-release
         env:
-          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold"
-          # RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold -Z threads=8"
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold -Z threads=8"
       - name: Upload target binaries (github)
         uses: actions/upload-artifact@v3
         with:
