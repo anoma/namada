@@ -1,12 +1,12 @@
 #![allow(missing_docs)]
 
 pub mod data;
+pub mod event;
 pub mod proto;
 mod types;
 
 use data::TxType;
-use namada_core::event::extend::*;
-use namada_core::event::Event;
+pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
@@ -14,27 +14,6 @@ pub use types::{
     CompressedSignature, Data, DecodeError, Header, MaspBuilder, Memo, Section,
     Signature, Signed, Signer, Tx, TxError, VerifySigError,
 };
-
-/// Creates a new event with the hash and height of the transaction
-/// already filled in
-pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
-    let base_event = match tx.header().tx_type {
-        TxType::Wrapper(_) => {
-            Event::accepted_tx().compose(WithTxHash(tx.header_hash()))
-        }
-        TxType::Decrypted(_) => Event::applied_tx().compose(WithTxHash(
-            tx.clone().update_header(TxType::Raw).header_hash(),
-        )),
-        TxType::Protocol(_) => {
-            Event::applied_tx().compose(WithTxHash(tx.header_hash()))
-        }
-        _ => unreachable!(),
-    };
-    base_event
-        .compose(WithBlockHeight(height.into()))
-        .compose(WithLog(String::new()))
-        .into()
-}
 
 #[cfg(test)]
 mod tests {

@@ -86,6 +86,17 @@ impl ExtendEvent for WithLog {
     }
 }
 
+/// Extend an [`Event`] with info data.
+pub struct WithInfo(pub String);
+
+impl ExtendEvent for WithInfo {
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        let Self(info) = self;
+        event["info"] = info;
+    }
+}
+
 /// Defer the extension of an [`Event`] to other
 /// implementations of [`ExtendEvent`].
 pub struct WithDeferredData<THIS, NEXT> {
