@@ -97,6 +97,17 @@ impl ExtendEvent for WithInfo {
     }
 }
 
+/// Extend an [`Event`] with `is_valid_masp_tx` data.
+pub struct WithValidMaspTx(pub usize);
+
+impl ExtendEvent for WithValidMaspTx {
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        let Self(masp_tx_index) = self;
+        event["is_valid_masp_tx"] = masp_tx_index.to_string();
+    }
+}
+
 /// Defer the extension of an [`Event`] to other
 /// implementations of [`ExtendEvent`].
 pub struct WithDeferredData<THIS, NEXT> {
