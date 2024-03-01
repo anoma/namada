@@ -185,3 +185,14 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.light-release]
+opt-level = 1
+debug = false
+strip = "none"
+debug-assertions = true
+overflow-checks = true
+lto = 'thin'
+panic = 'unwind'
+incremental = false
+codegen-units = 8

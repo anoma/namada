@@ -76,6 +76,12 @@ build-release:
 		--no-default-features \
 		--features jemalloc
 
+build-light-release:
+	$(cargo) build $(jobs) --profile light-release --timings --package namada_apps \
+		--manifest-path Cargo.toml \
+		--no-default-features \
+		--features jemalloc
+
 build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 
