@@ -124,6 +124,7 @@ pub enum EventType {
     /// The transaction was applied during block finalization
     Applied,
     /// The IBC transaction was applied during block finalization
+    // TODO: create type-safe wrapper for all ibc event kinds
     Ibc(String),
     /// The proposal that has been executed
     Proposal,
