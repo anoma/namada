@@ -63,8 +63,7 @@ where
 // The balances changed by the transaction, split between masp and non-masp
 // balances. The masp collection carries the token addresses. The collection of
 // the other balances maps the token address to the addresses of the
-// senders/receivers, their balance diff and whether this is positive or
-// negative diff
+// senders/receivers and their balance diff
 #[derive(Default)]
 struct ChangedBalances<'vp> {
     masp: BTreeSet<&'vp Address>,
@@ -572,6 +571,19 @@ where
                     unprocessed_vouts.remove(idx);
                 }
 
+                // The masp balance was changed for the given token but the
+                // transparent bundle carries no data about it. Note that the
+                // change in the masp balance could be 0 (i.e. pre_balance ==
+                // post_balance) but we still require the associated transparent
+                // bundle
+                if token_bundle_balances.is_empty() {
+                    tracing::debug!(
+                        "No transparent bundle data was found for token {} \
+                         but the masp balance in storage was updated",
+                        token,
+                    );
+                    return Ok(false);
+                }
                 // Iterate over the delta balances described by the transparent
                 // bundle and verify that these match the actual modifications
                 // in storage NOTE: this effectively prevents the
