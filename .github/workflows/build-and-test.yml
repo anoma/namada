@@ -33,7 +33,7 @@ env:
 jobs:
   build-wasm:
     timeout-minutes: 30
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
@@ -90,7 +90,7 @@ jobs:
 
   test-wasm:
     timeout-minutes: 30
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -173,7 +173,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
 
   test-unit:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -252,7 +252,7 @@ jobs:
         run: cargo clean
 
   test-integration:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -323,7 +323,7 @@ jobs:
         run: cargo clean
 
   run-benchmarks:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-x86]
+    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
     timeout-minutes: 60
     needs: [build-wasm]
     strategy:
@@ -398,7 +398,7 @@ jobs:
         run: cargo clean
 
   namada-release:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-x86]
+    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -486,7 +486,7 @@ jobs:
 
 
   namada-e2e:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     needs: [build-wasm, namada-release]
     strategy:
       fail-fast: false
