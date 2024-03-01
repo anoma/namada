@@ -67,6 +67,19 @@ pub enum EventLevel {
     Tx,
 }
 
+impl Display for EventLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                EventLevel::Block => "block",
+                EventLevel::Tx => "tx",
+            }
+        )
+    }
+}
+
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
 #[derive(
@@ -86,6 +99,13 @@ pub struct Event {
     pub level: EventLevel,
     /// Key-value attributes of the event.
     pub attributes: HashMap<String, String>,
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: print attributes, too
+        write!(f, "{} in {}", self.event_type, self.level)
+    }
 }
 
 /// The two types of custom events we currently use
