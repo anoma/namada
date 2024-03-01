@@ -449,7 +449,7 @@ jobs:
       - name: Pwd
         run: pwd
       - name: Test
-        run: $HOME/.cargo/env
+        run: echo "export PATH="$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
       - name: cargo
         run: cargo --version
       - name: rustup
