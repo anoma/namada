@@ -446,6 +446,8 @@ jobs:
         run: sccache --start-server
       - name: Whoami
         run: whoami
+      - name: Pwd
+        run: pwd
       - name: Build
         run: |
           pwd
