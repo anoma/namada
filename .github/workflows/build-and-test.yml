@@ -476,18 +476,18 @@ jobs:
             target/release/namadaw
             target/release/namadan
             target/release/namadar
-      - name: Upload namada binaries (minio)
-        run: |
-          unset AWS_SESSION_TOKEN
-          zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
-          aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
-        env:
-          BUCKET_NAME: namada-binaries
-          AWS_REGION: us-east-1
-          S3_ENDPOINT_URL: https://minio.heliax.click
-          ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
-          AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+      # - name: Upload namada binaries (minio)
+      #   run: |
+      #     unset AWS_SESSION_TOKEN
+      #     zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
+      #     aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
+      #   env:
+      #     BUCKET_NAME: namada-binaries
+      #     AWS_REGION: us-east-1
+      #     S3_ENDPOINT_URL: https://minio.heliax.click
+      #     ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Upload build timing report
         uses: actions/upload-artifact@v3
         with:
