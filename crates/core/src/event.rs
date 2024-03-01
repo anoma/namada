@@ -1,5 +1,7 @@
 //! Ledger events
 
+pub mod extend;
+
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
@@ -173,6 +175,28 @@ impl Event {
     /// Else return None.
     pub fn get(&self, key: &str) -> Option<&String> {
         self.attributes.get(key)
+    }
+
+    /// Compose this [`Event`] with additional data.
+    #[inline]
+    pub const fn compose<DATA>(
+        self,
+        data: DATA,
+    ) -> extend::CompositeEvent<DATA, Event>
+    where
+        DATA: extend::ExtendEvent,
+    {
+        extend::CompositeEvent::new(self, data)
+    }
+
+    /// Extend this [`Event`] with additional data.
+    #[inline]
+    pub fn extend<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: extend::ExtendEvent,
+    {
+        data.extend_event(self);
+        self
     }
 }
 
