@@ -448,6 +448,8 @@ jobs:
         run: whoami
       - name: Pwd
         run: pwd
+      - name: Test
+        run: $HOME/.cargo/env
       - name: cargo
         run: cargo --version
       - name: rustup
