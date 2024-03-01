@@ -2389,8 +2389,8 @@ mod tests {
         let bytes = Amount::from_str(coin.amount.to_string(), 0)
             .unwrap()
             .serialize_to_vec();
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(&mint_key, bytes)
             .expect("write failed");
         keys_changed.insert(mint_key);
@@ -3297,8 +3297,8 @@ mod tests {
         let ibc_token = ibc_token(&ibc_trace);
         let mint_key = mint_amount_key(&ibc_token);
         let bytes = Amount::from_u64(1).serialize_to_vec();
-        wl_storage
-            .write_log
+        state
+            .write_log_mut()
             .write(&mint_key, bytes)
             .expect("write failed");
         keys_changed.insert(mint_key);
