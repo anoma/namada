@@ -323,7 +323,7 @@ jobs:
         run: cargo clean
 
   run-benchmarks:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     timeout-minutes: 60
     needs: [build-wasm]
     strategy:
@@ -398,7 +398,7 @@ jobs:
         run: cargo clean
 
   namada-release:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     timeout-minutes: 40
     strategy:
       fail-fast: false
