@@ -1,6 +1,8 @@
 //! Gas accounting module to track the gas usage in a block for transactions and
 //! validity predicates triggered by transactions.
 
+pub mod event;
+
 use std::fmt::Display;
 use std::ops::Div;
 
