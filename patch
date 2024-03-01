@@ -1,0 +1,885 @@
+diff --git a/.github/workflows/build-and-test.yml b/.github/workflows/build-and-test.yml
+index d7b3e727b..66a7facba 100644
+--- a/.github/workflows/build-and-test.yml
++++ b/.github/workflows/build-and-test.yml
+@@ -21,28 +21,24 @@ permissions:
+   packages: read
+ 
+ env:
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  RUSTC_WRAPPER: sccache
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
++  ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
+ 
+ jobs:
+   build-wasm:
+     timeout-minutes: 30
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+     container: 
+       image: ghcr.io/anoma/namada:wasm-main
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        wasm_cache_version: ["v2"]
+         mold_version: [2.4.0]
+ 
+     steps:
+@@ -62,8 +58,13 @@ jobs:
+         # to disallow that.
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -85,23 +86,17 @@ jobs:
+             wasm/vp_*.wasm
+             wasm/checksums.json
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+   test-wasm:
+     timeout-minutes: 30
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+     needs: [build-wasm]
+     container: 
+       image: ghcr.io/anoma/namada:wasm-main
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        wasm_cache_version: ["v2"]
+-        nightly_version: [nightly-2024-02-10]
+         mold_version: [2.4.0]
+ 
+     steps:
+@@ -113,26 +108,27 @@ jobs:
+         if: ${{ github.event_name == 'pull_request_target' }}
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Duplicate checksums file
+         run: cp wasm/checksums.json wasm/original-checksums.json
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
+       - name: Download wasm artifacts
+         uses: actions/download-artifact@v3
+         with:
+           name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+           path: ./wasm
+         env:
+-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+-      - name: Setup rust nightly
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          toolchain: ${{ matrix.nightly_version }}
+-          profile: default
++          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -151,21 +147,12 @@ jobs:
+         if: failure()
+         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+   upload-wasm:
+     timeout-minutes: 5
+-    runs-on: ${{ matrix.os }}
++    runs-on: [ubuntu-22]
+     needs: [build-wasm]
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        os: [ubuntu-latest]
+-        wasm_cache_version: ["v2"]
+-        nightly_version: [nightly-2024-02-10]
+-        mold_version: [2.4.0]
+ 
+     steps:
+       - name: Download wasm artifacts
+@@ -186,18 +173,13 @@ jobs:
+           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+ 
+   test-unit:
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+     timeout-minutes: 30
+     needs: [build-wasm]
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        nightly_version: [nightly-2024-02-10]
+         mold_version: [2.4.0]
+-        make:
+-          - name: ABCI
+ 
+     env:
+       RUSTC_WRAPPER: sccache
+@@ -212,27 +194,13 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
+-      - name: Install libudev
+-        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+-      - name: Install Protoc
+-        uses: heliaxdev/setup-protoc@v2
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          version: "25.0"
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
+-      - name: Setup rust toolchain
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          profile: default
+-          override: true
+-      - name: Setup rust nightly
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          toolchain: ${{ matrix.nightly_version }}
+-          profile: default
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -241,12 +209,15 @@ jobs:
+             ~/.cargo/git/db/
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
++      - name: Run sccache-cache
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
+       - name: Download MASP parameters
+         run: |
+           mkdir -p /home/runner/.masp-params
+@@ -265,7 +236,7 @@ jobs:
+         run: make test-unit-with-coverage
+         env:
+           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
+-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
++          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+       - name: Upload coverage
+         uses: codecov/codecov-action@v3
+         with:
+@@ -278,23 +249,16 @@ jobs:
+         if: always()
+         run: sccache --stop-server || true
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+   test-integration:
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+     timeout-minutes: 30
+     needs: [build-wasm]
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        nightly_version: [nightly-2024-02-10]
+         mold_version: [2.4.0]
+-        make:
+-          - name: ABCI
+ 
+     env:
+       RUSTC_WRAPPER: sccache
+@@ -309,27 +273,13 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
+-      - name: Install libudev
+-        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+-      - name: Install Protoc
+-        uses: heliaxdev/setup-protoc@v2
+-        with:
+-          version: "25.0"
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
+-      - name: Setup rust toolchain
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          profile: default
+-          override: true
+-      - name: Setup rust nightly
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          toolchain: ${{ matrix.nightly_version }}
+-          profile: default
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -338,12 +288,15 @@ jobs:
+             ~/.cargo/git/db/
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
++      - name: Run sccache-cache
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
+       - name: Download MASP parameters
+         run: |
+           mkdir -p /home/runner/.masp-params
+@@ -359,7 +312,7 @@ jobs:
+         run: make test-integration
+         env:
+           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
+-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
++          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+       - name: Print sccache stats
+         if: always()
+         run: sccache --show-stats || true
+@@ -367,23 +320,16 @@ jobs:
+         if: always()
+         run: sccache --stop-server || true
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+   run-benchmarks:
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-x86]
+     timeout-minutes: 60
+     needs: [build-wasm]
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        nightly_version: [nightly-2024-02-10]
+         mold_version: [2.4.0]
+-        make:
+-          - name: ABCI
+ 
+     env:
+       RUSTC_WRAPPER: sccache
+@@ -398,27 +344,18 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
+-      - name: Install libudev
+-        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+-      - name: Install Protoc
+-        uses: heliaxdev/setup-protoc@v2
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          version: "25.0"
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
+-      - name: Setup rust toolchain
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          profile: default
+-          override: true
+-      - name: Setup rust nightly
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          toolchain: ${{ matrix.nightly_version }}
+-          profile: default
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -427,12 +364,15 @@ jobs:
+             ~/.cargo/git/db/
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
++      - name: Run sccache-cache
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
+       - name: Download MASP parameters
+         run: |
+           mkdir -p /home/runner/.masp-params
+@@ -447,7 +387,7 @@ jobs:
+       - name: Run benchmarks tests
+         run: make test-benches
+         env:
+-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
++          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+       - name: Print sccache stats
+         if: always()
+         run: sccache --show-stats || true
+@@ -455,21 +395,15 @@ jobs:
+         if: always()
+         run: sccache --stop-server || true
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+   namada-release:
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-x86]
+     timeout-minutes: 40
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+         mold_version: [2.4.0]
+-        make:
+-          - name: ABCI Release build
+ 
+     env:
+       RUSTC_WRAPPER: sccache
+@@ -484,22 +418,13 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
+-      - name: Install libudev
+-        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+-      - name: Install Protoc
+-        uses: heliaxdev/setup-protoc@v2
+-        with:
+-          version: "25.0"
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
+-      - name: Setup rust toolchain
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          profile: default
+-          override: true
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -509,15 +434,18 @@ jobs:
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
++      - name: Run sccache-cache
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: Build
+         run: make build-release
+         env:
+-          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
++          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold"
+       - name: Upload target binaries (github)
+         uses: actions/upload-artifact@v3
+         with:
+@@ -554,21 +482,15 @@ jobs:
+         if: always()
+         run: sccache --stop-server || true
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo clean
+ 
+ 
+   namada-e2e:
+-    runs-on: 
+-      group: namada-runners
++    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-x86]
+     needs: [build-wasm, namada-release]
+-    # timeout-minutes: 80
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest]
+-        nightly_version: [nightly-2024-02-10]
+         mold_version: [2.4.0]
+         comet_bft: [0.37.2]
+         hermes: [1.7.4-namada-beta7]
+@@ -577,6 +499,8 @@ jobs:
+           - index: 1
+           - index: 2
+           - index: 3
++          - index: 4
++          - index: 5
+ 
+     env:
+       RUSTC_WRAPPER: sccache
+@@ -591,27 +515,13 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
+-      - name: Install libudev
+-        run: sudo apt-get update && sudo apt-get -y install libudev-dev
+-      - name: Install Protoc
+-        uses: heliaxdev/setup-protoc@v2
+-        with:
+-          version: "25.0"
+-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+-      - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
+-      - name: Setup rust toolchain
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
+         with:
+-          profile: default
+-          override: true
+-      - name: Setup rust nightly
+-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+-        with:
+-          toolchain: ${{ matrix.nightly_version }}
+-          profile: default
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+@@ -620,12 +530,15 @@ jobs:
+             ~/.cargo/git/db/
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
++      - name: Run sccache-cache
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: Install mold linker
+-        run: |
+-          wget -q -O- https://github.com/rui314/mold/releases/download/v${{ matrix.mold_version }}/mold-${{ matrix.mold_version }}-x86_64-linux.tar.gz | tar -xz
+-          mv mold-${{ matrix.mold_version }}-x86_64-linux/bin/mold  /usr/local/bin
++        uses: rui314/setup-mold@v1
++        with:
++          mold-version: ${{ matrix.mold_version }}
++          make-default: false
+       - name: Download MASP parameters
+         run: |
+           mkdir -p /home/runner/.masp-params
+@@ -649,9 +562,16 @@ jobs:
+           mv cometbft /usr/local/bin
+       - name: Download Hermes
+         run: |
+-          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${{ matrix.hermes }}/hermes-v${{ matrix.hermes }}-x86_64-unknown-linux-gnu.tar.gz
+-          tar -xvzf hermes.tar.gz
++          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_ENV:-invalid} -r -e)
++          HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
++          if [ -z "$HERMES_VERSION" ]
++          then
++            HERMES_VERSION=$HERMES_VERSION_DEFAULT
++          fi
++          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.tar.gz
+           mv hermes /usr/local/bin
++        env:
++          BRANCH_NAME: ${GITHUB_REF##*/}
+       - name: Change permissions
+         run: |
+           chmod +x target/release/namada
+@@ -670,7 +590,7 @@ jobs:
+           NAMADA_TM_STDOUT: "false"
+           NAMADA_LOG_COLOR: "false"
+           NAMADA_LOG: "info"
+-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
++          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+           INDEX: ${{ matrix.make.index }}
+       - name: Upload e2e logs
+         if: success() || failure()
+@@ -689,6 +609,4 @@ jobs:
+         if: always()
+         run: sccache --stop-server || true
+       - name: Clean cargo cache
+-        run: |
+-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+-          cargo-cache
++        run: cargo-cache
+diff --git a/.github/workflows/checks.yml b/.github/workflows/checks.yml
+index 3373e7b21..89d435307 100644
+--- a/.github/workflows/checks.yml
++++ b/.github/workflows/checks.yml
+@@ -19,15 +19,12 @@ permissions:
+ 
+ env:
+   RUSTC_WRAPPER: sccache
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
+ 
+ jobs:
+   clippy-fmt:
+@@ -53,6 +50,11 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Remove some unused data in github runners
+         run: |
+           sudo rm -rf /usr/share/dotnet
+@@ -81,18 +83,17 @@ jobs:
+       - name: Show rust toolchain info
+         run: rustup show
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+             ~/.cargo/registry/index/
+             ~/.cargo/registry/cache/
+             ~/.cargo/git/db/
+-            target
+           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+           restore-keys: ${{ runner.os }}-cargo-
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Start sccache server
+         run: sccache --start-server
+       - name: ${{ matrix.make.name }}
+diff --git a/.github/workflows/cron.yml b/.github/workflows/cron.yml
+index ffd0110c5..3f7e3476f 100644
+--- a/.github/workflows/cron.yml
++++ b/.github/workflows/cron.yml
+@@ -42,7 +42,7 @@ jobs:
+       - name: Show rust toolchain info
+         run: rustup show
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+diff --git a/.github/workflows/docs.yml b/.github/workflows/docs.yml
+index 685f5f307..1e44f0535 100644
+--- a/.github/workflows/docs.yml
++++ b/.github/workflows/docs.yml
+@@ -19,15 +19,12 @@ permissions:
+ 
+ env:
+   RUSTC_WRAPPER: sccache
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
+ 
+ jobs:
+   docs:
+@@ -60,6 +57,11 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Install libudev
+         run: sudo apt-get update && sudo apt-get -y install libudev-dev
+       - name: Install Protoc
+@@ -68,7 +70,7 @@ jobs:
+           version: "25.0"
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Setup rust toolchain
+         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+         with:
+@@ -130,6 +132,11 @@ jobs:
+         # See comment in build-and-test.yml
+         with:
+           ref: ${{ github.event.pull_request.head.sha }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Install libudev
+         run: sudo apt-get update && sudo apt-get -y install libudev-dev
+       - name: Install Protoc
+@@ -138,7 +145,7 @@ jobs:
+           version: "25.0"
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Setup rust toolchain
+         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+         with:
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 3696b9410..c4100b733 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -17,15 +17,12 @@ permissions:
+ 
+ env:
+   RUSTC_WRAPPER: sccache
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
+ 
+ jobs:
+   build:
+@@ -56,14 +53,14 @@ jobs:
+           version: "25.0"
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Setup rust toolchain
+         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+         with:
+           profile: minimal
+           override: true
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+diff --git a/.github/workflows/scripts/hermes.json b/.github/workflows/scripts/hermes.json
+new file mode 100644
+index 000000000..01b3fefab
+--- /dev/null
++++ b/.github/workflows/scripts/hermes.json
+@@ -0,0 +1,3 @@
++{
++    "default": "1.7.4-namada-beta7"
++}
+\ No newline at end of file
+diff --git a/.github/workflows/triggerable_pos.yml b/.github/workflows/triggerable_pos.yml
+index c3605289c..538b9c0a3 100644
+--- a/.github/workflows/triggerable_pos.yml
++++ b/.github/workflows/triggerable_pos.yml
+@@ -15,15 +15,12 @@ on:
+ 
+ env:
+   RUSTC_WRAPPER: sccache
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
+ 
+ jobs:
+   test-pos:
+@@ -42,6 +39,11 @@ jobs:
+       - uses: actions/checkout@v4
+         with:
+           ref: ${{ inputs.branch }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Install libudev
+         run: sudo apt-get update && sudo apt-get -y install libudev-dev
+       - name: Install Protoc
+@@ -50,14 +52,14 @@ jobs:
+           version: "25.0"
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Setup rust toolchain
+         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+         with:
+           profile: default
+           override: true
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |
+diff --git a/.github/workflows/triggerable_sync.yml b/.github/workflows/triggerable_sync.yml
+index 32606384a..7ac7cd199 100644
+--- a/.github/workflows/triggerable_sync.yml
++++ b/.github/workflows/triggerable_sync.yml
+@@ -23,15 +23,12 @@ on:
+ 
+ env:
+   RUSTC_WRAPPER: sccache
+-  SCCACHE_S3_USE_SSL: ${{ secrets.CACHE_SSL }}
++  SCCACHE_S3_USE_SSL: false
+   GIT_LFS_SKIP_SMUDGE: 1
+   CARGO_INCREMENTAL: 0
+   RUST_BACKTRACE: full
+-  SCCACHE_BUCKET: namada-cache
+-  SCCACHE_ENDPOINT: ${{ secrets.CACHE_ENDPOINT }}
+-  AWS_ACCESS_KEY_ID: ${{ secrets.CACHE_ACCESS_KEY }}
+-  AWS_SECRET_ACCESS_KEY: ${{ secrets.CACHE_SECRET_KEY }}
+-  AWS_REGION: us-east-1
++  SCCACHE_BUCKET: github-runners-remote-cache-shared
++  AWS_REGION: us-east-2
+ 
+ jobs:
+   test-sync:
+@@ -51,6 +48,11 @@ jobs:
+       - uses: actions/checkout@v4
+         with:
+           ref: ${{ inputs.branch }}
++      - name: Configure AWS 
++        uses: aws-actions/configure-aws-credentials@v4
++        with:
++          aws-region: us-east-2
++          role-to-assume: ${{ secrets.AWS_ROLE }}
+       - name: Get latest commit SHA
+         run: |
+           git fetch origin ${{ inputs.branch }}
+@@ -63,14 +65,14 @@ jobs:
+           version: "25.0"
+           repo-token: ${{ secrets.GITHUB_TOKEN }}
+       - name: Run sccache-cache
+-        uses: mozilla-actions/sccache-action@v0.0.3
++        uses: mozilla-actions/sccache-action@v0.0.4
+       - name: Setup rust toolchain
+         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+         with:
+           toolchain: ${{ matrix.nightly_version }}
+           profile: default
+       - name: Cache cargo registry
+-        uses: actions/cache@v3
++        uses: actions/cache@v4
+         continue-on-error: false
+         with:
+           path: |

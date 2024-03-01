@@ -448,6 +448,12 @@ jobs:
         run: whoami
       - name: Pwd
         run: pwd
+      - name: cargo
+        run: cargo --version
+      - name: rustup
+        run: rustup --version
+      - name: toolchains  
+        run: rustup toolchain list
       - name: Build
         run: |
           pwd
