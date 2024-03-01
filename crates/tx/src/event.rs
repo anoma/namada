@@ -6,7 +6,7 @@ use namada_core::event::extend::{
 use namada_core::event::Event;
 
 use super::Tx;
-use crate::data::ResultCode;
+use crate::data::{ResultCode, TxResult};
 use crate::TxType;
 
 /// Creates a new event with the hash and height of the transaction
@@ -38,5 +38,16 @@ impl ExtendEvent for WithResultCode {
     fn extend_event(self, event: &mut Event) {
         let Self(code) = self;
         event["code"] = code.into();
+    }
+}
+
+/// Extend an [`Event`] with inner tx data.
+pub struct WithInnerTx<'result>(pub &'result TxResult);
+
+impl ExtendEvent for WithInnerTx<'_> {
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        let Self(tx_result) = self;
+        event["inner_tx"] = tx_result.to_string();
     }
 }
