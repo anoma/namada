@@ -71,13 +71,13 @@ build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
 
 build-release:
-	$(cargo) +$(nightly) build $(jobs) --release --timings --package namada_apps \
+	$(cargo) build $(jobs) --release --timings --package namada_apps \
 		--manifest-path Cargo.toml \
 		--no-default-features \
 		--features jemalloc
 
 build-light-release:
-	$(cargo) build $(jobs) --profile light-release --timings --package namada_apps \
+	$(cargo) +$(nightly) build $(jobs) --profile light-release --timings --package namada_apps \
 		--manifest-path Cargo.toml \
 		--no-default-features \
 		--features jemalloc
