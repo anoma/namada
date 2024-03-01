@@ -357,7 +357,7 @@ where
             let mut unprocessed_vouts =
                 BTreeSet::from_iter(0..transp_bundle.vout.len());
 
-            // Run the checks fore every token that involved the masp balances
+            // Run the checks for every token that involved the masp balances
             for token in changed_balances.masp {
                 let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
                     "No denomination found in storage for the given token",
@@ -375,19 +375,6 @@ where
                     if !unprocessed_vins.contains(idx) {
                         continue;
                     }
-                    // Non-masp sources add to the transparent tx pool
-                    *transparent_tx_pool = transparent_tx_pool
-                        .checked_add(
-                            &I128Sum::from_nonnegative(
-                                vin.asset_type,
-                                vin.value as i128,
-                            )
-                            .ok()
-                            .ok_or_err_msg(
-                                "invalid value or asset type for amount",
-                            )?,
-                        )
-                        .ok_or_err_msg("Overflow in input sum")?;
 
                     match conversion_state.assets.get(&vin.asset_type) {
                         // Note how the asset's epoch must be equal to
@@ -478,6 +465,23 @@ where
                         _ => continue,
                     };
 
+                    // Non-masp sources add to the transparent tx pool. Since we
+                    // iterate on the transparent bundle for every token this
+                    // check needs to be done after we have ensured that the
+                    // asset is the correct one for this iteration, to prevent
+                    // double counting
+                    *transparent_tx_pool = transparent_tx_pool
+                        .checked_add(
+                            &I128Sum::from_nonnegative(
+                                vin.asset_type,
+                                vin.value as i128,
+                            )
+                            .ok()
+                            .ok_or_err_msg(
+                                "invalid value or asset type for amount",
+                            )?,
+                        )
+                        .ok_or_err_msg("Overflow in input sum")?;
                     unprocessed_vins.remove(idx);
                 }
 
@@ -488,20 +492,6 @@ where
                     if !unprocessed_vouts.contains(idx) {
                         continue;
                     }
-                    // Non-masp destinations subtract from transparent tx
-                    // pool
-                    *transparent_tx_pool = transparent_tx_pool
-                        .checked_sub(
-                            &I128Sum::from_nonnegative(
-                                out.asset_type,
-                                out.value as i128,
-                            )
-                            .ok()
-                            .ok_or_err_msg(
-                                "invalid value or asset type for amount",
-                            )?,
-                        )
-                        .ok_or_err_msg("Underflow in output subtraction")?;
 
                     match conversion_state.assets.get(&out.asset_type) {
                         Some((
@@ -561,12 +551,30 @@ where
                         _ => continue,
                     };
 
+                    // Non-masp destinations subtract from transparent tx
+                    // pool. Since we iterate on the transparent bundle for
+                    // every token this check needs to be done after we have
+                    // ensured that the asset is the correct one for this
+                    // iteration, to prevent double counting
+                    *transparent_tx_pool = transparent_tx_pool
+                        .checked_sub(
+                            &I128Sum::from_nonnegative(
+                                out.asset_type,
+                                out.value as i128,
+                            )
+                            .ok()
+                            .ok_or_err_msg(
+                                "invalid value or asset type for amount",
+                            )?,
+                        )
+                        .ok_or_err_msg("Underflow in output subtraction")?;
+
                     unprocessed_vouts.remove(idx);
                 }
 
                 // Iterate over the delta balances described by the transparent
                 // bundle and verify that these match the actual modifications
-                // in storage NOTE: this effectively prevent the
+                // in storage NOTE: this effectively prevents the
                 // same addresses/tokens couples from being
                 // involved in other transparent transfers in the same tx since
                 // that would lead to a different change in their balances
