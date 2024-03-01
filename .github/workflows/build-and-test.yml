@@ -447,7 +447,9 @@ jobs:
       - name: Whoami
         run: whoami
       - name: Build
-        run: make build-release
+        run: |
+          pwd
+          make build-release
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold"
       - name: Upload target binaries (github)
