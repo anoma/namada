@@ -123,3 +123,85 @@ where
         self.next.extend_event(event);
     }
 }
+
+#[cfg(test)]
+mod event_composition_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn test_with_deferred_data_basic() {
+        let expected_attrs = {
+            let mut attrs = HashMap::new();
+            attrs.insert("log".to_string(), "this is sparta!".to_string());
+            attrs.insert("height".to_string(), "300".to_string());
+            attrs.insert("hash".to_string(), Hash::default().to_string());
+            attrs
+        };
+
+        let mut base_event = Event::applied_tx();
+        base_event.extend(
+            WithDeferredData::begin(WithLog("this is sparta!".to_string()))
+                .compose(WithBlockHeight(300.into()))
+                .compose(WithTxHash(Hash::default())),
+        );
+
+        assert_eq!(base_event.attributes, expected_attrs);
+    }
+
+    #[test]
+    fn test_with_deferred_repeated() {
+        let expected_attrs = {
+            let mut attrs = HashMap::new();
+            attrs.insert("log".to_string(), "dejavu".to_string());
+            attrs
+        };
+
+        let mut base_event = Event::applied_tx();
+        base_event.extend(
+            WithDeferredData::begin(WithLog("dejavu".to_string()))
+                .compose(WithLog("dejavu".to_string()))
+                .compose(WithLog("dejavu".to_string()))
+                .compose(WithLog("dejavu".to_string())),
+        );
+
+        assert_eq!(base_event.attributes, expected_attrs);
+    }
+
+    #[test]
+    fn test_event_compose_basic() {
+        let expected_attrs = {
+            let mut attrs = HashMap::new();
+            attrs.insert("log".to_string(), "this is sparta!".to_string());
+            attrs.insert("height".to_string(), "300".to_string());
+            attrs.insert("hash".to_string(), Hash::default().to_string());
+            attrs
+        };
+
+        let base_event: Event = Event::applied_tx()
+            .compose(WithLog("this is sparta!".to_string()))
+            .compose(WithBlockHeight(300.into()))
+            .compose(WithTxHash(Hash::default()))
+            .into();
+
+        assert_eq!(base_event.attributes, expected_attrs);
+    }
+
+    #[test]
+    fn test_event_compose_repeated() {
+        let expected_attrs = {
+            let mut attrs = HashMap::new();
+            attrs.insert("log".to_string(), "dejavu".to_string());
+            attrs
+        };
+
+        let base_event: Event = Event::applied_tx()
+            .compose(WithLog("dejavu".to_string()))
+            .compose(WithLog("dejavu".to_string()))
+            .compose(WithLog("dejavu".to_string()))
+            .into();
+
+        assert_eq!(base_event.attributes, expected_attrs);
+    }
+}
