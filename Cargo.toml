@@ -187,6 +187,7 @@ panic = "unwind"
 overflow-checks = true
 
 [profile.light-release]
+inherits = "release"
 opt-level = 1
 debug = false
 strip = "none"
