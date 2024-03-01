@@ -101,7 +101,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         wasm_cache_version: ["v2"]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
 
     steps:
@@ -164,7 +164,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         wasm_cache_version: ["v2"]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
 
     steps:
@@ -194,7 +194,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
           - name: ABCI
@@ -291,7 +291,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
           - name: ABCI
@@ -380,7 +380,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
           - name: ABCI
@@ -568,7 +568,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-20]
+        nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         comet_bft: [0.37.2]
         hermes: [1.7.4-namada-beta7]

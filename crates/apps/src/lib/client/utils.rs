@@ -236,9 +236,6 @@ pub async fn join_network(
         });
 
     // Try to find validator data when using a pre-genesis validator
-    let validator_alias = validator_alias_and_pre_genesis_wallet
-        .as_ref()
-        .map(|(alias, _wallet)| alias.clone());
     let validator_keys = validator_alias_and_pre_genesis_wallet.as_ref().map(
         |(_alias, wallet)| {
             let tendermint_node_key: common::SecretKey =
@@ -247,7 +244,8 @@ pub async fn join_network(
             (tendermint_node_key, consensus_key)
         },
     );
-    let node_mode = if validator_alias.is_some() {
+    let is_validator = validator_alias_and_pre_genesis_wallet.is_some();
+    let node_mode = if is_validator {
         TendermintMode::Validator
     } else {
         TendermintMode::Full
