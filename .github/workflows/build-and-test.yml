@@ -40,6 +40,8 @@ jobs:
       fail-fast: false
       matrix:
         mold_version: [2.4.0]
+    env:
+      RUSTC_WRAPPER: ""
 
     steps:
       - name: Checkout repo
@@ -442,6 +444,8 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
+      - name: Whoami
+        run: whoami
       - name: Build
         run: make build-release
         env:
@@ -469,7 +473,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
       - name: Upload build timing report
-        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
