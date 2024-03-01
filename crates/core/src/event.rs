@@ -166,6 +166,24 @@ pub enum EventError {
 }
 
 impl Event {
+    /// Create an accepted tx event with empty attributes.
+    pub fn accepted_tx() -> Self {
+        Self {
+            event_type: EventType::Accepted,
+            level: EventLevel::Tx,
+            attributes: HashMap::new(),
+        }
+    }
+
+    /// Create an applied tx event with empty attributes.
+    pub fn applied_tx() -> Self {
+        Self {
+            event_type: EventType::Applied,
+            level: EventLevel::Tx,
+            attributes: HashMap::new(),
+        }
+    }
+
     /// Check if the events keys contains a given string
     pub fn contains_key(&self, key: &str) -> bool {
         self.attributes.contains_key(key)
