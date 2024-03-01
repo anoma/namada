@@ -157,12 +157,13 @@ impl FromStr for EventType {
             "applied" => Ok(EventType::Applied),
             "proposal" => Ok(EventType::Proposal),
             "pgf_payments" => Ok(EventType::PgfPayment),
-            // IBC
+            // <IBC>
             "update_client" => Ok(EventType::Ibc("update_client".to_string())),
             "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),
             "write_acknowledgement" => {
                 Ok(EventType::Ibc("write_acknowledgement".to_string()))
             }
+            // </IBC>
             "ethereum_bridge" => Ok(EventType::EthereumBridge),
             _ => Err(EventError::InvalidEventType),
         }
