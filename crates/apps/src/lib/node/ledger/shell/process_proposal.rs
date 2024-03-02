@@ -131,7 +131,7 @@ where
         block_proposer: &Address,
     ) -> Vec<TxResult> {
         let mut temp_state = self.state.with_temp_write_log();
-        let mut metadata = ValidationMeta::from(&self.state.read_only());
+        let mut metadata = ValidationMeta::from(self.state.read_only());
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
@@ -402,9 +402,6 @@ where
                             .to_string(),
                     },
                 }
-            }
-            TxType::Decrypted(_) => {
-                unreachable!("Received decrypted tx in ProcessProposal")
             }
             TxType::Wrapper(wrapper) => {
                 // Account for gas and space. This is done even if the

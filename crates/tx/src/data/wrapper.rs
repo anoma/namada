@@ -22,7 +22,7 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::data::{DecryptedTx, TxType};
+    use crate::data::TxType;
     use crate::{Code, Data, Section, Tx};
 
     /// TODO: Determine a sane number for this
@@ -297,8 +297,7 @@ pub mod wrapper_tx {
             transfer_code_tag: Option<String>,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
-            let mut tx =
-                Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+            let mut tx = Tx::from_type(TxType::Raw);
             let masp_section = tx.add_section(Section::MaspTx(unshield));
             let masp_hash = Hash(
                 masp_section
