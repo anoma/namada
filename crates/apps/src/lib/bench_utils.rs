@@ -329,9 +329,7 @@ impl BenchShell {
 
     pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
         // This function avoid serializaing the tx data with Borsh
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
-            namada::tx::data::DecryptedTx::Decrypted,
-        ));
+        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
@@ -563,14 +561,14 @@ impl BenchShell {
     // Commit a masp transaction and cache the tx and the changed keys for
     // client queries
     pub fn commit_masp_tx(&mut self, mut masp_tx: Tx) {
-        use namada::core::types::key::RefTo;
+        use namada::core::key::RefTo;
         masp_tx.add_wrapper(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                token: self.wl_storage.storage.native_token.clone(),
+                token: self.state.in_mem().native_token.clone(),
             },
             defaults::albert_keypair().ref_to(),
-            self.wl_storage.storage.last_epoch,
+            self.state.in_mem().last_epoch,
             0.into(),
             None,
         );
@@ -584,9 +582,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
-        namada::tx::data::DecryptedTx::Decrypted,
-    ));
+    let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
     tx.set_code(Code::new(wasm_code, None));
     tx.set_data(Data::new(
         TxWriteData {

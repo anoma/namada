@@ -6,12 +6,12 @@
 //!
 //! The state machine moves through the following state DAG:
 //!
-//! 1. [`BuildingProtocolTxBatch`] - the initial state. In
-//!    this state, we populate a block with protocol txs.
-//! 2. [`BuildingNormalTxBatch`] - the second state. In
-//!    this state, we populate a block with non-protocol txs.
-//! 3. [`BuildingProtocolTxBatch`] - we return to this state to
-//!    fill up any remaining block space if possible.
+//! 1. [`BuildingProtocolTxBatch`] - the initial state. In this state, we
+//!    populate a block with protocol txs.
+//! 2. [`BuildingNormalTxBatch`] - the second state. In this state, we populate
+//!    a block with non-protocol txs.
+//! 3. [`BuildingProtocolTxBatch`] - we return to this state to fill up any
+//!    remaining block space if possible.
 
 mod normal_txs;
 mod protocol_txs;

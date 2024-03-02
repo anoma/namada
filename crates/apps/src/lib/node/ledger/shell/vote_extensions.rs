@@ -136,15 +136,11 @@ where
                 Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least
                     // one valid nonce
-                    ext.data
-                        .ethereum_events
-                        .iter()
-                        .any(|event| {
-                            self.state
-                                .ethbridge_queries()
-                                .validate_eth_event_nonce(event)
-                        })
-                        .then(|| tx_bytes.clone())
+                    ext.data.ethereum_events.iter().any(|event| {
+                        self.state
+                            .ethbridge_queries()
+                            .validate_eth_event_nonce(event)
+                    })
                 }
                 Some(EthereumTxData::ValSetUpdateVext(ext)) => {
                     // only include non-stale validator set updates
@@ -156,13 +152,13 @@ where
                     // to remove it from the mempool this way, but it
                     // will eventually be evicted, getting replaced
                     // by newer txs.
-                    (!self
+                    let is_seen = self
                         .state
                         .ethbridge_queries()
-                        .valset_upd_seen(ext.data.signing_epoch.next()))
-                    .then(|| tx_bytes.clone())
+                        .valset_upd_seen(ext.data.signing_epoch.next());
+                    !is_seen
                 }
-                _ => None,
+                _ => false,
             }
         })
     }

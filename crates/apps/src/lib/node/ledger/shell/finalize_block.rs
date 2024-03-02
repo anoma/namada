@@ -5,7 +5,7 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::governance::pgf::inflation as pgf_inflation;
-use namada::ledger::events::EventType;
+use namada::hash::Hash;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::WrapperArgs;
@@ -204,11 +204,8 @@ where
                 continue;
             }
 
-            let (
-                mut tx_event,
-                mut tx_gas_meter,
-                mut wrapper_args
-            ) = match &tx_header.tx_type {
+            let (mut tx_event, tx_gas_meter, mut wrapper_args) =
+                match &tx_header.tx_type {
                     TxType::Wrapper(wrapper) => {
                         stats.increment_wrapper_txs();
                         let tx_event = new_tx_event(&tx, height.0);
@@ -229,9 +226,6 @@ where
                                 is_committed_fee_unshield: false,
                             }),
                         )
-                    }
-                    TxType::Decrypted(_) => {
-                        unreachable!("Received decrypted tx in FinalizeBlock")
                     }
                     TxType::Raw => {
                         tracing::error!(
@@ -255,60 +249,61 @@ where
                                 &tx,
                             )
                             .unwrap();
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
-                        {
-                            for event in ext.data.ethereum_events.iter() {
-                                self.mode.dequeue_eth_event(event);
-                            }
-                        }
-                        (
-                            new_tx_event(&tx, height.0),
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                        )
-                    }
-                    ProtocolTxType::EthereumEvents => {
-                        let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
-                            ).unwrap();
-                        if let Some(address) =
-                            self.mode.get_validator_address().cloned()
-                        {
-                            let this_signer = &(
-                                address,
-                                self.state.in_mem().get_last_block_height(),
-                            );
-                            for MultiSignedEthEvent { event, signers } in
-                                &digest.events
+                            if self
+                                .mode
+                                .get_validator_address()
+                                .map(|validator| {
+                                    validator == &ext.data.validator_addr
+                                })
+                                .unwrap_or(false)
                             {
-                                if signers.contains(this_signer) {
+                                for event in ext.data.ethereum_events.iter() {
                                     self.mode.dequeue_eth_event(event);
                                 }
                             }
+                            (
+                                new_tx_event(&tx, height.0),
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
                         }
-                        (
-                            new_tx_event(&tx, height.0),
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                        )
-                    }
-                },
-            };
-            let replay_protection_hashes = if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
-                Some(ReplayProtectionHashes {
-                    raw_header_hash: tx.raw_header_hash(),
-                    header_hash: tx.header_hash(),
-                })
-            } else {
-                None
-            };
+                        ProtocolTxType::EthereumEvents => {
+                            let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx,
+                            ).unwrap();
+                            if let Some(address) =
+                                self.mode.get_validator_address().cloned()
+                            {
+                                let this_signer = &(
+                                    address,
+                                    self.state.in_mem().get_last_block_height(),
+                                );
+                                for MultiSignedEthEvent { event, signers } in
+                                    &digest.events
+                                {
+                                    if signers.contains(this_signer) {
+                                        self.mode.dequeue_eth_event(event);
+                                    }
+                                }
+                            }
+                            (
+                                new_tx_event(&tx, height.0),
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
+                        }
+                    },
+                };
+            let replay_protection_hashes =
+                if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
+                    Some(ReplayProtectionHashes {
+                        raw_header_hash: tx.raw_header_hash(),
+                        header_hash: tx.header_hash(),
+                    })
+                } else {
+                    None
+                };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
             let tx_result = protocol::check_tx_allowed(&tx, &self.state)
                 .and_then(|()| {
@@ -468,11 +463,7 @@ where
                             let header_hash = replay_protection_hashes
                                 .expect("This cannot fail")
                                 .header_hash;
-                            self.state
-                                .delete_tx_hash(header_hash)
-                                .expect(
-                                    "Error while deleting tx hash from storage",
-                                );
+                            self.state.delete_tx_hash(header_hash);
                         }
                     }
 
@@ -627,14 +618,17 @@ where
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
     fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
-        if let Some(ReplayProtectionHashes {raw_header_hash, header_hash}) = hashes {
+        if let Some(ReplayProtectionHashes {
+            raw_header_hash,
+            header_hash,
+        }) = hashes
+        {
             self.state
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
             self.state
                 .delete_tx_hash(header_hash)
-                .expect("Error while deleting tx hash from storage");
         }
     }
 }
@@ -889,27 +883,6 @@ mod test_finalize_block {
         assert_eq!(event.event_type.to_string(), String::from("applied"));
         let code = event.attributes.get("code").expect("Test failed");
         assert_eq!(code, &String::from(ResultCode::InvalidTx));
-    }
-
-    #[test]
-    #[should_panic(expected = "Received decrypted tx in FinalizeBlock")]
-    fn test_decrypted_is_unreachable() {
-        const LAST_HEIGHT: BlockHeight = BlockHeight(3);
-        let (mut shell, _, _, _) = setup_at_height(LAST_HEIGHT);
-        let tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
-            .to_bytes();
-        let processed_tx = ProcessedTx {
-            tx: tx.into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        };
-        let req = FinalizeBlock {
-            txs: vec![processed_tx],
-            ..Default::default()
-        };
-        _ = shell.finalize_block(req);
     }
 
     /// Test that once a validator's vote for an Ethereum event lands
@@ -2575,8 +2548,10 @@ mod test_finalize_block {
             let mut wrapper_tx =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
-                        amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                        token: shell.state.native_token.clone(),
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
                     Epoch(0),
@@ -2722,6 +2697,7 @@ mod test_finalize_block {
             assert!(
                 shell
                     .state
+                    .write_log()
                     .has_replay_protection_entry(&valid_wrapper.header_hash())
                     .unwrap_or_default()
             );

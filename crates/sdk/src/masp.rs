@@ -152,9 +152,8 @@ pub enum TransferErr {
 
 #[derive(Debug, Clone)]
 struct ExtractedMaspTx {
-    fee_unshielding:
-        Option<(BTreeSet<namada_core::types::storage::Key>, Transaction)>,
-    inner_tx: Option<(BTreeSet<namada_core::types::storage::Key>, Transaction)>,
+    fee_unshielding: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
+    inner_tx: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
 }
 
 /// MASP verifying keys
@@ -2332,10 +2331,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             || IndexedTx {
                 height: BlockHeight::first(),
                 index: TxIndex(0),
+                is_wrapper: false,
             },
             |indexed| IndexedTx {
                 height: indexed.height,
                 index: indexed.index + 1,
+                is_wrapper: false,
             },
         );
         self.sync_status = ContextSyncStatus::Speculative;

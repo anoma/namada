@@ -301,8 +301,6 @@ pub enum TxType {
     Raw,
     /// A Tx that contains an encrypted raw tx
     Wrapper(Box<WrapperTx>),
-    /// An attempted decryption of a wrapper tx
-    Decrypted(DecryptedTx),
     /// Txs issued by validators as part of internal protocols
     Protocol(Box<ProtocolTx>),
 }
@@ -477,76 +475,5 @@ mod test_process_tx {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
-    }
-}
-
-/// Test that process_tx correctly identifies a DecryptedTx
-/// with some unsigned data and returns an identical copy
-#[test]
-fn test_process_tx_decrypted_unsigned() {
-    use crate::{Code, Data, Tx};
-    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-    let code_sec = tx
-        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
-        .clone();
-    let data_sec = tx
-        .set_data(Data::new("transaction data".as_bytes().to_owned()))
-        .clone();
-    tx.validate_tx().expect("Test failed");
-    match tx.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted) => {
-            assert_eq!(tx.header().code_hash, code_sec.get_hash(),);
-            assert_eq!(tx.header().data_hash, data_sec.get_hash(),);
-        }
-        _ => panic!("Test failed"),
-    }
-}
-
-/// Test that process_tx correctly identifies a DecryptedTx
-/// with some signed data and extracts it without checking
-/// signature
-#[test]
-fn test_process_tx_decrypted_signed() {
-    use namada_core::key::*;
-
-    use crate::{Code, Data, Section, Signature, Tx};
-
-    fn gen_keypair() -> common::SecretKey {
-        use rand::prelude::ThreadRng;
-        use rand::thread_rng;
-
-        let mut rng: ThreadRng = thread_rng();
-        ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
-    }
-
-    use namada_core::key::Signature as S;
-    let mut decrypted =
-        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-    // Invalid signed data
-    let ed_sig =
-        ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-    let mut sig_sec = Signature::new(
-        vec![decrypted.header_hash()],
-        [(0, gen_keypair())].into_iter().collect(),
-        None,
-    );
-    sig_sec
-        .signatures
-        .insert(0, common::Signature::try_from_sig(&ed_sig).unwrap());
-    decrypted.add_section(Section::Signature(sig_sec));
-    // create the tx with signed decrypted data
-    let code_sec = decrypted
-        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
-        .clone();
-    let data_sec = decrypted
-        .set_data(Data::new("transaction data".as_bytes().to_owned()))
-        .clone();
-    decrypted.validate_tx().expect("Test failed");
-    match decrypted.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted) => {
-            assert_eq!(decrypted.header.code_hash, code_sec.get_hash());
-            assert_eq!(decrypted.header.data_hash, data_sec.get_hash());
-        }
-        _ => panic!("Test failed"),
     }
 }
