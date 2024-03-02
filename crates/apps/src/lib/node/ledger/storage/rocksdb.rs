@@ -54,7 +54,6 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::ledger::storage::tx_queue::TxQueue;
 use namada::replay_protection;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
@@ -510,10 +509,9 @@ impl RocksDB {
         // restarting the chain
         tracing::info!("Reverting non-height-prepended metadata keys");
         batch.put_cf(state_cf, "height", encode(&previous_height));
-        for metadata_key in [
-            "next_epoch_min_start_height",
-            "next_epoch_min_start_time",
-        ] {
+        for metadata_key in
+            ["next_epoch_min_start_height", "next_epoch_min_start_time"]
+        {
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
                 .0

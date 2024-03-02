@@ -2,13 +2,12 @@
 
 use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
-use namada::core::hints;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::TxGasMeter;
 use namada::ledger::protocol;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
+use namada::tx::data::{TxType, WrapperTx};
 use namada::tx::Tx;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
@@ -56,15 +55,13 @@ where
             // add encrypted txs
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
-            let block_proposer = find_validator_by_raw_hash(
-                &self.state,
-                tm_raw_hash_string,
-            )
-            .unwrap()
-            .expect(
-                "Unable to find native validator address of block proposer \
-                 from tendermint raw hash",
-            );
+            let block_proposer =
+                find_validator_by_raw_hash(&self.state, tm_raw_hash_string)
+                    .unwrap()
+                    .expect(
+                        "Unable to find native validator address of block \
+                         proposer from tendermint raw hash",
+                    );
             let (mut normal_txs, alloc) = self.build_normal_txs(
                 alloc,
                 &req.txs,
@@ -96,7 +93,7 @@ where
     fn get_protocol_txs_allocator(
         &self,
     ) -> BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>> {
-        (&self.state).into()
+        self.state.read_only().into()
     }
 
     /// Builds a batch of encrypted transactions, retrieved from
@@ -369,12 +366,10 @@ where
 mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
-    use borsh_ext::BorshSerializeExt;
     use namada::core::address;
     use namada::core::ethereum_events::EthereumEvent;
     use namada::core::key::RefTo;
     use namada::core::storage::{BlockHeight, InnerEthEventsQueue};
-    use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -385,7 +380,7 @@ mod test_prepare_proposal {
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Header, Section, Signature, Signed};
+    use namada::tx::{Code, Data, Section, Signature, Signed};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
     use namada::{replay_protection, token};
     use namada_sdk::storage::StorageWrite;

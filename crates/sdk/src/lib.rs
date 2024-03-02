@@ -965,7 +965,6 @@ pub mod testing {
         // Generate an arbitrary transaction type
         pub fn arb_tx_type()(tx_type in prop_oneof![
             Just(TxType::Raw),
-            arb_decrypted_tx().prop_map(TxType::Decrypted),
             arb_wrapper_tx().prop_map(|x| TxType::Wrapper(Box::new(x))),
         ]) -> TxType {
             tx_type

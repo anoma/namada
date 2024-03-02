@@ -1109,12 +1109,6 @@ where
                      the mempool"
                 );
             }
-            TxType::Decrypted(_) => {
-                response.code = ResultCode::InvalidTx.into();
-                response.log = format!(
-                    "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
-                );
-            }
         }
 
         if response.code == ResultCode::Ok.into() {
@@ -1401,16 +1395,11 @@ mod test_utils {
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
     use namada::core::storage::{BlockHash, Epoch, Header};
-    use namada::core::time::DurationSecs;
-    use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
     use namada::state::{LastBlock, StorageWrite};
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::token::conversion::update_allowed_conversions;
-    use namada::tx::data::Fee;
-    use namada::tx::{Code, Data};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 

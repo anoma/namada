@@ -585,7 +585,7 @@ pub mod testing {
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
-    use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+    use namada_storage::tx_queue::ExpiredTxsQueue;
 
     use super::mockdb::MockDB;
     use super::*;

@@ -843,7 +843,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }

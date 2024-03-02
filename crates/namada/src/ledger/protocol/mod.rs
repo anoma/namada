@@ -209,7 +209,7 @@ where
                 &tx_index,
                 ShellParams {
                     tx_gas_meter,
-                    wl_storage,
+                    state,
                     vp_wasm_cache,
                     tx_wasm_cache,
                 },
@@ -218,7 +218,6 @@ where
             inner_res.wrapper_changed_keys = changed_keys;
             Ok(inner_res)
         }
-        TxType::Decrypted(_) => Err(Error::TxTypeError),
     }
 }
 
@@ -1040,11 +1039,13 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::chain::ChainId;
+    use namada_core::address::testing::nam;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_core::keccak::keccak_hash;
-    use namada_core::storage::BlockHeight;
+    use namada_core::key::RefTo;
+    use namada_core::storage::{BlockHeight, Epoch};
+    use namada_core::token::DenominatedAmount;
     use namada_core::voting_power::FractionalVotingPower;
     use namada_core::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
@@ -1054,6 +1055,7 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
+    use namada_tx::data::Fee;
     use namada_tx::{SignableEthMessage, Signed};
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;
@@ -1195,10 +1197,7 @@ mod tests {
     #[test]
     fn test_apply_wasm_tx_allowlist() {
         let (mut state, _validators) = test_utils::setup_default_storage();
-
-            let mut rng: ThreadRng = thread_rng();
-            ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
-        };
+        let keypair = key::testing::keypair_1();
         let wrapper_tx = WrapperTx::new(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(
