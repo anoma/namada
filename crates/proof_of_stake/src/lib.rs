@@ -2280,21 +2280,16 @@ where
 
     // Check to see if the validator should be jailed upon a reactivation. This
     // may occur if a validator is deactivated but then an infraction is
-    // discovered later.
-    let last_slash_epoch = read_validator_last_slash_epoch(storage, validator)?;
-    if let Some(last_slash_epoch) = last_slash_epoch {
-        let eligible_epoch =
-            last_slash_epoch + params.slash_processing_epoch_offset();
-        if current_epoch < eligible_epoch {
-            // The validator should be set back to jailed
-            validator_state_handle(validator).set(
-                storage,
-                ValidatorState::Jailed,
-                pipeline_epoch,
-                0,
-            )?;
-            return Ok(());
-        }
+    // discovered later, thus the validator is frozen.
+    if is_validator_frozen(storage, validator, current_epoch, &params)? {
+        // The validator should be set back to jailed
+        validator_state_handle(validator).set(
+            storage,
+            ValidatorState::Jailed,
+            pipeline_epoch,
+            0,
+        )?;
+        return Ok(());
     }
 
     // Determine which validator set the validator should be added to again
