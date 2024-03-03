@@ -440,7 +440,8 @@ jobs:
         run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
       - name: CI Release Build
         id: light-build
-        if: !contains(github.ref, "draft") && !contains(github.ref, "main") && !contains(github.ref, "-rc")
+        if: |
+          !contains(github.ref, "draft") && !contains(github.ref, "main") && !contains(github.ref, "-rc")
         run: make build-ci-release
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=8"
