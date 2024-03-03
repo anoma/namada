@@ -255,7 +255,7 @@ impl Default for BenchShell {
                 r#type: ProposalType::Default(None),
                 voting_start_epoch,
                 voting_end_epoch: voting_start_epoch + 3_u64,
-                grace_epoch: voting_start_epoch + 9_u64,
+                activation_epoch: voting_start_epoch + 9_u64,
             },
             None,
             Some(vec![content_section]),

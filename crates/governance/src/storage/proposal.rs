@@ -44,12 +44,12 @@ pub struct InitProposalData {
     pub author: Address,
     /// The proposal type
     pub r#type: ProposalType,
-    /// The epoch from which voting is allowed
+    /// The epoch in which voting begins
     pub voting_start_epoch: Epoch,
-    /// The epoch from which voting is stopped
+    /// The final epoch in which voting is allowed
     pub voting_end_epoch: Epoch,
-    /// The epoch from which this changes are executed
-    pub grace_epoch: Epoch,
+    /// The epoch in which any changes are executed and become active
+    pub activation_epoch: Epoch,
 }
 
 impl InitProposalData {
@@ -94,7 +94,7 @@ impl TryFrom<DefaultProposal> for InitProposalData {
             r#type: ProposalType::Default(None),
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -113,7 +113,7 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
             r#type: ProposalType::PGFSteward(extra_data),
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -153,7 +153,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
             r#type: ProposalType::PGFPayment(continuous_fundings), /* here continuous_fundings also contains the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -524,7 +524,7 @@ pub struct StorageProposal {
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
-    pub grace_epoch: Epoch,
+    pub activation_epoch: Epoch,
 }
 
 impl StorageProposal {
@@ -572,7 +572,7 @@ Author: {}
 Content: {:?}
 Start Epoch: {}
 End Epoch: {}
-Grace Epoch: {}
+Activation Epoch: {}
 Status: {}
 Data: {}",
             self.id,
@@ -581,7 +581,7 @@ Data: {}",
             self.content,
             self.voting_start_epoch,
             self.voting_end_epoch,
-            self.grace_epoch,
+            self.activation_epoch,
             self.get_status(current_epoch),
             self.r#type.format_data()
         )
@@ -597,7 +597,7 @@ impl Display for StorageProposal {
             {:2}Author: {}
             {:2}Start Epoch: {}
             {:2}End Epoch: {}
-            {:2}Grace Epoch: {}
+            {:2}Activation Epoch: {}
             ",
             self.id,
             "",
@@ -609,7 +609,7 @@ impl Display for StorageProposal {
             "",
             self.voting_end_epoch,
             "",
-            self.grace_epoch
+            self.activation_epoch
         )
     }
 }
@@ -726,7 +726,7 @@ pub mod testing {
             r#type in arb_proposal_type(),
             voting_start_epoch in arb_epoch(),
             voting_end_epoch in arb_epoch(),
-            grace_epoch in arb_epoch(),
+            activation_epoch in arb_epoch(),
         ) -> InitProposalData {
             InitProposalData {
                 id,
@@ -735,7 +735,7 @@ pub mod testing {
                 r#type,
                 voting_start_epoch,
                 voting_end_epoch,
-                grace_epoch,
+                activation_epoch,
             }
         }
     }

@@ -1238,7 +1238,10 @@ pub async fn to_ledger_vector(
                 "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
-            format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!(
+                "Activation epoch : {}",
+                init_proposal_data.activation_epoch
+            ),
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
 
@@ -1259,7 +1262,10 @@ pub async fn to_ledger_vector(
                 "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
-            format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!(
+                "Activation epoch : {}",
+                init_proposal_data.activation_epoch
+            ),
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {
