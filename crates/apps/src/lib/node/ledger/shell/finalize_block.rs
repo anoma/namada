@@ -627,8 +627,7 @@ where
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
-            self.state
-                .delete_tx_hash(header_hash)
+            self.state.delete_tx_hash(header_hash)
         }
     }
 }

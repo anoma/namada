@@ -900,8 +900,7 @@ mod tests {
                 .unwrap();
 
             // delete previous hash
-            write_log
-                .delete_tx_hash(Hash::sha256("tx1".as_bytes()));
+            write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
 
             // finalize previous hashes
             for tx in ["tx2", "tx3"] {
