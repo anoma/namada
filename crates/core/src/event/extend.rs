@@ -185,4 +185,17 @@ mod event_composition_tests {
 
         assert_eq!(base_event.attributes, expected_attrs);
     }
+
+    #[test]
+    fn test_domain_of_composed_event() {
+        let composite_event = IbcEvent {
+            event_type: "update_account".into(),
+            attributes: Default::default(),
+        }
+        .with(Log("this is sparta!".to_string()))
+        .with(Height(300.into()))
+        .with(TxHash(Hash::default()));
+
+        assert_eq!(composite_event.domain(), "ibc");
+    }
 }
