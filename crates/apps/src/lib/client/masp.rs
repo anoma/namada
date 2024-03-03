@@ -16,7 +16,7 @@ use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 pub async fn syncing<
     U: ShieldedUtils + MaybeSend + MaybeSync,
     C: Client + Sync,
-    IO: Io,
+    IO: Io + Send + Sync,
 >(
     mut shielded: ShieldedContext<U>,
     client: &C,
@@ -130,7 +130,7 @@ impl<'io, IO: Io> CliLogger<'io, IO> {
     }
 }
 
-impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
+impl<'io, IO: Io + Send + Sync> ProgressLogger<IO> for CliLogger<'io, IO> {
     type Fetch = CliLogging<'io, u64, IO>;
     type Scan = CliLogging<'io, IndexedNoteEntry, IO>;
 

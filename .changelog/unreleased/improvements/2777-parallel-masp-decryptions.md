@@ -1,0 +1,1 @@
+ - Shielded sync now tries to decrypt fetched masp txs in parallel ([\#2777](https://github.com/anoma/namada/pull/2777))
