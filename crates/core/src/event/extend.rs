@@ -4,6 +4,24 @@ use super::*;
 use crate::hash::Hash;
 use crate::storage::BlockHeight;
 
+/// Provides event composition routines.
+pub trait ComposeEvent {
+    /// Compose an [event](Event) with new data.
+    fn compose<NEW>(self, data: NEW) -> CompositeEvent<NEW, Self>
+    where
+        Self: Sized;
+}
+
+impl<E> ComposeEvent for E
+where
+    E: Into<Event>,
+{
+    #[inline(always)]
+    fn compose<NEW>(self, data: NEW) -> CompositeEvent<NEW, E> {
+        CompositeEvent::new(self, data)
+    }
+}
+
 /// Event composed of various other event extensions.
 #[derive(Clone, Debug)]
 pub struct CompositeEvent<DATA, E> {
@@ -15,11 +33,6 @@ impl<E, DATA> CompositeEvent<DATA, E> {
     /// Create a new composed event.
     pub const fn new(base_event: E, data: DATA) -> Self {
         Self { base_event, data }
-    }
-
-    /// Compose this event with new data.
-    pub const fn compose<NEW>(self, data: NEW) -> CompositeEvent<NEW, Self> {
-        CompositeEvent::new(self, data)
     }
 }
 

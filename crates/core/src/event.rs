@@ -217,18 +217,6 @@ impl Event {
         self.attributes.get(key)
     }
 
-    /// Compose this [`Event`] with additional data.
-    #[inline]
-    pub const fn compose<DATA>(
-        self,
-        data: DATA,
-    ) -> extend::CompositeEvent<DATA, Event>
-    where
-        DATA: extend::ExtendEvent,
-    {
-        extend::CompositeEvent::new(self, data)
-    }
-
     /// Extend this [`Event`] with additional data.
     #[inline]
     pub fn extend<DATA>(&mut self, data: DATA) -> &mut Self

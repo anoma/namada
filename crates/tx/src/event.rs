@@ -1,7 +1,7 @@
 //! Transaction events.
 
 use namada_core::event::extend::{
-    ExtendEvent, WithBlockHeight, WithLog, WithTxHash,
+    ComposeEvent, ExtendEvent, WithBlockHeight, WithLog, WithTxHash,
 };
 use namada_core::event::Event;
 
