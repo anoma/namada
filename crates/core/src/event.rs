@@ -269,10 +269,8 @@ impl Index<&str> for Event {
 
 impl IndexMut<&str> for Event {
     fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        if !self.attributes.contains_key(index) {
-            self.attributes.insert(String::from(index), String::new());
-        }
-        self.attributes.get_mut(index).unwrap()
+        let entry = self.attributes.entry(index.into()).or_default();
+        &mut *entry
     }
 }
 
