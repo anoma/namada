@@ -3,7 +3,7 @@ pub mod log;
 
 use namada_core::collections::HashMap;
 pub use namada_core::event::{
-    extend, EmitEvents, Event, EventError, EventLevel, EventType,
+    extend, EmitEvents, Event, EventError, EventLevel, EventToEmit, EventType,
 };
 use serde_json::Value;
 
