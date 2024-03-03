@@ -7,7 +7,8 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+#[cfg(feature = "async-send")]
+use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -65,12 +66,15 @@ use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
+#[cfg(feature = "async-send")]
 use rayon::prelude::*;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
 use token::storage_key::{balance_key, is_any_shielded_action_balance_key};
 use token::Amount;
+#[cfg(feature = "async-send")]
+use tokio::sync::Mutex;
 
 use crate::error::{Error, PinnedBalanceError, QueryError};
 use crate::io::Io;
@@ -666,66 +670,60 @@ pub struct ShieldedContext<U: ShieldedUtils> {
 }
 
 /// A thread safe handle back to a shielded context
+#[cfg(feature = "async-send")]
 #[derive(Clone)]
-pub struct ThreadHandle<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> {
+pub struct ThreadHandle<'shielded, U: ShieldedUtils + Send + Sync> {
     // for safety, this field should not be accessible from the outside
     inner: Arc<Mutex<&'shielded mut ShieldedContext<U>>>,
 }
 
-unsafe impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> Send
-    for ThreadHandle<'shielded, U>
-{
-}
-unsafe impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync> Sync
-    for ThreadHandle<'shielded, U>
-{
-}
-
-impl<'shielded, U: ShieldedUtils + MaybeSend + MaybeSync>
-    ThreadHandle<'shielded, U>
-{
+#[cfg(feature = "async-send")]
+impl<'shielded, U: ShieldedUtils + Send + Sync> ThreadHandle<'shielded, U> {
     pub fn new(ctx: &'shielded mut ShieldedContext<U>) -> Self {
         Self {
             inner: Arc::new(Mutex::new(ctx)),
         }
     }
 
-    fn get_note_pos(&self, indexed_tx: &IndexedTx) -> usize {
-        let locked = self.inner.lock().unwrap();
+    async fn get_note_pos(&self, indexed_tx: &IndexedTx) -> usize {
+        let locked = self.inner.lock().await;
         locked.tx_note_map[indexed_tx]
     }
 
-    fn insert_decrypted_data(
+    async fn insert_decrypted_data(
         &self,
         key: (IndexedTx, ViewingKey),
         value: DecryptedData,
     ) {
-        let mut locked = self.inner.lock().unwrap();
+        let mut locked = self.inner.lock().await;
         locked.decrypted_note_cache.insert(key, value);
     }
 
-    fn save(&self) -> std::io::Result<()> {
-        let locked = self.inner.lock().unwrap();
-        futures::executor::block_on(locked.save())
+    async fn save(&self) -> std::io::Result<()> {
+        let locked = self.inner.lock().await;
+        locked.save().await
     }
 
-    fn scanned(&self, indexed_tx: &IndexedTx) {
-        let mut locked = self.inner.lock().unwrap();
+    async fn scanned(&self, indexed_tx: &IndexedTx) {
+        let mut locked = self.inner.lock().await;
         locked.unscanned.scanned(indexed_tx);
     }
 
-    fn merge_scanned_data(&self, mut scanned_data: ScannedData) {
-        let mut locked = self.inner.lock().unwrap();
+    async fn merge_scanned_data(&self, mut scanned_data: ScannedData) {
+        let mut locked = self.inner.lock().await;
         scanned_data.merge(*locked);
     }
 
-    fn nullify_spent_notes(&self, native_token: &Address) -> Result<(), Error> {
-        let mut locked = self.inner.lock().unwrap();
+    async fn nullify_spent_notes(
+        &self,
+        native_token: &Address,
+    ) -> Result<(), Error> {
+        let mut locked = self.inner.lock().await;
         locked.nullify_spent_notes(native_token)
     }
 
-    fn update_vk_heights(&self, height: BlockHeight) {
-        let mut locked = self.inner.lock().unwrap();
+    async fn update_vk_heights(&self, height: BlockHeight) {
+        let mut locked = self.inner.lock().await;
         for (_, h) in locked.vk_heights.iter_mut() {
             *h = Some(height.into());
         }
@@ -820,6 +818,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
+    #[cfg(feature = "async-send")]
     pub async fn fetch<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
@@ -904,7 +903,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         indexed_tx,
                         &stx,
                         vk,
-                    )?;
+                    )
+                    .await?;
                     ctx.insert_decrypted_data(
                         (indexed_tx, *vk),
                         DecryptedData {
@@ -913,22 +913,134 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             delta,
                             epoch,
                         },
-                    );
+                    )
+                    .await;
                 }
                 // possibly remove unneeded elements from the cache.
-                ctx.scanned(&indexed_tx);
-                _ = ctx.save();
+                ctx.scanned(&indexed_tx).await;
+                _ = ctx.save().await;
                 Ok::<(), Error>(())
             })?;
 
         // TODO: This can possibly be improved. We will have unnecessary
         // trial decryption attempts if syncing is
         // interrupted and new keys are added.
-        ctx.update_vk_heights(last_query_height);
+        ctx.update_vk_heights(last_query_height).await;
         display_line!(logger.io(), "\nNullifying spent notes...");
-        ctx.nullify_spent_notes(&native_token)?;
+        ctx.nullify_spent_notes(&native_token).await?;
         display_line!(logger.io(), "Finished.");
-        _ = ctx.save();
+        _ = ctx.save().await;
+        Ok(())
+    }
+
+    /// Fetch the current state of the multi-asset shielded pool into a
+    /// ShieldedContext
+    #[cfg(not(feature = "async-send"))]
+    pub async fn fetch<C: Client + Sync, IO: Io>(
+        &mut self,
+        client: &C,
+        logger: &impl ProgressLogger<IO>,
+        last_query_height: Option<BlockHeight>,
+        _batch_size: u64,
+        sks: &[ExtendedSpendingKey],
+        fvks: &[ViewingKey],
+    ) -> Result<(), Error> {
+        // add new viewing keys
+        // Reload the state from file to get the last confirmed state and
+        // discard any speculative data, we cannot fetch on top of a
+        // speculative state
+        // Always reload the confirmed context or initialize a new one if not
+        // found
+        if self.load_confirmed().await.is_err() {
+            // Initialize a default context if we couldn't load a valid one
+            // from storage
+            *self = Self {
+                utils: std::mem::take(&mut self.utils),
+                ..Default::default()
+            };
+        }
+
+        for esk in sks {
+            let vk = to_viewing_key(esk).vk;
+            self.vk_heights.entry(vk).or_default();
+        }
+        for vk in fvks {
+            self.vk_heights.entry(*vk).or_default();
+        }
+        let _ = self.save().await;
+        let native_token = query_native_token(client).await?;
+        // the latest block height which has been added to the witness Merkle
+        // tree
+        let Some(least_idx) = self.vk_heights.values().min().cloned() else {
+            return Ok(());
+        };
+        let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
+        // get the bounds on the block heights to fetch
+        let start_idx =
+            std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
+        // Query for the last produced block height
+        let last_block_height = query_block(client)
+            .await?
+            .map_or_else(BlockHeight::first, |block| block.height);
+        let last_query_height = last_query_height.unwrap_or(last_block_height);
+        // Load all transactions accepted until this point
+        // N.B. the cache is a hash map
+        self.unscanned.extend(
+            self.fetch_shielded_transfers(
+                client,
+                logger,
+                start_idx,
+                last_query_height,
+            )
+            .await?,
+        );
+        // persist the cache in case of interruptions.
+        let _ = self.save().await;
+
+        let unscanned = self.unscanned.clone();
+        for (indexed_tx, (_, _, stx)) in &unscanned.txs {
+            if Some(*indexed_tx) > last_witnessed_tx {
+                self.update_witness_map(*indexed_tx, stx)?;
+            }
+        }
+        _ = self.utils.save(self).await;
+
+        let sync_status = self.sync_status;
+        let txs = logger.scan(unscanned);
+        for (indexed_tx, (epoch, tx, stx)) in txs {
+            let mut vk_heights = BTreeMap::new();
+            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+            for (vk, h) in vk_heights
+                .iter_mut()
+                .filter(|(_vk, h)| **h < Some(indexed_tx))
+            {
+                let delta =
+                    Self::scan_tx(self, sync_status, indexed_tx, &stx, vk)
+                        .await?;
+                *h = Some(indexed_tx);
+                self.decrypted_note_cache.insert(
+                    (indexed_tx, *vk),
+                    DecryptedData {
+                        tx: stx.clone(),
+                        keys: tx.clone(),
+                        delta,
+                        epoch,
+                    },
+                );
+            }
+            // possibly remove unneeded elements from the cache.
+            self.unscanned.scanned(&indexed_tx);
+            std::mem::swap(&mut vk_heights, &mut self.vk_heights);
+            let _ = self.save().await;
+        }
+
+        // TODO: This can possibly be improved. We will have unnecessary
+        // trial decryption attempts if syncing is
+        // interrupted and new keys are added.
+        display_line!(logger.io(), "\nNullifying spent notes...");
+        self.nullify_spent_notes(&native_token)?;
+        display_line!(logger.io(), "Finished.");
+        _ = self.save().await;
         Ok(())
     }
 
@@ -1156,8 +1268,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Newly discovered notes are associated to the supplied viewing keys. Note
     /// nullifiers are mapped to their originating notes. Note positions are
     /// associated to notes, memos, and diversifiers.
-    pub fn scan_tx(
-        ctx: ThreadHandle<U>,
+    pub async fn scan_tx(
+        #[cfg(feature = "async-send")] ctx: ThreadHandle<U>,
+        #[cfg(not(feature = "async-send"))] ctx: &mut Self,
         sync_status: ContextSyncStatus,
         indexed_tx: IndexedTx,
         shielded: &Transaction,
@@ -1167,7 +1280,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let mut transaction_delta = TransactionDelta::new();
         let mut scanned_data = ScannedData::default();
         if let ContextSyncStatus::Confirmed = sync_status {
-            let mut note_pos = ctx.get_note_pos(&indexed_tx);
+            #[cfg(feature = "async-send")]
+            let mut note_pos = ctx.get_note_pos(&indexed_tx).await;
+            #[cfg(not(feature = "async-send"))]
+            let mut note_pos = ctx.tx_note_map[&indexed_tx];
             // Listen for notes sent to our viewing keys, only if we are syncing
             // (i.e. in a confirmed status)
             for so in shielded
@@ -1220,7 +1336,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 note_pos += 1;
             }
         }
-        ctx.merge_scanned_data(scanned_data);
+        #[cfg(feature = "async-send")]
+        ctx.merge_scanned_data(scanned_data).await;
+        #[cfg(not(feature = "async-send"))]
+        scanned_data.merge(ctx);
         Ok(transaction_delta)
     }
 
@@ -2518,17 +2637,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in &vks {
             self.vk_heights.entry(*vk).or_default();
         }
+        #[cfg(feature = "async-send")]
         let ctx = ThreadHandle::new(self);
         for vk in vks {
             let delta = Self::scan_tx(
+                #[cfg(feature = "async-send")]
                 ctx.clone(),
+                #[cfg(not(feature = "async-send"))]
+                self,
                 ContextSyncStatus::Speculative,
                 indexed_tx,
                 masp_tx,
                 &vk,
-            )?;
-
+            )
+            .await?;
+            #[cfg(feature = "async-send")]
             ctx.insert_decrypted_data(
+                (indexed_tx, vk),
+                DecryptedData {
+                    tx: masp_tx.clone(),
+                    keys: changed_balance_keys.clone(),
+                    delta,
+                    epoch,
+                },
+            )
+            .await;
+            #[cfg(not(feature = "async-send"))]
+            self.decrypted_note_cache.insert(
                 (indexed_tx, vk),
                 DecryptedData {
                     tx: masp_tx.clone(),
@@ -2538,10 +2673,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 },
             );
         }
+        #[cfg(feature = "async-send")]
         ctx.nullify_spent_notes(&native_token)?;
+        #[cfg(not(feature = "async-send"))]
+        self.nullify_spent_notes(&native_token)?;
         // Save the speculative state for future usage
-        ctx.save().map_err(|e| Error::Other(e.to_string()))?;
-
+        #[cfg(feature = "async-send")]
+        ctx.save().await.map_err(|e| Error::Other(e.to_string()))?;
+        #[cfg(not(feature = "async-send"))]
+        self.save().await.map_err(|e| Error::Other(e.to_string()))?;
         Ok(())
     }
 
