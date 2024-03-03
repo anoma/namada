@@ -186,7 +186,7 @@ opt-level = 3
 panic = "unwind"
 overflow-checks = true
 
-[profile.light-release]
+[profile.ci-release]
 inherits = "release"
 opt-level = 1
 debug = false

@@ -33,11 +33,10 @@ env:
 jobs:
   build-wasm:
     timeout-minutes: 30
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
-      fail-fast: false
       matrix:
         mold_version: [2.4.0]
     env:
@@ -67,7 +66,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE }}
       - name: Cache cargo registry
         uses: actions/cache@v4
-        continue-on-error: false
+        id: cache
         with:
           path: |
             ~/.cargo/registry/index/
@@ -88,7 +87,8 @@ jobs:
             wasm/vp_*.wasm
             wasm/checksums.json
       - name: Clean cargo cache
-        run: cargo clean
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo-cache
 
   # test-wasm:
   #   timeout-minutes: 30
@@ -97,7 +97,6 @@ jobs:
   #   container: 
   #     image: ghcr.io/anoma/namada:wasm-main
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       mold_version: [2.4.0]
 
@@ -131,7 +130,6 @@ jobs:
   #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
-  #       continue-on-error: false
   #       with:
   #         path: |
   #           ~/.cargo/registry/index/
@@ -156,7 +154,6 @@ jobs:
   #   runs-on: ${{ matrix.os }}
   #   needs: [build-wasm]
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       os: [ubuntu-latest]
 
@@ -183,7 +180,6 @@ jobs:
   #   timeout-minutes: 30
   #   needs: [build-wasm]
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       mold_version: [2.4.0]
 
@@ -207,7 +203,6 @@ jobs:
   #         role-to-assume: ${{ secrets.AWS_ROLE }}
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
-  #       continue-on-error: false
   #       with:
   #         path: |
   #           ~/.cargo/registry/index/
@@ -262,7 +257,6 @@ jobs:
   #   timeout-minutes: 30
   #   needs: [build-wasm]
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       mold_version: [2.4.0]
 
@@ -286,7 +280,6 @@ jobs:
   #         role-to-assume: ${{ secrets.AWS_ROLE }}
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
-  #       continue-on-error: false
   #       with:
   #         path: |
   #           ~/.cargo/registry/index/
@@ -333,7 +326,6 @@ jobs:
   #   timeout-minutes: 60
   #   needs: [build-wasm]
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       mold_version: [2.4.0]
 
@@ -362,7 +354,6 @@ jobs:
   #         role-to-assume: ${{ secrets.AWS_ROLE }}
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
-  #       continue-on-error: false
   #       with:
   #         path: |
   #           ~/.cargo/registry/index/
@@ -404,15 +395,11 @@ jobs:
   #       run: cargo clean
 
   namada-release:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
-    timeout-minutes: 40
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    timeout-minutes: 10
     strategy:
-      fail-fast: false
       matrix:
         mold_version: [2.4.0]
-
-    env:
-      RUSTC_WRAPPER: sccache
 
     steps:
       - name: Checkout repo
@@ -429,7 +416,8 @@ jobs:
         with:
           aws-region: us-east-2
           role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo registry
+      - name: Cache cargo directory
+        id: cache
         uses: actions/cache@v4
         continue-on-error: false
         with:
@@ -448,24 +436,19 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
-      - name: Whoami
-        run: whoami
-      - name: Pwd
-        run: pwd
       - name: Test
         run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
-      - name: cargo
-        run: cargo --version
-      - name: rustup
-        run: rustup --version
-      - name: toolchains  
-        run: rustup toolchain list
-      - name: Build
-        run: |
-          pwd
-          make build-light-release
+      - name: CI Release Build
+        id: light-build
+        if: ${{ !contains(github.ref, "draft") || !contains(github.ref, "main") || !contains(github.ref, "-rc") }}
+        run: make build-ci-release
         env:
-          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold -Z threads=8"
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=8"
+      - name: Release Build
+        if: ${{ steps.light-build.outcome == 'skipped' }}
+        run: make build-release
+        env:
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold"
       - name: Upload target binaries (github)
         uses: actions/upload-artifact@v3
         with:
@@ -493,7 +476,7 @@ jobs:
         with:
           name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
           path: target/cargo-timings/cargo-timing.html
-          retention-days: 3
+          retention-days: 1
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -501,14 +484,14 @@ jobs:
         if: always()
         run: sccache --stop-server || true
       - name: Clean cargo cache
-        run: cargo clean
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo-cache
 
 
   # namada-e2e:
   #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
   #   needs: [build-wasm, namada-release]
   #   strategy:
-  #     fail-fast: false
   #     matrix:
   #       mold_version: [2.4.0]
   #       comet_bft: [0.37.2]
@@ -541,7 +524,6 @@ jobs:
   #         role-to-assume: ${{ secrets.AWS_ROLE }}
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
-  #       continue-on-error: false
   #       with:
   #         path: |
   #           ~/.cargo/registry/index/
