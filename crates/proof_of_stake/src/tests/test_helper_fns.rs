@@ -1173,7 +1173,7 @@ fn test_slash_validator_redelegation() {
         .unwrap();
     outgoing_redelegations
         .at(&Epoch(6))
-        .insert(&mut storage, Epoch(8), token::Amount::from(7))
+        .insert(&mut storage, Epoch(10), token::Amount::from(7))
         .unwrap();
     slash_validator_redelegation(
         &storage,
@@ -1202,7 +1202,7 @@ fn test_slash_validator_redelegation() {
         .unwrap();
     outgoing_redelegations
         .at(&Epoch(7))
-        .insert(&mut storage, Epoch(8), token::Amount::from(7))
+        .insert(&mut storage, Epoch(10), token::Amount::from(7))
         .unwrap();
     slash_validator_redelegation(
         &storage,

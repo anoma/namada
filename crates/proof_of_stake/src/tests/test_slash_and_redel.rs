@@ -736,7 +736,6 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     )
     .unwrap();
 
-    let redel_start = current_epoch;
     let redel_end = current_epoch + params.pipeline_len;
 
     // Checks ----------------
@@ -753,7 +752,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
         validator_outgoing_redelegations_handle(&src_validator)
             .at(&dest_validator)
             .at(&bond_start)
-            .get(&storage, &redel_start)
+            .get(&storage, &redel_end)
             .unwrap();
     assert_eq!(outgoing_redelegation, Some(redel_amount_1));
 
@@ -888,7 +887,6 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     )
     .unwrap();
 
-    let redel_2_start = current_epoch;
     let redel_2_end = current_epoch + params.pipeline_len;
 
     // Checks -----------------------------------
@@ -912,7 +910,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
         validator_outgoing_redelegations_handle(&src_validator)
             .at(&dest_validator)
             .at(&bond_start)
-            .get(&storage, &redel_start)
+            .get(&storage, &redel_end)
             .unwrap();
     assert_eq!(outgoing_redelegation_1, Some(redel_amount_1));
 
@@ -920,7 +918,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
         validator_outgoing_redelegations_handle(&dest_validator)
             .at(&dest_validator_2)
             .at(&redel_end)
-            .get(&storage, &redel_2_start)
+            .get(&storage, &redel_2_end)
             .unwrap();
     assert_eq!(outgoing_redelegation_2, Some(redel_amount_2));
 

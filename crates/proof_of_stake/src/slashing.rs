@@ -388,15 +388,15 @@ where
         let (
             NestedSubKey::Data {
                 key: bond_start,
-                nested_sub_key: SubKey::Data(redel_start),
+                nested_sub_key: SubKey::Data(redel_end),
             },
             amount,
         ) = res?;
 
         if params.in_redelegation_slashing_window(
             infraction_epoch,
-            redel_start,
-            params.redelegation_end_epoch_from_start(redel_start),
+            params.redelegation_start_epoch_from_end(redel_end),
+            redel_end,
         ) && bond_start <= infraction_epoch
         {
             slash_redelegation(
@@ -404,7 +404,7 @@ where
                 params,
                 amount,
                 bond_start,
-                params.redelegation_end_epoch_from_start(redel_start),
+                redel_end,
                 src_validator,
                 current_epoch,
                 slashes,

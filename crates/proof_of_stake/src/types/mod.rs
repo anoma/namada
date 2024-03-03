@@ -164,7 +164,8 @@ pub type ValidatorTotalUnbonded =
     NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 
 /// A validator's incoming redelegations, where the key is the bond owner
-/// address and the value is the redelegation end epoch
+/// address and the value is the redelegation end epoch, when it started
+/// contributing to the validator
 pub type IncomingRedelegations = LazyMap<Address, Epoch>;
 
 /// A validator's outgoing redelegations, where the validator in question is a
