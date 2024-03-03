@@ -1721,13 +1721,13 @@ impl ConcretePosState {
             .unwrap_or_default()
             .iter()
             .for_each(|(address, amounts)| {
-                for ((bond_start, redel_start), amount) in amounts {
+                for ((bond_start, redel_end), amount) in amounts {
                     abs_src_outgoing
                         .entry(address.clone())
                         .or_default()
                         .entry(*bond_start)
                         .or_default()
-                        .insert(*redel_start, *amount);
+                        .insert(*redel_end, *amount);
                 }
             });
         let conc_src_outgoing =
@@ -3488,7 +3488,7 @@ impl AbstractPosState {
             .or_default();
         for (start_epoch, bonded) in &result_unbond.epoch_map {
             let cur_outgoing = outgoing_redelegations
-                .entry((*start_epoch, self.epoch))
+                .entry((*start_epoch, pipeline_epoch))
                 .or_default();
             *cur_outgoing += *bonded;
         }
@@ -4269,17 +4269,17 @@ impl AbstractPosState {
             BTreeMap::<(Epoch, Epoch), token::Amount>::new()
         };
 
-        for ((src_start_epoch, redel_start), amount) in outgoing_redelegations {
+        for ((src_start_epoch, redel_end), amount) in outgoing_redelegations {
             if self.params.in_redelegation_slashing_window(
                 infraction_epoch,
-                redel_start,
-                self.params.redelegation_end_epoch_from_start(redel_start),
+                self.params.redelegation_start_epoch_from_end(redel_end),
+                redel_end,
             ) && src_start_epoch <= infraction_epoch
             {
                 self.slash_redelegation(
                     amount,
                     src_start_epoch,
-                    self.params.redelegation_end_epoch_from_start(redel_start),
+                    redel_end,
                     validator,
                     slash_rate,
                     &validator_slashes,

@@ -2099,7 +2099,7 @@ where
     for (start, &unbonded_amount) in result_unbond.epoch_map.iter() {
         outgoing_redelegations.at(start).update(
             storage,
-            current_epoch,
+            pipeline_epoch,
             |current| current.unwrap_or_default() + unbonded_amount,
         )?;
     }
