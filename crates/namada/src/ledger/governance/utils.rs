@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use namada_governance::utils::TallyResult;
-use namada_sdk::events::{Event, EventLevel};
+use namada_sdk::events::{Event, EventLevel, EventToEmit};
 use thiserror::Error;
 
 use crate::ledger::events::EventType;
@@ -43,6 +43,10 @@ impl From<ProposalEvent> for Event {
             attributes: proposal_event.attributes,
         }
     }
+}
+
+impl EventToEmit for ProposalEvent {
+    const DOMAIN: &'static str = "governance";
 }
 
 impl ProposalEvent {

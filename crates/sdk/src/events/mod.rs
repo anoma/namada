@@ -4,7 +4,7 @@ pub mod log;
 use std::collections::HashMap;
 
 pub use namada_core::event::{
-    extend, EmitEvents, Event, EventError, EventLevel, EventType,
+    extend, EmitEvents, Event, EventError, EventLevel, EventToEmit, EventType,
 };
 use serde_json::Value;
 

@@ -16,18 +16,44 @@ use crate::borsh::{BorshDeserialize, BorshSerialize};
 use crate::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
 use crate::ibc::IbcEvent;
 
+/// An event to be emitted in Namada.
+pub trait EventToEmit: Into<Event> {
+    /// The domain of the event to emit.
+    ///
+    /// This may be used to group events of a certain kind.
+    const DOMAIN: &'static str;
+
+    /// Utility method to return the value of [`Self::DOMAIN`].
+    #[inline(always)]
+    fn domain(&self) -> &'static str {
+        Self::DOMAIN
+    }
+}
+
+impl EventToEmit for Event {
+    const DOMAIN: &'static str = "generic";
+}
+
+impl EventToEmit for IbcEvent {
+    const DOMAIN: &'static str = "ibc";
+}
+
+impl EventToEmit for EthBridgeEvent {
+    const DOMAIN: &'static str = "eth-bridge";
+}
+
 /// Used in sub-systems that may emit events.
 pub trait EmitEvents {
     /// Emit a single [event](Event).
     fn emit<E>(&mut self, event: E)
     where
-        E: Into<Event>;
+        E: EventToEmit;
 
     /// Emit a batch of [events](Event).
     fn emit_many<B, E>(&mut self, event_batch: B)
     where
         B: IntoIterator<Item = E>,
-        E: Into<Event>;
+        E: EventToEmit;
 }
 
 impl EmitEvents for Vec<Event> {

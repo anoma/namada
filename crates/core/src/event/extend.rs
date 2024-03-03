@@ -52,6 +52,14 @@ where
     }
 }
 
+impl<E, DATA> EventToEmit for CompositeEvent<DATA, E>
+where
+    E: EventToEmit,
+    DATA: ExtendEvent,
+{
+    const DOMAIN: &'static str = E::DOMAIN;
+}
+
 /// Extend an [event](Event) with additional fields.
 pub trait ExtendEvent {
     /// Add additional fields to the specified `event`.
