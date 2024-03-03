@@ -19,6 +19,7 @@ use namada::proof_of_stake::storage::{
 };
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
+use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
 use namada::tx::event::{Code, InnerTx};
@@ -347,11 +348,7 @@ where
                         if wrapper_args
                             .map(|args| args.is_committed_fee_unshield)
                             .unwrap_or_default()
-                            || result.vps_result.accepted_vps.contains(
-                                &Address::Internal(
-                                    address::InternalAddress::Masp,
-                                ),
-                            )
+                            || is_masp_tx(&result.changed_keys)
                         {
                             tx_event.extend(ValidMaspTx(tx_index));
                         }
