@@ -1,0 +1,1 @@
+ - Exposes some cometbft genesis params in Namada genesis files ([\#2797](https://github.com/anoma/namada/pull/2797))
