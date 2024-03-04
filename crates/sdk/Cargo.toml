@@ -73,7 +73,6 @@ bimap.workspace = true
 bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
-borsh-serde-adapter.workspace = true
 circular-queue.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true

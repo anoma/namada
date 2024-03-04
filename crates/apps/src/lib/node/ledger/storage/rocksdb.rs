@@ -1546,7 +1546,7 @@ impl DB for RocksDB {
         let last_height: BlockHeight = {
             let state_cf = self.get_column_family(STATE_CF)?;
 
-            types::decode(
+            decode(
                 self.0
                     .get_cf(state_cf, "height")
                     .map_err(|e| Error::DBError(e.to_string()))?
@@ -1622,7 +1622,7 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
         let last_height: BlockHeight = {
             let state_cf = self.db.get_column_family(STATE_CF).unwrap();
 
-            types::decode(
+            decode(
                 self.db.0
                     .get_cf(state_cf, "height")
                     .map_err(|e| Error::DBError(e.to_string()))

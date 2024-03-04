@@ -106,7 +106,7 @@ where
                         validator::Update { pub_key, power }
                     })
                     .expect("Must be able to set genesis validator set"),
-                app_hash: self.wl_storage.storage.merkle_root().0.to_vec().try_into().expect("Infallible"),
+                app_hash: self.state.in_mem().merkle_root().0.to_vec().try_into().expect("Infallible"),
                 ..Default::default()
             };
             debug_assert!(!rsp.validators.is_empty());
