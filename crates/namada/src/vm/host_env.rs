@@ -2062,10 +2062,16 @@ where
         TxRuntimeError::MissingTxData
     })?;
     let state = Rc::new(RefCell::new(env.state()));
+    println!();
+    println!("START IBC ----------------------------------------------------");
+    println!();
     let mut actions = IbcActions::new(state.clone());
     let module = TransferModule::new(state);
     actions.add_transfer_module(module.module_id(), module);
     actions.execute(&tx_data)?;
+    println!();
+    println!("STOP IBC ----------------------------------------------------");
+    println!();
 
     Ok(())
 }

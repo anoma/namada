@@ -198,6 +198,7 @@ macro_rules! impl_storage_read {
             ) -> namada_storage::Result<Option<Vec<u8>>> {
                 // try to read from the write log first
                 let (log_val, gas) = self.write_log().read(key);
+                println!("IBC gas {gas} - read_bytes write_log.read");
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
                     Some(write_log::StorageModification::Write { ref value }) => {
@@ -213,6 +214,7 @@ macro_rules! impl_storage_read {
                     None => {
                         // when not found in write log, try to read from the storage
                         let (value, gas) = self.db_read(key).into_storage_result()?;
+                        println!("IBC gas {gas} - read_bytes db_read");
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(value)
                     }
@@ -222,6 +224,7 @@ macro_rules! impl_storage_read {
             fn has_key(&self, key: &storage::Key) -> namada_storage::Result<bool> {
                 // try to read from the write log first
                 let (log_val, gas) = self.write_log().read(key);
+                println!("IBC gas {gas} - has_key write_log");
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
                     Some(&write_log::StorageModification::Write { .. })
@@ -234,6 +237,7 @@ macro_rules! impl_storage_read {
                     None => {
                         // when not found in write log, try to check the storage
                         let (present, gas) = self.db_has_key(key).into_storage_result()?;
+                println!("IBC gas {gas} - db_has_key");
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(present)
                     }
@@ -246,6 +250,7 @@ macro_rules! impl_storage_read {
             ) -> namada_storage::Result<Self::PrefixIter<'iter>> {
                 let (iter, gas) =
                     iter_prefix_post(self.write_log(), self.db(), prefix);
+                println!("IBC gas {gas} - iter_prefix");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(iter)
             }
@@ -255,6 +260,7 @@ macro_rules! impl_storage_read {
                 iter: &mut Self::PrefixIter<'iter>,
             ) -> namada_storage::Result<Option<(String, Vec<u8>)>> {
                 iter.next().map(|(key, val, gas)| {
+                println!("IBC gas {gas} - iter_next");
                     self.charge_gas(gas).into_storage_result()?;
                     Ok((key, val))
                 }).transpose()
@@ -264,6 +270,7 @@ macro_rules! impl_storage_read {
                 &self,
             ) -> std::result::Result<String, namada_storage::Error> {
                 let (chain_id, gas) = self.in_mem().get_chain_id();
+                println!("IBC gas {gas} - get_chain_id");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(chain_id)
             }
@@ -272,6 +279,7 @@ macro_rules! impl_storage_read {
                 &self,
             ) -> std::result::Result<storage::BlockHeight, namada_storage::Error> {
                 let (height, gas) = self.in_mem().get_block_height();
+                println!("IBC gas {gas} - get_block_height");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(height)
             }
@@ -283,6 +291,7 @@ macro_rules! impl_storage_read {
             {
                 let (header, gas) =
                     StateRead::get_block_header(self, Some(height)).into_storage_result()?;
+                println!("IBC gas {gas} - get_block_header");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(header)
             }
@@ -291,6 +300,7 @@ macro_rules! impl_storage_read {
                 &self,
             ) -> std::result::Result<storage::BlockHash, namada_storage::Error> {
                 let (hash, gas) = self.in_mem().get_block_hash();
+                println!("IBC gas {gas} - get_block_hash");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(hash)
             }
@@ -299,29 +309,34 @@ macro_rules! impl_storage_read {
                 &self,
             ) -> std::result::Result<storage::Epoch, namada_storage::Error> {
                 let (epoch, gas) = self.in_mem().get_current_epoch();
+                println!("IBC gas {gas} - get_block_epoch");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(epoch)
             }
 
             fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
-                self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
-                ).into_storage_result()?;
+                let gas = namada_gas::STORAGE_ACCESS_GAS_PER_BYTE;
+                println!("IBC gas {gas} - get_pred_epochs");
+                self.charge_gas( gas).into_storage_result()?;
                 Ok(self.in_mem().block.pred_epochs.clone())
             }
 
             fn get_tx_index(
                 &self,
             ) -> std::result::Result<storage::TxIndex, namada_storage::Error> {
+                let gas = namada_gas::STORAGE_ACCESS_GAS_PER_BYTE;
+                println!("IBC gas {gas} - get_tx_index");
                 self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
+                    gas
                 ).into_storage_result()?;
                 Ok(self.in_mem().tx_index)
             }
 
             fn get_native_token(&self) -> namada_storage::Result<Address> {
+                let gas =     namada_gas::STORAGE_ACCESS_GAS_PER_BYTE;
+                println!("IBC gas {gas} - get_native_token");
                 self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
+                gas
                 ).into_storage_result()?;
                 Ok(self.in_mem().native_token.clone())
             }
@@ -346,6 +361,7 @@ macro_rules! impl_storage_write {
                     .write_log_mut()
                     .write(key, val.as_ref().to_vec())
                     .into_storage_result()?;
+                println!("IBC gas {gas} - write_bytes");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(())
             }
@@ -355,6 +371,7 @@ macro_rules! impl_storage_write {
                     .write_log_mut()
                     .delete(key)
                     .into_storage_result()?;
+                println!("IBC gas {gas} - delete");
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(())
             }

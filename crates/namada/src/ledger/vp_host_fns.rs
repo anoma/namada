@@ -75,6 +75,7 @@ where
     S: StateRead + Debug,
 {
     let (log_val, gas) = state.write_log().read_pre(key);
+    println!("NATIVE gas {gas} - read_pre write_log");
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
@@ -97,6 +98,7 @@ where
             // When not found in write log, try to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
+            println!("NATIVE gas {gas} - read_pre db_read");
             add_gas(gas_meter, gas, sentinel)?;
             Ok(value)
         }
@@ -116,6 +118,7 @@ where
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
+    println!("NATIVE gas {gas} - read_post write_log");
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
@@ -138,6 +141,7 @@ where
             // When not found in write log, try to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
+            println!("NATIVE gas {gas} - read_post db_read");
             add_gas(gas_meter, gas, sentinel)?;
             Ok(value)
         }
@@ -157,6 +161,7 @@ where
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
+    println!("NATIVE gas {gas} - read_temp");
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(write_log::StorageModification::Temp { ref value }) => {
@@ -180,6 +185,7 @@ where
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read_pre(key);
+    println!("NATIVE gas {gas} - has_key_pre write_log");
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -193,6 +199,7 @@ where
             // When not found in write log, try to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+            println!("NATIVE gas {gas} - has_key_pre db");
             add_gas(gas_meter, gas, sentinel)?;
             Ok(present)
         }
@@ -212,6 +219,7 @@ where
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
+    println!("NATIVE gas {gas} - has_key_post write_log");
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -225,6 +233,7 @@ where
             // When not found in write log, try to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+            println!("NATIVE gas {gas} - has_key_post db");
             add_gas(gas_meter, gas, sentinel)?;
             Ok(present)
         }
@@ -241,6 +250,7 @@ where
     S: StateRead + Debug,
 {
     let (chain_id, gas) = state.in_mem().get_chain_id();
+    println!("NATIVE gas {gas} - get_chain_id");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(chain_id)
 }
@@ -256,6 +266,7 @@ where
     S: StateRead + Debug,
 {
     let (height, gas) = state.in_mem().get_block_height();
+    println!("NATIVE gas {gas} - get_block_height");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(height)
 }
@@ -272,6 +283,7 @@ where
 {
     let (header, gas) = StateRead::get_block_header(state, Some(height))
         .map_err(RuntimeError::StorageError)?;
+    println!("NATIVE gas {gas} - get_block_header");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(header)
 }
@@ -287,6 +299,7 @@ where
     S: StateRead + Debug,
 {
     let (hash, gas) = state.in_mem().get_block_hash();
+    println!("NATIVE gas {gas} - get_block_hash");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(hash)
 }
@@ -298,11 +311,9 @@ pub fn get_tx_code_hash(
     tx: &Tx,
     sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(
-        gas_meter,
-        HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
-    )?;
+    let gas = HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE;
+    println!("NATIVE gas {gas} - get_tx_code_hash");
+    add_gas(gas_meter, gas, sentinel)?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -321,6 +332,7 @@ where
     S: StateRead + Debug,
 {
     let (epoch, gas) = state.in_mem().get_current_epoch();
+    println!("NATIVE gas {gas} - get_block_epoch");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(epoch)
 }
@@ -332,11 +344,9 @@ pub fn get_tx_index(
     tx_index: &TxIndex,
     sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<TxIndex> {
-    add_gas(
-        gas_meter,
-        TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
-    )?;
+    let gas = TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE;
+    println!("NATIVE gas {gas} - get_tx_index");
+    add_gas(gas_meter, gas, sentinel)?;
     Ok(*tx_index)
 }
 
@@ -349,11 +359,9 @@ pub fn get_native_token<S>(
 where
     S: StateRead + Debug,
 {
-    add_gas(
-        gas_meter,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
-    )?;
+    let gas = ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE;
+    println!("NATIVE gas {gas} - get_native_token");
+    add_gas(gas_meter, gas, sentinel)?;
     Ok(state.in_mem().native_token.clone())
 }
 
@@ -366,13 +374,11 @@ pub fn get_pred_epochs<S>(
 where
     S: StateRead + Debug,
 {
-    add_gas(
-        gas_meter,
-        state.in_mem().block.pred_epochs.first_block_heights.len() as u64
-            * 8
-            * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
-    )?;
+    let gas = state.in_mem().block.pred_epochs.first_block_heights.len() as u64
+        * 8
+        * MEMORY_ACCESS_GAS_PER_BYTE;
+    println!("NATIVE gas {gas} - get_pred_epochs");
+    add_gas(gas_meter, gas, sentinel)?;
     Ok(state.in_mem().block.pred_epochs.clone())
 }
 
@@ -410,6 +416,7 @@ where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix);
+    println!("NATIVE gas {gas} - iter_prefix_pre");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(iter)
 }
@@ -430,6 +437,7 @@ where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix);
+    println!("NATIVE gas {gas} - iter_prefix_post");
     add_gas(gas_meter, gas, sentinel)?;
     Ok(iter)
 }
@@ -444,6 +452,7 @@ where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
 {
     if let Some((key, val, gas)) = iter.next() {
+        println!("NATIVE gas {gas} - iter_next");
         add_gas(gas_meter, gas, sentinel)?;
         return Ok(Some((key, val)));
     }
