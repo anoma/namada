@@ -424,7 +424,9 @@ where
                     && are_continuous_fundings_unique
                     && are_targets_unique)
             }
-            _ => Ok(true), // default proposal
+            // default proposal condition are checked already for all other proposals
+            // default_with_wasm proposal need to check only for valid code
+            _ => Ok(true), 
         }
     }
 
@@ -434,7 +436,7 @@ where
         let proposal_type: ProposalType =
             self.force_read(&proposal_type_key, ReadType::Post)?;
 
-        if !proposal_type.is_default() {
+        if !proposal_type.is_default_with_wasm() {
             return Ok(false);
         }
 
