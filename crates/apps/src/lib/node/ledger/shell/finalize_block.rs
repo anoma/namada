@@ -7,8 +7,7 @@ use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::ledger::events::extend::{
-    ComposeEvent, WithBlockHeight, WithDeferredData, WithInfo, WithLog,
-    WithValidMaspTx,
+    ComposeEvent, WithBlockHeight, WithInfo, WithLog, WithValidMaspTx,
 };
 use namada::ledger::events::{EmitEvents, EventType};
 use namada::ledger::gas::GasMetering;
@@ -485,13 +484,12 @@ where
                         self.state.drop_tx();
                         tx_event.extend(WithResultCode(ResultCode::InvalidTx));
                     }
-                    tx_event.extend(
-                        WithDeferredData::begin(WithGasUsed(result.gas_used))
-                            .compose(WithInfo(
-                                "Check inner_tx for result.".to_string(),
-                            ))
-                            .compose(WithInnerTx(&result)),
-                    );
+                    tx_event
+                        .extend(WithGasUsed(result.gas_used))
+                        .extend(WithInfo(
+                            "Check inner_tx for result.".to_string(),
+                        ))
+                        .extend(WithInnerTx(&result));
                 }
                 Err(msg) => {
                     tracing::info!(
@@ -534,12 +532,9 @@ where
                     stats.increment_errored_txs();
                     self.state.drop_tx();
 
-                    tx_event.extend(
-                        WithDeferredData::begin(WithGasUsed(
-                            tx_gas_meter.get_tx_consumed_gas(),
-                        ))
-                        .compose(WithInfo(msg.to_string())),
-                    );
+                    tx_event
+                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(WithInfo(msg.to_string()));
 
                     if let EventType::Accepted = tx_event.event_type {
                         // If wrapper, invalid tx error code

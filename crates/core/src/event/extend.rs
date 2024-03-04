@@ -121,88 +121,11 @@ impl ExtendEvent for WithValidMaspTx {
     }
 }
 
-/// Defer the extension of an [`Event`] to other
-/// implementations of [`ExtendEvent`].
-pub struct WithDeferredData<THIS, NEXT> {
-    this: THIS,
-    next: NEXT,
-}
-
-impl<THIS> WithDeferredData<THIS, WithNoOp> {
-    /// Begin composing a batch of [`ExtendEvent`] implementations.
-    pub const fn begin(data: THIS) -> Self {
-        Self {
-            this: data,
-            next: WithNoOp,
-        }
-    }
-}
-
-impl<THIS, NEXT> WithDeferredData<THIS, NEXT> {
-    /// Add to the batch of [`ExtendEvent`] implementations.
-    pub const fn compose<NEW>(self, data: NEW) -> WithDeferredData<NEW, Self> {
-        WithDeferredData {
-            this: data,
-            next: self,
-        }
-    }
-}
-
-impl<THIS, NEXT> ExtendEvent for WithDeferredData<THIS, NEXT>
-where
-    THIS: ExtendEvent,
-    NEXT: ExtendEvent,
-{
-    fn extend_event(self, event: &mut Event) {
-        self.this.extend_event(event);
-        self.next.extend_event(event);
-    }
-}
-
 #[cfg(test)]
 mod event_composition_tests {
     use std::collections::HashMap;
 
     use super::*;
-
-    #[test]
-    fn test_with_deferred_data_basic() {
-        let expected_attrs = {
-            let mut attrs = HashMap::new();
-            attrs.insert("log".to_string(), "this is sparta!".to_string());
-            attrs.insert("height".to_string(), "300".to_string());
-            attrs.insert("hash".to_string(), Hash::default().to_string());
-            attrs
-        };
-
-        let mut base_event = Event::applied_tx();
-        base_event.extend(
-            WithDeferredData::begin(WithLog("this is sparta!".to_string()))
-                .compose(WithBlockHeight(300.into()))
-                .compose(WithTxHash(Hash::default())),
-        );
-
-        assert_eq!(base_event.attributes, expected_attrs);
-    }
-
-    #[test]
-    fn test_with_deferred_repeated() {
-        let expected_attrs = {
-            let mut attrs = HashMap::new();
-            attrs.insert("log".to_string(), "dejavu".to_string());
-            attrs
-        };
-
-        let mut base_event = Event::applied_tx();
-        base_event.extend(
-            WithDeferredData::begin(WithLog("dejavu".to_string()))
-                .compose(WithLog("dejavu".to_string()))
-                .compose(WithLog("dejavu".to_string()))
-                .compose(WithLog("dejavu".to_string())),
-        );
-
-        assert_eq!(base_event.attributes, expected_attrs);
-    }
 
     #[test]
     fn test_event_compose_basic() {
