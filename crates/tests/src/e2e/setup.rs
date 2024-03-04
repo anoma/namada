@@ -287,7 +287,7 @@ where
         let mut sign_pre_genesis_txs = run_cmd(
             Bin::Client,
             args,
-            Some(5),
+            Some(10),
             &working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),

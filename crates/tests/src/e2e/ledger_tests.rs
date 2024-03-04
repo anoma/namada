@@ -1767,7 +1767,7 @@ fn pos_init_validator() -> Result<()> {
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
         |genesis, base_dir: &_| {
-            setup::set_validators(2, genesis, base_dir,  default_port_offset)
+            setup::set_validators(2, genesis, base_dir, default_port_offset)
         },
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),

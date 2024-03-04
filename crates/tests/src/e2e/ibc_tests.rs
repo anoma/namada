@@ -101,14 +101,19 @@ use crate::{run, run_as};
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
-    let update_genesis =
-        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let update_genesis = |mut genesis: templates::All<
+        templates::Unvalidated,
+    >,
+                          base_dir: &_| {
+        genesis.parameters.parameters.epochs_per_year = 31536;
+        setup::set_validators(2, genesis, base_dir, setup::default_port_offset)
+    };
+    let (ledger_a, ledger_aa, ledger_b, ledger_bb, test_a, test_b) =
+        run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_aa = ledger_aa.background();
     let _bg_ledger_b = ledger_b.background();
+    let _bg_ledger_bb = ledger_bb.background();
 
     let (client_id_a, client_id_b) = create_client(&test_a, &test_b)?;
 
@@ -192,7 +197,9 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year = 31536;
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    // let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let (ledger_a, ledger_aa, ledger_b, ledger_bb, test_a, test_b) =
+        run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -298,7 +305,9 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
                 .unwrap()]);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    // let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let (ledger_a, ledger_aa, ledger_b, ledger_bb, test_a, test_b) =
+        run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
 
@@ -362,7 +371,7 @@ fn run_two_nets(
         templates::All<templates::Unvalidated>,
         &Path,
     ) -> templates::All<templates::Unvalidated>,
-) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
+) -> Result<(NamadaCmd, NamadaCmd, NamadaCmd, NamadaCmd, Test, Test)> {
     let (test_a, test_b) = setup_two_single_node_nets(update_genesis)?;
     set_ethereum_bridge_mode(
         &test_a,
@@ -382,22 +391,42 @@ fn run_two_nets(
     // Run Chain A
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let mut ledger_a =
-        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(200))?;
     ledger_a.exp_string(LEDGER_STARTED)?;
     ledger_a.exp_string(VALIDATOR_NODE)?;
+    wait_for_wasm_pre_compile(&mut ledger_a)?;
+    let bg_a = ledger_a.background();
+
+    let mut ledger_aa =
+        run_as!(test_a, Who::Validator(1), Bin::Node, &["ledger"], Some(200))?;
+    ledger_aa.exp_string(LEDGER_STARTED)?;
+    ledger_aa.exp_string(VALIDATOR_NODE)?;
+    wait_for_wasm_pre_compile(&mut ledger_aa)?;
+    let bg_aa = ledger_aa.background();
+
     // Run Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let mut ledger_b =
-        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(200))?;
     ledger_b.exp_string(LEDGER_STARTED)?;
     ledger_b.exp_string(VALIDATOR_NODE)?;
-
-    wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;
+    let bg_b = ledger_b.background();
+
+    let mut ledger_bb =
+        run_as!(test_b, Who::Validator(1), Bin::Node, &["ledger"], Some(200))?;
+    ledger_bb.exp_string(LEDGER_STARTED)?;
+    ledger_bb.exp_string(VALIDATOR_NODE)?;
+    wait_for_wasm_pre_compile(&mut ledger_bb)?;
+    let bg_bb = ledger_bb.background();
 
     sleep(5);
 
-    Ok((ledger_a, ledger_b, test_a, test_b))
+    let ledger_a = bg_a.foreground();
+    let ledger_aa = bg_aa.foreground();
+    let ledger_b = bg_b.foreground();
+    let ledger_bb = bg_bb.foreground();
+    Ok((ledger_a, ledger_aa, ledger_b, ledger_bb, test_a, test_b))
 }
 
 /// Set up two Namada chains to talk to each other via IBC.
@@ -415,6 +444,27 @@ fn setup_two_single_node_nets(
 
     let test_a = setup::network(&mut update_genesis, None)?;
     let test_b = setup::network(update_genesis, None)?;
+    setup::allow_duplicate_ips(
+        &test_a,
+        &test_a.net.chain_id,
+        Who::Validator(0),
+    );
+    setup::allow_duplicate_ips(
+        &test_a,
+        &test_a.net.chain_id,
+        Who::Validator(1),
+    );
+    setup::allow_duplicate_ips(
+        &test_b,
+        &test_b.net.chain_id,
+        Who::Validator(0),
+    );
+    setup::allow_duplicate_ips(
+        &test_b,
+        &test_b.net.chain_id,
+        Who::Validator(1),
+    );
+
     let genesis_b_dir = test_b
         .test_dir
         .path()
@@ -426,8 +476,8 @@ fn setup_two_single_node_nets(
     .map_err(|_| eyre!("Could not read genesis files from test b"))?;
     // chain b's validator needs to listen on a different port than chain a's
     // validator
-    let validator_pk = get_validator_pk(&test_b, Who::Validator(0)).unwrap();
-    let validator_addr = genesis_b
+    let validator_0_pk = get_validator_pk(&test_b, Who::Validator(0)).unwrap();
+    let validator_0_addr = genesis_b
         .transactions
         .established_account
         .as_ref()
@@ -436,11 +486,11 @@ fn setup_two_single_node_nets(
         .find_map(|acct| {
             acct.tx
                 .public_keys
-                .contains(&StringEncoded::new(validator_pk.clone()))
+                .contains(&StringEncoded::new(validator_0_pk.clone()))
                 .then(|| acct.address.clone())
         })
         .unwrap();
-    let validator_tx = genesis_b
+    let validator_0_tx = genesis_b
         .transactions
         .validator_account
         .as_mut()
@@ -448,15 +498,95 @@ fn setup_two_single_node_nets(
         .iter_mut()
         .find(|val| {
             Address::Established(val.tx.data.address.raw.clone())
-                == validator_addr
+                == validator_0_addr
         })
         .unwrap();
-    let new_port = validator_tx.tx.data.net_address.port()
+    let new_port = validator_0_tx.tx.data.net_address.port()
         + setup::ANOTHER_CHAIN_PORT_OFFSET;
-    validator_tx.tx.data.net_address.set_port(new_port);
+    dbg!(validator_0_tx.tx.data.net_address.port(), new_port);
+    validator_0_tx.tx.data.net_address.set_port(new_port);
+
+    let validator_1_pk = get_validator_pk(&test_b, Who::Validator(1)).unwrap();
+    let validator_1_addr = genesis_b
+        .transactions
+        .established_account
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find_map(|acct| {
+            acct.tx
+                .public_keys
+                .contains(&StringEncoded::new(validator_1_pk.clone()))
+                .then(|| acct.address.clone())
+        })
+        .unwrap();
+    let validator_1_tx = genesis_b
+        .transactions
+        .validator_account
+        .as_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|val| {
+            Address::Established(val.tx.data.address.raw.clone())
+                == validator_1_addr
+        })
+        .unwrap();
+    let new_port = validator_1_tx.tx.data.net_address.port()
+        + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    dbg!(validator_1_tx.tx.data.net_address.port(), new_port);
+    validator_1_tx.tx.data.net_address.set_port(new_port);
+
     genesis_b
         .write_toml_files(&genesis_b_dir.join(test_b.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
+
+
+    // Validator 1 in chain B
+    let genesis_bb_dir = test_b
+        .test_dir
+        .path()
+        .join(namada_apps::client::utils::NET_ACCOUNTS_DIR)
+        .join("validator-1");
+    let mut genesis_bb = chain::Finalized::read_toml_files(
+        &genesis_bb_dir.join(test_b.net.chain_id.as_str()),
+    )
+    .map_err(|_| eyre!("Could not read genesis files from test b"))?;
+    // chain b's validator needs to listen on a different port than chain a's
+    // validator
+    let validator_0_tx = genesis_bb
+        .transactions
+        .validator_account
+        .as_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|val| {
+            Address::Established(val.tx.data.address.raw.clone())
+                == validator_0_addr
+        })
+        .unwrap();
+    let new_port = validator_0_tx.tx.data.net_address.port()
+        + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    validator_0_tx.tx.data.net_address.set_port(new_port);
+
+    let validator_1_tx = genesis_bb
+        .transactions
+        .validator_account
+        .as_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|val| {
+            Address::Established(val.tx.data.address.raw.clone())
+                == validator_1_addr
+        })
+        .unwrap();
+    let new_port = validator_1_tx.tx.data.net_address.port()
+        + setup::ANOTHER_CHAIN_PORT_OFFSET;
+    validator_1_tx.tx.data.net_address.set_port(new_port);
+    genesis_bb
+        .write_toml_files(&genesis_bb_dir.join(test_b.net.chain_id.as_str()))
+        .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
+
+        // Validator-0
     // modify chain b to use different ports for cometbft
     let mut config = namada_apps::config::Config::load(
         &genesis_b_dir,
@@ -464,16 +594,48 @@ fn setup_two_single_node_nets(
         Some(TendermintMode::Validator),
     );
     let proxy_app = &mut config.ledger.cometbft.proxy_app;
-    set_port(proxy_app, ANOTHER_PROXY_APP);
+    set_port(
+        proxy_app,
+        proxy_app.port() + setup::ANOTHER_CHAIN_PORT_OFFSET,
+    );
     let rpc_addr = &mut config.ledger.cometbft.rpc.laddr;
-    set_port(rpc_addr, ANOTHER_RPC);
+    set_port(rpc_addr, rpc_addr.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
     let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
-    set_port(p2p_addr, ANOTHER_P2P);
+    set_port(p2p_addr, p2p_addr.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
+    for peer in config.ledger.cometbft.p2p.persistent_peers.iter_mut() {
+        set_port(peer, peer.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
+    }
     config
         .write(&genesis_b_dir, &test_b.net.chain_id, true)
         .map_err(|e| {
             eyre!("Unable to modify chain b's config file due to {}", e)
         })?;
+
+    // Validator-1
+    // modify chain b to use different ports for cometbft
+    let mut config = namada_apps::config::Config::load(
+        &genesis_bb_dir,
+        &test_b.net.chain_id,
+        Some(TendermintMode::Validator),
+    );
+    let proxy_app = &mut config.ledger.cometbft.proxy_app;
+    set_port(
+        proxy_app,
+        proxy_app.port() + setup::ANOTHER_CHAIN_PORT_OFFSET,
+    );
+    let rpc_addr = &mut config.ledger.cometbft.rpc.laddr;
+    set_port(rpc_addr, rpc_addr.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
+    let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
+    set_port(p2p_addr, p2p_addr.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
+    for peer in config.ledger.cometbft.p2p.persistent_peers.iter_mut() {
+        set_port(peer, peer.port() + setup::ANOTHER_CHAIN_PORT_OFFSET);
+    }
+    config
+        .write(&genesis_bb_dir, &test_b.net.chain_id, true)
+        .map_err(|e| {
+            eyre!("Unable to modify chain b's config file due to {}", e)
+        })?;
+
     Ok((test_a, test_b))
 }
 
@@ -1686,6 +1848,7 @@ fn query_height(test: &Test) -> Result<Height> {
         .async_runtime()
         .block_on(client.status())
         .map_err(|e| eyre!("Getting the status failed: {}", e))?;
+    dbg!(&status.sync_info);
 
     Ok(Height::new(0, status.sync_info.latest_block_height.into()).unwrap())
 }
@@ -2080,4 +2243,18 @@ fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
     response
         .end_block_events
         .ok_or_else(|| eyre!("IBC event was not found: height {}", height))
+}
+
+trait AddrPort {
+    fn port(&self) -> u16;
+}
+
+use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+impl AddrPort for TendermintAddress {
+    fn port(&self) -> u16 {
+        match self {
+            TendermintAddress::Tcp { port, .. } => *port,
+            _ => panic!(),
+        }
+    }
 }
