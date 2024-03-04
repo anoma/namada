@@ -614,14 +614,14 @@ where
     let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
-    let ibc_events = state.write_log_mut().take_ibc_events();
+    let events = state.write_log_mut().take_events();
 
     Ok(TxResult {
         gas_used,
         changed_keys,
         vps_result,
         initialized_accounts,
-        ibc_events,
+        events,
         eth_bridge_events: BTreeSet::default(),
     })
 }

@@ -147,10 +147,9 @@ where
                             id
                         );
 
-                        for ibc_event in
-                            shell.state.write_log_mut().take_ibc_events()
+                        for mut event in
+                            shell.state.write_log_mut().take_events()
                         {
-                            let mut event = Event::from(ibc_event.clone());
                             // Add the height for IBC event query
                             let height =
                                 shell.state.in_mem().get_last_block_height()

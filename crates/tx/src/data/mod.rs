@@ -23,8 +23,8 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::ethereum_structs::EthBridgeEvent;
+use namada_core::events::Event;
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{Gas, VpsGas};
 use namada_macros::BorshDeserializer;
@@ -185,10 +185,8 @@ pub struct TxResult {
     pub vps_result: VpsResult,
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
-    /// IBC events emitted by the transaction
-    pub ibc_events: BTreeSet<IbcEvent>,
-    /// Ethereum bridge events emitted by the transaction
-    pub eth_bridge_events: BTreeSet<EthBridgeEvent>,
+    /// Events emitted by the transaction
+    pub events: BTreeSet<Event>,
 }
 
 impl TxResult {

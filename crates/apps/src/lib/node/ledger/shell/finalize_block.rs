@@ -125,8 +125,7 @@ where
             self.apply_inflation(current_epoch)?;
 
             // Take IBC events that may be emitted from PGF
-            for ibc_event in self.state.write_log_mut().take_ibc_events() {
-                let mut event = Event::from(ibc_event.clone());
+            for mut event in self.state.write_log_mut().take_events() {
                 // Add the height for IBC event query
                 let height = self.state.in_mem().get_last_block_height() + 1;
                 event["height"] = height.to_string();
@@ -441,23 +440,7 @@ where
                                 .accept(tx_index);
                         }
                         // events from other sources
-                        response.events.extend(
-                            // ibc events
-                            result
-                                .ibc_events
-                                .iter()
-                                .cloned()
-                                .map(|ibc_event| {
-                                    ibc_event.with(Height(height)).into()
-                                })
-                                // eth bridge events
-                                .chain(
-                                    result
-                                        .eth_bridge_events
-                                        .iter()
-                                        .map(Event::from),
-                                ),
-                        );
+                        response.events.extend(result.events.iter().cloned());
                     } else {
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
