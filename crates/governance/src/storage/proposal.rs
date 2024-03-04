@@ -412,6 +412,11 @@ impl ProposalType {
         matches!(self, ProposalType::Default)
     }
 
+    /// Check if the proposal type is default
+    pub fn is_default_with_wasm(&self) -> bool {
+        matches!(self, ProposalType::DefaultWithWasm(_))
+    }
+
     fn format_data(&self) -> String {
         match self {
             ProposalType::DefaultWithWasm(hash) => format!("Hash: {}", &hash),
