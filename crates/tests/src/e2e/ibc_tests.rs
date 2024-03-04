@@ -195,13 +195,15 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year = 31536;
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(2, genesis, base_dir, setup::default_port_offset)
         };
     // let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let (ledger_a, ledger_aa, ledger_b, ledger_bb, test_a, test_b) =
         run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_aa = ledger_aa.background();
     let _bg_ledger_b = ledger_b.background();
+    let _bg_ledger_bb = ledger_bb.background();
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -540,7 +542,6 @@ fn setup_two_single_node_nets(
         .write_toml_files(&genesis_b_dir.join(test_b.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
 
-
     // Validator 1 in chain B
     let genesis_bb_dir = test_b
         .test_dir
@@ -586,7 +587,7 @@ fn setup_two_single_node_nets(
         .write_toml_files(&genesis_bb_dir.join(test_b.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
 
-        // Validator-0
+    // Validator-0
     // modify chain b to use different ports for cometbft
     let mut config = namada_apps::config::Config::load(
         &genesis_b_dir,
