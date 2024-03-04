@@ -2073,10 +2073,16 @@ where
         TxRuntimeError::MissingTxData
     })?;
     let ctx = Rc::new(RefCell::new(env.ctx.clone()));
+    println!();
+    println!("START IBC ----------------------------------------------------");
+    println!();
     let mut actions = IbcActions::new(ctx.clone());
     let module = TransferModule::new(ctx);
     actions.add_transfer_module(module.module_id(), module);
     actions.execute(&tx_data)?;
+    println!();
+    println!("STOP IBC ----------------------------------------------------");
+    println!();
 
     Ok(())
 }
@@ -2383,6 +2389,7 @@ where
     ) -> std::result::Result<Option<Vec<u8>>, StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
+        println!("IBC gas {gas} - read_bytes write_log.read");
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
@@ -2399,6 +2406,7 @@ where
                 // when not found in write log, try to read from the storage
                 let storage = unsafe { self.storage.get() };
                 let (value, gas) = storage.read(key).into_storage_result()?;
+                println!("IBC gas {gas} - read_bytes db_read");
                 ibc_tx_charge_gas(self, gas)?;
                 value
             }
@@ -2409,6 +2417,7 @@ where
         // try to read from the write log first
         let write_log = unsafe { self.write_log.get() };
         let (log_val, gas) = write_log.read(key);
+        println!("IBC gas {gas} - has_key write_log");
         ibc_tx_charge_gas(self, gas)?;
         Ok(match log_val {
             Some(&write_log::StorageModification::Write { .. }) => true,
@@ -2420,6 +2429,7 @@ where
                 let storage = unsafe { self.storage.get() };
                 let (present, gas) =
                     storage.has_key(key).into_storage_result()?;
+                println!("IBC gas {gas} - db_has_key");
                 ibc_tx_charge_gas(self, gas)?;
                 present
             }
@@ -2434,6 +2444,7 @@ where
         let storage = unsafe { self.storage.get() };
         let (iter, gas) =
             namada_state::iter_prefix_post(write_log, storage, prefix);
+        println!("IBC gas {gas} - iter_prefix");
         ibc_tx_charge_gas(self, gas)?;
 
         let iterators = unsafe { self.iterators.get() };
@@ -2450,7 +2461,11 @@ where
         while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
             let (log_val, log_gas) =
                 write_log.read(&Key::parse(key.clone()).into_storage_result()?);
-            ibc_tx_charge_gas(self, iter_gas + log_gas)?;
+            let gas = iter_gas + log_gas;
+            println!(
+                "IBC gas {gas} - iter_next (iter: {iter_gas}, log: {log_gas})"
+            );
+            ibc_tx_charge_gas(self, gas)?;
             match log_val {
                 Some(write_log::StorageModification::Write { ref value }) => {
                     return Ok(Some((key, value.clone())));
@@ -2479,6 +2494,7 @@ where
     fn get_chain_id(&self) -> Result<String, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (chain_id, gas) = storage.get_chain_id();
+        println!("IBC gas {gas} - get_chain_id");
         ibc_tx_charge_gas(self, gas)?;
         Ok(chain_id)
     }
@@ -2486,6 +2502,7 @@ where
     fn get_block_height(&self) -> Result<BlockHeight, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (height, gas) = storage.get_block_height();
+        println!("IBC gas {gas} - get_block_height");
         ibc_tx_charge_gas(self, gas)?;
         Ok(height)
     }
@@ -2498,6 +2515,7 @@ where
         let (header, gas) = storage
             .get_block_header(Some(height))
             .into_storage_result()?;
+        println!("IBC gas {gas} - get_block_header");
         ibc_tx_charge_gas(self, gas)?;
         Ok(header)
     }
@@ -2505,6 +2523,7 @@ where
     fn get_block_hash(&self) -> Result<BlockHash, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (hash, gas) = storage.get_block_hash();
+        println!("IBC gas {gas} - get_block_hash");
         ibc_tx_charge_gas(self, gas)?;
         Ok(hash)
     }
@@ -2512,35 +2531,33 @@ where
     fn get_block_epoch(&self) -> Result<Epoch, StorageError> {
         let storage = unsafe { self.storage.get() };
         let (epoch, gas) = storage.get_current_epoch();
+        println!("IBC gas {gas} - get_block_epoch");
         ibc_tx_charge_gas(self, gas)?;
         Ok(epoch)
     }
 
     fn get_tx_index(&self) -> Result<TxIndex, StorageError> {
         let tx_index = unsafe { self.tx_index.get() };
-        ibc_tx_charge_gas(
-            self,
-            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
-        )?;
+        let gas = crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE;
+        println!("IBC gas {gas} - get_tx_index");
+        ibc_tx_charge_gas(self, gas)?;
         Ok(TxIndex(tx_index.0))
     }
 
     fn get_native_token(&self) -> Result<Address, StorageError> {
         let storage = unsafe { self.storage.get() };
+        let gas = crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE;
         let native_token = storage.native_token.clone();
-        ibc_tx_charge_gas(
-            self,
-            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
-        )?;
+        println!("IBC gas {gas} - get_native_token");
+        ibc_tx_charge_gas(self, gas)?;
         Ok(native_token)
     }
 
     fn get_pred_epochs(&self) -> namada_state::StorageResult<Epochs> {
         let storage = unsafe { self.storage.get() };
-        ibc_tx_charge_gas(
-            self,
-            crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE,
-        )?;
+        let gas = crate::vm::host_env::gas::STORAGE_ACCESS_GAS_PER_BYTE;
+        println!("IBC gas {gas} - get_pred_epochs");
+        ibc_tx_charge_gas(self, gas)?;
         Ok(storage.block.pred_epochs.clone())
     }
 }
@@ -2562,6 +2579,7 @@ where
         let (gas, _size_diff) = write_log
             .write(key, data.as_ref().to_vec())
             .into_storage_result()?;
+        println!("IBC gas {gas} - write_bytes");
         ibc_tx_charge_gas(self, gas)
     }
 
@@ -2572,6 +2590,7 @@ where
 
         let write_log = unsafe { self.write_log.get() };
         let (gas, _size_diff) = write_log.delete(key).into_storage_result()?;
+        println!("IBC gas {gas} - delete");
         ibc_tx_charge_gas(self, gas)
     }
 }
@@ -2586,6 +2605,7 @@ where
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
         let write_log = unsafe { self.write_log.get() };
         let gas = write_log.emit_ibc_event(event);
+        println!("IBC gas {gas} - emit_ibc_event");
         ibc_tx_charge_gas(self, gas)
     }
 

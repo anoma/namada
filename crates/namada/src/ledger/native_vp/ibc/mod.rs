@@ -72,6 +72,7 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<bool> {
+        println!("START NATIVE IBC VP ---------------------------------------");
         let signed = tx_data;
         let tx_data = signed.data().ok_or(Error::NoTxData)?;
 
@@ -83,6 +84,7 @@ where
 
         // Validate the denom store if a denom key has been changed
         self.validate_denom(keys_changed)?;
+                println!("STOP NATIVE IBC VP ---------------------------------------");
 
         Ok(true)
     }
