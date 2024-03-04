@@ -417,8 +417,6 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// The proposal data
     pub proposal_data: C::Data,
-    /// Flag if proposal should be run offline
-    pub is_offline: bool,
     /// Flag if proposal is of type Pgf stewards
     pub is_pgf_stewards: bool,
     /// Flag if proposal is of type Pgf funding
@@ -446,11 +444,6 @@ impl<C: NamadaTypes> InitProposal<C> {
             proposal_data,
             ..self
         }
-    }
-
-    /// Flag if proposal should be run offline
-    pub fn is_offline(self, is_offline: bool) -> Self {
-        Self { is_offline, ..self }
     }
 
     /// Flag if proposal is of type Pgf stewards
@@ -568,15 +561,11 @@ pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Proposal id
-    pub proposal_id: Option<u64>,
+    pub proposal_id: u64,
     /// The vote
     pub vote: String,
     /// The address of the voter
-    pub voter: C::Address,
-    /// Flag if proposal vote should be run offline
-    pub is_offline: bool,
-    /// The proposal file path
-    pub proposal_data: Option<C::Data>,
+    pub voter_address: C::Address,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -597,7 +586,7 @@ impl<C: NamadaTypes> VoteProposal<C> {
     /// Proposal id
     pub fn proposal_id(self, proposal_id: u64) -> Self {
         Self {
-            proposal_id: Some(proposal_id),
+            proposal_id,
             ..self
         }
     }
@@ -608,19 +597,9 @@ impl<C: NamadaTypes> VoteProposal<C> {
     }
 
     /// The address of the voter
-    pub fn voter(self, voter: C::Address) -> Self {
-        Self { voter, ..self }
-    }
-
-    /// Flag if proposal vote should be run offline
-    pub fn is_offline(self, is_offline: bool) -> Self {
-        Self { is_offline, ..self }
-    }
-
-    /// The proposal file path
-    pub fn proposal_data(self, proposal_data: C::Data) -> Self {
+    pub fn voter(self, voter_address: C::Address) -> Self {
         Self {
-            proposal_data: Some(proposal_data),
+            voter_address,
             ..self
         }
     }

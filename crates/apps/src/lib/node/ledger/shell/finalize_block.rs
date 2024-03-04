@@ -1514,13 +1514,12 @@ mod test_finalize_block {
             shell.proposal_data.insert(proposal_id);
 
             let proposal = InitProposalData {
-                id: proposal_id,
                 content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
                 grace_epoch: Epoch::default().next(),
-                r#type: ProposalType::Default(None),
+                r#type: ProposalType::Default,
             };
 
             namada::governance::init_proposal(

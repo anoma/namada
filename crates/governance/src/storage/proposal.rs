@@ -36,8 +36,6 @@ pub enum ProposalError {
     Deserialize,
 )]
 pub struct InitProposalData {
-    /// The proposal id
-    pub id: u64,
     /// The proposal content
     pub content: Hash,
     /// The proposal author address
@@ -56,7 +54,7 @@ impl InitProposalData {
     /// Get the hash of the corresponding extra data section
     pub fn get_section_code_hash(&self) -> Option<Hash> {
         match self.r#type {
-            ProposalType::Default(hash) => hash,
+            ProposalType::DefaultWithWasm(hash) => Some(hash),
             _ => None,
         }
     }
@@ -88,10 +86,12 @@ impl TryFrom<DefaultProposal> for InitProposalData {
 
     fn try_from(value: DefaultProposal) -> Result<Self, Self::Error> {
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::Default(None),
+            r#type: match value.data {
+                Some(_) => ProposalType::DefaultWithWasm(Hash::default()),
+                None => ProposalType::Default,
+            },
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
             grace_epoch: value.proposal.grace_epoch,
@@ -107,7 +107,6 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
             BTreeSet::<AddRemove<Address>>::try_from(value.data).unwrap();
 
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
             r#type: ProposalType::PGFSteward(extra_data),
@@ -147,7 +146,6 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
         continuous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
             r#type: ProposalType::PGFPayment(continuous_fundings), /* here continuous_fundings also contains the retro funding */
@@ -195,8 +193,10 @@ impl StoragePgfFunding {
     Deserialize,
 )]
 pub enum ProposalType {
-    /// Default governance proposal with the optional wasm code
-    Default(Option<Hash>),
+    /// Default governance proposal
+    Default,
+    /// Governance proposal with wasm code
+    DefaultWithWasm(Hash),
     /// PGF stewards proposal
     PGFSteward(BTreeSet<AddRemove<Address>>),
     /// PGF funding proposal
@@ -409,13 +409,13 @@ pub enum PGFAction {
 impl ProposalType {
     /// Check if the proposal type is default
     pub fn is_default(&self) -> bool {
-        matches!(self, ProposalType::Default(_))
+        matches!(self, ProposalType::Default)
     }
 
     fn format_data(&self) -> String {
         match self {
-            ProposalType::Default(Some(hash)) => format!("Hash: {}", &hash),
-            ProposalType::Default(None) => "".to_string(),
+            ProposalType::DefaultWithWasm(hash) => format!("Hash: {}", &hash),
+            ProposalType::Default => "".to_string(),
             ProposalType::PGFSteward(addresses) => format!(
                 "Addresses:{}",
                 addresses
@@ -437,7 +437,8 @@ impl ProposalType {
 impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalType::Default(_) => write!(f, "Default"),
+            ProposalType::Default => write!(f, "Default"),
+            ProposalType::DefaultWithWasm(_) => write!(f, "DefaultWithWasm"),
             ProposalType::PGFSteward(_) => write!(f, "PGF steward"),
             ProposalType::PGFPayment(_) => write!(f, "PGF funding"),
         }
@@ -622,7 +623,7 @@ pub mod testing {
     use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
-    use proptest::{collection, option, prop_compose};
+    use proptest::{collection, prop_compose};
 
     use super::*;
     use crate::storage::vote::testing::arb_proposal_vote;
@@ -706,7 +707,7 @@ pub mod testing {
     /// Generate an arbitrary proposal type
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
-            option::of(arb_hash()).prop_map(ProposalType::Default),
+            arb_hash().prop_map(ProposalType::DefaultWithWasm),
             collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
                 0..10,
@@ -720,7 +721,6 @@ pub mod testing {
     prop_compose! {
         /// Generate a proposal initialization
         pub fn arb_init_proposal()(
-            id: u64,
             content in arb_hash(),
             author in arb_non_internal_address(),
             r#type in arb_proposal_type(),
@@ -729,7 +729,6 @@ pub mod testing {
             grace_epoch in arb_epoch(),
         ) -> InitProposalData {
             InitProposalData {
-                id,
                 content,
                 author,
                 r#type,

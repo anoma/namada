@@ -51,12 +51,6 @@ pub enum ProposalValidation {
          but maximum is {1}"
     )]
     InvalidContentLength(u64, u64),
-    /// Invalid offline proposal tally epoch
-    #[error(
-        "Invalid proposal tally epoch: tally epoch ({0}) must be less than \
-         current epoch ({1})"
-    )]
-    InvalidTallyEPoch(Epoch, Epoch),
     /// The proposal wasm code is not valid
     #[error(
         "Invalid proposal extra data: file doesn't exist or content size \
@@ -183,20 +177,6 @@ pub fn is_valid_content(
         Err(ProposalValidation::InvalidContentLength(
             proposal_content_length,
             max_content_length,
-        ))
-    }
-}
-
-pub fn is_valid_tally_epoch(
-    tally_epoch: Epoch,
-    current_epoch: Epoch,
-) -> Result<(), ProposalValidation> {
-    if tally_epoch <= current_epoch {
-        Ok(())
-    } else {
-        Err(ProposalValidation::InvalidTallyEPoch(
-            tally_epoch,
-            current_epoch,
         ))
     }
 }

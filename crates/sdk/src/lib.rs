@@ -271,7 +271,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_init_proposal(&self, proposal_data: Vec<u8>) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
             tx_code_path: PathBuf::from(TX_INIT_PROPOSAL),
@@ -292,17 +291,16 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a VoteProposal builder from the given minimum set of arguments
-    fn new_vote_prposal(
+    fn new_proposal_vote(
         &self,
+        proposal_id: u64,
         vote: String,
-        voter: Address,
+        voter_address: Address,
     ) -> args::VoteProposal {
         args::VoteProposal {
             vote,
-            voter,
-            proposal_id: None,
-            is_offline: false,
-            proposal_data: None,
+            voter_address,
+            proposal_id,
             tx_code_path: PathBuf::from(TX_VOTE_PROPOSAL),
             tx: self.tx_builder(),
         }
@@ -1173,7 +1171,7 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             let content_hash = tx.add_section(Section::ExtraData(content_extra_data)).get_hash();
             init_proposal.content = content_hash;
-            if let ProposalType::Default(Some(hash)) = &mut init_proposal.r#type {
+            if let ProposalType::DefaultWithWasm(hash) = &mut init_proposal.r#type {
                 let type_hash = tx.add_section(Section::ExtraData(type_extra_data)).get_hash();
                 *hash = type_hash;
             }

@@ -2,7 +2,6 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::{self, read_dir};
 use std::io;
 use std::str::FromStr;
 
@@ -23,10 +22,6 @@ use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
 };
 use namada::core::token::{Change, MaspDigitPos};
-use namada::governance::cli::offline::{
-    find_offline_proposal, find_offline_votes, read_offline_files,
-    OfflineSignedProposal, OfflineVote,
-};
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
 use namada::governance::pgf::storage::steward::StewardDetail;
@@ -34,9 +29,8 @@ use namada::governance::storage::keys as governance_storage;
 use namada::governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
-use namada::governance::utils::{
-    compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
-};
+use namada::governance::utils::{ProposalVotes, VotePower};
+use namada::governance::ProposalVote;
 use namada::io::Io;
 use namada::ledger::events::Event;
 use namada::ledger::ibc::storage::{
@@ -1251,133 +1245,43 @@ pub async fn query_proposal_result(
     context: &impl Namada,
     args: args::QueryProposalResult,
 ) {
-    if args.proposal_id.is_some() {
-        let proposal_id =
-            args.proposal_id.expect("Proposal id should be defined.");
+    let proposal_id = args.proposal_id;
 
-        let current_epoch = query_epoch(context.client()).await.unwrap();
-        let proposal_result = namada_sdk::rpc::query_proposal_result(
-            context.client(),
-            proposal_id,
-        )
-        .await;
-        let proposal_query = namada_sdk::rpc::query_proposal_by_id(
-            context.client(),
-            proposal_id,
-        )
-        .await;
+    let current_epoch = query_epoch(context.client()).await.unwrap();
+    let proposal_result =
+        namada_sdk::rpc::query_proposal_result(context.client(), proposal_id)
+            .await;
+    let proposal_query =
+        namada_sdk::rpc::query_proposal_by_id(context.client(), proposal_id)
+            .await;
 
-        if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
-            (proposal_result, proposal_query)
-        {
-            display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-            if current_epoch >= proposal_query.voting_end_epoch {
-                display_line!(context.io(), "{:4}{}", "", proposal_result);
+    if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
+        (proposal_result, proposal_query)
+    {
+        display_line!(context.io(), "Proposal Id: {} ", proposal_id);
+        if current_epoch >= proposal_query.voting_end_epoch {
+            display_line!(context.io(), "{:4}{}", "", proposal_result);
+        } else {
+            display_line!(
+                context.io(),
+                "{:4}Still voting until epoch {}",
+                "",
+                proposal_query.voting_end_epoch
+            );
+            let res = format!("{}", proposal_result);
+            if let Some(idx) = res.find(' ') {
+                let slice = &res[idx..];
+                display_line!(context.io(), "{:4}Currently{}", "", slice);
             } else {
                 display_line!(
                     context.io(),
-                    "{:4}Still voting until epoch {}",
+                    "{:4}Error parsing the result string",
                     "",
-                    proposal_query.voting_end_epoch
                 );
-                let res = format!("{}", proposal_result);
-                if let Some(idx) = res.find(' ') {
-                    let slice = &res[idx..];
-                    display_line!(context.io(), "{:4}Currently{}", "", slice);
-                } else {
-                    display_line!(
-                        context.io(),
-                        "{:4}Error parsing the result string",
-                        "",
-                    );
-                }
             }
-        } else {
-            edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
-        };
+        }
     } else {
-        let proposal_folder = args.proposal_folder.expect(
-            "The argument --proposal-folder is required with --offline.",
-        );
-        let data_directory = read_dir(&proposal_folder).unwrap_or_else(|_| {
-            panic!(
-                "Should be able to read {} directory.",
-                proposal_folder.to_string_lossy()
-            )
-        });
-        let files = read_offline_files(data_directory);
-        let proposal_path = find_offline_proposal(&files);
-
-        let proposal = if let Some(path) = proposal_path {
-            let proposal_file =
-                fs::File::open(path).expect("file should open read only");
-            let proposal: OfflineSignedProposal =
-                serde_json::from_reader(proposal_file)
-                    .expect("file should be proper JSON");
-
-            let author_account = rpc::get_account_info(
-                context.client(),
-                &proposal.proposal.author,
-            )
-            .await
-            .unwrap()
-            .expect("Account should exist.");
-
-            let proposal = proposal.validate(
-                &author_account.public_keys_map,
-                author_account.threshold,
-                false,
-            );
-
-            if let Ok(proposal) = proposal {
-                proposal
-            } else {
-                edisplay_line!(
-                    context.io(),
-                    "The offline proposal is not valid."
-                );
-                return;
-            }
-        } else {
-            edisplay_line!(
-                context.io(),
-                "Couldn't find a file name offline_proposal_*.json."
-            );
-            return;
-        };
-
-        let votes = find_offline_votes(&files)
-            .iter()
-            .map(|path| {
-                let vote_file = fs::File::open(path).expect("");
-                let vote: OfflineVote =
-                    serde_json::from_reader(vote_file).expect("");
-                vote
-            })
-            .collect::<Vec<OfflineVote>>();
-
-        let proposal_votes =
-            compute_offline_proposal_votes(context, &proposal, votes.clone())
-                .await;
-        let total_voting_power = get_total_staked_tokens(
-            context.client(),
-            proposal.proposal.tally_epoch,
-        )
-        .await;
-
-        let proposal_result = compute_proposal_result(
-            proposal_votes,
-            total_voting_power,
-            TallyType::TwoThirds,
-        );
-
-        display_line!(
-            context.io(),
-            "Proposal offline: {}",
-            proposal.proposal.hash()
-        );
-        display_line!(context.io(), "Parsed {} votes.", votes.len());
-        display_line!(context.io(), "{:4}{}", "", proposal_result);
+        edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
     }
 }
 
@@ -2895,69 +2799,6 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     })
 }
 
-pub async fn compute_offline_proposal_votes(
-    context: &impl Namada,
-    proposal: &OfflineSignedProposal,
-    votes: Vec<OfflineVote>,
-) -> ProposalVotes {
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut validator_voting_power: HashMap<Address, VotePower> =
-        HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut delegator_voting_power: HashMap<
-        Address,
-        HashMap<Address, VotePower>,
-    > = HashMap::default();
-    for vote in votes {
-        let is_validator = is_validator(context.client(), &vote.address).await;
-        let is_delegator = is_delegator(context.client(), &vote.address).await;
-        if is_validator {
-            let validator_stake = get_validator_stake(
-                context.client(),
-                proposal.proposal.tally_epoch,
-                &vote.address,
-            )
-            .await
-            .unwrap_or_default();
-            validators_vote.insert(vote.address.clone(), vote.clone().into());
-            validator_voting_power
-                .insert(vote.address.clone(), validator_stake);
-        } else if is_delegator {
-            let validators = get_delegators_delegation_at(
-                context.client(),
-                &vote.address.clone(),
-                proposal.proposal.tally_epoch,
-            )
-            .await;
-
-            for validator in vote.delegations.clone() {
-                let delegator_stake =
-                    validators.get(&validator).cloned().unwrap_or_default();
-
-                delegators_vote
-                    .insert(vote.address.clone(), vote.clone().into());
-                delegator_voting_power
-                    .entry(vote.address.clone())
-                    .or_default()
-                    .insert(validator, delegator_stake);
-            }
-        } else {
-            display_line!(
-                context.io(),
-                "Skipping vote, not a validator/delegator at epoch {}.",
-                proposal.proposal.tally_epoch
-            );
-        }
-    }
-
-    ProposalVotes {
-        validators_vote,
-        validator_voting_power,
-        delegators_vote,
-        delegator_voting_power,
-    }
-}
-
 pub async fn compute_proposal_votes<
     C: namada::ledger::queries::Client + Sync,
 >(
@@ -2969,10 +2810,12 @@ pub async fn compute_proposal_votes<
         .await
         .unwrap();
 
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut validator_voting_power: HashMap<Address, VotePower> =
         HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut delegator_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
@@ -2985,7 +2828,7 @@ pub async fn compute_proposal_votes<
                     .await
                     .unwrap_or_default();
 
-            validators_vote.insert(vote.validator.clone(), vote.data.into());
+            validators_vote.insert(vote.validator.clone(), vote.data);
             validator_voting_power.insert(vote.validator, validator_stake);
         } else {
             let delegator_stake = get_bond_amount_at(
@@ -2997,8 +2840,7 @@ pub async fn compute_proposal_votes<
             .await;
 
             if let Some(stake) = delegator_stake {
-                delegators_vote
-                    .insert(vote.delegator.clone(), vote.data.into());
+                delegators_vote.insert(vote.delegator.clone(), vote.data);
                 delegator_voting_power
                     .entry(vote.delegator.clone())
                     .or_default()

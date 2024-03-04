@@ -38,6 +38,18 @@ impl ProposalVote {
     pub fn is_abstain(&self) -> bool {
         matches!(self, ProposalVote::Abstain)
     }
+
+    /// Check if two votes are equal, returns an error if the variants of the
+    /// two instances are different
+    #[allow(clippy::match_like_matches_macro)]
+    pub fn is_same_side(&self, other: &ProposalVote) -> bool {
+        match (self, other) {
+            (ProposalVote::Yay, ProposalVote::Yay) => true,
+            (ProposalVote::Nay, ProposalVote::Nay) => true,
+            (ProposalVote::Abstain, ProposalVote::Abstain) => true,
+            _ => false,
+        }
+    }
 }
 
 impl Display for ProposalVote {

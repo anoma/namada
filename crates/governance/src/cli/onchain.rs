@@ -21,8 +21,6 @@ use crate::storage::proposal::PGFTarget;
 )]
 /// The proposal structure
 pub struct OnChainProposal {
-    /// The proposal id
-    pub id: u64,
     /// The proposal content
     pub content: BTreeMap<String, String>,
     /// The proposal author address

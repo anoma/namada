@@ -3129,7 +3129,6 @@ pub mod args {
     pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
-    pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
@@ -4748,7 +4747,6 @@ pub mod args {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: std::fs::read(self.proposal_data).expect(""),
-                is_offline: self.is_offline,
                 is_pgf_stewards: self.is_pgf_stewards,
                 is_pgf_funding: self.is_pgf_funding,
                 tx_code_path: self.tx_code_path,
@@ -4760,7 +4758,6 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
-            let is_offline = PROPOSAL_OFFLINE.parse(matches);
             let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
             let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
@@ -4769,7 +4766,6 @@ pub mod args {
                 tx,
                 proposal_data,
                 tx_code_path,
-                is_offline,
                 is_pgf_stewards,
                 is_pgf_funding,
             }
@@ -4780,19 +4776,6 @@ pub mod args {
                 .arg(DATA_PATH.def().help(
                     "The data path file (json) that describes the proposal.",
                 ))
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help(
-                            "Flag if the proposal should be serialized \
-                             offline (only for default types).",
-                        )
-                        .conflicts_with_all([
-                            PROPOSAL_PGF_FUNDING.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                            PROPOSAL_ETH.name,
-                        ]),
-                )
                 .arg(
                     PROPOSAL_ETH
                         .def()
@@ -4835,12 +4818,9 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
-                voter: ctx.borrow_chain_or_exit().get(&self.voter),
-                is_offline: self.is_offline,
-                proposal_data: self.proposal_data.map(|path| {
-                    std::fs::read(path)
-                        .expect("Should be able to read the file.")
-                }),
+                voter_address: ctx
+                    .borrow_chain_or_exit()
+                    .get(&self.voter_address),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -4849,54 +4829,26 @@ pub mod args {
     impl Args for VoteProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
-            let voter = ADDRESS.parse(matches);
-            let is_offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_data = DATA_PATH_OPT.parse(matches);
+            let voter_address = ADDRESS.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
             Self {
                 tx,
                 proposal_id,
                 vote,
-                is_offline,
-                voter,
-                proposal_data,
+                voter_address,
                 tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help("The proposal identifier.")
-                        .conflicts_with_all([
-                            PROPOSAL_OFFLINE.name,
-                            DATA_PATH_OPT.name,
-                        ]),
-                )
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
                 .arg(PROPOSAL_VOTE.def().help(
                     "The vote for the proposal. Either yay, nay, or abstain.",
                 ))
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help("Flag if the proposal vote should run offline.")
-                        .conflicts_with(PROPOSAL_ID.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .help(
-                            "The data path file (json) that describes the \
-                             proposal.",
-                        )
-                        .requires(PROPOSAL_OFFLINE.name)
-                        .conflicts_with(PROPOSAL_ID.name),
-                )
                 .arg(ADDRESS.def().help("The address of the voter."))
         }
     }
@@ -4984,11 +4936,7 @@ pub mod args {
         /// Common query args
         pub query: Query<C>,
         /// Proposal id
-        pub proposal_id: Option<u64>,
-        /// Flag if proposal result should be run on offline data
-        pub offline: bool,
-        /// The folder containing the proposal and votes
-        pub proposal_folder: Option<PathBuf>,
+        pub proposal_id: u64,
     }
 
     impl CliToSdk<QueryProposalResult<SdkTypes>> for QueryProposalResult<CliTypes> {
@@ -4996,8 +4944,6 @@ pub mod args {
             QueryProposalResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
-                offline: self.offline,
-                proposal_folder: self.proposal_folder,
             }
         }
     }
@@ -5005,49 +4951,14 @@ pub mod args {
     impl Args for QueryProposalResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_folder = DATA_PATH_OPT.parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
 
-            Self {
-                query,
-                proposal_id,
-                offline,
-                proposal_folder,
-            }
+            Self { query, proposal_id }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help("The proposal identifier.")
-                        .conflicts_with_all([
-                            PROPOSAL_OFFLINE.name,
-                            DATA_PATH_OPT.name,
-                        ]),
-                )
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help(
-                            "Flag if the proposal result should run on \
-                             offline data.",
-                        )
-                        .conflicts_with(PROPOSAL_ID.name)
-                        .requires(DATA_PATH_OPT.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .help(
-                            "The path to the folder containing the proposal \
-                             and votes files in json format.",
-                        )
-                        .conflicts_with(PROPOSAL_ID.name)
-                        .requires(PROPOSAL_OFFLINE.name),
-                )
+                .arg(PROPOSAL_ID.def().help("The proposal identifier."))
         }
     }
 
