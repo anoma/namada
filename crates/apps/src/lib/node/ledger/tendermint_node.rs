@@ -4,6 +4,7 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use borsh_ext::BorshSerializeExt;
+use itertools::Itertools;
 use namada::core::chain::ChainId;
 use namada::core::key::*;
 use namada::core::storage::BlockHeight;
@@ -19,7 +20,11 @@ use tokio::sync::oneshot::{Receiver, Sender};
 
 use crate::cli::namada_version;
 use crate::config;
+use crate::config::genesis;
+use crate::config::genesis::templates::KeyScheme;
+use crate::facade::tendermint::consensus::params;
 use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::facade::tendermint::public_key::Algorithm;
 use crate::facade::tendermint::{block, Genesis, Moniker};
 use crate::facade::tendermint_config::{
     Error as TendermintError, TendermintConfig,
@@ -116,7 +121,8 @@ async fn initalize_config(
         panic!("Tendermint failed to initialize with {:#?}", output);
     }
 
-    write_tm_genesis(&home_dir, chain_id, genesis_time).await?;
+    write_tm_genesis(&home_dir, config.shell.base_dir, chain_id, genesis_time)
+        .await?;
 
     update_tendermint_config(&home_dir, config.cometbft).await?;
     Ok((home_dir_string, tendermint_path))
@@ -429,6 +435,7 @@ async fn update_tendermint_config(
 
 async fn write_tm_genesis(
     home_dir: impl AsRef<Path>,
+    base_dir: impl AsRef<Path>,
     chain_id: ChainId,
     genesis_time: DateTimeUtc,
 ) -> Result<()> {
@@ -439,6 +446,12 @@ async fn write_tm_genesis(
             path, err
         )
     });
+    let namada_genesis = {
+        let chain_dir = base_dir.as_ref().join(chain_id.to_string());
+        genesis::chain::Finalized::read_toml_files(&chain_dir)
+            .expect("Missing genesis files")
+    };
+    let cometbft_genesis_params = namada_genesis.parameters.cometbft_params;
     let mut file_contents = vec![];
     file.read_to_end(&mut file_contents)
         .await
@@ -464,7 +477,31 @@ async fn write_tm_genesis(
         // This parameter has no value anymore in Tendermint-core
         time_iota_ms: block::Size::default_time_iota_ms(),
     };
-    genesis.consensus_params.block = size;
+    genesis.consensus_params.block =
+        cometbft_genesis_params
+            .block
+            .map_or(size, |size| block::Size {
+                max_bytes: size.max_bytes,
+                max_gas: size.max_gas,
+                time_iota_ms: size.time_iota_ms,
+            });
+    genesis.consensus_params.validator.pub_key_types = cometbft_genesis_params
+        .validator
+        .map(|val| {
+            val.pub_key_types
+                .into_iter()
+                .sorted()
+                .dedup()
+                .map(|scheme| match scheme {
+                    KeyScheme::Ed22519 => Algorithm::Ed25519,
+                    KeyScheme::Secp256k1 => Algorithm::Secp256k1,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    genesis.consensus_params.version = cometbft_genesis_params
+        .version
+        .map(|v| params::VersionParams { app: v.app });
 
     let mut file = OpenOptions::new()
         .write(true)

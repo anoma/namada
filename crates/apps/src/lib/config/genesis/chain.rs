@@ -706,6 +706,7 @@ pub struct FinalizedParameters {
     pub gov_params: templates::GovernanceParams,
     pub pgf_params: namada::governance::pgf::parameters::PgfParameters,
     pub eth_bridge_params: Option<templates::EthBridgeParams>,
+    pub cometbft_params: templates::CometBftParams,
 }
 
 impl FinalizedParameters {
@@ -716,6 +717,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params,
             eth_bridge_params,
+            cometbft_params,
         }: templates::Parameters<Validated>,
     ) -> Self {
         use namada::governance::pgf::parameters::PgfParameters;
@@ -730,6 +732,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params: finalized_pgf_params,
             eth_bridge_params,
+            cometbft_params,
         }
     }
 }

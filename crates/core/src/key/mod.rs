@@ -90,7 +90,17 @@ pub trait TryFromRef<T: ?Sized>: Sized {
 }
 
 /// Type capturing signature scheme IDs
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(
+    PartialEq,
+    Eq,
+    Copy,
+    Clone,
+    Debug,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+)]
 pub enum SchemeType {
     /// Type identifier for Ed25519 scheme
     Ed25519,

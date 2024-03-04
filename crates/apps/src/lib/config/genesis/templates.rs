@@ -229,6 +229,8 @@ pub struct Parameters<T: TemplateValidation> {
     pub gov_params: GovernanceParams,
     pub pgf_params: PgfParams<T>,
     pub eth_bridge_params: Option<EthBridgeParams>,
+    #[serde(default)]
+    pub cometbft_params: CometBftParams,
 }
 
 #[derive(
@@ -484,6 +486,92 @@ pub struct EthBridgeParams {
     /// The addresses of the Ethereum contracts that need to be directly known
     /// by validators.
     pub contracts: Contracts,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct CometBftParams {
+    /// Block size parameters
+    pub block: Option<BlockParams>,
+
+    /// Validator parameters
+    pub validator: Option<ValidatorParams>,
+
+    /// Version parameters
+    pub version: Option<VersionParams>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct BlockParams {
+    /// Maximum number of bytes in a block
+    pub max_bytes: u64,
+    /// Maximum amount of gas which can be spent on a block
+    pub max_gas: i64,
+    /// This parameter has no value anymore in Tendermint-core
+    pub time_iota_ms: i64,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
+pub enum KeyScheme {
+    Ed22519,
+    Secp256k1,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct ValidatorParams {
+    pub pub_key_types: Vec<KeyScheme>,
+}
+
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct VersionParams {
+    pub app: u64,
 }
 
 impl TokenBalances {
@@ -857,6 +945,7 @@ pub fn validate_parameters(
         gov_params,
         pgf_params,
         eth_bridge_params,
+        cometbft_params,
     } = parameters;
     match parameters.denominate(tokens) {
         Err(e) => {
@@ -874,6 +963,7 @@ pub fn validate_parameters(
                 valid: Default::default(),
             },
             eth_bridge_params,
+            cometbft_params,
         }),
     }
 }
