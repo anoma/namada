@@ -916,8 +916,8 @@ struct LedgerProposalType<'a>(&'a ProposalType, &'a Tx);
 impl<'a> Display for LedgerProposalType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.0 {
-            ProposalType::Default(None) => write!(f, "Default"),
-            ProposalType::Default(Some(hash)) => {
+            ProposalType::Default => write!(f, "Default"),
+            ProposalType::DefaultWithWasm(hash) => {
                 let extra = self
                     .1
                     .get_section(hash)
@@ -939,10 +939,10 @@ fn proposal_type_to_ledger_vector(
     output: &mut Vec<String>,
 ) {
     match proposal_type {
-        ProposalType::Default(None) => {
+        ProposalType::Default => {
             output.push("Proposal type : Default".to_string())
         }
-        ProposalType::Default(Some(hash)) => {
+        ProposalType::DefaultWithWasm(hash) => {
             output.push("Proposal type : Default".to_string());
             let extra = tx
                 .get_section(hash)
@@ -1223,7 +1223,6 @@ pub async fn to_ledger_vector(
             .hash();
 
         tv.output.push("Type : Init proposal".to_string());
-        tv.output.push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
             tx,
@@ -1243,8 +1242,6 @@ pub async fn to_ledger_vector(
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
 
-        tv.output_expert
-            .push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
             tx,

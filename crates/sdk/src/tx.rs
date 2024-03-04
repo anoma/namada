@@ -1898,7 +1898,6 @@ pub async fn build_default_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
@@ -1930,7 +1929,7 @@ pub async fn build_default_proposal(
                 let (_, extra_section_hash) =
                     tx_builder.add_extra_section(init_proposal_code, None);
                 init_proposal_data.r#type =
-                    ProposalType::Default(Some(extra_section_hash));
+                    ProposalType::DefaultWithWasm(extra_section_hash);
             };
             Ok(())
         };
@@ -1956,18 +1955,16 @@ pub async fn build_vote_proposal(
         tx,
         proposal_id,
         vote,
-        voter,
-        is_offline: _,
-        proposal_data: _,
+        voter_address,
         tx_code_path,
     }: &args::VoteProposal,
     epoch: Epoch,
 ) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(voter.clone());
+    let default_signer = Some(voter_address.clone());
     let signing_data = signing::aux_signing_data(
         context,
         tx,
-        Some(voter.clone()),
+        default_signer.clone(),
         default_signer.clone(),
     )
     .await?;
@@ -1978,20 +1975,18 @@ pub async fn build_vote_proposal(
     let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxSubmitError::InvalidProposalVote)?;
 
-    let proposal_id = proposal_id.ok_or_else(|| {
-        Error::Other("Proposal id must be defined.".to_string())
-    })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(context.client(), proposal_id).await?
+        rpc::query_proposal_by_id(context.client(), *proposal_id).await?
     {
         proposal
     } else {
         return Err(Error::from(TxSubmitError::ProposalDoesNotExist(
-            proposal_id,
+            *proposal_id,
         )));
     };
 
-    let is_validator = rpc::is_validator(context.client(), voter).await?;
+    let is_validator =
+        rpc::is_validator(context.client(), voter_address).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
         eprintln!("Proposal {} cannot be voted on anymore.", proposal_id);
@@ -1999,19 +1994,19 @@ pub async fn build_vote_proposal(
             eprintln!(
                 "NB: voter address {} is a validator, and validators can only \
                  vote on proposals within the first 2/3 of the voting period.",
-                voter
+                 voter_address
             );
         }
         if !tx.force {
             return Err(Error::from(
-                TxSubmitError::InvalidProposalVotingPeriod(proposal_id),
+                TxSubmitError::InvalidProposalVotingPeriod(*proposal_id),
             ));
         }
     }
 
     let delegations = rpc::get_delegators_delegation_at(
         context.client(),
-        voter,
+        voter_address,
         proposal.voting_start_epoch,
     )
     .await?
@@ -2026,9 +2021,9 @@ pub async fn build_vote_proposal(
     }
 
     let data = VoteProposalData {
-        id: proposal_id,
+        id: *proposal_id,
         vote: proposal_vote,
-        voter: voter.clone(),
+        voter: voter_address.clone(),
         delegations,
     };
 
@@ -2052,7 +2047,6 @@ pub async fn build_pgf_funding_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
@@ -2101,7 +2095,6 @@ pub async fn build_pgf_stewards_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
