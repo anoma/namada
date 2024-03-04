@@ -7,7 +7,7 @@ use crate::storage::BlockHeight;
 /// Provides event composition routines.
 pub trait ComposeEvent {
     /// Compose an [event](Event) with new data.
-    fn compose<NEW>(self, data: NEW) -> CompositeEvent<NEW, Self>
+    fn with<NEW>(self, data: NEW) -> CompositeEvent<NEW, Self>
     where
         Self: Sized;
 }
@@ -17,7 +17,7 @@ where
     E: Into<Event>,
 {
     #[inline(always)]
-    fn compose<NEW>(self, data: NEW) -> CompositeEvent<NEW, E> {
+    fn with<NEW>(self, data: NEW) -> CompositeEvent<NEW, E> {
         CompositeEvent::new(self, data)
     }
 }
@@ -67,9 +67,9 @@ impl ExtendEvent for WithNoOp {
 }
 
 /// Extend an [`Event`] with block height information.
-pub struct WithBlockHeight(pub BlockHeight);
+pub struct Height(pub BlockHeight);
 
-impl ExtendEvent for WithBlockHeight {
+impl ExtendEvent for Height {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(height) = self;
@@ -78,9 +78,9 @@ impl ExtendEvent for WithBlockHeight {
 }
 
 /// Extend an [`Event`] with transaction hash information.
-pub struct WithTxHash(pub Hash);
+pub struct TxHash(pub Hash);
 
-impl ExtendEvent for WithTxHash {
+impl ExtendEvent for TxHash {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(hash) = self;
@@ -89,9 +89,9 @@ impl ExtendEvent for WithTxHash {
 }
 
 /// Extend an [`Event`] with log data.
-pub struct WithLog(pub String);
+pub struct Log(pub String);
 
-impl ExtendEvent for WithLog {
+impl ExtendEvent for Log {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(log) = self;
@@ -100,9 +100,9 @@ impl ExtendEvent for WithLog {
 }
 
 /// Extend an [`Event`] with info data.
-pub struct WithInfo(pub String);
+pub struct Info(pub String);
 
-impl ExtendEvent for WithInfo {
+impl ExtendEvent for Info {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(info) = self;
@@ -111,9 +111,9 @@ impl ExtendEvent for WithInfo {
 }
 
 /// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct WithValidMaspTx(pub usize);
+pub struct ValidMaspTx(pub usize);
 
-impl ExtendEvent for WithValidMaspTx {
+impl ExtendEvent for ValidMaspTx {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(masp_tx_index) = self;
@@ -138,9 +138,9 @@ mod event_composition_tests {
         };
 
         let base_event: Event = Event::applied_tx()
-            .compose(WithLog("this is sparta!".to_string()))
-            .compose(WithBlockHeight(300.into()))
-            .compose(WithTxHash(Hash::default()))
+            .with(Log("this is sparta!".to_string()))
+            .with(Height(300.into()))
+            .with(TxHash(Hash::default()))
             .into();
 
         assert_eq!(base_event.attributes, expected_attrs);
@@ -155,9 +155,9 @@ mod event_composition_tests {
         };
 
         let base_event: Event = Event::applied_tx()
-            .compose(WithLog("dejavu".to_string()))
-            .compose(WithLog("dejavu".to_string()))
-            .compose(WithLog("dejavu".to_string()))
+            .with(Log("dejavu".to_string()))
+            .with(Log("dejavu".to_string()))
+            .with(Log("dejavu".to_string()))
             .into();
 
         assert_eq!(base_event.attributes, expected_attrs);

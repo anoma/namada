@@ -1,7 +1,7 @@
 //! Transaction events.
 
 use namada_core::event::extend::{
-    ComposeEvent, ExtendEvent, WithBlockHeight, WithLog, WithTxHash,
+    ComposeEvent, ExtendEvent, Height, Log, TxHash,
 };
 use namada_core::event::Event;
 
@@ -14,26 +14,25 @@ use crate::TxType;
 pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
     let base_event = match tx.header().tx_type {
         TxType::Wrapper(_) => {
-            Event::accepted_tx().compose(WithTxHash(tx.header_hash()))
+            Event::accepted_tx().with(TxHash(tx.header_hash()))
         }
-        TxType::Decrypted(_) => Event::applied_tx().compose(WithTxHash(
-            tx.clone().update_header(TxType::Raw).header_hash(),
-        )),
+        TxType::Decrypted(_) => Event::applied_tx()
+            .with(TxHash(tx.clone().update_header(TxType::Raw).header_hash())),
         TxType::Protocol(_) => {
-            Event::applied_tx().compose(WithTxHash(tx.header_hash()))
+            Event::applied_tx().with(TxHash(tx.header_hash()))
         }
         _ => unreachable!(),
     };
     base_event
-        .compose(WithBlockHeight(height.into()))
-        .compose(WithLog(String::new()))
+        .with(Height(height.into()))
+        .with(Log(String::new()))
         .into()
 }
 
 /// Extend an [`Event`] with result code data.
-pub struct WithResultCode(pub ResultCode);
+pub struct Code(pub ResultCode);
 
-impl ExtendEvent for WithResultCode {
+impl ExtendEvent for Code {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(code) = self;
@@ -42,9 +41,9 @@ impl ExtendEvent for WithResultCode {
 }
 
 /// Extend an [`Event`] with inner tx data.
-pub struct WithInnerTx<'result>(pub &'result TxResult);
+pub struct InnerTx<'result>(pub &'result TxResult);
 
-impl ExtendEvent for WithInnerTx<'_> {
+impl ExtendEvent for InnerTx<'_> {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(tx_result) = self;
