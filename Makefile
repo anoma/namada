@@ -139,10 +139,6 @@ run-ledger:
 	# runs the node
 	$(cargo) run --bin namadan -- ledger run
 
-run-gossip:
-	# runs the node gossip node
-	$(cargo) run --bin namadan -- gossip run
-
 reset-ledger:
 	# runs the node
 	$(cargo) run --bin namadan -- ledger reset

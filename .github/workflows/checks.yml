@@ -29,14 +29,6 @@ env:
 jobs:
   clippy-fmt:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    strategy:
-      fail-fast: false
-      matrix:
-        make:
-          - name: Clippy
-            command: clippy
-          - name: Format
-            command: check && make fmt-check
 
     steps:
       - name: Checkout repo
@@ -53,9 +45,10 @@ jobs:
         with:
           aws-region: us-east-2
           role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: ToBeDeleted
+        run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
       - name: Cache cargo registry
         uses: actions/cache@v4
-        continue-on-error: false
         with:
           path: |
             ~/.cargo/registry/index/
@@ -67,8 +60,14 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
-      - name: ${{ matrix.make.name }}
-        run: make ${{ matrix.make.command }}
+      - name: Clippy check
+        run: make clippy
+        env:
+          RUSTFLAGS: "-Z threads=8"
+      - name: Format check
+        run: make fmt
+        env:
+          RUSTFLAGS: "-Z threads=8"
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats || true
