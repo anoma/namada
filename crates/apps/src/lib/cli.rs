@@ -17,6 +17,7 @@ use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
 use namada::io::StdIo;
 use utils::*;
+use regex::Regex;
 pub use utils::{safe_exit, Cmd};
 
 pub use self::context::Context;
@@ -2924,6 +2925,72 @@ pub mod cmds {
     }
 }
 
+/// This enum represents a validator metadata
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+pub enum ValidatorMetadataValidation {
+    #[error(
+    "Invalid email metadata: expected {0}, but found {1}"
+    )]
+    /// The metadata email does not follow RFC / length requirements
+    InvalidEmail(String, String),
+    #[error(
+    "Invalid discord handle metadata:  expected {0}, but found {1}"
+    )]
+    /// The metadata discord-handle does not follow specs / length requirements
+    InvalidDiscordHandle(String, String),
+}
+
+/// Simplified version of the RFC 5321, RFC 5322, and others
+pub fn is_valid_metadata_email(
+    email: Option<String>,
+) -> std::result::Result<(), ValidatorMetadataValidation> {
+    let max_len = 254; // Count in bytes, not characters to be closer to the RFC
+    let email_regex = Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap();
+
+    if let Some(ref text) = email {
+        if email_regex.is_match(text) {
+            if text.len() <= max_len {
+                Ok(())
+            } else {
+                Err(ValidatorMetadataValidation::InvalidEmail(
+                    text.len().to_string(),
+                    max_len.to_string(),
+                ))
+            }
+        } else {
+            Err(ValidatorMetadataValidation::InvalidEmail(
+                "xyz.abc@example.com".to_string(),
+                text.to_string(),
+            ))
+        }
+    } else {
+        Ok(())
+    }
+}
+
+/// Discord handles are limited in size and character types
+pub fn is_valid_metadata_discord_handle(
+    username: Option<String>,
+) -> std::result::Result<(), ValidatorMetadataValidation> {
+    // old discord handles
+    let username_regex = Regex::new(r"^[a-z0-9_.]{2,32}$").unwrap();
+    // New discord handles
+    let tag_regex = Regex::new(r"^(?i)[a-zA-Z][a-zA-Z0-9_]{1,31}#\d{4}$").unwrap();
+
+    if let Some(ref text) = username {
+        if username_regex.is_match(text) && tag_regex.is_match(text) {
+            Ok(())
+        } else {
+            Err(ValidatorMetadataValidation::InvalidDiscordHandle(
+                "PhiBi#1234 or phibi".to_string(),
+                username.unwrap(),
+            ))
+        }
+    } else {
+        Ok(())
+    }
+}
+
 pub mod args {
     use std::collections::HashMap;
     use std::env;
@@ -2959,7 +3026,7 @@ pub mod args {
 
     use super::context::*;
     use super::utils::*;
-    use super::{ArgGroup, ArgMatches};
+    use super::{ArgGroup, ArgMatches, is_valid_metadata_discord_handle, is_valid_metadata_email};
     use crate::client::utils::PRE_GENESIS_DIR;
     use crate::config::genesis::GenesisAddress;
     use crate::config::{self, Action, ActionAtHeight};
@@ -4227,6 +4294,22 @@ pub mod args {
             let avatar = AVATAR_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BECOME_VALIDATOR_WASM);
+
+            if !email.is_empty() {
+                let valid_email = is_valid_metadata_email(Some(email.clone()));
+                valid_email.unwrap_or_else(|e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                });
+            }
+            if !discord_handle.clone().unwrap().is_empty() {
+                let valid_discord_handle = is_valid_metadata_discord_handle(discord_handle.clone());
+                valid_discord_handle.unwrap_or_else(|e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                });
+            }
+
             Self {
                 tx,
                 address,
@@ -5540,6 +5623,22 @@ pub mod args {
             let avatar = AVATAR_OPT.parse(matches);
             let commission_rate = COMMISSION_RATE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
+
+            if !email.clone().unwrap().is_empty() {
+                let valid_email = is_valid_metadata_email(email.clone());
+                valid_email.unwrap_or_else(|e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                });
+            }
+            if !discord_handle.clone().unwrap().is_empty() {
+                let valid_discord_handle = is_valid_metadata_discord_handle(discord_handle.clone());
+                valid_discord_handle.unwrap_or_else(|e| {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                });
+            }
+
             Self {
                 tx,
                 validator,
