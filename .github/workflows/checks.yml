@@ -25,6 +25,7 @@ env:
   RUST_BACKTRACE: full
   SCCACHE_BUCKET: github-runners-remote-cache-shared
   AWS_REGION: us-east-2
+  ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
 
 jobs:
   clippy-fmt:
@@ -56,7 +57,7 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
@@ -68,9 +69,6 @@ jobs:
         run: make fmt
         env:
           RUSTFLAGS: "-Z threads=8"
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true

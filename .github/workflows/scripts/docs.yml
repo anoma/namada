@@ -69,7 +69,7 @@ jobs:
         with:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
@@ -144,7 +144,7 @@ jobs:
         with:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Setup rust toolchain
         uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36

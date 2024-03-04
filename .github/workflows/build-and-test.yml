@@ -92,7 +92,7 @@ jobs:
 
   test-wasm:
     timeout-minutes: 15
-    runs-on: [self-hosted, 4vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -217,7 +217,7 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
@@ -228,10 +228,10 @@ jobs:
           make-default: false
       - name: Download MASP parameters
         run: |
-          mkdir -p /home/runner/.masp-params
-          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
-          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+          mkdir -p ~/.masp-params
+          curl -o ~/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o ~/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o ~/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -243,16 +243,13 @@ jobs:
       - name: Run unit tests
         run: make test-unit-with-coverage
         env:
-          NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
+          NAMADA_MASP_PARAMS_DIR: ~/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=8"
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
           files: lcov.info
           fail_ci_if_error: true
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
@@ -298,7 +295,7 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
@@ -309,10 +306,10 @@ jobs:
           make-default: false
       - name: Download MASP parameters
         run: |
-          mkdir -p /home/runner/.masp-params
-          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
-          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+          mkdir -p ~/.masp-params
+          curl -o ~/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o ~/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o ~/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -321,11 +318,8 @@ jobs:
       - name: Run integration tests
         run: make test-integration
         env:
-          NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
+          NAMADA_MASP_PARAMS_DIR: ~/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=8"
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
@@ -376,7 +370,7 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
@@ -387,10 +381,10 @@ jobs:
           make-default: false
       - name: Download MASP parameters
         run: |
-          mkdir -p /home/runner/.masp-params
-          curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
-          curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-          curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+          mkdir -p ~/.masp-params
+          curl -o ~/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+          curl -o ~/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+          curl -o ~/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Download wasm artifacts
         uses: actions/download-artifact@v3
         with:
@@ -400,9 +394,6 @@ jobs:
         run: make test-benches
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=16"
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
@@ -448,7 +439,7 @@ jobs:
         with:
           mold-version: ${{ matrix.mold_version }}
           make-default: false
-      - name: Run sccache-cache
+      - name: Setup sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
       - name: Start sccache server
         run: sccache --start-server
@@ -494,9 +485,6 @@ jobs:
           name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
           path: target/cargo-timings/cargo-timing.html
           retention-days: 1
-      - name: Print sccache stats
-        if: always()
-        run: sccache --show-stats || true
       - name: Stop sccache server
         if: always()
         run: sccache --stop-server || true
@@ -548,7 +536,7 @@ jobs:
   #           ~/.cargo/git/db/
   #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
-  #     - name: Run sccache-cache
+  #     - name: Setup sccache-cache
   #       uses: mozilla-actions/sccache-action@v0.0.4
   #     - name: Start sccache server
   #       run: sccache --start-server
@@ -559,10 +547,10 @@ jobs:
   #         make-default: false
   #     - name: Download MASP parameters
   #       run: |
-  #         mkdir -p /home/runner/.masp-params
-  #         curl -o /home/runner/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
-  #         curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
-  #         curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+  #         mkdir -p ~/.masp-params
+  #         curl -o ~/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+  #         curl -o ~/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+  #         curl -o ~/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
   #     - name: Download wasm artifacts
   #       uses: actions/download-artifact@v3
   #       with:
@@ -602,7 +590,7 @@ jobs:
   #     - name: Run e2e test
   #       run: python3 .github/workflows/scripts/schedule-e2e.py
   #       env:
-  #         NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
+  #         NAMADA_MASP_PARAMS_DIR: ~/.masp-params
   #         NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
   #         NAMADA_E2E_KEEP_TEMP: "true"
   #         NAMADA_TM_STDOUT: "false"
