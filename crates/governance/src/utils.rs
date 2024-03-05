@@ -180,7 +180,9 @@ impl TallyResult {
 }
 
 /// The result with votes of a proposal
-#[derive(Clone, Debug, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer)]
+#[derive(
+    Clone, Debug, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer,
+)]
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,

@@ -16,8 +16,6 @@ lazy_static! {
 #[distributed_slice]
 pub static REGISTER_DESERIALIZERS: [fn()];
 
-
-
 pub trait TypeHash {
     const HASH: [u8; 32];
 }
