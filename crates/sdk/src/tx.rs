@@ -2177,7 +2177,7 @@ pub async fn build_vote_proposal(
     } else {
         // Get active valid validators with whom the voter has delegations
         // (bonds)
-        let delegation_vals = rpc::get_delegators_delegation_at(
+        let delegation_vals = rpc::get_delegations_of_delegator_at(
             context.client(),
             voter_address,
             proposal.voting_start_epoch,
