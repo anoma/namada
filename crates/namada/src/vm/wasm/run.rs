@@ -655,7 +655,8 @@ mod tests {
     use itertools::Either;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
-    use namada_tx::data::TxType;
+    use namada_token::DenominatedAmount;
+    use namada_tx::data::{Fee, TxType};
     use namada_tx::{Code, Data};
     use test_log::test;
     use wasmer_vm::TrapCode;
@@ -1328,10 +1329,26 @@ mod tests {
         state.write_bytes(&len_key, code_len).unwrap();
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
-        tx.add_code_from_hash(read_code_hash, None)
-            .add_serialized_data(vec![]);
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(
+            namada_tx::data::WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: state.in_mem().native_token.clone(),
+                },
+                namada_core::key::testing::common_sk_from_simple_seed(0)
+                    .to_public(),
+                namada_state::Epoch(0),
+                0.into(),
+                None,
+            ),
+        )));
+        tx.add_code_from_hash(read_code_hash, None);
+        wrapper_tx.add_code_from_hash(read_code_hash, None);
+        tx.add_serialized_data(vec![]);
+        wrapper_tx.add_serialized_data(vec![]);
 
-        // Check that using a disallowed tx leads to an error
+        // Check that using a disallowed wrapper tx leads to an error, but a raw
+        // tx is ok even if not allowlisted
         {
             let allowlist = vec![format!("{}-bad", read_code_hash)];
             crate::parameters::update_tx_allowlist_parameter(
@@ -1340,11 +1357,16 @@ mod tests {
             .unwrap();
             state.commit_tx();
 
-            let result = check_tx_allowed(&tx, &state);
+            let result = check_tx_allowed(&wrapper_tx, &state);
             assert_matches!(result.unwrap_err(), Error::DisallowedTx);
+            let result = check_tx_allowed(&tx, &state);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
         }
 
-        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
+        // Check that using an allowed wrapper tx doesn't lead to
+        // `Error::DisallowedTx`
         {
             let allowlist = vec![read_code_hash.to_string()];
             crate::parameters::update_tx_allowlist_parameter(
@@ -1353,7 +1375,7 @@ mod tests {
             .unwrap();
             state.commit_tx();
 
-            let result = check_tx_allowed(&tx, &state);
+            let result = check_tx_allowed(&wrapper_tx, &state);
             if let Err(result) = result {
                 assert!(!matches!(result, Error::DisallowedTx));
             }
