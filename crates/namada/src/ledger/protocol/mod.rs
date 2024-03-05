@@ -96,8 +96,6 @@ pub enum Error {
     MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
-    #[error("Tx is not allowed in allowlist parameter.")]
-    DisallowedTx,
 }
 
 /// Shell parameters for running wasm transactions.
@@ -205,8 +203,6 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
-            // Check that the transaction code is allowlisted
-            check_tx_allowed(&tx, state)?;
             let mut inner_res = apply_wasm_tx(
                 tx,
                 &tx_index,
@@ -632,29 +628,6 @@ where
     })
 }
 
-/// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
-/// and its code `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<D, H>(tx: &Tx, state: &WlState<D, H>) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    if let TxType::Wrapper(_) = tx.header().tx_type {
-        if let Some(code_sec) = tx
-            .get_section(tx.code_sechash())
-            .and_then(|x| Section::code_sec(&x))
-        {
-            if crate::parameters::is_tx_allowed(state, &code_sec.code.hash())
-                .map_err(Error::StorageError)?
-            {
-                return Ok(());
-            }
-        }
-        return Err(Error::DisallowedTx);
-    }
-    Ok(())
-}
-
 /// Apply a derived transaction to storage based on some protocol transaction.
 /// The logic here must be completely deterministic and will be executed by all
 /// full nodes every time a protocol transaction is included in a block. Storage
@@ -1042,13 +1015,10 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::address::testing::nam;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_core::keccak::keccak_hash;
-    use namada_core::key::RefTo;
-    use namada_core::storage::{BlockHeight, Epoch};
-    use namada_core::token::DenominatedAmount;
+    use namada_core::storage::BlockHeight;
     use namada_core::voting_power::FractionalVotingPower;
     use namada_core::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
@@ -1058,7 +1028,6 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
-    use namada_tx::data::Fee;
     use namada_tx::{SignableEthMessage, Signed};
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;
@@ -1195,56 +1164,5 @@ mod tests {
         assert_eq!(voting_power, expected);
 
         Ok(())
-    }
-
-    #[test]
-    fn test_apply_wasm_tx_allowlist() {
-        let (mut state, _validators) = test_utils::setup_default_storage();
-        let keypair = key::testing::keypair_1();
-        let wrapper_tx = WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: DenominatedAmount::native(
-                    Amount::from_uint(10, 0).expect("Test failed"),
-                ),
-                token: nam(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            Default::default(),
-            None,
-        );
-        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper_tx)));
-        // pseudo-random code hash
-        let code = vec![1_u8, 2, 3];
-        let tx_hash = Hash::sha256(&code);
-        tx.set_code(namada_tx::Code::new(code, None));
-
-        // Check that using a disallowed tx leads to an error
-        {
-            let allowlist = vec![format!("{}-bad", tx_hash)];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
-            )
-            .unwrap();
-            state.commit_tx();
-
-            let result = check_tx_allowed(&tx, &state);
-            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
-        }
-
-        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
-        {
-            let allowlist = vec![tx_hash.to_string()];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
-            )
-            .unwrap();
-            state.commit_tx();
-
-            let result = check_tx_allowed(&tx, &state);
-            if let Err(result) = result {
-                assert!(!matches!(result, Error::DisallowedTx));
-            }
-        }
     }
 }
