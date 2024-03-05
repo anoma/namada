@@ -152,7 +152,7 @@ pub async fn get_validator_state(
 }
 
 /// Get the delegator's delegation
-pub async fn get_delegators_delegation(
+pub async fn get_delegation_validators(
     tendermint_addr: &str,
     address: &Address,
 ) -> Result<HashSet<Address>, Error> {
@@ -161,11 +161,12 @@ pub async fn get_delegators_delegation(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    rpc::get_delegators_delegation(&client, address).await
+    let epoch = rpc::query_epoch(&client).await?;
+    rpc::get_delegation_validators(&client, address, epoch).await
 }
 
 /// Get the delegator's delegation at some epoh
-pub async fn get_delegators_delegation_at(
+pub async fn get_delegations_of_delegator_at(
     tendermint_addr: &str,
     address: &Address,
     epoch: Epoch,
@@ -175,7 +176,7 @@ pub async fn get_delegators_delegation_at(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    rpc::get_delegators_delegation_at(&client, address, epoch).await
+    rpc::get_delegations_of_delegator_at(&client, address, epoch).await
 }
 
 /// Query and return validator's commission rate and max commission rate

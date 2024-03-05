@@ -1958,7 +1958,7 @@ pub async fn build_vote_proposal(
         voter_address,
         tx_code_path,
     }: &args::VoteProposal,
-    epoch: Epoch,
+    current_epoch: Epoch,
 ) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(voter_address.clone());
     let signing_data = signing::aux_signing_data(
@@ -1988,7 +1988,7 @@ pub async fn build_vote_proposal(
     let is_validator =
         rpc::is_validator(context.client(), voter_address).await?;
 
-    if !proposal.can_be_voted(epoch, is_validator) {
+    if !proposal.can_be_voted(current_epoch, is_validator) {
         eprintln!("Proposal {} cannot be voted on anymore.", proposal_id);
         if is_validator {
             eprintln!(
@@ -2022,7 +2022,7 @@ pub async fn build_vote_proposal(
         }
         vec![voter_address.clone()]
     } else {
-        let validators = rpc::get_delegators_delegation_at(
+        let validators = rpc::get_delegations_of_delegator_at(
             context.client(),
             voter_address,
             proposal.voting_start_epoch,

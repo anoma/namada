@@ -26,28 +26,32 @@ use crate::{storage_key, PosParams};
 pub fn find_delegation_validators<S>(
     storage: &S,
     owner: &Address,
+    epoch: &Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
 {
-    let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
-    let mut delegations: HashSet<Address> = HashSet::new();
+    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
+    // let mut delegations: HashSet<Address> = HashSet::new();
 
-    for iter_result in
-        namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    {
-        let (key, _bond_bytes) = iter_result?;
-        let validator_address = storage_key::get_validator_address_from_bond(
-            &key,
-        )
-        .ok_or_else(|| {
-            namada_storage::Error::new_const(
-                "Delegation key should contain validator address.",
-            )
-        })?;
-        delegations.insert(validator_address);
-    }
-    Ok(delegations)
+    // for iter_result in
+    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
+    // {
+    //     let (key, _bond_bytes) = iter_result?;
+    //     let validator_address = storage_key::get_validator_address_from_bond(
+    //         &key,
+    //     )
+    //     .ok_or_else(|| {
+    //         namada_storage::Error::new_const(
+    //             "Delegation key should contain validator address.",
+    //         )
+    //     })?;
+    //     delegations.insert(validator_address);
+    // }
+    let delegation_targets = delegation_targets_handle(owner).at(epoch);
+    delegation_targets
+        .iter(storage)?
+        .collect::<Result<HashSet<Address>, _>>()
 }
 
 /// Find all validators to which a given bond `owner` (or source) has a

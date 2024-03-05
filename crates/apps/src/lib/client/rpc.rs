@@ -2334,13 +2334,19 @@ pub async fn query_delegations<N: Namada>(
     let delegations: HashSet<Address> = unwrap_client_response::<N::Client, _>(
         RPC.vp()
             .pos()
-            .delegation_validators(context.client(), &owner)
+            .delegation_validators(context.client(), &owner, &None)
             .await,
     );
     if delegations.is_empty() {
-        display_line!(context.io(), "No delegations found");
+        display_line!(
+            context.io(),
+            "No delegations found active in the current epoch"
+        );
     } else {
-        display_line!(context.io(), "Found delegations to:");
+        display_line!(
+            context.io(),
+            "Found delegations in the current epoch to:"
+        );
         for delegation in delegations {
             display_line!(context.io(), "  {delegation}");
         }
@@ -2758,25 +2764,26 @@ async fn get_validator_stake<C: namada::ledger::queries::Client + Sync>(
     )
 }
 
-pub async fn get_delegators_delegation<
+pub async fn get_delegation_validators<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
 ) -> HashSet<Address> {
-    namada_sdk::rpc::get_delegators_delegation(client, address)
+    let epoch = namada_sdk::rpc::query_epoch(client).await.unwrap();
+    namada_sdk::rpc::get_delegation_validators(client, address, epoch)
         .await
         .unwrap()
 }
 
-pub async fn get_delegators_delegation_at<
+pub async fn get_delegations_of_delegator_at<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
     epoch: Epoch,
 ) -> HashMap<Address, token::Amount> {
-    namada_sdk::rpc::get_delegators_delegation_at(client, address, epoch)
+    namada_sdk::rpc::get_delegations_of_delegator_at(client, address, epoch)
         .await
         .unwrap()
 }

@@ -809,18 +809,25 @@ pub async fn get_validator_state<C: crate::queries::Client + Sync>(
     )
 }
 
-/// Get the delegator's delegation
-pub async fn get_delegators_delegation<C: crate::queries::Client + Sync>(
+/// Get the validators to which a delegator is bonded at a certain epoch
+pub async fn get_delegation_validators<C: crate::queries::Client + Sync>(
     client: &C,
     address: &Address,
+    epoch: Epoch,
 ) -> Result<HashSet<Address>, error::Error> {
     convert_response::<C, _>(
-        RPC.vp().pos().delegation_validators(client, address).await,
+        RPC.vp()
+            .pos()
+            .delegation_validators(client, address, &Some(epoch))
+            .await,
     )
 }
 
-/// Get the delegator's delegation at some epoch
-pub async fn get_delegators_delegation_at<C: crate::queries::Client + Sync>(
+/// Get the delegations of a delegator at some epoch, including the validator
+/// and bond amount
+pub async fn get_delegations_of_delegator_at<
+    C: crate::queries::Client + Sync,
+>(
     client: &C,
     address: &Address,
     epoch: Epoch,
