@@ -18,10 +18,11 @@ use namada::governance::{
 };
 use namada::ibc;
 use namada::ledger::governance::utils::ProposalEvent;
-use namada::ledger::pos::BondId;
+use namada::ledger::pos::{validator_state_handle, BondId};
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::read_total_stake;
+use namada::proof_of_stake::types::ValidatorState;
 use namada::state::StorageWrite;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
@@ -264,8 +265,15 @@ where
     > = HashMap::default();
 
     for vote in votes {
+        // Skip votes involving jailed or inactive validators
+        let validator = vote.validator.clone();
+        let validator_state = validator_state_handle(&validator).get(storage, epoch, params)?;
+        if matches!(validator_state, Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)) {
+            continue;
+        }
+
+        // Tally the votes involving active validators
         if vote.is_validator() {
-            let validator = vote.validator.clone();
             let vote_data = vote.data.clone();
 
             let validator_stake =
@@ -275,7 +283,6 @@ where
             validators_vote.insert(validator.clone(), vote_data);
             validator_voting_power.insert(validator, validator_stake);
         } else {
-            let validator = vote.validator.clone();
             let delegator = vote.delegator.clone();
             let vote_data = vote.data.clone();
 
