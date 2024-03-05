@@ -60,30 +60,24 @@ pub enum ResultCode {
     InvalidTx = 2,
     /// Invalid signature
     InvalidSig = 3,
-    /// Tx is in invalid order
-    InvalidOrder = 4,
-    /// Tx wasn't expected
-    ExtraTxs = 5,
-    /// Undecryptable
-    Undecryptable = 6,
     /// The block is full
-    AllocationError = 7,
+    AllocationError = 4,
     /// Replayed tx
-    ReplayTx = 8,
+    ReplayTx = 5,
     /// Invalid chain ID
-    InvalidChainId = 9,
+    InvalidChainId = 6,
     /// Expired tx
-    ExpiredTx = 10,
+    ExpiredTx = 7,
     /// Exceeded gas limit
-    TxGasLimit = 11,
+    TxGasLimit = 8,
     /// Error in paying tx fee
-    FeeError = 12,
+    FeeError = 9,
     /// Invalid vote extension
-    InvalidVoteExtension = 13,
+    InvalidVoteExtension = 10,
     /// Tx is too large
-    TooLarge = 14,
-    /// Decrypted tx is expired
-    ExpiredDecryptedTx = 15,
+    TooLarge = 11,
+    /// Tx code is not allowlisted
+    TxNotAllowlisted = 12,
     // =========================================================================
     // WARN: These codes shouldn't be changed between version!
 }
@@ -96,11 +90,10 @@ impl ResultCode {
         // NOTE: pattern match on all `ResultCode` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | WasmRuntimeError | ExpiredDecryptedTx => true,
-            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
-            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
-            | TooLarge => false,
+            Ok | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | AllocationError | ReplayTx
+            | InvalidChainId | ExpiredTx | TxGasLimit | FeeError
+            | InvalidVoteExtension | TooLarge | TxNotAllowlisted => false,
         }
     }
 

@@ -84,6 +84,8 @@ pub enum Error {
     ConversionError(String),
     #[error("Invalid transaction signature")]
     InvalidTxSignature,
+    #[error("Storage error: {0}")]
+    StorageError(String),
     #[error("Tx is not allowed in allowlist parameter")]
     DisallowedTx,
 }
@@ -91,9 +93,9 @@ pub enum Error {
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
-// and its code `Hash` is not included in the `tx_allowlist` parameter.
-fn check_tx_allowed<S>(tx: &Tx, storage: &S) -> Result<()>
+/// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
+/// `Hash` is not included in the `tx_allowlist` parameter.
+pub fn check_tx_allowed<S>(tx: &Tx, storage: &S) -> Result<()>
 where
     S: StorageRead,
 {
@@ -103,7 +105,7 @@ where
             .and_then(|x| Section::code_sec(&x))
         {
             if crate::parameters::is_tx_allowed(storage, &code_sec.code.hash())
-                .map_err(|e| Error::LoadWasmCode(e.to_string()))?
+                .map_err(|e| Error::StorageError(e.to_string()))?
             {
                 return Ok(());
             }

@@ -10,6 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
+use namada::vm::wasm::run::check_tx_allowed;
 use namada_sdk::state::StateRead;
 use namada_sdk::tx::data::GasLimit;
 pub mod prepare_proposal;
@@ -1036,11 +1037,22 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Tx allowlist
+                if let Err(err) = check_tx_allowed(&tx, &self.state) {
+                    response.code = ResultCode::TxNotAllowlisted.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction code didn't pass \
+                         the allowlist checks {}",
+                        err
+                    );
+                    return response;
+                }
+
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ResultCode::TxGasLimit.into();
-                    response.log = "{INVALID_MSG}: Wrapper transactions \
+                    response.log = "{INVALID_MSG}: Wrapper transaction \
                                     exceeds its gas limit"
                         .to_string();
                     return response;
