@@ -1643,6 +1643,13 @@ pub async fn build_unbond(
             amount.to_string_native(),
             bond_amount.to_string_native(),
         );
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::LowerBondThanUnbond(
+                bond_source,
+                amount.to_string_native(),
+                bond_amount.to_string_native(),
+            )));
+        }
     }
 
     // Query the unbonds before submitting the tx
