@@ -95,6 +95,9 @@ pub enum LoadStoreError {
     /// Wallet store writing error
     #[error("Failed to write the wallet store: {0}")]
     StoreNewWallet(String),
+    /// Wallet store update error
+    #[error("Failed to update the wallet store from {0}: {1}")]
+    UpdateWallet(String, String),
 }
 
 /// Captures the permanent storage parts of the wallet's functioning
@@ -104,6 +107,26 @@ pub trait WalletStorage: Sized + Clone {
 
     /// Load a wallet from the store file.
     fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError>;
+
+    // XXX REMOVE
+    /// Atomically update the wallet store
+    fn update<U>(
+        &self,
+        wallet: &mut Wallet<U>,
+        transform: impl FnOnce(&mut Wallet<U>),
+    ) -> Result<(), LoadStoreError>;
+
+    /// Atomically update the wallet store
+    fn update_store(
+        &self,
+        update: impl FnOnce(&mut Store),
+    ) -> Result<(), LoadStoreError>;
+
+    /// Load wallet from the store file (read only)
+    fn load_store_read_only(&self) -> Result<Store, LoadStoreError>;
+
+    // fn close<U>(&self, wallet: &Wallet<U>, storage_lock: WalletStorageLock)
+    // -> Result<(), LoadStoreError>;
 }
 
 #[cfg(feature = "std")]
@@ -182,6 +205,130 @@ pub mod fs {
                 Store::decode(store).map_err(LoadStoreError::Decode)?;
             Ok(())
         }
+
+        fn load_store_read_only(&self) -> Result<Store, LoadStoreError> {
+            let wallet_file = self.store_dir().join(FILE_NAME);
+            let mut options = fs::OpenOptions::new();
+            options.read(true).write(false);
+            let lock =
+                RwLock::new(options.open(wallet_file).map_err(|err| {
+                    LoadStoreError::ReadWallet(
+                        self.store_dir().to_str().unwrap().parse().unwrap(),
+                        err.to_string(),
+                    )
+                })?);
+            let guard = lock.read().map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            let mut store = Vec::<u8>::new();
+            (&*guard).read_to_end(&mut store).map_err(|err| {
+                LoadStoreError::ReadWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            Store::decode(store).map_err(LoadStoreError::Decode)
+        }
+
+        fn update<U>(
+            &self,
+            wallet: &mut Wallet<U>,
+            transform: impl FnOnce(&mut Wallet<U>),
+        ) -> Result<(), LoadStoreError> {
+            let wallet_file = self.store_dir().join(FILE_NAME);
+            let mut options = fs::OpenOptions::new();
+            options.create(true).write(true).truncate(true);
+            let mut lock =
+                RwLock::new(options.open(&wallet_file).map_err(|err| {
+                    LoadStoreError::UpdateWallet(
+                        self.store_dir().to_str().unwrap().parse().unwrap(),
+                        err.to_string(),
+                    )
+                })?);
+            let mut guard = lock.write().map_err(|err| {
+                LoadStoreError::UpdateWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            let mut store = Vec::<u8>::new();
+            (&*guard).read_to_end(&mut store).map_err(|err| {
+                LoadStoreError::UpdateWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            wallet.store =
+                Store::decode(store).map_err(LoadStoreError::Decode)?;
+
+            // Apply wallet transformation
+            transform(wallet);
+
+            let data = wallet.store.encode();
+            // XXX
+            // Make sure the dir exists
+            // let wallet_dir = wallet_path.parent().unwrap();
+            // fs::create_dir_all(wallet_dir).map_err(|err| {
+            //     LoadStoreError::StoreNewWallet(err.to_string())
+            // })?;
+            // Write the file
+            guard
+                .write_all(&data)
+                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
+        }
+
+        fn update_store(
+            &self,
+            update: impl FnOnce(&mut Store),
+        ) -> Result<(), LoadStoreError> {
+            let wallet_file = self.store_dir().join(FILE_NAME);
+            let mut options = fs::OpenOptions::new();
+            options.create(true).write(true).truncate(true);
+            let mut lock =
+                RwLock::new(options.open(&wallet_file).map_err(|err| {
+                    LoadStoreError::UpdateWallet(
+                        self.store_dir().to_str().unwrap().parse().unwrap(),
+                        err.to_string(),
+                    )
+                })?);
+            let mut guard = lock.write().map_err(|err| {
+                LoadStoreError::UpdateWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            let mut store = Vec::<u8>::new();
+            (&*guard).read_to_end(&mut store).map_err(|err| {
+                LoadStoreError::UpdateWallet(
+                    self.store_dir().to_str().unwrap().parse().unwrap(),
+                    err.to_string(),
+                )
+            })?;
+            let mut store =
+                Store::decode(store).map_err(LoadStoreError::Decode)?;
+
+            // Apply store transformation
+            update(&mut store);
+
+            let data = store.encode();
+            // XXX
+            // Make sure the dir exists
+            // let wallet_dir = wallet_path.parent().unwrap();
+            // fs::create_dir_all(wallet_dir).map_err(|err| {
+            //     LoadStoreError::StoreNewWallet(err.to_string())
+            // })?;
+            // Write the file
+            guard
+                .write_all(&data)
+                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
+        }
+        // fn close<U>(&self, wallet: &Wallet<U>, storage_lock:
+        // WalletStorageLock) -> Result<(), LoadStoreError> {
+        //     Ok(())
+        // }
     }
 
     /// For a non-interactive filesystem based wallet
@@ -262,54 +409,70 @@ impl<U> From<Wallet<U>> for Store {
 
 impl<U> Wallet<U> {
     /// Create a new wallet from the given backing store and storage location
+    // pub fn new(utils: U) -> Self {
     pub fn new(utils: U, store: Store) -> Self {
         Self {
             utils,
+            // store: Store::default(),
             store,
             decrypted_key_cache: HashMap::default(),
             decrypted_spendkey_cache: HashMap::default(),
         }
     }
 
-    /// Add validator data to the store
-    pub fn add_validator_data(
-        &mut self,
-        address: Address,
-        keys: ValidatorKeys,
-    ) {
-        self.store.add_validator_data(address, keys);
-    }
+    // pub fn new(utils: U, store_location: Path) -> Self {
+    //     Self {
+    //         utils,
+    //         store: Store::default(),
+    //         store_location,
+    //         decrypted_key_cache: HashMap::default(),
+    //         decrypted_spendkey_cache: HashMap::default(),
+    //     }
+    // }
 
-    /// Returns a reference to the validator data, if it exists.
-    pub fn get_validator_data(&self) -> Option<&ValidatorData> {
-        self.store.get_validator_data()
-    }
+    // /// Add validator data to the store
+    // fn add_validator_data(
+    //     &mut self,
+    //     address: Address,
+    //     keys: ValidatorKeys,
+    // ) {
+    //     self.store.add_validator_data(address, keys);
+    // }
 
+    // /// Returns a reference to the validator data, if it exists.
+    // pub fn get_validator_data(&self) -> Option<&ValidatorData> {
+    //     self.store.get_validator_data()
+    // }
+
+    // XXX REMOVE?
     /// Returns a mut reference to the validator data, if it exists.
-    pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
-        self.store.get_validator_data_mut()
-    }
+    // pub fn get_validator_data_mut(&mut self) -> Option<&mut ValidatorData> {
+    //     self.store.get_validator_data_mut()
+    // }
 
-    /// Take the validator data, if it exists.
-    pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
-        self.store.take_validator_data()
-    }
+    // /// Take the validator data, if it exists.
+    // pub fn take_validator_data(&mut self) -> Option<ValidatorData> {
+    //     self.store.take_validator_data()
+    // }
 
     /// Returns the validator data, if it exists.
     pub fn into_validator_data(self) -> Option<ValidatorData> {
         self.store.into_validator_data()
     }
 
+    // XXX REMOVE?
     /// Provide immutable access to the backing store
     pub fn store(&self) -> &Store {
         &self.store
     }
 
+    // XXX REMOVE?
     /// Provide mutable access to the backing store
     pub fn store_mut(&mut self) -> &mut Store {
         &mut self.store
     }
 
+    /// XXX HERE
     /// Extend this wallet from pre-genesis validator wallet.
     pub fn extend_from_pre_genesis_validator(
         &mut self,
@@ -527,6 +690,35 @@ impl<U: WalletStorage> Wallet<U> {
     /// Save the wallet store to a file.
     pub fn save(&self) -> Result<(), LoadStoreError> {
         self.utils.save(self)
+    }
+
+    /// Add validator data to the store
+    pub fn add_validator_data_atomic(
+        &mut self,
+        address: Address,
+        keys: ValidatorKeys,
+    ) -> Result<(), LoadStoreError> {
+        self.utils
+            .clone()
+            .update_store(|store| store.add_validator_data(address, keys))
+    }
+
+    /// XXX does not make sense in the current context -- REMOVE?
+    /// Returns the validator data, if it exists.
+    pub fn take_validator_data_atomic(&self) -> Option<ValidatorData> {
+        self.utils
+            .clone()
+            .load_store_read_only()
+            .ok()
+            .and_then(Store::into_validator_data)
+    }
+
+    pub fn into_validator_data_atomic(self) -> Option<ValidatorData> {
+        self.utils
+            .clone()
+            .load_store_read_only()
+            .ok()
+            .and_then(Store::into_validator_data)
     }
 }
 

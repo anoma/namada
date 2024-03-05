@@ -12,7 +12,7 @@ pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
-    ConfirmationResponse, FindKeyError, Wallet, WalletIo,
+    ConfirmationResponse, FindKeyError, Wallet, WalletIo, WalletStorage,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
@@ -191,7 +191,7 @@ pub fn read_and_confirm_passphrase_tty(
 /// for signing protocol txs and for the DKG (which will also be stored)
 /// A protocol keypair may be optionally provided, indicating that
 /// we should reuse a keypair already in the wallet
-pub fn gen_validator_keys<U: WalletIo>(
+pub fn gen_validator_keys<U: WalletIo + WalletStorage>(
     wallet: &mut Wallet<U>,
     eth_bridge_pk: Option<common::PublicKey>,
     protocol_pk: Option<common::PublicKey>,
@@ -221,8 +221,8 @@ fn find_secret_key<F, U>(
     extract_key: F,
 ) -> Result<Option<common::SecretKey>, FindKeyError>
 where
-    F: Fn(&ValidatorData) -> common::SecretKey,
-    U: WalletIo,
+    F: Fn(ValidatorData) -> common::SecretKey,
+    U: WalletIo + WalletStorage,
 {
     maybe_pk
         .map(|pk| {
@@ -231,7 +231,9 @@ where
                 // TODO: optionally encrypt validator keys
                 .find_key_by_pkh(&pkh, None)
                 .ok()
-                .or_else(|| wallet.get_validator_data().map(extract_key))
+                .or_else(|| {
+                    wallet.take_validator_data_atomic().map(extract_key)
+                })
                 .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
         })
         .transpose()
