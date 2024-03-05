@@ -189,6 +189,10 @@ fn validate_pos_changes(
     // metadata is manipulated
     let is_valid_metadata_change = || {
         let metadata = is_validator_metadata_key(key);
+        if !is_valid_metadata_email(&Some(metadata.email.clone())) ||
+            !is_valid_metadata_discord_handle(&metadata.discord_handle) {
+            false
+        }
         match metadata {
             Some(address) => address == owner && **valid_sig,
             None => false,
@@ -301,6 +305,7 @@ fn validate_pos_changes(
     };
 
     let is_valid_become_validator = || {
+        // TODO : should we validate metadata here ?
         if is_validator_addresses_key(key)
             || is_consensus_keys_key(key)
             || is_validator_eth_cold_key_key(key).is_some()
@@ -703,6 +708,103 @@ mod tests {
         let vp_env = vp_host_env::take();
         let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+        assert!(
+            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .unwrap()
+        );
+    }
+
+    /// Test that a PoS action to update validator metadata is
+    /// rejected if email or discord handle are invalid.
+    #[test]
+    fn test_invalid_metada_pos_action_rejected() {
+        // Init PoS genesis
+        let pos_params = PosParams::default();
+        let validator = address::testing::established_address_3();
+        let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
+        let consensus_key = key::testing::keypair_2().ref_to();
+        let protocol_key = key::testing::keypair_1().ref_to();
+        let eth_cold_key = key::testing::keypair_3().ref_to();
+        let eth_hot_key = key::testing::keypair_4().ref_to();
+        let commission_rate = Dec::new(5, 2).unwrap();
+        let max_commission_rate_change = Dec::new(1, 2).unwrap();
+
+        let genesis_validators = [GenesisValidator {
+            address: validator,
+            tokens: initial_stake,
+            consensus_key,
+            protocol_key,
+            commission_rate,
+            max_commission_rate_change,
+            eth_hot_key,
+            eth_cold_key,
+            metadata: Default::default(),
+        }];
+
+        init_pos(&genesis_validators[..], &pos_params, Epoch(0));
+
+        // Initialize a tx environment
+        let mut tx_env = tx_host_env::take();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = address::testing::established_address_2();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+
+        // Initialize VP environment from PoS action to become a validator
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            let consensus_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let protocol_key = key::common::PublicKey::Ed25519(
+                key::testing::gen_keypair::<key::ed25519::SigScheme>().ref_to(),
+            );
+            let eth_cold_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let eth_hot_key =
+                key::testing::gen_keypair::<key::secp256k1::SigScheme>()
+                    .ref_to();
+            let commission_rate = Dec::new(5, 2).unwrap();
+            let max_commission_rate_change = Dec::new(1, 2).unwrap();
+            let args = data::pos::BecomeValidator {
+                address: address.clone(),
+                consensus_key,
+                eth_cold_key,
+                eth_hot_key,
+                protocol_key,
+                commission_rate,
+                max_commission_rate_change,
+                email: "abcd".to_string(),
+                description: None,
+                website: None,
+                // TODO: Do I need to write 2 different tests for email and for discord handle ?
+                discord_handle: "abcd@1337".to_string(),
+                avatar: None,
+            };
+            // TODO: Should I expect this to fail ?
+            tx::ctx().become_validator(args).unwrap();
+        });
+
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
+        let mut vp_env = vp_host_env::take();
+        let mut tx = vp_env.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.raw_header_hash()],
+            pks_map.index_secret_keys(vec![secret_key]),
+            None,
+        )));
+        let signed_tx = tx.clone();
+        vp_env.tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();

@@ -167,6 +167,10 @@ pub enum ReactivationError {
 pub enum MetadataError {
     #[error("The validator email cannot be removed")]
     CannotRemoveEmail,
+    #[error("Invalid email metadata: {0} does not follow standard email specifications")]
+    InvalidEmail(String),
+    #[error("Invalid discord handle metadata: {0} does not follow discord handle specifications")]
+    InvalidDiscordHandle(String),
 }
 
 #[allow(missing_docs)]

@@ -4553,6 +4553,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "proptest-state-machine",
+ "regex",
  "serde 1.0.193",
  "test-log",
  "thiserror",

@@ -34,6 +34,7 @@ proptest = { workspace = true, optional = true }
 serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+regex = "1.10.2"
 
 
 [dev-dependencies]

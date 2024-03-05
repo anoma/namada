@@ -25,6 +25,7 @@ mod tests;
 use core::fmt::Debug;
 use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use regex::Regex;
 
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
@@ -1192,6 +1193,48 @@ pub struct BecomeValidator<'a> {
     pub offset_opt: Option<u64>,
 }
 
+/// Simplified version of the RFC 5321, RFC 5322, and others
+pub fn is_valid_metadata_email(
+    email: &Option<String>,
+) -> bool {
+    let max_len = 254; // Count in bytes, not characters to be closer to the RFC
+    let email_regex = Regex::new(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$").unwrap();
+
+    if let Some(ref text) = email {
+        if email_regex.is_match(text) {
+            if text.len() <= max_len {
+                true
+            } else {
+                false
+            }
+        } else {
+           false
+        }
+    } else {
+        true
+    }
+}
+
+/// Discord handles are limited in size and character types
+pub fn is_valid_metadata_discord_handle(
+    username: &Option<String>,
+) -> bool {
+    // old discord handles
+    let username_regex = Regex::new(r"^[a-z0-9_.]{2,32}$").unwrap();
+    // New discord handles
+    let tag_regex = Regex::new(r"^(?i)[a-zA-Z][a-zA-Z0-9_]{1,31}#\d{4}$").unwrap();
+
+    if let Some(ref text) = username {
+        if username_regex.is_match(text) && tag_regex.is_match(text) {
+            true
+        } else {
+           false
+        }
+    } else {
+        true
+    }
+}
+
 /// Initialize data for a new validator.
 pub fn become_validator<S>(
     storage: &mut S,
@@ -1227,7 +1270,18 @@ where
             "The given address is already a validator",
         ));
     }
-
+    if is_valid_metadata_email(&Some(metadata.email.clone())) {
+        return Err(MetadataError::InvalidEmail(
+            metadata.email.clone()
+        )
+            .into());
+    }
+    if is_valid_metadata_discord_handle(&metadata.discord_handle) {
+        return Err(MetadataError::InvalidDiscordHandle(
+            metadata.discord_handle.clone().unwrap()
+        )
+            .into());
+    }
     // If the address is not yet a validator, it cannot have self-bonds, but it
     // may have delegations.
     if has_bonds(storage, address)? {
@@ -2591,6 +2645,19 @@ pub fn change_validator_metadata<S>(
 where
     S: StorageRead + StorageWrite,
 {
+    if is_valid_metadata_email(&email) {
+        return Err(MetadataError::InvalidEmail(
+            email.clone().unwrap()
+        )
+        .into());
+    }
+    if is_valid_metadata_discord_handle(&discord_handle) {
+        return Err(MetadataError::InvalidDiscordHandle(
+            discord_handle.clone().unwrap()
+        )
+        .into());
+    }
+
     if let Some(email) = email {
         write_validator_email(storage, validator, &email)?;
     }
