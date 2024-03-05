@@ -267,8 +267,12 @@ where
     for vote in votes {
         // Skip votes involving jailed or inactive validators
         let validator = vote.validator.clone();
-        let validator_state = validator_state_handle(&validator).get(storage, epoch, params)?;
-        if matches!(validator_state, Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)) {
+        let validator_state =
+            validator_state_handle(&validator).get(storage, epoch, params)?;
+        if matches!(
+            validator_state,
+            Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
+        ) {
             continue;
         }
 

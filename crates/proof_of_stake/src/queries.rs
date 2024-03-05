@@ -12,7 +12,9 @@ use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
-use crate::storage::{bond_handle, delegation_targets_handle, read_pos_params, unbond_handle};
+use crate::storage::{
+    bond_handle, delegation_targets_handle, read_pos_params, unbond_handle,
+};
 use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, Slash,
     UnbondDetails,
@@ -82,7 +84,9 @@ where
     let delegation_targets = delegation_targets_handle(owner).at(epoch);
     for validator in delegation_targets.iter(storage)? {
         let validator = validator?;
-        let stake = bond_handle(owner, &validator).get_sum(storage, *epoch, &params)?.unwrap_or_default();
+        let stake = bond_handle(owner, &validator)
+            .get_sum(storage, *epoch, &params)?
+            .unwrap_or_default();
         delegations.insert(validator, stake);
     }
     Ok(delegations)
