@@ -42,7 +42,7 @@ pub fn main() -> Result<()> {
                 #[cfg(not(feature = "migrations"))]
                 {
                     panic!(
-                        "This command is only available if build with the \
+                        "This command is only available if built with the \
                          \"migrations\" feature."
                     )
                 }
@@ -58,7 +58,7 @@ pub fn main() -> Result<()> {
                 #[cfg(not(feature = "migrations"))]
                 {
                     panic!(
-                        "This command is only available if build with the \
+                        "This command is only available if built with the \
                          \"migrations\" feature."
                     )
                 }
