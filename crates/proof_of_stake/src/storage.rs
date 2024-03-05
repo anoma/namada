@@ -18,7 +18,7 @@ use num_traits::CheckedAdd;
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
     BelowCapacityValidatorSets, BondId, Bonds, CommissionRates,
-    ConsensusValidatorSets, DelegatorRedelegatedBonded,
+    ConsensusValidatorSets, DelegationTargets, DelegatorRedelegatedBonded,
     DelegatorRedelegatedUnbonded, EpochedSlashes, IncomingRedelegations,
     LivenessMissedVotes, LivenessSumMissedVotes, OutgoingRedelegations,
     ReverseOrdTokenAmount, RewardsAccumulator, RewardsProducts, Slashes,
@@ -242,6 +242,12 @@ pub fn liveness_missed_votes_handle() -> LivenessMissedVotes {
 pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
     let key = storage_key::liveness_sum_missed_votes_key();
     LivenessSumMissedVotes::open(key)
+}
+
+/// Get the storage handle to the delegation targets map
+pub fn delegation_targets_handle(delegator: &Address) -> DelegationTargets {
+    let key = storage_key::delegation_targets_key(delegator);
+    DelegationTargets::open(key)
 }
 
 // ---- Storage read + write ----

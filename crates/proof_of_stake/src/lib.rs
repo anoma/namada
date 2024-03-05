@@ -51,15 +51,15 @@ use crate::slashing::{
 };
 use crate::storage::{
     below_capacity_validator_set_handle, bond_handle,
-    consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    delegator_redelegated_unbonds_handle, get_last_reward_claim_epoch,
-    liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
-    read_consensus_validator_set_addresses, read_non_pos_owned_params,
-    read_pos_params, read_validator_last_slash_epoch,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    total_bonded_handle, total_consensus_stake_handle, total_unbonded_handle,
-    try_insert_consensus_key, unbond_handle, update_total_deltas,
-    update_validator_deltas, validator_addresses_handle,
+    consensus_validator_set_handle, delegation_targets_handle,
+    delegator_redelegated_bonds_handle, delegator_redelegated_unbonds_handle,
+    get_last_reward_claim_epoch, liveness_missed_votes_handle,
+    liveness_sum_missed_votes_handle, read_consensus_validator_set_addresses,
+    read_non_pos_owned_params, read_pos_params,
+    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
+    read_validator_stake, total_bonded_handle, total_consensus_stake_handle,
+    total_unbonded_handle, try_insert_consensus_key, unbond_handle,
+    update_total_deltas, update_validator_deltas, validator_addresses_handle,
     validator_commission_rate_handle, validator_consensus_key_handle,
     validator_deltas_handle, validator_eth_cold_key_handle,
     validator_eth_hot_key_handle, validator_incoming_redelegations_handle,
@@ -263,6 +263,11 @@ where
         let bonds = find_bonds(storage, source, validator)?;
         tracing::debug!("\nBonds after incrementing: {bonds:#?}");
     }
+
+    // Add the validator to the delegation targets
+    let target_validators =
+        delegation_targets_handle(source).at(&(current_epoch + offset));
+    target_validators.insert(storage, validator.clone())?;
 
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
@@ -505,6 +510,17 @@ where
     // Replace bond amount for partial unbond, if any.
     if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
         bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
+    }
+
+    // If the bond is now completely empty, remove the validator from the
+    // delegation targets
+    let bonds_total = bonds_handle
+        .get_sum(storage, pipeline_epoch, &params)?
+        .unwrap_or_default();
+    if bonds_total.is_zero() {
+        delegation_targets_handle(source)
+            .at(&pipeline_epoch)
+            .remove(storage, validator)?;
     }
 
     // `updatedUnbonded`

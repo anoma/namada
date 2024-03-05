@@ -12,7 +12,7 @@ use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
-use crate::storage::{bond_handle, read_pos_params, unbond_handle};
+use crate::storage::{bond_handle, delegation_targets_handle, read_pos_params, unbond_handle};
 use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, Slash,
     UnbondDetails,
@@ -58,26 +58,32 @@ pub fn find_delegations<S>(
 where
     S: StorageRead,
 {
-    let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
+    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
     let params = read_pos_params(storage)?;
     let mut delegations: HashMap<Address, token::Amount> = HashMap::new();
 
-    for iter_result in
-        namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    {
-        let (key, _bond_bytes) = iter_result?;
-        let validator_address = storage_key::get_validator_address_from_bond(
-            &key,
-        )
-        .ok_or_else(|| {
-            namada_storage::Error::new_const(
-                "Delegation key should contain validator address.",
-            )
-        })?;
-        let deltas_sum = bond_handle(owner, &validator_address)
-            .get_sum(storage, *epoch, &params)?
-            .unwrap_or_default();
-        delegations.insert(validator_address, deltas_sum);
+    // for iter_result in
+    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
+    // {
+    //     let (key, _bond_bytes) = iter_result?;
+    //     let validator_address = storage_key::get_validator_address_from_bond(
+    //         &key,
+    //     )
+    //     .ok_or_else(|| {
+    //         namada_storage::Error::new_const(
+    //             "Delegation key should contain validator address.",
+    //         )
+    //     })?;
+    //     let deltas_sum = bond_handle(owner, &validator_address)
+    //         .get_sum(storage, *epoch, &params)?
+    //         .unwrap_or_default();
+    //     delegations.insert(validator_address, deltas_sum);
+    // }
+    let delegation_targets = delegation_targets_handle(owner).at(epoch);
+    for validator in delegation_targets.iter(storage)? {
+        let validator = validator?;
+        let stake = bond_handle(owner, &validator).get_sum(storage, *epoch, &params)?.unwrap_or_default();
+        delegations.insert(validator, stake);
     }
     Ok(delegations)
 }

@@ -58,6 +58,7 @@ const VALIDATOR_AVATAR_KEY: &str = "avatar";
 const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
+const DELEGATION_TARGETS_PREFIX: &str = "delegation_targets";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1042,5 +1043,19 @@ pub fn liveness_missed_votes_key() -> Key {
 pub fn liveness_sum_missed_votes_key() -> Key {
     liveness_data_prefix()
         .push(&LIVENESS_MISSED_VOTES_SUM.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage prefix for the delegation targets.
+pub fn delegation_targets_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&DELEGATION_TARGETS_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the delegation targets of a delegator.
+pub fn delegation_targets_key(delegator: &Address) -> Key {
+    delegation_targets_prefix()
+        .push(&delegator.to_db_key())
         .expect("Cannot obtain a storage key")
 }
