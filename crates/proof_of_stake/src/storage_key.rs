@@ -58,6 +58,7 @@ const VALIDATOR_AVATAR_KEY: &str = "avatar";
 const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
+const TOTAL_ACTIVE_VOTING_POWER_KEY: &str = "total_active_voting_power";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1042,5 +1043,13 @@ pub fn liveness_missed_votes_key() -> Key {
 pub fn liveness_sum_missed_votes_key() -> Key {
     liveness_data_prefix()
         .push(&LIVENESS_MISSED_VOTES_SUM.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for total active voting power (Consensus, Below-Capacity, and
+/// Below-threshold validators).
+pub fn total_active_voting_power_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_ACTIVE_VOTING_POWER_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
