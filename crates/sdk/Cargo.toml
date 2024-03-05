@@ -93,6 +93,7 @@ data-encoding.workspace = true
 derivation-path.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
+eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true

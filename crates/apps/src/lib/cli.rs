@@ -839,6 +839,7 @@ pub mod cmds {
         RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        UpdateDB(LedgerUpdateDB),
         RollBack(LedgerRollBack),
     }
 
@@ -850,10 +851,12 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let update_db = SubCmd::parse(matches).map(Self::UpdateDB);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
+                    .or(update_db)
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
@@ -873,6 +876,7 @@ pub mod cmds {
                 .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerUpdateDB::def())
                 .subcommand(LedgerRollBack::def())
         }
     }
@@ -952,6 +956,27 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerUpdateDB(pub args::LedgerUpdateDb);
+
+    impl SubCmd for LedgerUpdateDB {
+        const CMD: &'static str = "update_db";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerUpdateDb::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD).about(
+                "Applies a set of updates to the DB for hard forking. The \
+                 input should be a path to a file dictating a set of keys and \
+                 their new values. Can be dry-run for testing.",
+            )
         }
     }
 
@@ -3372,6 +3397,30 @@ pub mod args {
                     .def()
                     .help("If provided, dump also the diff of the last height"),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerUpdateDb {
+        pub updates: PathBuf,
+        pub dry_run: bool,
+    }
+
+    impl Args for LedgerUpdateDb {
+        fn parse(matches: &ArgMatches) -> Self {
+            let updates = PATH.parse(matches);
+            let dry_run = DRY_RUN_TX.parse(matches);
+            Self { updates, dry_run }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help(
+                "The path to a json of key-value pairs to update the DB with.",
+            ))
+            .arg(DRY_RUN_TX.def().help(
+                "If set, applies the updates but does not persist them. Using \
+                 for testing and debugging.",
+            ))
         }
     }
 

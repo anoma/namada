@@ -3609,6 +3609,7 @@ dependencies = [
  "derivation-path",
  "ethbridge-bridge-contract",
  "ethers",
+ "eyre",
  "fd-lock",
  "futures",
  "itertools 0.10.5",
