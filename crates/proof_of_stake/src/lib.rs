@@ -272,11 +272,11 @@ where
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
-    let is_jailed_or_inactive_at_pipeline = matches!(
+    let is_jailed_or_inactive_at_offset = matches!(
         validator_state_handle.get(storage, offset_epoch, &params)?,
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_or_inactive_at_pipeline {
+    if !is_jailed_or_inactive_at_offset {
         update_validator_set(
             storage,
             &params,
@@ -303,6 +303,7 @@ where
         amount.change(),
         current_epoch,
         offset_opt,
+        !is_jailed_or_inactive_at_offset,
     )?;
 
     Ok(())
@@ -696,6 +697,7 @@ where
         change_after_slashing,
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
@@ -2175,6 +2177,7 @@ where
         amount_after_slashing.change(),
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     Ok(())

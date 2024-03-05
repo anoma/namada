@@ -250,6 +250,12 @@ pub fn delegation_targets_handle(delegator: &Address) -> DelegationTargets {
     DelegationTargets::open(key)
 }
 
+/// Get the storage handle to the total active voting power
+pub fn total_active_voting_power_handle() -> TotalDeltas {
+    let key = storage_key::total_active_voting_power_key();
+    TotalDeltas::open(key)
+}
+
 // ---- Storage read + write ----
 
 /// Read PoS parameters
@@ -623,22 +629,44 @@ pub fn update_total_deltas<S>(
     delta: token::Change,
     current_epoch: namada_core::storage::Epoch,
     offset_opt: Option<u64>,
+    update_active_voting_power: bool,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let handle = total_deltas_handle();
     let offset = offset_opt.unwrap_or(params.pipeline_len);
-    let val = handle
+    let total_deltas = total_deltas_handle();
+    let total_active_voting_power = total_active_voting_power_handle();
+
+    // Update total deltas
+    let total_deltas_val = total_deltas
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(
+    total_deltas.set(
         storage,
-        val.checked_add(&delta)
+        total_deltas_val
+            .checked_add(&delta)
             .expect("Total deltas updated amount should not overflow"),
         current_epoch,
         offset,
-    )
+    )?;
+
+    // Update total active voting power
+    if update_active_voting_power {
+        let active_val = total_active_voting_power
+            .get_delta_val(storage, current_epoch + offset)?
+            .unwrap_or_default();
+        total_active_voting_power.set(
+            storage,
+            active_val.checked_add(&delta).expect(
+                "Total active voting power updated amount should not overflow",
+            ),
+            current_epoch,
+            offset,
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Read PoS validator's email.

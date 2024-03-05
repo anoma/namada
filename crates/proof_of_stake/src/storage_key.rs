@@ -59,6 +59,7 @@ const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 const DELEGATION_TARGETS_PREFIX: &str = "delegation_targets";
+const TOTAL_ACTIVE_VOTING_POWER_KEY: &str = "total_active_voting_power";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1057,5 +1058,13 @@ pub fn delegation_targets_prefix() -> Key {
 pub fn delegation_targets_key(delegator: &Address) -> Key {
     delegation_targets_prefix()
         .push(&delegator.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for total active voting power (Consensus, Below-Capacity, and
+/// Below-threshold validators).
+pub fn total_active_voting_power_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&TOTAL_ACTIVE_VOTING_POWER_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
