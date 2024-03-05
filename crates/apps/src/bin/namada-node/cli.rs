@@ -5,8 +5,6 @@ use namada::core::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
 use namada_apps::config::ValidatorLocalConfig;
 use namada_apps::node::ledger;
-#[cfg(not(feature = "migrations"))]
-use namada_sdk::display_line;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
