@@ -10,6 +10,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -26,7 +28,9 @@ const SECRET_KEY_LENGTH: usize = 32;
 const SIGNATURE_LENGTH: usize = 64;
 
 /// Ed25519 public key
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Serialize, Deserialize, BorshDeserializer,
+)]
 pub struct PublicKey(pub ed25519_consensus::VerificationKey);
 
 impl super::PublicKey for PublicKey {
@@ -134,7 +138,9 @@ impl FromStr for PublicKey {
 }
 
 /// Ed25519 secret key
-#[derive(Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(
+    Debug, Serialize, Deserialize, Zeroize, ZeroizeOnDrop, BorshDeserializer,
+)]
 pub struct SecretKey(pub Box<ed25519_consensus::SigningKey>);
 
 impl super::SecretKey for SecretKey {
@@ -239,7 +245,9 @@ impl FromStr for SecretKey {
 }
 
 /// Ed25519 signature
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Serialize, Deserialize, BorshDeserializer,
+)]
 pub struct Signature(pub ed25519_consensus::Signature);
 
 impl super::Signature for Signature {
@@ -332,6 +340,7 @@ impl Ord for Signature {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,

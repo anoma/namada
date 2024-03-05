@@ -2,6 +2,8 @@ use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::hash::Hash;
 use namada_core::key::common;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// A tx data type to initialize a new established account
@@ -11,6 +13,7 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -33,6 +36,7 @@ pub struct InitAccount {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,

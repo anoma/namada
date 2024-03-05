@@ -11,6 +11,8 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -83,6 +85,7 @@ pub const WASM_HASH_PREFIX: &str = "hash";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -128,6 +131,7 @@ impl From<TxIndex> for u32 {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Default,
 )]
 pub struct BlockResults(VecIndexSet<u128>);
@@ -166,6 +170,7 @@ impl BlockResults {
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -238,6 +243,7 @@ impl FromStr for BlockHeight {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -347,7 +353,9 @@ impl core::fmt::Debug for BlockHash {
 
 /// The data from Tendermint header
 /// relevant for Namada storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Default)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer, Default,
+)]
 pub struct Header {
     /// Merkle root hash of block
     pub hash: Hash,
@@ -370,6 +378,7 @@ impl Header {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Debug,
     Default,
@@ -410,7 +419,7 @@ impl FromStr for Key {
 }
 
 /// Storage keys that are utf8 encoded strings
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Eq, PartialEq, Copy, Clone, Hash, BorshDeserializer)]
 pub struct StringKey {
     /// The original key string, in bytes
     pub original: [u8; IBC_KEY_LIMIT],
@@ -497,7 +506,15 @@ impl arse_merkle_tree::Key<IBC_KEY_LIMIT> for StringKey {
 
 /// A wrapper around raw bytes to be stored as values
 /// in a merkle tree
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub struct TreeBytes(pub Vec<u8>);
 
 impl arse_merkle_tree::traits::Value for TreeBytes {
@@ -794,6 +811,7 @@ pub trait KeySeg {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Debug,
     Eq,
@@ -1038,6 +1056,7 @@ impl KeySeg for common::PublicKey {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -1215,6 +1234,7 @@ impl Mul for Epoch {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Epochs {
     /// The block heights of the first block of each known epoch.
@@ -1282,7 +1302,14 @@ impl Epochs {
 }
 
 /// A value of a storage prefix iterator.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+)]
 pub struct PrefixValue {
     /// Storage key
     pub key: Key,
@@ -1291,7 +1318,9 @@ pub struct PrefixValue {
 }
 
 /// Container of all Ethereum event queues.
-#[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Default, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct EthEventsQueue {
     /// Queue of transfer to Namada events.
     pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
@@ -1457,6 +1486,7 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Eq,
     PartialEq,
     Ord,

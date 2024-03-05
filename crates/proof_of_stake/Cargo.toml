@@ -21,6 +21,8 @@ testing = ["proptest"]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_governance = { path = "../governance" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 namada_storage = { path = "../storage" }
 namada_parameters = { path = "../parameters" }
 namada_trans_token = { path = "../trans_token" }
@@ -28,6 +30,7 @@ namada_trans_token = { path = "../trans_token" }
 borsh.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
+linkme.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }

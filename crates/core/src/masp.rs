@@ -6,6 +6,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -22,6 +24,7 @@ use crate::token::{Denomination, MaspDigitPos};
 #[derive(
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Clone,
     Debug,
     PartialOrd,
@@ -101,6 +104,7 @@ const PAYMENT_ADDRESS_SIZE: usize = 43 + 1;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Eq,
     PartialEq,
     PartialOrd,
@@ -245,6 +249,7 @@ impl<'de> serde::Deserialize<'de> for ExtendedViewingKey {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress, bool);
 
@@ -306,7 +311,9 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
 }
 
 /// Wrapper for masp_primitive's ExtendedSpendingKey
-#[derive(Clone, Debug, Copy, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone, Debug, Copy, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 
 impl string_encoding::Format for ExtendedSpendingKey {
@@ -469,6 +476,7 @@ impl Display for TransferTarget {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,

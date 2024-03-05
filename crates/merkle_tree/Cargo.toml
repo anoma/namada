@@ -14,11 +14,14 @@ version.workspace = true
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 
 arse-merkle-tree.workspace = true
 borsh.workspace = true
 eyre.workspace = true
 ics23.workspace = true
+linkme.workspace = true
 prost.workspace = true
 thiserror.workspace = true
 

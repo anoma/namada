@@ -26,6 +26,8 @@ use namada_core::storage::{
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree
@@ -133,6 +135,7 @@ pub type Amt<H> =
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub enum StoreType {
     /// Base tree, which has roots of the subtrees

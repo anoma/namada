@@ -1,6 +1,6 @@
 [package]
-name = "namada_gas"
-description = "Namada gas"
+name = "namada_migrations"
+description = "Namada DB migration tooling"
 resolver = "2"
 authors.workspace = true
 edition.workspace = true
@@ -12,15 +12,12 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[lib]
+
 [dependencies]
-namada_core = { path = "../core" }
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations"}
 borsh.workspace = true
+borsh-ext.workspace = true
+data-encoding.workspace = true
+lazy_static.workspace = true
 linkme.workspace = true
 serde.workspace = true
-thiserror.workspace = true
-
-[dev-dependencies]
-assert_matches.workspace = true
-proptest.workspace = true

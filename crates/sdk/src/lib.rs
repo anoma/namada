@@ -1,5 +1,4 @@
 extern crate alloc;
-extern crate core;
 
 pub use namada_core::*;
 #[cfg(feature = "tendermint-rpc")]
@@ -25,7 +24,6 @@ pub mod error;
 pub mod events;
 pub(crate) mod internal_macros;
 pub mod io;
-pub mod migrations;
 pub mod queries;
 pub mod wallet;
 

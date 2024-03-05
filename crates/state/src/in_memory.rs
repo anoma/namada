@@ -4,7 +4,9 @@ use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::time::DateTimeUtc;
 use namada_core::{encode, ethereum_structs};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_macros::BorshDeserializer;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
+use namada_migrations::*;
 use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
@@ -72,7 +74,7 @@ where
 }
 
 /// Last committed block
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct LastBlock {
     /// Block height
     pub height: BlockHeight,

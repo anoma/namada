@@ -6,6 +6,8 @@ use std::num::NonZeroU64;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -30,6 +32,7 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct ProposalBytes {
     inner: NonZeroU64,
@@ -183,6 +186,7 @@ pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialOrd,
     Ord,
@@ -305,7 +309,13 @@ impl FromStr for ChainId {
 
 /// Chain ID prefix
 #[derive(
-    Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
 )]
 #[serde(transparent)]
 pub struct ChainIdPrefix(String);

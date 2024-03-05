@@ -5,6 +5,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::storage::Epoch;
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::validation::{
@@ -17,7 +19,13 @@ use crate::parameters::GovernanceParameters;
 use crate::storage::proposal::PGFTarget;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// The proposal structure
 pub struct OnChainProposal {
@@ -37,7 +45,13 @@ pub struct OnChainProposal {
 
 /// Pgf default proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct DefaultProposal {
     /// The proposal data
@@ -183,7 +197,13 @@ impl TryFrom<&[u8]> for PgfStewardProposal {
 
 /// Pgf funding proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfFundingProposal {
     /// The proposal data
@@ -246,7 +266,13 @@ impl TryFrom<&[u8]> for PgfFundingProposal {
 
 /// Pgf stewards
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfSteward {
     /// Pgf action
@@ -257,7 +283,13 @@ pub struct PgfSteward {
 
 /// Pgf action
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub enum PgfAction {
     /// Add action
@@ -275,7 +307,13 @@ impl PgfAction {
 
 /// Pgf funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfFunding {
     /// Pgf continuous funding
@@ -304,7 +342,13 @@ impl Display for PgfFunding {
 
 /// Pgf continuous funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfContinuous {
     /// Pgf target
@@ -315,7 +359,13 @@ pub struct PgfContinuous {
 
 /// Pgf retro funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfRetro {
     /// Pgf retro target

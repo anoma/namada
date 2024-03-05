@@ -60,6 +60,8 @@ use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_ibc::IbcMessage;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
@@ -116,7 +118,7 @@ pub type IndexedNoteEntry = (
 );
 
 /// Shielded transfer
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct ShieldedTransfer {
     /// Shielded transfer builder
     pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
@@ -129,7 +131,7 @@ pub struct ShieldedTransfer {
 }
 
 /// Shielded pool data for a token
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspTokenRewardData {
     pub name: String,
     pub address: Address,
@@ -499,7 +501,7 @@ pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
 }
 
 /// a masp change
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
+#[derive(BorshSerialize, BorshDeserialize, BorshDeserializer, Debug, Clone)]
 pub struct MaspChange {
     /// the token address
     pub asset: Address,
@@ -528,7 +530,9 @@ pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 ///
 /// The cache is designed so that it either contains
 /// all transactions from a given height, or none.
-#[derive(BorshSerialize, BorshDeserialize, Debug, Default, Clone)]
+#[derive(
+    BorshSerialize, BorshDeserialize, BorshDeserializer, Debug, Default, Clone,
+)]
 pub struct Unscanned {
     txs: IndexedNoteData,
 }

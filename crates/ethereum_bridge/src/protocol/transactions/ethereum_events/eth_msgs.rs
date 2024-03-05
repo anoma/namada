@@ -1,5 +1,7 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ethereum_events::EthereumEvent;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
@@ -15,6 +17,7 @@ use crate::protocol::transactions::votes::{dedupe, Tally, Votes};
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct EthMsgUpdate {
     /// The event being seen.
@@ -38,7 +41,14 @@ impl From<MultiSignedEthEvent> for EthMsgUpdate {
 
 /// Represents an event stored under `eth_msgs`
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
 )]
 pub struct EthMsg {
     /// The event being stored

@@ -6,6 +6,8 @@ pub mod decrypted_tx {
     use namada_core::borsh::{
         BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
     };
+    use namada_macros::BorshDeserializer;
+    use namada_migrations::*;
     use sha2::{Digest, Sha256};
 
     #[derive(
@@ -13,6 +15,7 @@ pub mod decrypted_tx {
         Debug,
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
         serde::Serialize,
         serde::Deserialize,

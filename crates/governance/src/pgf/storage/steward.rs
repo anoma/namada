@@ -3,10 +3,14 @@ use std::collections::HashMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::dec::Dec;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 
 use crate::pgf::REWARD_DISTRIBUTION_LIMIT;
 
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer, PartialEq,
+)]
 /// Struct holding data about a pgf steward
 pub struct StewardDetail {
     /// The steward address

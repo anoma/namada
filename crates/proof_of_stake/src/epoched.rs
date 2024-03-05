@@ -8,6 +8,8 @@ use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::storage::{self, Epoch};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};
 use namada_storage::{StorageRead, StorageWrite};
@@ -759,6 +761,7 @@ where
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -782,6 +785,7 @@ impl EpochOffset for OffsetZero {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -805,6 +809,7 @@ impl EpochOffset for OffsetDefaultNumPastEpochs {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -828,6 +833,7 @@ impl EpochOffset for OffsetPipelineLen {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -851,6 +857,7 @@ impl EpochOffset for OffsetUnbondingLen {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -874,6 +881,7 @@ impl EpochOffset for OffsetPipelinePlusUnbondingLen {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -897,6 +905,7 @@ impl EpochOffset for OffsetSlashProcessingLen {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -920,6 +929,7 @@ impl EpochOffset for OffsetSlashProcessingLenPlus {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -943,6 +953,7 @@ impl EpochOffset for OffsetMaxU64 {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -966,6 +977,7 @@ impl EpochOffset for OffsetMaxProposalPeriod {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -990,6 +1002,7 @@ impl EpochOffset for OffsetMaxProposalPeriodPlus {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -1017,6 +1030,7 @@ impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLen {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,

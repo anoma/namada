@@ -10,9 +10,13 @@ use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_core::masp_primitives::sapling;
 use namada_core::storage::Epoch;
 use namada_core::token::{Denomination, MaspDigitPos};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 
 /// A representation of the conversion state
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct ConversionState {
     /// The last amount of the native token distributed
     pub normed_inflation: Option<u128>,

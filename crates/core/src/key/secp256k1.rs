@@ -14,6 +14,8 @@ use data_encoding::HEXLOWER;
 use ethabi::Token;
 use k256::ecdsa::RecoveryId;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
 use serde::de::{Error, SeqAccess, Visitor};
@@ -34,7 +36,9 @@ use crate::key::StorageHasher;
 pub const SIGNATURE_SIZE: usize = 64 + 1;
 
 /// secp256k1 public key
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Serialize, Deserialize, BorshDeserializer,
+)]
 pub struct PublicKey(pub k256::PublicKey);
 
 /// Size of a compressed public key bytes
@@ -168,7 +172,7 @@ impl From<&PublicKey> for EthAddress {
 }
 
 /// Secp256k1 secret key
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshDeserializer)]
 pub struct SecretKey(pub Box<k256::SecretKey>);
 
 impl super::SecretKey for SecretKey {
@@ -288,7 +292,7 @@ impl RefTo<PublicKey> for SecretKey {
 }
 
 /// Secp256k1 signature
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, BorshDeserializer)]
 pub struct Signature(pub k256::ecdsa::Signature, pub RecoveryId);
 
 impl super::Signature for Signature {
@@ -530,6 +534,7 @@ impl TryFrom<&[u8; 65]> for Signature {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,

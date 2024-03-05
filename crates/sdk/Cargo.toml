@@ -60,6 +60,8 @@ namada_core = { path = "../core" }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }
@@ -78,12 +80,12 @@ data-encoding.workspace = true
 derivation-path.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
-eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
 futures.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
 lazy_static.workspace = true
+linkme.workspace = true
 masp_primitives.workspace = true
 masp_proofs.workspace = true
 num256.workspace = true

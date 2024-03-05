@@ -7,6 +7,8 @@ use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use num_integer::Integer;
 use num_traits::{CheckedAdd, CheckedMul, CheckedSub};
 use uint::construct_uint;
@@ -300,6 +302,7 @@ construct_uint! {
     #[derive(
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
     )]
 
@@ -482,6 +485,7 @@ const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct I256(pub Uint);

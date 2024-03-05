@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::dec::Dec;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_storage::{Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +21,7 @@ use super::storage::steward::StewardDetail;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]

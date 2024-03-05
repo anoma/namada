@@ -21,12 +21,15 @@ testing = [
 [dependencies]
 namada_core = { path = "../core" }
 namada_gas = { path = "../gas" }
+namada_macros = { path = "../macros" }
 namada_merkle_tree = { path = "../merkle_tree" }
+namada_migrations = {path = "../migrations" }
 namada_replay_protection = { path = "../replay_protection" }
 namada_tx = { path = "../tx" }
 
 borsh.workspace = true
 itertools.workspace = true
+linkme.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

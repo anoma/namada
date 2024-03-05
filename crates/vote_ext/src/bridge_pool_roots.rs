@@ -10,6 +10,8 @@ use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::key::common;
 use namada_core::key::common::Signature;
 use namada_core::storage::BlockHeight;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_tx::Signed;
 
 /// A vote extension containing a validator's signature
@@ -25,6 +27,7 @@ use namada_tx::Signed;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct BridgePoolRootVext {
@@ -58,6 +61,7 @@ pub type Vext = BridgePoolRootVext;
     BorshSerialize,
     BorshSchema,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     Hash,
@@ -98,6 +102,7 @@ impl Vext {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct MultiSignedVext(pub HashSet<SignedVext>);

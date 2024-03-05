@@ -19,9 +19,11 @@ testing = ["namada_core/testing", "proptest"]
 [dependencies]
 namada_core = { path = "../core" }
 namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 namada_storage = { path = "../storage" }
 
 borsh.workspace = true
+linkme.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true
 

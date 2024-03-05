@@ -28,7 +28,7 @@ testing = [
 
 [dependencies]
 namada_macros = {path = "../macros"}
-
+namada_migrations = {path = "../migrations"}
 arse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
@@ -44,6 +44,7 @@ ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
 k256.workspace = true
+linkme.workspace = true
 masp_primitives.workspace = true
 num256.workspace = true
 num_enum = "0.7.0"

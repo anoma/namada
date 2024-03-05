@@ -1,11 +1,13 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ethereum_events::EthereumEvent;
 use namada_gas::Gas;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_tx::Tx;
 
 /// A wrapper for `crate::types::transaction::WrapperTx` to conditionally
 /// add `has_valid_pow` flag for only used in testnets.
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub struct TxInQueue {
     /// Wrapper tx
     pub tx: Tx,
@@ -15,7 +17,9 @@ pub struct TxInQueue {
     pub gas: Gas,
 }
 
-#[derive(Default, Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Default, Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer,
+)]
 /// Wrapper txs to be decrypted in the next block proposal
 pub struct TxQueue(std::collections::VecDeque<TxInQueue>);
 
@@ -49,14 +53,16 @@ impl TxQueue {
 }
 
 /// Expired transaction kinds.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub enum ExpiredTx {
     /// Broadcast the given Ethereum event.
     EthereumEvent(EthereumEvent),
 }
 
 /// Queue of expired transactions that need to be retransmitted.
-#[derive(Default, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Default, Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct ExpiredTxsQueue {
     inner: Vec<ExpiredTx>,
 }

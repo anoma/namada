@@ -10,13 +10,21 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::key::common;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 pub use storage::*;
 pub use storage_key::*;
 pub use types::*;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// Account data
 pub struct Account {

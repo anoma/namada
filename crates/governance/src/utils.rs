@@ -6,6 +6,8 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 
 use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
@@ -35,7 +37,7 @@ impl Display for ProposalStatus {
 pub type VotePower = token::Amount;
 
 /// Structure rappresenting a proposal vote
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct Vote {
     /// Field holding the address of the validator
     pub validator: Address,
@@ -60,7 +62,9 @@ impl Vote {
 }
 
 /// Represent a tally type
-#[derive(Copy, Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy, Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub enum TallyType {
     /// Represent a tally type for proposal requiring 2/3 of the total voting
     /// power to be yay
@@ -90,7 +94,9 @@ impl TallyType {
 }
 
 /// The result of a proposal
-#[derive(Copy, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy, Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub enum TallyResult {
     /// Proposal was accepted with the associated value
     Passed,
@@ -173,7 +179,7 @@ impl TallyResult {
 }
 
 /// The result with votes of a proposal
-#[derive(Clone, Copy, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,

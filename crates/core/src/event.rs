@@ -5,6 +5,8 @@ use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
@@ -25,7 +27,15 @@ impl EmitEvents for Vec<Event> {
 
 /// Indicates if an event is emitted do to
 /// an individual Tx or the nature of a finalized block
-#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub enum EventLevel {
     /// Indicates an event is to do with a finalized block.
     Block,
@@ -35,7 +45,15 @@ pub enum EventLevel {
 
 /// Custom events that can be queried from Tendermint
 /// using a websocket client
-#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub struct Event {
     /// The type of event.
     pub event_type: EventType,
@@ -47,7 +65,15 @@ pub struct Event {
 }
 
 /// The two types of custom events we currently use
-#[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub enum EventType {
     /// The transaction was accepted to be included in a block
     Accepted,

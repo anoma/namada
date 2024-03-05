@@ -9,7 +9,8 @@ use namada_core::ethereum_events::{EthereumEvent, Uint};
 use namada_core::hash::Hash;
 use namada_core::keccak::{keccak_hash, KeccakHash};
 use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
-use namada_macros::StorageKeys;
+use namada_macros::{BorshDeserializer, StorageKeys};
+use namada_migrations::*;
 use namada_vote_ext::validator_set_update::VotingPowersMap;
 
 use crate::storage::proof::{BridgePoolRootProof, EthereumProof};
@@ -189,7 +190,7 @@ impl From<&Hash> for Keys<EthereumEvent> {
 
 /// A wrapper struct for managing keys related to
 /// tracking signatures over bridge pool roots and nonces.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshDeserializer)]
 pub struct BridgePoolRoot(pub BridgePoolRootProof);
 
 impl BorshSerialize for BridgePoolRoot {

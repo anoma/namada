@@ -9,13 +9,21 @@ use namada_core::hash::Hash;
 use namada_core::key::{common, RefTo, SigScheme};
 use namada_core::sign::SignatureIndex;
 use namada_core::storage::Epoch;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::validation::{is_valid_tally_epoch, ProposalValidation};
 use crate::storage::vote::ProposalVote;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// The offline proposal structure
 pub struct OfflineProposal {
@@ -89,7 +97,13 @@ impl TryFrom<&[u8]> for OfflineProposal {
 }
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// The signed offline proposal structure
 pub struct OfflineSignedProposal {
@@ -173,7 +187,13 @@ impl OfflineSignedProposal {
 }
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// The offline proposal structure
 pub struct OfflineVote {

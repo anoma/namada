@@ -7,6 +7,8 @@ use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -43,6 +45,7 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,

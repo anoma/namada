@@ -28,6 +28,8 @@ use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
     bridge_contract_key, native_erc20_key, vote_tallies,
 };
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;
 use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
@@ -50,6 +52,7 @@ use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -78,7 +81,14 @@ pub struct TransferToEthereumStatus {
 /// Contains information about the flow control of some ERC20
 /// wrapped asset.
 #[derive(
-    Debug, Copy, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize,
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Erc20FlowControl {
     /// Whether the wrapped asset is whitelisted.
@@ -117,7 +127,15 @@ pub type TransferToErcArgs = (
 );
 
 /// Response data returned by `generate_bridge_pool_proof`.
-#[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub struct GenBridgePoolProofRsp {
     /// Ethereum ABI encoded arguments to pass to `transfer_to_erc`.
     pub abi_encoded_args: Vec<u8>,

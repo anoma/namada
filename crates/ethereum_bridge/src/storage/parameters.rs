@@ -7,6 +7,8 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::ethereum_structs;
 use namada_core::storage::Key;
 use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
@@ -29,6 +31,7 @@ use crate::storage::vp;
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Erc20WhitelistEntry {
     /// The address of the whitelisted ERC20 token.
@@ -49,6 +52,7 @@ pub struct Erc20WhitelistEntry {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 #[repr(transparent)]
 pub struct MinimumConfirmations(NonZeroU64);
@@ -85,6 +89,7 @@ impl From<MinimumConfirmations> for NonZeroU64 {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 #[repr(transparent)]
 pub struct ContractVersion(NonZeroU64);
@@ -109,6 +114,7 @@ impl Default for ContractVersion {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct UpgradeableContract {
     /// The Ethereum address of the contract.
@@ -129,6 +135,7 @@ pub struct UpgradeableContract {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Contracts {
     /// The Ethereum address of the ERC20 contract that represents this chain's
@@ -148,6 +155,7 @@ pub struct Contracts {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct EthereumBridgeParams {
     /// Initial Ethereum block height when events will first be extracted from.

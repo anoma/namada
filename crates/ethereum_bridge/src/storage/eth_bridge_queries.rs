@@ -9,6 +9,8 @@ use namada_core::keccak::KeccakHash;
 use namada_core::storage::{BlockHeight, Epoch, Key as StorageKey};
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{hints, token};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
 use namada_proof_of_stake::storage::{
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
@@ -37,6 +39,7 @@ pub enum SendValsetUpd {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -54,6 +57,7 @@ pub enum EthBridgeStatus {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,

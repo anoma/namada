@@ -10,6 +10,8 @@ use namada_core::hash::Hash;
 use namada_core::keccak::{keccak_hash, KeccakHash};
 use namada_core::storage;
 use namada_core::storage::{BlockHeight, DbKeySeg};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -28,7 +30,13 @@ const POOL_ROOT_PREFIX_NON_LEAF: u8 = 0xff;
 ///
 /// Note that an empty tree has root [0u8; 20] by definition.
 #[derive(
-    Debug, Default, Clone, BorshSerialize, BorshDeserialize, BorshSchema,
+    Debug,
+    Default,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
 )]
 pub struct BridgePoolTree {
     /// Root of the tree

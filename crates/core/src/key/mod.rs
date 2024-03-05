@@ -11,6 +11,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -278,6 +280,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,

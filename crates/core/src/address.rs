@@ -10,6 +10,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -72,7 +74,14 @@ pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
-    Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Hash,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    Hash,
 )]
 pub enum Address {
     /// An established address is generated on-chain
@@ -379,6 +388,7 @@ impl TryFrom<Signer> for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -438,6 +448,7 @@ impl_display_and_from_str_via_format!(EstablishedAddress);
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -478,6 +489,7 @@ impl EstablishedAddressGen {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -507,6 +519,7 @@ impl From<&key::common::PublicKey> for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,

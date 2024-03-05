@@ -3,6 +3,8 @@
 use std::cmp::Ordering;
 
 use data_encoding::HEXUPPER;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -28,6 +30,7 @@ pub enum SigIndexDecodeError {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,

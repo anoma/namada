@@ -1,5 +1,7 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
 use super::storage::keys as goverance_storage;
@@ -14,6 +16,7 @@ use super::storage::keys as goverance_storage;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 /// Governance parameter structure
 pub struct GovernanceParameters {

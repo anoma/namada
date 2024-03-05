@@ -452,12 +452,6 @@ async fn write_tm_genesis(
     genesis.genesis_time = genesis_time
         .try_into()
         .expect("Couldn't convert DateTimeUtc to Tendermint Time");
-    if let Some(height) = super::migrating_state() {
-        genesis.initial_height = height
-            .0
-            .try_into()
-            .expect("Failed to convert initial genesis height");
-    }
     let size = block::Size {
         // maximum size of a serialized Tendermint block.
         // on Namada, we have a hard-cap of 16 MiB (6 MiB max

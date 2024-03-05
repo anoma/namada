@@ -18,12 +18,14 @@ testing = ["proptest"]
 [dependencies]
 namada_core = { path = "../core" }
 namada_macros = {path = "../macros"}
+namada_migrations = { path= "../migrations" }
 namada_parameters = {path = "../parameters"}
 namada_storage = {path = "../storage"}
 namada_trans_token = {path = "../trans_token"}
 
 borsh.workspace = true
 itertools.workspace = true
+linkme.workspace = true
 proptest = { workspace = true, optional = true }
 serde_json.workspace = true
 serde.workspace = true

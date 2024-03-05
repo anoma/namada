@@ -81,6 +81,8 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_replay_protection = { path = "../replay_protection" }

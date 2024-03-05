@@ -8,12 +8,14 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::{Address, InternalAddress};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// Aliases created from raw strings are kept in-memory as given, but their
 /// `Serialize` and `Display` instance converts them to lowercase. Their
 /// `PartialEq` instance is case-insensitive.
-#[derive(Clone, Debug, Default, Eq)]
+#[derive(Clone, Debug, Default, Eq, BorshDeserializer)]
 pub struct Alias(String);
 
 impl Alias {

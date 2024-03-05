@@ -14,9 +14,12 @@ version.workspace = true
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations" }
 namada_tx = { path = "../tx" }
 
 borsh.workspace = true
+linkme.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

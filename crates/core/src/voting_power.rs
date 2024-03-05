@@ -9,6 +9,8 @@ use std::ops::{Add, AddAssign, Mul};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use num_rational::Ratio;
 use num_traits::ops::checked::CheckedAdd;
 use serde::de::Visitor;
@@ -21,6 +23,7 @@ use crate::uint::Uint;
 #[derive(
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Default,
     Copy,
@@ -96,7 +99,9 @@ impl From<EthBridgeVotingPower> for u128 {
 
 /// A fraction of the total voting power. This should always be a reduced
 /// fraction that is between zero and one inclusive.
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug)]
+#[derive(
+    Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash, Debug, BorshDeserializer,
+)]
 pub struct FractionalVotingPower(Ratio<Uint>);
 
 impl FractionalVotingPower {

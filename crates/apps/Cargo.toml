@@ -62,8 +62,11 @@ jemalloc = ["rocksdb/jemalloc"]
 
 [dependencies]
 namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_macros = {path = "../macros"}
+namada_migrations = {path = "../migrations"}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+
 
 ark-serialize.workspace = true
 ark-std.workspace = true
@@ -98,6 +101,7 @@ ledger-namada-rs.workspace = true
 ledger-transport-hid.workspace = true
 libc.workspace = true
 libloading.workspace = true
+linkme.workspace = true
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
 masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
 num_cpus.workspace = true

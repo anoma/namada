@@ -14,7 +14,7 @@ use std::thread;
 
 use byte_unit::Byte;
 use futures::future::TryFutureExt;
-use namada::core::storage::{BlockHeight, Key};
+use namada::core::storage::Key;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
@@ -163,13 +163,6 @@ impl Shell {
     }
 }
 
-/// Determine if the ledger is migrating state.
-pub fn migrating_state() -> Option<BlockHeight> {
-    const ENV_INITIAL_HEIGHT: &str = "NAMADA_INITIAL_HEIGHT";
-    let height = std::env::var(ENV_INITIAL_HEIGHT).ok()?;
-    height.parse::<u64>().ok().map(BlockHeight)
-}
-
 /// Run the ledger with an async runtime
 pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
     let logical_cores = num_cpus::get();
@@ -229,48 +222,6 @@ pub fn dump_db(
 
     let db = storage::PersistentDB::open(db_path, None);
     db.dump_block(out_file_path, historic, block_height);
-}
-
-/// Change the funds of an account in-place. Use with
-/// caution, as this modifies state in storage without
-/// going through the consensus protocol.
-pub fn update_db_keys(
-    config: config::Ledger,
-    updates: PathBuf,
-    dry_run: bool,
-) {
-    use std::io::Read;
-    use data_encoding::HEXUPPER;
-    use namada::ledger::storage::DB;
-
-    let mut update_json = String::new();
-    let mut file = std::fs::File::open(updates).expect("Could not fine updates file at the specified path.");
-    file.read_to_string(&mut update_json).expect("Unable to read the updates json file");
-    let updates: std::collections::HashMap<Key, String>  = serde_json::from_str(&update_json)
-        .expect("Could not parse the updates file as json");
-    let cometbft_path = config.cometbft_dir();
-    let chain_id = config.chain_id;
-    let db_path = config.shell.db_dir(&chain_id);
-
-    let mut db = storage::PersistentDB::open(db_path, None);
-    let mut batch = Default::default();
-
-    for (key, value) in updates {
-        tracing::debug!("Overwriting key <{}> with value: {}...", key, value);
-        let data = HEXUPPER.decode(value.as_bytes())
-            .expect("Could not decode a hex value into bytes");
-        db.overwrite_entry(&mut batch, None, &key, data)
-            .expect("Failed to overwrite a key in storage");
-    }
-    if !dry_run {
-        tracing::debug!("Persisting DB changes...");
-        db.exec_batch(batch).expect("Failed to execute write batch");
-        db.flush(true).expect("Failed to flush data to disk");
-
-        // reset CometBFT's state, such that we can resume with a different app hash
-        tendermint_node::reset(cometbft_path)
-            .expect("Failed to reset CometBFT state");
-    }
 }
 
 /// Roll Namada state back to the previous height

@@ -1,5 +1,7 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::Hash;
+use namada_macros::BorshDeserializer;
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use crate::Tx;
@@ -7,7 +9,13 @@ use crate::Tx;
 /// A validity predicate with an input that is intended to be invoked via `eval`
 /// host function.
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct EvalVp {
     /// The VP code hash to `eval`
