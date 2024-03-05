@@ -13,6 +13,7 @@ const TX_REVEAL_PK_WASM: &str = "tx_reveal_pk.wasm";
 const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 
 /// Transaction to initialize an established account
+#[derive(Debug, Clone)]
 pub struct InitAccount(Tx);
 
 impl InitAccount {
