@@ -174,6 +174,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     match tx.header().tx_type {
+        // Raw trasaction type is allowed only for governance proposals
         TxType::Raw => apply_wasm_tx(
             tx,
             &tx_index,
@@ -204,6 +205,8 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+            // Check that the transaction code is allowlisted
+            check_tx_allowed(&tx, state)?;
             let mut inner_res = apply_wasm_tx(
                 tx,
                 &tx_index,

@@ -305,24 +305,21 @@ where
                     None
                 };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let tx_result = protocol::check_tx_allowed(&tx, &self.state)
-                .and_then(|()| {
-                    protocol::dispatch_tx(
-                        tx,
-                        processed_tx.tx.as_ref(),
-                        TxIndex(
-                            tx_index
-                                .try_into()
-                                .expect("transaction index out of bounds"),
-                        ),
-                        &tx_gas_meter,
-                        &mut self.state,
-                        &mut self.vp_wasm_cache,
-                        &mut self.tx_wasm_cache,
-                        wrapper_args.as_mut(),
-                    )
-                })
-                .map_err(Error::TxApply);
+            let tx_result = protocol::dispatch_tx(
+                tx,
+                processed_tx.tx.as_ref(),
+                TxIndex(
+                    tx_index
+                        .try_into()
+                        .expect("transaction index out of bounds"),
+                ),
+                &tx_gas_meter,
+                &mut self.state,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+                wrapper_args.as_mut(),
+            )
+            .map_err(Error::TxApply);
             let tx_gas_meter = tx_gas_meter.into_inner();
             match tx_result {
                 Ok(result) => {
