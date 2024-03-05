@@ -49,7 +49,7 @@ pub mod main {
         ctx.write(&target_key, 9_u64)?;
 
         // parameters
-        let target_key = parameters_storage::get_tx_allowlist_storage_key();
+        let target_key = parameters_storage::get_vp_allowlist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;
         Ok(())
     }
@@ -165,10 +165,11 @@ pub mod main {
     #[transaction(gas = 1000)]
     fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         let signed = tx_data;
-        let _data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-            ctx.set_commitment_sentinel();
-            err
-        })?;
+        let _data =
+            signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
         Ok(())
     }
 }

@@ -1811,20 +1811,24 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     Ok(())
 }
 
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Submit a valid proposal
-/// 3. Query the proposal
-/// 4. Query token balance (submitted funds)
-/// 5. Query governance address balance
-/// 6. Submit an invalid proposal
-/// 7. Check invalid proposal was not accepted
-/// 8. Query token balance (funds shall not be submitted)
-/// 9. Send a yay vote from a validator
-/// 10. Send a yay vote from a normal user
-/// 11. Query the proposal and check the result
-/// 12. Wait proposal grace and check proposal author funds
-/// 13. Check governance address funds are 0
+// In this test we:
+// 1. Run the ledger node
+// 2. Submit a valid proposal
+// 3. Query the proposal
+// 4. Query token balance (submitted funds)
+// 5. Query governance address balance
+// 6. Submit an invalid proposal
+// 7. Check invalid proposal was not accepted
+// 8. Query token balance (funds shall not be submitted)
+// 9. Send a yay vote from a validator
+// 10. Send a yay vote from a normal user
+// 11. Query the proposal and check the result
+// 12. Wait proposal grace and check proposal author funds
+// 13. Check governance address funds are 0
+// 14. Query the new parameters
+// 15. Try to initialize a new account which should fail
+// 16. Submit a tx that triggers an already existing account which should
+//     succeed
 #[test]
 fn proposal_submission() -> Result<()> {
     let test = setup::network(
@@ -2123,13 +2127,56 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("nam: 0")?;
     client.assert_success();
 
-    // // 14. Query parameters
+    // 14. Query parameters
     let query_protocol_parameters =
         vec!["query-protocol-parameters", "--node", &validator_one_rpc];
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
     client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
+    client.assert_success();
+
+    // 15. Try to initialize a new account with the no more allowlisted vp
+    let init_account = vec![
+        "init-account",
+        "--public-keys",
+        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
+        "--threshold",
+        "1",
+        "--code-path",
+        VP_USER_WASM,
+        "--alias",
+        "Test-Account",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, init_account, Some(30))?;
+    client.exp_regex("VP code is not allowed in allowlist parameter")?;
+    client.assert_success();
+
+    // 16. Submit a tx touching a previous account with the no more allowlisted
+    //     vp and verify that the transaction succeeds, i.e. the non allowlisted
+    //     vp can still run
+    let transfer = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, transfer, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
