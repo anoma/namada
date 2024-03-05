@@ -7,6 +7,7 @@ use std::ops::{Add, AddAssign, Deref};
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use ethbridge_structs::*;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};

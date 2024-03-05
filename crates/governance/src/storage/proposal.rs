@@ -8,6 +8,7 @@ use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::storage::Epoch;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};

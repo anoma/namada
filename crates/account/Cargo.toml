@@ -15,6 +15,7 @@ version.workspace = true
 [features]
 default = []
 testing = ["namada_core/testing", "proptest"]
+migrations = ["namada_migrations/migrations", "namada_macros/migrations", "linkme"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -23,7 +24,7 @@ namada_migrations = { path = "../migrations" }
 namada_storage = { path = "../storage" }
 
 borsh.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true }
 proptest = { workspace = true, optional = true }
 serde.workspace = true
 

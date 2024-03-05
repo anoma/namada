@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};

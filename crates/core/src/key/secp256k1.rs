@@ -15,6 +15,7 @@ use ethabi::Token;
 use k256::ecdsa::RecoveryId;
 use k256::elliptic_curve::sec1::ToEncodedPoint;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};

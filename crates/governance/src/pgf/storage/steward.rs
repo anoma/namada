@@ -4,6 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 
 use crate::pgf::REWARD_DISTRIBUTION_LIMIT;

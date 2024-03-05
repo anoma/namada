@@ -6,6 +6,7 @@ use namada_core::dec::Dec;
 use namada_core::key::{common, secp256k1};
 use namada_core::token;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

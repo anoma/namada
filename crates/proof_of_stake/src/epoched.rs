@@ -9,6 +9,7 @@ use std::{cmp, ops};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::storage::{self, Epoch};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};

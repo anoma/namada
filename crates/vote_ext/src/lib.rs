@@ -10,6 +10,7 @@ use namada_core::borsh::{
 use namada_core::chain::ChainId;
 use namada_core::key::common;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;

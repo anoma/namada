@@ -11,6 +11,7 @@ use namada_core::key::common;
 use namada_core::key::common::Signature;
 use namada_core::storage::BlockHeight;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_tx::Signed;
 

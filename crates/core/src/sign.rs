@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 
 use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

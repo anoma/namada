@@ -28,6 +28,7 @@ use namada::tx::{
     verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
 };
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::args::Tx as TxArgs;
 use namada_sdk::signing::{sign_tx, SigningTxData};

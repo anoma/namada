@@ -15,6 +15,11 @@ version.workspace = true
 [features]
 default = []
 testing = ["proptest", "namada_core/testing"]
+migrations = [
+    "namada_migrations/migrations",
+    "namada_macros/migrations",
+    "linkme",
+]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -25,7 +30,7 @@ namada_migrations = {path = "../migrations" }
 ark-bls12-381.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
 num-derive.workspace = true
 num-traits.workspace = true

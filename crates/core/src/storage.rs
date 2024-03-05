@@ -12,6 +12,7 @@ use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -419,7 +420,7 @@ impl FromStr for Key {
 }
 
 /// Storage keys that are utf8 encoded strings
-#[derive(Eq, PartialEq, Copy, Clone, Hash, BorshDeserializer)]
+#[derive(Eq, Debug, PartialEq, Copy, Clone, Hash, BorshDeserializer)]
 pub struct StringKey {
     /// The original key string, in bytes
     pub original: [u8; IBC_KEY_LIMIT],

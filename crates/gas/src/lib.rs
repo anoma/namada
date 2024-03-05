@@ -6,6 +6,7 @@ use std::ops::Div;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

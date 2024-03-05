@@ -17,6 +17,7 @@ use namada::eth_bridge::storage::parameters::{
 };
 use namada::token;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

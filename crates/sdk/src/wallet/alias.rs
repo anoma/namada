@@ -9,6 +9,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::{Address, InternalAddress};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

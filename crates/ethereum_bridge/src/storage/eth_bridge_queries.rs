@@ -10,6 +10,7 @@ use namada_core::storage::{BlockHeight, Epoch, Key as StorageKey};
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{hints, token};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
 use namada_proof_of_stake::storage::{

@@ -8,6 +8,7 @@ use namada_core::ethereum_structs;
 use namada_core::storage::Key;
 use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};

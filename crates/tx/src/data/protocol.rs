@@ -6,6 +6,7 @@ use namada_core::borsh::{
 };
 use namada_core::key::*;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

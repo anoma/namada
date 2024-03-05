@@ -11,6 +11,7 @@ use namada_core::masp_primitives::sapling;
 use namada_core::storage::Epoch;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 
 /// A representation of the conversion state

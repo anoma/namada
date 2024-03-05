@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

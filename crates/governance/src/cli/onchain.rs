@@ -6,6 +6,7 @@ use namada_core::address::Address;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

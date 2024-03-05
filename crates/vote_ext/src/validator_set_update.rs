@@ -14,6 +14,7 @@ use namada_core::storage::Epoch;
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{ethereum_structs, token};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_tx::Signed;
 

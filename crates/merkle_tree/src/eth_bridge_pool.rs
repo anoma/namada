@@ -11,6 +11,7 @@ use namada_core::keccak::{keccak_hash, KeccakHash};
 use namada_core::storage;
 use namada_core::storage::{BlockHeight, DbKeySeg};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 
 #[derive(thiserror::Error, Debug)]

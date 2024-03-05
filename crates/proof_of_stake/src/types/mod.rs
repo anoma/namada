@@ -16,6 +16,7 @@ use namada_core::storage::{Epoch, KeySeg};
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_storage::collections::lazy_map::NestedMap;
 use namada_storage::collections::{LazyMap, LazySet, LazyVec};

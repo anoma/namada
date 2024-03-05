@@ -9,6 +9,7 @@ use namada_core::token;
 use namada_core::uint::Uint;
 use namada_governance::parameters::GovernanceParameters;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use thiserror::Error;
 

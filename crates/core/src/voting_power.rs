@@ -10,6 +10,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use ethabi::ethereum_types as ethereum;
 use eyre::{eyre, Result};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_rational::Ratio;
 use num_traits::ops::checked::CheckedAdd;

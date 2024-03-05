@@ -15,6 +15,9 @@ version.workspace = true
 [lib]
 proc-macro = true
 
+[features]
+migrations = ["namada_migrations/migrations"]
+
 [dependencies]
 namada_migrations = {path = "../migrations"}
 paste.workspace = true

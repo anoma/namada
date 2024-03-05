@@ -7,6 +7,7 @@ use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 
 use super::cli::offline::OfflineVote;
@@ -179,7 +180,7 @@ impl TallyResult {
 }
 
 /// The result with votes of a proposal
-#[derive(Clone, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer)]
+#[derive(Clone, Debug, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,

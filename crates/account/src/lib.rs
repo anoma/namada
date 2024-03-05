@@ -11,6 +11,7 @@ pub use namada_core::account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::key::common;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 pub use storage::*;

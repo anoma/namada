@@ -7,6 +7,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
 use namada_macros::{BorshDeserializer, StorageKeys};
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

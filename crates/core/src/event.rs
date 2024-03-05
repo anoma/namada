@@ -6,6 +6,7 @@ use std::ops::{Index, IndexMut};
 use std::str::FromStr;
 
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use thiserror::Error;
 

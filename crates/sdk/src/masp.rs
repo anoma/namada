@@ -61,6 +61,7 @@ use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
@@ -131,7 +132,7 @@ pub struct ShieldedTransfer {
 }
 
 /// Shielded pool data for a token
-#[derive(BorshSerialize, BorshDeserialize, BorshDeserializer)]
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspTokenRewardData {
     pub name: String,
     pub address: Address,

@@ -25,6 +25,11 @@ testing = [
   "rand",
   "proptest",
 ]
+migrations = [
+  "namada_migrations/migrations",
+  "namada_macros/migrations",
+  "linkme",
+]
 
 [dependencies]
 namada_macros = {path = "../macros"}
@@ -44,7 +49,7 @@ ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
 k256.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
 num256.workspace = true
 num_enum = "0.7.0"

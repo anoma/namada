@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::ethereum_events::EthereumEvent;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 

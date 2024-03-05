@@ -6,6 +6,7 @@ use namada_core::{encode, ethereum_structs};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_macros::BorshDeserializer;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;

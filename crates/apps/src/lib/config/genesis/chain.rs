@@ -16,6 +16,7 @@ use namada::core::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::core::token::Amount;
 use namada::ledger::parameters::EpochDuration;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};

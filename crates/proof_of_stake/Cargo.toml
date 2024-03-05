@@ -16,6 +16,11 @@ version.workspace = true
 default = []
 # testing helpers
 testing = ["proptest"]
+migrations = [
+    "namada_migrations/migrations",
+    "namada_macros/migrations",
+    "linkme",
+]
 
 [dependencies]
 namada_account = { path = "../account" }
@@ -30,7 +35,7 @@ namada_trans_token = { path = "../trans_token" }
 borsh.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 num-traits.workspace = true
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }

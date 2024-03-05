@@ -17,6 +17,11 @@ default = []
 testing = [
     "namada_core/testing",
 ]
+migrations = [
+    "namada_migrations/migrations",
+    "namada_macros/migrations",
+    "linkme",
+]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -29,7 +34,7 @@ namada_tx = { path = "../tx" }
 
 borsh.workspace = true
 itertools.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 thiserror.workspace = true
 tracing.workspace = true
 

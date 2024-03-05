@@ -19,6 +19,11 @@ testing = [
     "namada_core/testing",
     "namada_state/testing",
 ]
+migrations = [
+    "namada_migrations/migrations",
+    "namada_macros/migrations",
+    "linkme",
+]
 
 [dependencies]
 namada_account = {path = "../account", optional = true}
@@ -38,7 +43,7 @@ ethabi.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 serde.workspace = true
 serde_json.workspace = true
 rand.workspace = true

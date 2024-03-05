@@ -28,6 +28,7 @@ use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{Gas, VpsGas};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};

@@ -11,6 +11,7 @@ use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
 use eyre::{eyre, Context};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

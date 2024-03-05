@@ -1,6 +1,7 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::token;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_storage::{Result, StorageRead, StorageWrite};
 

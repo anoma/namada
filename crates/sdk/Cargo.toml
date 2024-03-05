@@ -53,6 +53,20 @@ testing = [
 
 # Download MASP params if they're not present
 download-params = ["masp_proofs/download-params"]
+migrations = [
+  "namada_migrations/migrations",
+  "namada_macros/migrations",
+  "namada_account/migrations",
+  "namada_core/migrations",
+  "namada_ethereum_bridge/migrations",
+  "namada_governance/migrations",
+  "namada_proof_of_stake/migrations",
+  "namada_state/migrations",
+  "namada_storage/migrations",
+  "namada_tx/migrations",
+  "namada_vote_ext/migrations",
+  "linkme",
+]
 
 [dependencies]
 namada_account = { path = "../account" }
@@ -85,7 +99,7 @@ futures.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
 lazy_static.workspace = true
-linkme.workspace = true
+linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
 masp_proofs.workspace = true
 num256.workspace = true

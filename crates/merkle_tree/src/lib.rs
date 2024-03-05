@@ -27,6 +27,7 @@ use namada_core::storage::{
 };
 use namada_core::{decode, DecodeError};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use thiserror::Error;
 

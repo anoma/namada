@@ -22,6 +22,7 @@ use namada_core::sign::SignatureIndex;
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};

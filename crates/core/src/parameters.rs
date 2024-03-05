@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 
 use super::address::Address;

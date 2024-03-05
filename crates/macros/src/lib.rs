@@ -382,11 +382,15 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
     let deserializer_ident =
         syn::Ident::new(&format!("{}_DESERIALIZER", ident), Span::call_site());
     quote!(
+        #[cfg(feature = "migrations")]
         #[namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
         static #deserializer_ident: fn() = || {
             let mut locked = namada_migrations::TYPE_DESERIALIZERS.lock().unwrap();
-            locked.insert(#hash, |bytes| {#ident::try_from_slice(&bytes).is_ok()});
+            locked.insert(#hash, |bytes| {
+                #ident::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
+            });
         };
+
         impl namada_migrations::TypeHash for #ident {
             const HASH: [u8; 32] = #hash;
         }

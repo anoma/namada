@@ -29,6 +29,7 @@ use namada_ethereum_bridge::storage::{
     bridge_contract_key, native_erc20_key, vote_tallies,
 };
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;

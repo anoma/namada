@@ -3,6 +3,7 @@ use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::hash::Hash;
 use namada_core::key::common;
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 

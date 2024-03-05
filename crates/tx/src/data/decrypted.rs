@@ -7,6 +7,7 @@ pub mod decrypted_tx {
         BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
     };
     use namada_macros::BorshDeserializer;
+    #[cfg(feature = "migrations")]
     use namada_migrations::*;
     use sha2::{Digest, Sha256};
 

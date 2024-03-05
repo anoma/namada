@@ -10,6 +10,7 @@ use namada_core::hash::Hash;
 use namada_core::keccak::{keccak_hash, KeccakHash};
 use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_macros::{BorshDeserializer, StorageKeys};
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_vote_ext::validator_set_update::VotingPowersMap;
 

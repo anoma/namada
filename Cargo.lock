@@ -4144,6 +4144,7 @@ dependencies = [
  "ibc-testkit",
  "itertools 0.10.5",
  "k256",
+ "linkme",
  "loupe",
  "masp_primitives",
  "masp_proofs",

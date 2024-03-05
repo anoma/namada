@@ -10,6 +10,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
 use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
