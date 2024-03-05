@@ -263,6 +263,13 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 /// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
+/// The set of all target validators for a given delegator.
+pub type DelegationTargets = crate::epoched::NestedEpoched<
+    LazySet<Address>,
+    crate::epoched::OffsetPipelineLen,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
+>;
+
 #[derive(
     Debug,
     Clone,

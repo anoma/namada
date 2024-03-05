@@ -61,6 +61,7 @@ const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 const LAST_STAKED_RATIO_KEY: &str = "last_staked_ratio";
 const LAST_POS_INFLATION_AMOUNT_KEY: &str = "last_inflation_amount";
 const TOTAL_ACTIVE_DELTAS_KEY: &str = "total_active_deltas";
+const DELEGATION_TARGETS_PREFIX: &str = "delegation_targets";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1082,4 +1083,18 @@ pub fn is_total_active_deltas_key(key: &Key) -> bool {
     } else {
         false
     }
+}
+
+/// Storage prefix for the delegation targets.
+pub fn delegation_targets_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&DELEGATION_TARGETS_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the delegation targets of a delegator.
+pub fn delegation_targets_key(delegator: &Address) -> Key {
+    delegation_targets_prefix()
+        .push(&delegator.to_db_key())
+        .expect("Cannot obtain a storage key")
 }
