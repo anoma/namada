@@ -882,8 +882,11 @@ where
                         }
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
-                            ibc.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::IbcNativeVpError)
+                            let res = ibc.validate_tx(tx, &keys_changed, &verifiers);
+                            if res.is_err() {
+                                tracing::info!("IBC res: {res:?}");
+                            }
+                            res.map_err(Error::IbcNativeVpError)
                         }
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
