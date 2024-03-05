@@ -3080,26 +3080,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linkme"
-version = "0.3.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3ae8aae8e1d516e0a3ceee1219eded7f73741607e4227bf11ef2c3e31580427"
-dependencies = [
- "linkme-impl",
-]
-
-[[package]]
-name = "linkme-impl"
-version = "0.3.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad083d767be37e709a232ae2a244445ed032bb9c6bf7d9442dd416ba5a7b7264"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.39",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3415,7 +3395,6 @@ name = "namada_account"
 version = "0.31.8"
 dependencies = [
  "borsh",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_migrations",
@@ -3442,7 +3421,6 @@ dependencies = [
  "impl-num-traits",
  "index-set",
  "k256",
- "linkme",
  "masp_primitives",
  "namada_macros",
  "namada_migrations",
@@ -3479,7 +3457,6 @@ dependencies = [
  "ethers",
  "eyre",
  "itertools 0.10.5",
- "linkme",
  "namada_account",
  "namada_core",
  "namada_macros",
@@ -3506,7 +3483,6 @@ name = "namada_gas"
 version = "0.31.8"
 dependencies = [
  "borsh",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_migrations",
@@ -3520,7 +3496,6 @@ version = "0.31.8"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_migrations",
@@ -3579,7 +3554,6 @@ dependencies = [
  "borsh",
  "eyre",
  "ics23",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_migrations",
@@ -3596,7 +3570,6 @@ dependencies = [
  "borsh-ext",
  "data-encoding",
  "lazy_static",
- "linkme",
  "serde",
 ]
 
@@ -3618,7 +3591,6 @@ dependencies = [
  "borsh",
  "data-encoding",
  "derivative",
- "linkme",
  "namada_account",
  "namada_core",
  "namada_governance",
@@ -3661,7 +3633,6 @@ dependencies = [
  "itertools 0.10.5",
  "jubjub",
  "lazy_static",
- "linkme",
  "masp_primitives",
  "masp_proofs",
  "namada_account",
@@ -3726,7 +3697,6 @@ dependencies = [
  "borsh",
  "ics23",
  "itertools 0.10.5",
- "linkme",
  "namada_core",
  "namada_gas",
  "namada_macros",
@@ -3751,7 +3721,6 @@ version = "0.31.8"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
- "linkme",
  "namada_core",
  "namada_gas",
  "namada_macros",
@@ -3831,7 +3800,6 @@ dependencies = [
  "ark-bls12-381",
  "borsh",
  "data-encoding",
- "linkme",
  "masp_primitives",
  "namada_core",
  "namada_gas",
@@ -3893,7 +3861,6 @@ name = "namada_vote_ext"
 version = "0.31.8"
 dependencies = [
  "borsh",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_migrations",
