@@ -257,21 +257,10 @@ where
         let pre_voting_end_epoch: Epoch =
             self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
 
-        let voter = gov_storage::get_voter_address(key);
-        let delegation_address = gov_storage::get_vote_delegation_address(key);
-
-        let (voter_address, delegation_address) =
-            match (voter, delegation_address) {
-                (Some(voter_address), Some(delegator_address)) => {
-                    (voter_address, delegator_address)
-                }
-                _ => {
-                    return Err(native_vp::Error::new_alloc(format!(
-                        "Vote key is not valid: {key}"
-                    ))
-                    .into());
-                }
-            };
+        let voter = gov_storage::get_voter_address(key)
+            .ok_or(Error::InvalidVoteKey(key.to_string()))?;
+        let validator = gov_storage::get_vote_delegation_address(key)
+            .ok_or(Error::InvalidVoteKey(key.to_string()))?;
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
@@ -286,8 +275,8 @@ where
 
         let vote_key = gov_storage::get_vote_proposal_key(
             proposal_id,
-            voter_address.clone(),
-            delegation_address.clone(),
+            voter.clone(),
+            validator.clone(),
         );
 
         if self
@@ -302,7 +291,7 @@ where
 
         // TODO: We should refactor this by modifying the vote proposal tx
         let all_delegations_are_valid = if let Ok(delegations) =
-            find_delegations(&self.ctx.pre(), voter_address, &current_epoch)
+            find_delegations(&self.ctx.pre(), voter, &current_epoch)
         {
             if delegations.is_empty() {
                 return Err(native_vp::Error::new_alloc(format!(
@@ -310,11 +299,11 @@ where
                 ))
                 .into());
             } else {
-                delegations.iter().all(|(address, _)| {
+                delegations.iter().all(|(val_address, _)| {
                     let vote_key = gov_storage::get_vote_proposal_key(
                         proposal_id,
-                        voter_address.clone(),
-                        address.clone(),
+                        voter.clone(),
+                        val_address.clone(),
                     );
                     self.ctx.post().has_key(&vote_key).unwrap_or(false)
                 })
@@ -352,7 +341,7 @@ where
 
         // first check if validator, then check if delegator
         let is_validator =
-            self.is_validator(verifiers, voter_address, delegation_address)?;
+            self.is_validator(verifiers, voter, validator)?;
 
         if is_validator {
             return is_valid_validator_voting_period(
@@ -374,8 +363,8 @@ where
         let is_delegator = self.is_delegator(
             pre_voting_start_epoch,
             verifiers,
-            voter_address,
-            delegation_address,
+            voter,
+            validator,
         )?;
 
         if !is_delegator {
@@ -1096,20 +1085,20 @@ where
     pub fn is_validator(
         &self,
         verifiers: &BTreeSet<Address>,
-        address: &Address,
-        delegation_address: &Address,
+        voter: &Address,
+        validator: &Address,
     ) -> Result<bool>
     where
         S: StateRead,
         CA: 'static + WasmCacheAccess,
     {
-        if !address.eq(delegation_address) {
+        if !voter.eq(validator) {
             return Ok(false);
         }
 
-        let is_validator = is_validator(&self.ctx.pre(), address)?;
+        let is_validator = is_validator(&self.ctx.pre(), voter)?;
 
-        Ok(is_validator && verifiers.contains(address))
+        Ok(is_validator && verifiers.contains(voter))
     }
 
     /// Private method to read from storage data that are 100% in storage.
