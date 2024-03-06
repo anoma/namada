@@ -1015,6 +1015,78 @@ mod tests {
         );
     }
 
+    // Test that writing a value on top of a temporary write is not allowed
+    #[test]
+    fn test_write_after_temp_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write(&key1, val1.clone()),
+            Err(Error::UpdateTemporaryValue)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write(&key1, val1),
+            Err(Error::UpdateTemporaryValue)
+        ));
+    }
+
+    // Test that a temporary write on top of a write is not allowed
+    #[test]
+    fn test_write_temp_after_write_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterWrite)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterWrite)
+        ));
+    }
+
+    // Test that a temporary write on top of a delete is not allowed
+    #[test]
+    fn test_write_temp_after_delete_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.delete(&key1).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterDelete)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.delete(&key1).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterDelete)
+        ));
+    }
+
     prop_compose! {
         fn arb_verifiers_changed_key_tx_all_key()
             (verifiers_from_tx in testing::arb_verifiers_from_tx())
