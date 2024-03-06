@@ -35,7 +35,7 @@ impl<S> StorageRead for IbcProtocolContext<'_, S>
 where
     S: State,
 {
-    type PrefixIter<'iter> = <S as StorageRead>::PrefixIter<'iter> where Self: 'iter;
+    type PrefixIter<'iter> = namada_state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn read_bytes(
         &self,
@@ -52,14 +52,62 @@ where
         &'iter self,
         prefix: &namada_storage::Key,
     ) -> StorageResult<Self::PrefixIter<'iter>> {
-        self.state.iter_prefix(prefix)
+        // TODO: Use this line instead in a breaking release:
+        // self.state.iter_prefix(prefix)
+
+        // TODO: delete this in a breaking release together with changes in
+        // `iter_next`:
+        let (iter, gas) = namada_state::iter_prefix_post(
+            self.state.write_log(),
+            self.state.db(),
+            prefix,
+        );
+        self.state.charge_gas(gas).into_storage_result()?;
+        Ok(iter)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> StorageResult<Option<(String, Vec<u8>)>> {
-        self.state.iter_next(iter)
+        // TODO: Use this line instead in a breaking release:
+        // self.state.iter_next(iter)
+
+        // TODO: delete this in a breaking release (`state.iter_next` already
+        // handles reading from write-log):
+        use namada_state::write_log;
+        let write_log = self.state.write_log();
+        for (key, val, iter_gas) in iter.by_ref() {
+            let (log_val, log_gas) = write_log.read(
+                &namada_storage::Key::parse(key.clone())
+                    .into_storage_result()?,
+            );
+            self.state
+                .charge_gas(iter_gas + log_gas)
+                .into_storage_result()?;
+            match log_val {
+                Some(write_log::StorageModification::Write { ref value }) => {
+                    return Ok(Some((key, value.clone())));
+                }
+                Some(&write_log::StorageModification::Delete) => {
+                    // check the next because the key has already deleted
+                    continue;
+                }
+                Some(&write_log::StorageModification::InitAccount {
+                    ..
+                }) => {
+                    // a VP of a new account doesn't need to be iterated
+                    continue;
+                }
+                Some(write_log::StorageModification::Temp { ref value }) => {
+                    return Ok(Some((key, value.clone())));
+                }
+                None => {
+                    return Ok(Some((key, val)));
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn get_chain_id(&self) -> StorageResult<String> {
@@ -121,7 +169,8 @@ where
     H: 'static + StorageHasher,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        self.write_log_mut().emit_ibc_event(event);
+        let gas = self.write_log_mut().emit_ibc_event(event);
+        self.charge_gas(gas).into_storage_result()?;
         Ok(())
     }
 
