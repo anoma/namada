@@ -920,7 +920,10 @@ fn transparent_address_or_alias_find(
         );
     } else if alias.is_some() {
         let alias = alias.unwrap().to_lowercase();
-        if let Some(address) = wallet.find_address(&alias) {
+        if let Some(address) = wallet
+            .find_address_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found address {}", address.to_pretty_string());
         } else {
             display_line!(
@@ -1054,7 +1057,10 @@ fn transparent_key_address_find_by_alias(
 
     // Find transparent address
     if !keys_only {
-        if let Some(address) = wallet.find_address(&alias) {
+        if let Some(address) = wallet
+            .find_address_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found transparent address:")
                 .unwrap();

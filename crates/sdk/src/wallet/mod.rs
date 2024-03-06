@@ -504,21 +504,21 @@ impl<U> Wallet<U> {
     //     self.store.add_vp_type_to_address(vp_type, address)
     // }
 
-    /// XXX HERE
-    /// Find the stored address by an alias.
-    pub fn find_address(
-        &self,
-        alias: impl AsRef<str>,
-    ) -> Option<std::borrow::Cow<Address>> {
-        Alias::is_reserved(alias.as_ref())
-            .map(std::borrow::Cow::Owned)
-            .or_else(|| {
-                self.store
-                    .find_address(alias)
-                    .map(std::borrow::Cow::Borrowed)
-            })
-    }
+    // /// Find the stored address by an alias.
+    // pub fn find_address(
+    //     &self,
+    //     alias: impl AsRef<str>,
+    // ) -> Option<std::borrow::Cow<Address>> {
+    //     Alias::is_reserved(alias.as_ref())
+    //         .map(std::borrow::Cow::Owned)
+    //         .or_else(|| {
+    //             self.store
+    //                 .find_address(alias)
+    //                 .map(std::borrow::Cow::Borrowed)
+    //         })
+    // }
 
+    /// XXX HERE
     /// Find an alias by the address if it's in the wallet.
     pub fn find_alias(&self, address: &Address) -> Option<&Alias> {
         self.store.find_alias(address)
@@ -760,6 +760,22 @@ impl<U: WalletStorage> Wallet<U> {
                 (alias, addr)
             })
             .collect())
+    }
+
+    /// Find the stored address by an alias.
+    pub fn find_address_atomic(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Result<Option<Address>, LoadStoreError> {
+        Alias::is_reserved(alias.as_ref())
+            .map(Ok)
+            .or_else(|| {
+                self.utils
+                    .load_store_read_only()
+                    .map(move |store| store.find_address(alias).cloned())
+                    .transpose()
+            })
+            .transpose()
     }
 }
 

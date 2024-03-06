@@ -92,7 +92,8 @@ mod dev {
     /// An established user address for testing & development
     pub fn albert_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("albert")
+            .find_address_atomic("albert")
+            .expect("Failed to read from the wallet storage.")
             .expect("Albert's address should be in the pre-genesis wallet")
             .into_owned()
     }
@@ -100,7 +101,8 @@ mod dev {
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("bertha")
+            .find_address_atomic("bertha")
+            .expect("Failed to read from the wallet storage.")
             .expect("Bertha's address should be in the pre-genesis wallet")
             .into_owned()
     }
@@ -108,7 +110,8 @@ mod dev {
     /// An established user address for testing & development
     pub fn christel_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("christel")
+            .find_address_atomic("christel")
+            .expect("Failed to read from the wallet storage.")
             .expect("Christel's address should be in the pre-genesis wallet")
             .into_owned()
     }
@@ -126,7 +129,8 @@ mod dev {
     /// An established validator address for testing & development
     pub fn validator_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("validator-0")
+            .find_address_atomic("validator-0")
+            .expect("Failed to read from the wallet storage.")
             .expect(
                 "The zeroth validator's address should be in the pre-genesis \
                  wallet",

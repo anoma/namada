@@ -431,7 +431,8 @@ impl ArgFromContext for Address {
                     .map(|(trace_path, base_denom)| {
                         let base_token = ctx
                             .wallet
-                            .find_address(&base_denom)
+                            .find_address_atomic(&base_denom)
+                            .expect("Failed to read from the wallet storage.")
                             .map(|addr| addr.to_string())
                             .unwrap_or(base_denom);
                         let ibc_denom = format!("{trace_path}/{base_token}");
@@ -447,8 +448,8 @@ impl ArgFromContext for Address {
             // Or it can be an alias that may be found in the wallet
             .or_else(|_| {
                 ctx.wallet
-                    .find_address(raw)
-                    .map(|x| x.into_owned())
+                    .find_address_atomic(raw)
+                    .expect("Failed to read from the wallet storage.")
                     .ok_or(Skip)
             })
             .map_err(|_| format!("Unknown address {raw}"))
