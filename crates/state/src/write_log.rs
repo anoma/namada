@@ -244,7 +244,8 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
@@ -262,6 +263,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Write { value });
+
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
@@ -309,7 +314,8 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Temp { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { .. } => {
@@ -330,6 +336,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Temp { value });
+
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
         Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
@@ -345,7 +355,8 @@ impl WriteLog {
         }
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Delete)
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len() as i64,
@@ -359,6 +370,9 @@ impl WriteLog {
             // storage
             None => 0,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Delete);
         let gas = key.len() + size_diff as usize;
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
