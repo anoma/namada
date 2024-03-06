@@ -977,7 +977,8 @@ impl Default for BenchShieldedCtx {
             let viewing_key: FromContext<ExtendedViewingKey> = FromContext::new(
                 chain_ctx
                     .wallet
-                    .find_viewing_key(viewing_alias)
+                    .find_viewing_key_atomic(viewing_alias)
+                    .expect("Failed to read from the wallet storage.")
                     .unwrap()
                     .to_string(),
             );

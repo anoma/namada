@@ -554,8 +554,8 @@ impl ArgFromMutContext for ExtendedViewingKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
             ctx.wallet
-                .find_viewing_key(raw)
-                .copied()
+                .find_viewing_key_atomic(raw)
+                .expect("Failed to read from the wallet storage.")
                 .map_err(|_find_err| format!("Unknown viewing key {}", raw))
         })
     }

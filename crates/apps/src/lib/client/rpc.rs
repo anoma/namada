@@ -808,8 +808,8 @@ async fn query_tokens(
         }
         None => {
             tokens = wallet
-            .tokens_with_aliases_atomic()
-            .expect("Failed to read from the wallet storage.")
+                .tokens_with_aliases_atomic()
+                .expect("Failed to read from the wallet storage.")
         }
     }
 

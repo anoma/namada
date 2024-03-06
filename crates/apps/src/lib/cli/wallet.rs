@@ -1100,7 +1100,10 @@ fn shielded_key_address_find_by_alias(
             _ => "not encrypted",
         };
         // Check if alias is a viewing key
-        if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+        if let Ok(viewing_key) = wallet
+            .find_viewing_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found shielded keys:").unwrap();
             display_line!(io,

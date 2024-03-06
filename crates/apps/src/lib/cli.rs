@@ -6468,8 +6468,8 @@ pub mod args {
             use crate::wallet::CliWalletUtils;
 
             let find_viewing_key = |w: &mut Wallet<CliWalletUtils>| {
-                w.find_viewing_key(&self.viewing_key.raw)
-                    .copied()
+                w.find_viewing_key_atomic(&self.viewing_key.raw)
+                    .expect("Failed to read from the wallet storage.")
                     .unwrap_or_else(|_| {
                         eprintln!(
                             "Unknown viewing key {}",
