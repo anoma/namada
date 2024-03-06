@@ -1184,7 +1184,9 @@ fn transparent_keys_list(
     } else {
         let mut w_lock = io::stdout().lock();
         display_line!(io, &mut w_lock; "Known transparent keys:").unwrap();
-        let known_secret_keys = wallet.get_secret_keys();
+        let known_secret_keys = wallet
+            .get_secret_keys_atomic()
+            .expect("Failed to read from the wallet storage.");
         for (alias, public_key) in known_public_keys {
             let stored_keypair = known_secret_keys.get(&alias);
             let encrypted = match stored_keypair {

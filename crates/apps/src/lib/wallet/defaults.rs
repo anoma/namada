@@ -136,14 +136,18 @@ mod dev {
 
     /// Get an unencrypted keypair from the pre-genesis wallet.
     pub fn get_unencrypted_keypair(name: &str) -> common::SecretKey {
-        let sk = match PREGENESIS_WALLET.get_secret_keys().get(name).unwrap().0
+        match PREGENESIS_WALLET
+            .get_secret_keys_atomic()
+            .expect("Failed to read from the wallet storage.")
+            .get(name)
+            .unwrap()
+            .0
         {
             namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
                 panic!("{name}'s keypair should not be encrypted")
             }
-            namada_sdk::wallet::StoredKeypair::Raw(sk) => sk,
-        };
-        sk.clone()
+            namada_sdk::wallet::StoredKeypair::Raw(ref sk) => sk.clone(),
+        }
     }
 
     /// Get albert's keypair from the pre-genesis wallet.

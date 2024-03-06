@@ -849,6 +849,28 @@ impl<U: WalletStorage> Wallet<U> {
             .find_alias_by_payment_addr(payment_address)
             .cloned())
     }
+
+    /// Get all known keys by their alias, paired with PKH, if known.
+    #[allow(clippy::type_complexity)]
+    pub fn get_secret_keys_atomic(
+        &self,
+    ) -> Result<
+        HashMap<
+            String,
+            (StoredKeypair<common::SecretKey>, Option<PublicKeyHash>),
+        >,
+        LoadStoreError,
+    > {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_secret_keys()
+            .into_iter()
+            .map(|(alias, (kp, pkh))| {
+                (alias.into(), (kp.clone(), pkh.cloned()))
+            })
+            .collect())
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {

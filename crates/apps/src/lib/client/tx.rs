@@ -326,7 +326,9 @@ pub async fn submit_change_consensus_key(
             validator_consensus_key(&validator.to_string().into())
         });
     let mut consensus_key_alias = base_consensus_key_alias.to_string();
-    let all_keys = wallet.get_secret_keys();
+    let all_keys = wallet
+        .get_secret_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     let mut key_counter = 0;
     while all_keys.contains_key(&consensus_key_alias) {
         key_counter += 1;
