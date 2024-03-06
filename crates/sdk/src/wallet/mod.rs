@@ -720,6 +720,22 @@ impl<U: WalletStorage> Wallet<U> {
             .ok()
             .and_then(Store::into_validator_data)
     }
+
+    /// Extend the wallet from pre-genesis validator wallet.
+    pub fn extend_from_pre_genesis_validator_atomic(
+        &self,
+        validator_address: Address,
+        validator_alias: Alias,
+        other: pre_genesis::ValidatorWallet,
+    ) -> Result<(), LoadStoreError> {
+        self.utils.clone().update_store(
+            partial!(Store::extend_from_pre_genesis_validator => _,
+                validator_address,
+                validator_alias,
+                other
+            ),
+        )
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {

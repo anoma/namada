@@ -151,11 +151,13 @@ impl Finalized {
                 .find_validator(&tendermint_pk)
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
-            wallet.extend_from_pre_genesis_validator(
-                address,
-                alias,
-                validator_wallet,
-            )
+            wallet
+                .extend_from_pre_genesis_validator_atomic(
+                    address,
+                    alias,
+                    validator_wallet,
+                )
+                .expect("Could not apply pre-genesis validator wallet.")
         }
 
         // Add some internal addresses to the wallet
