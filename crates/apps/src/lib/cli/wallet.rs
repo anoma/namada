@@ -1172,7 +1172,9 @@ fn transparent_keys_list(
     unsafe_show_secret: bool,
     show_hint: bool,
 ) {
-    let known_public_keys = wallet.get_public_keys();
+    let known_public_keys = wallet
+        .get_public_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_public_keys.is_empty() {
         if show_hint {
             display_line!(
