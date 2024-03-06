@@ -552,29 +552,25 @@ impl<U> Wallet<U> {
     //     self.store.find_payment_addr(alias.as_ref())
     // }
 
+    // /// Find an alias by the payment address if it's in the wallet.
+    // pub fn find_alias_by_payment_addr(
+    //     &self,
+    //     payment_address: &PaymentAddress,
+    // ) -> Option<&Alias> {
+    //     self.store.find_alias_by_payment_addr(payment_address)
+    // }
+
+    // /// Get all known keys by their alias, paired with PKH, if known.
+    // pub fn get_secret_keys(
+    //     &self,
+    // ) -> HashMap<
+    //     String,
+    //     (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
+    // > { self.store .get_secret_keys() .into_iter() .map(|(alias, value)|
+    // > (alias.into(), value)) .collect()
+    // }
+
     /// XXX HERE
-    /// Find an alias by the payment address if it's in the wallet.
-    pub fn find_alias_by_payment_addr(
-        &self,
-        payment_address: &PaymentAddress,
-    ) -> Option<&Alias> {
-        self.store.find_alias_by_payment_addr(payment_address)
-    }
-
-    /// Get all known keys by their alias, paired with PKH, if known.
-    pub fn get_secret_keys(
-        &self,
-    ) -> HashMap<
-        String,
-        (&StoredKeypair<common::SecretKey>, Option<&PublicKeyHash>),
-    > {
-        self.store
-            .get_secret_keys()
-            .into_iter()
-            .map(|(alias, value)| (alias.into(), value))
-            .collect()
-    }
-
     /// Get all known public keys by their alias.
     pub fn get_public_keys(&self) -> HashMap<String, common::PublicKey> {
         self.store
@@ -839,6 +835,18 @@ impl<U: WalletStorage> Wallet<U> {
             .utils
             .load_store_read_only()?
             .find_payment_addr(alias.as_ref())
+            .cloned())
+    }
+
+    /// Find an alias by the payment address if it's in the wallet.
+    pub fn find_alias_by_payment_addr_atomic(
+        &self,
+        payment_address: &PaymentAddress,
+    ) -> Result<Option<Alias>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_alias_by_payment_addr(payment_address)
             .cloned())
     }
 }

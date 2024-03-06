@@ -980,8 +980,11 @@ fn payment_address_or_alias_find(
             );
         }
     } else if payment_address.is_some() {
-        if let Some(alias) =
-            wallet.find_alias_by_payment_addr(payment_address.as_ref().unwrap())
+        if let Some(alias) = wallet
+            .find_alias_by_payment_addr_atomic(
+                payment_address.as_ref().unwrap(),
+            )
+            .expect("Failed to read from the wallet storage.")
         {
             display_line!(io, "Found alias {}", alias);
         } else {
