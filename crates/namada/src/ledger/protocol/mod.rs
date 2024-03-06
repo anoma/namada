@@ -615,6 +615,7 @@ where
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
     let ibc_events = state.write_log_mut().take_ibc_events();
+    println!("Cleared tx IBC events: {ibc_events:?}");
 
     Ok(TxResult {
         gas_used,
