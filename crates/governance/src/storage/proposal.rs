@@ -83,7 +83,7 @@ pub struct VoteProposalData {
     /// The proposal voter address
     pub voter: Address,
     /// Validators to who the voter has delegations to
-    pub delegations: Vec<Address>,
+    pub delegation_validators: Vec<Address>,
 }
 
 impl TryFrom<DefaultProposal> for InitProposalData {
@@ -770,13 +770,13 @@ pub mod testing {
             id: u64,
             vote in arb_proposal_vote(),
             voter in arb_non_internal_address(),
-            delegations in collection::vec(arb_non_internal_address(), 0..10),
+            delegation_validators in collection::vec(arb_non_internal_address(), 0..10),
         ) -> VoteProposalData {
             VoteProposalData {
                 id,
                 vote,
                 voter,
-                delegations,
+                delegation_validators,
             }
         }
     }

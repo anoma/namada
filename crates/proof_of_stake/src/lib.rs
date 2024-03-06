@@ -160,7 +160,7 @@ where
 }
 
 /// Check if the provided address is a delegator address, optionally at a
-/// particular epoch
+/// particular epoch. Returns `false` if the address is a validator.
 pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
@@ -218,6 +218,7 @@ where
         "Bonding token amount {} at epoch {current_epoch}",
         amount.to_string_native()
     );
+    // No-op if the bond amount is 0
     if amount.is_zero() {
         return Ok(());
     }
@@ -1246,8 +1247,8 @@ where
         ));
     }
 
-    // If the address is not yet a validator, it cannot have self-bonds, but it
-    // may have delegations.
+    // The address may not have any bonds if it is going to be initialized as a
+    // validator
     if has_bonds(storage, address)? {
         return Err(namada_storage::Error::new_const(
             "The given address has delegations and therefore cannot become a \

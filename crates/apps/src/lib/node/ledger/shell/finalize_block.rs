@@ -1535,7 +1535,7 @@ mod test_finalize_block {
                 id: proposal_id,
                 vote,
                 voter: validator,
-                delegations: vec![],
+                delegation_validators: vec![],
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)

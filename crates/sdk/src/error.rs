@@ -171,7 +171,7 @@ pub enum TxSubmitError {
     /// Bond amount is zero
     #[error("The requested bond amount is 0.")]
     BondIsZero,
-    /// Unond amount is zero
+    /// Unbond amount is zero
     #[error("The requested unbond amount is 0.")]
     UnbondIsZero,
     /// No unbonded bonds ready to withdraw in the current epoch

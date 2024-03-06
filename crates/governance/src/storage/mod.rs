@@ -102,11 +102,11 @@ pub fn vote_proposal<S>(storage: &mut S, data: VoteProposalData) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    for delegation in data.delegations {
+    for validator in data.delegation_validators {
         let vote_key = governance_keys::get_vote_proposal_key(
             data.id,
             data.voter.clone(),
-            delegation,
+            validator,
         );
         storage.write(&vote_key, data.vote.clone())?;
     }

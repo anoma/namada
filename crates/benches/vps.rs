@@ -99,7 +99,7 @@ fn vp_user(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Yay,
             voter: defaults::albert_address(),
-            delegations: vec![defaults::validator_address()],
+            delegation_validators: vec![defaults::validator_address()],
         },
         None,
         None,
@@ -239,8 +239,9 @@ fn vp_implicit(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Yay,
             voter: Address::from(&implicit_account.to_public()),
-            delegations: vec![], /* NOTE: no need to bond tokens because the
-                                  * implicit vp doesn't check that */
+            delegation_validators: vec![], /* NOTE: no need to bond tokens
+                                            * because the
+                                            * implicit vp doesn't check that */
         },
         None,
         None,
@@ -396,7 +397,7 @@ fn vp_validator(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Yay,
             voter: defaults::validator_address(),
-            delegations: vec![],
+            delegation_validators: vec![],
         },
         None,
         None,
