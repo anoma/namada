@@ -18,8 +18,7 @@ testing = [
     "namada_core/testing",
 ]
 migrations = [
-    "namada_migrations/migrations",
-    "namada_macros/migrations",
+    "namada_migrations",
     "linkme",
 ]
 
@@ -28,7 +27,7 @@ namada_core = { path = "../core" }
 namada_gas = { path = "../gas" }
 namada_macros = { path = "../macros" }
 namada_merkle_tree = { path = "../merkle_tree" }
-namada_migrations = {path = "../migrations" }
+namada_migrations = {path = "../migrations", optional = true }
 namada_replay_protection = { path = "../replay_protection" }
 namada_tx = { path = "../tx" }
 

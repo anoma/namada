@@ -54,8 +54,7 @@ testing = [
 # Download MASP params if they're not present
 download-params = ["masp_proofs/download-params"]
 migrations = [
-  "namada_migrations/migrations",
-  "namada_macros/migrations",
+  "namada_migrations",
   "namada_account/migrations",
   "namada_core/migrations",
   "namada_ethereum_bridge/migrations",
@@ -75,7 +74,7 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
-namada_migrations = { path = "../migrations" }
+namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }

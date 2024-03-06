@@ -74,8 +74,7 @@ multicore = [
 download-params = ["namada_sdk/download-params"]
 rand = ["namada_sdk/rand"]
 migrations = [
-  "namada_migrations/migrations",
-  "namada_macros/migrations",
+  "namada_migrations",
   "linkme",
 ]
 
@@ -87,7 +86,7 @@ namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
-namada_migrations = { path = "../migrations" }
+namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_replay_protection = { path = "../replay_protection" }

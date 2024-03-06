@@ -357,6 +357,43 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
             (def.ident, def.generics)
         });
     let type_hash: [u8; 32] = hasher.finalize().into();
+
+    if !generics.params.is_empty() {
+        panic!(
+            "Cannot derive BorshDeserializer on a parameterized type. This \
+             can be done manually for concrete instantiations via the \
+             derive_borshdeserializer! macro."
+        );
+    }
+    impl_borsh_deserializer(type_hash, ident)
+}
+
+#[proc_macro]
+pub fn derive_borshdeserializer(item: TokenStream) -> TokenStream {
+    derive_borshdeserializer_inner(item.into()).into()
+}
+
+fn derive_borshdeserializer_inner(item: TokenStream2) -> TokenStream2 {
+    let type_def = syn::parse2::<syn::Type>(item).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(type_def.to_token_stream().to_string().as_bytes());
+    let type_hash: [u8; 32] = hasher.finalize().into();
+    impl_borsh_deserializer(type_hash, type_def)
+}
+
+fn impl_borsh_deserializer<T: ToTokens>(
+    type_hash: [u8; 32],
+    type_def: T,
+) -> TokenStream2 {
     let hash = syn::ExprArray {
         attrs: vec![],
         bracket_token: Default::default(),
@@ -370,47 +407,23 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
             })
         })),
     };
-
-    if !generics.params.is_empty() {
-        panic!(
-            "Cannot derive BorshDeserializer on a parameterized type. This \
-             can be done manually for concrete instantiations via the \
-             derive_borshdeserializer! macro."
-        );
-    }
-
+    let hex = data_encoding::HEXUPPER.encode(&type_hash);
     let deserializer_ident =
-        syn::Ident::new(&format!("{}_DESERIALIZER", ident), Span::call_site());
+        syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
     quote!(
         #[cfg(feature = "migrations")]
-        #[namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
+        #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
         static #deserializer_ident: fn() = || {
-            let mut locked = namada_migrations::TYPE_DESERIALIZERS.lock().unwrap();
+            let mut locked = ::namada_migrations::TYPE_DESERIALIZERS.lock().unwrap();
             locked.insert(#hash, |bytes| {
-                #ident::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
+                #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
             });
         };
-
-        impl namada_migrations::TypeHash for #ident {
+        #[cfg(feature = "migrations")]
+        impl ::namada_migrations::TypeHash for #type_def {
             const HASH: [u8; 32] = #hash;
         }
     )
-}
-
-#[allow(unused_macros)]
-macro_rules! derive_borshdeserializer {
-    ($name: ty) => {
-        #[namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
-        static [<$name_ DESERIALIZER>]: fn() = || {
-            let mut locked = ::namada_migrations::TYPE_DESERIALIZERS.lock().unwrap();
-            locked.insert($name::HASH, |bytes| {#ident::try_from_slice(&bytes).is_ok()});
-        };
-        impl ::namada_migrations::TypeHash for $name {
-            const HASH: [u8; 32] = ::sha2_const::Sha256::new()
-                .update(std::any::type_name::<$name>())
-                .finalize();
-        }
-    };
 }
 
 #[cfg(test)]

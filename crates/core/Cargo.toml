@@ -26,14 +26,13 @@ testing = [
   "proptest",
 ]
 migrations = [
-  "namada_migrations/migrations",
-  "namada_macros/migrations",
+  "namada_migrations",
   "linkme",
 ]
 
 [dependencies]
 namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations"}
+namada_migrations = {path = "../migrations", optional = true}
 arse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
