@@ -481,6 +481,26 @@ where
     Ok(amnt)
 }
 
+/// Read PoS total stake (sum of deltas).
+pub fn read_total_active_stake<S>(
+    storage: &S,
+    params: &PosParams,
+    epoch: namada_core::storage::Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let handle = total_active_voting_power_handle();
+    let amnt = handle
+        .get_sum(storage, epoch, params)?
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
+    Ok(amnt)
+}
+
 /// Read all addresses from consensus validator set.
 pub fn read_consensus_validator_set_addresses<S>(
     storage: &S,
