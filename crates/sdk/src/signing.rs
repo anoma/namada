@@ -59,7 +59,7 @@ use crate::tx::{
     VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
-use crate::wallet::{Wallet, WalletIo};
+use crate::wallet::{Wallet, WalletIo, WalletStorage};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
 
 /// A structure holding the signing data to craft a transaction
@@ -1070,12 +1070,13 @@ fn proposal_type_to_ledger_vector(
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
-    wallet: &Wallet<impl WalletIo>,
+    wallet: &Wallet<impl WalletIo + WalletStorage>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
-        .get_addresses()
+        .get_addresses_atomic()
+        .expect("Failed to read from the wallet storage.")
         .into_iter()
         .map(|(alias, addr)| (addr, alias))
         .collect();

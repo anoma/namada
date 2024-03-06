@@ -1343,7 +1343,9 @@ fn transparent_addresses_list(
     io: &impl Io,
     show_hint: bool,
 ) {
-    let known_addresses = wallet.get_addresses();
+    let known_addresses = wallet
+        .get_addresses_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_addresses.is_empty() {
         if show_hint {
             display_line!(

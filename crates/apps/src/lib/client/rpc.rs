@@ -163,7 +163,15 @@ pub async fn query_transfers(
     let query_token = args.token;
     let wallet = context.wallet().await;
     let query_owner = args.owner.map_or_else(
-        || Either::Right(wallet.get_addresses().into_values().collect()),
+        || {
+            Either::Right(
+                wallet
+                    .get_addresses_atomic()
+                    .expect("Failed to read from the wallet storage.")
+                    .into_values()
+                    .collect(),
+            )
+        },
         Either::Left,
     );
     let mut shielded = context.shielded_mut().await;

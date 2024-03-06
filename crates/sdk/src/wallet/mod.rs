@@ -579,16 +579,16 @@ impl<U> Wallet<U> {
     //         .collect()
     // }
 
-    /// XXX HERE
-    /// Get all known addresses by their alias, paired with PKH, if known.
-    pub fn get_addresses(&self) -> HashMap<String, Address> {
-        self.store
-            .get_addresses()
-            .iter()
-            .map(|(alias, value)| (alias.into(), value.clone()))
-            .collect()
-    }
+    // /// Get all known addresses by their alias, paired with PKH, if known.
+    // pub fn get_addresses(&self) -> HashMap<String, Address> {
+    //     self.store
+    //         .get_addresses()
+    //         .iter()
+    //         .map(|(alias, value)| (alias.into(), value.clone()))
+    //         .collect()
+    // }
 
+    /// XXX HERE
     /// Get all known payment addresses by their alias
     pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
         self.store
@@ -880,6 +880,19 @@ impl<U: WalletStorage> Wallet<U> {
             .utils
             .load_store_read_only()?
             .get_public_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), value.clone()))
+            .collect())
+    }
+
+    /// Get all known addresses by their alias, paired with PKH, if known.
+    pub fn get_addresses_atomic(
+        &self,
+    ) -> Result<HashMap<String, Address>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_addresses()
             .iter()
             .map(|(alias, value)| (alias.into(), value.clone()))
             .collect())
