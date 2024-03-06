@@ -37,8 +37,6 @@ pub enum RuntimeError {
     NumConversionError(TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
-    #[error("Trying to read a temporary value with read_post")]
-    ReadTemporaryValueError,
     #[error("Trying to read a permanent value with read_temp")]
     ReadPermanentValueError,
     #[error("Invalid transaction code hash")]
@@ -90,11 +88,9 @@ where
             // Read the VP of a new account
             Ok(Some(vp_code_hash.to_vec()))
         }
-        Some(&write_log::StorageModification::Temp { .. }) => {
-            Err(RuntimeError::ReadTemporaryValueError)
-        }
-        None => {
-            // When not found in write log, try to read from the storage
+        Some(&write_log::StorageModification::Temp { .. }) | None => {
+            // When not found in write log or only found a temporary value, try
+            // to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas, sentinel)?;
@@ -115,7 +111,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read_persistent(key);
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
@@ -131,11 +127,9 @@ where
             // Read the VP code hash of a new account
             Ok(Some(vp_code_hash.to_vec()))
         }
-        Some(&write_log::StorageModification::Temp { .. }) => {
-            Err(RuntimeError::ReadTemporaryValueError)
-        }
-        None => {
-            // When not found in write log, try to read from the storage
+        Some(&write_log::StorageModification::Temp { .. }) | None => {
+            // When not found in write log or only found a temporary value, try
+            // to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas, sentinel)?;
@@ -188,11 +182,9 @@ where
             Ok(false)
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) => {
-            Err(RuntimeError::ReadTemporaryValueError)
-        }
-        None => {
-            // When not found in write log, try to check the storage
+        Some(&write_log::StorageModification::Temp { .. }) | None => {
+            // When not found in write log or only found a temporary value, try
+            // to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas, sentinel)?;
@@ -213,7 +205,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read_persistent(key);
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -222,11 +214,9 @@ where
             Ok(false)
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) => {
-            Err(RuntimeError::ReadTemporaryValueError)
-        }
-        None => {
-            // When not found in write log, try to check the storage
+        Some(&write_log::StorageModification::Temp { .. }) | None => {
+            // When not found in write log or only found a temporary value, try
+            // to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas, sentinel)?;
