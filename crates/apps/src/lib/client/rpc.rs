@@ -676,7 +676,9 @@ async fn print_balances(
                 format!(
                     ": {}, owned by {}",
                     context.format_amount(tok, balance).await,
-                    wallet.lookup_alias(owner)
+                    wallet
+                        .lookup_alias_atomic(owner)
+                        .expect("Failed to read from the wallet storage.")
                 ),
             ),
             None => continue,
@@ -720,11 +722,13 @@ async fn print_balances(
                 context.io(),
                 &mut w;
                 "No balances owned by {}",
-                wallet.lookup_alias(target)
+                wallet.lookup_alias_atomic(target).expect("Failed to read from the wallet storage.")
             )
             .unwrap(),
             (Some(token), None) => {
-                let token_alias = wallet.lookup_alias(token);
+                let token_alias = wallet
+                    .lookup_alias_atomic(token)
+                    .expect("Failed to read from the wallet storage.");
                 display_line!(context.io(), &mut w; "No balances for token {}", token_alias).unwrap()
             }
             (None, None) => {
@@ -758,7 +762,11 @@ async fn lookup_token_alias(
         Address::Internal(InternalAddress::Erc20(eth_addr)) => {
             eth_addr.to_canonical()
         }
-        _ => context.wallet().await.lookup_alias(token),
+        _ => context
+            .wallet()
+            .await
+            .lookup_alias_atomic(token)
+            .expect("Failed to read from the wallet storage."),
     }
 }
 
@@ -791,7 +799,8 @@ async fn query_tokens(
                 tokens.insert(eth_addr.to_string(), token.clone());
             } else {
                 let alias = wallet
-                    .find_alias(token)
+                    .find_alias_atomic(token)
+                    .expect("Failed to read from the wallet storage.")
                     .map(|alias| alias.to_string())
                     .unwrap_or(token.to_string());
                 tokens.insert(alias, token.clone());
@@ -799,8 +808,8 @@ async fn query_tokens(
         }
         None => {
             tokens = wallet
-                .tokens_with_aliases()
-                .expect("Failed to read tokens from the wallet store.")
+            .tokens_with_aliases_atomic()
+            .expect("Failed to read from the wallet storage.")
         }
     }
 
@@ -836,7 +845,8 @@ pub async fn query_ibc_tokens(
     let wallet = context.wallet().await;
     let token = args.token.map(|t| {
         wallet
-            .find_address(&t)
+            .find_address_atomic(&t)
+            .expect("Failed to read from the wallet storage.")
             .map(|addr| addr.to_string())
             .unwrap_or(t)
     });

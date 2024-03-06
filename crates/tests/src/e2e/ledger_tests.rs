@@ -672,8 +672,7 @@ fn pos_bonds() -> Result<()> {
                     .expect("Failed to read from the wallet storage.")
                     .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                bonds
-                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds.retain(|bond| bond.data.validator != validator_1_address);
                 bonds
             });
             genesis
@@ -1625,8 +1624,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                     .expect("Failed to read from the wallet storage.")
                     .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                bonds
-                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds.retain(|bond| bond.data.validator != validator_1_address);
                 bonds
             });
             genesis
@@ -1800,8 +1798,7 @@ fn test_invalid_validator_txs() -> Result<()> {
                     .expect("Failed to read from the wallet storage.")
                     .expect("Failed to find validator-1 address");
                 let mut bonds = genesis.transactions.bond.unwrap();
-                bonds
-                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds.retain(|bond| bond.data.validator != validator_1_address);
                 bonds
             });
             genesis

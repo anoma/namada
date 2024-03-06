@@ -317,7 +317,9 @@ pub async fn submit_change_consensus_key(
 
     // Determine the alias for the new key
     let mut wallet = namada.wallet_mut().await;
-    let alias = wallet.find_alias(&validator).cloned();
+    let alias = wallet
+        .find_alias_atomic(&validator)
+        .expect("Failed to read from the wallet storage.");
     let base_consensus_key_alias = alias
         .map(|al| validator_consensus_key(&al))
         .unwrap_or_else(|| {

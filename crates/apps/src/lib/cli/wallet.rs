@@ -934,7 +934,10 @@ fn transparent_address_or_alias_find(
             );
         }
     } else if address.is_some() {
-        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
+        if let Some(alias) = wallet
+            .find_alias_atomic(address.as_ref().unwrap())
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found alias {}", alias);
         } else {
             display_line!(

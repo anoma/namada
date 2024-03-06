@@ -687,7 +687,9 @@ pub fn derive_genesis_addresses(
             let maybe_alias =
                 maybe_pre_genesis_wallet.as_ref().and_then(|wallet| {
                     let implicit_address = (&pk.raw).into();
-                    wallet.find_alias(&implicit_address)
+                    wallet
+                        .find_alias_atomic(&implicit_address)
+                        .expect("Failed to read from the wallet storage.")
                 });
 
             if let Some(alias) = maybe_alias {

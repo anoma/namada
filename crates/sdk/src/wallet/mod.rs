@@ -777,6 +777,30 @@ impl<U: WalletStorage> Wallet<U> {
             })
             .transpose()
     }
+
+    /// Find an alias by the address if it's in the wallet.
+    pub fn find_alias_atomic(
+        &self,
+        address: &Address,
+    ) -> Result<Option<Alias>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_alias(address)
+            .cloned())
+    }
+
+    /// Try to find an alias for a given address from the wallet. If not found,
+    /// formats the address into a string.
+    pub fn lookup_alias_atomic(
+        &self,
+        addr: &Address,
+    ) -> Result<String, LoadStoreError> {
+        Ok(match self.find_alias_atomic(addr)? {
+            Some(alias) => format!("{}", alias),
+            None => format!("{}", addr),
+        })
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {

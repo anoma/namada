@@ -95,7 +95,6 @@ mod dev {
             .find_address_atomic("albert")
             .expect("Failed to read from the wallet storage.")
             .expect("Albert's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An established user address for testing & development
@@ -104,7 +103,6 @@ mod dev {
             .find_address_atomic("bertha")
             .expect("Failed to read from the wallet storage.")
             .expect("Bertha's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An established user address for testing & development
@@ -113,7 +111,6 @@ mod dev {
             .find_address_atomic("christel")
             .expect("Failed to read from the wallet storage.")
             .expect("Christel's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An implicit user address for testing & development
@@ -135,7 +132,6 @@ mod dev {
                 "The zeroth validator's address should be in the pre-genesis \
                  wallet",
             )
-            .into_owned()
     }
 
     /// Get an unencrypted keypair from the pre-genesis wallet.
