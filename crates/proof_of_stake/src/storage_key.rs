@@ -1098,3 +1098,19 @@ pub fn delegation_targets_key(delegator: &Address) -> Key {
         .push(&delegator.to_db_key())
         .expect("Cannot obtain a storage key")
 }
+
+/// Is storage key for the delegation targets of a delegator?
+pub fn is_delegation_targets_key(key: &Key) -> bool {
+    if key.segments.len() >= 3 {
+        match &key.segments[..3] {
+            [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(prefix),
+                DbKeySeg::AddressSeg(_delegator),
+            ] => addr == &ADDRESS && prefix == DELEGATION_TARGETS_PREFIX,
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
