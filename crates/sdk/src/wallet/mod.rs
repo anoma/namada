@@ -749,17 +749,23 @@ impl<U: WalletStorage> Wallet<U> {
     }
 
     /// Get addresses with tokens VP type keyed and ordered by their aliases.
-    pub fn tokens_with_aliases(
+    pub fn tokens_with_aliases_atomic(
         &self,
     ) -> Result<BTreeMap<String, Address>, LoadStoreError> {
-        Ok(self
+        let res = self
             .get_addresses_with_vp_type_atomic(AddressVpType::Token)?
             .into_iter()
-            .map(|addr| {
-                let alias = self.lookup_alias(&addr);
-                (alias, addr)
+            .map(|addr| match self.lookup_alias_atomic(&addr) {
+                Ok(alias) => Ok((alias, addr)),
+                Err(err) => Err(err),
             })
-            .collect())
+            .collect::<Vec<_>>();
+        // TODO rewrite when Iter::try_collect gets stabilized
+        if let Some(Err(err)) = res.iter().find(|x| x.is_err()) {
+            Err(err.clone())
+        } else {
+            Ok(res.into_iter().map(Result::unwrap).collect())
+        }
     }
 
     /// Find the stored address by an alias.
