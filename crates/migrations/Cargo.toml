@@ -22,5 +22,5 @@ borsh.workspace = true
 borsh-ext.workspace = true
 data-encoding.workspace = true
 lazy_static.workspace = true
-linkme = {workspace = true, optional = true}
+linkme.workspace = true
 serde.workspace = true
