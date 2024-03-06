@@ -37,8 +37,6 @@ pub enum RuntimeError {
     NumConversionError(TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
-    #[error("Trying to read a permanent value with read_temp")]
-    ReadPermanentValueError,
     #[error("Invalid transaction code hash")]
     InvalidCodeHash,
     #[error("No value found in result buffer")]
@@ -149,15 +147,13 @@ pub fn read_temp<S>(
 where
     S: StateRead + Debug,
 {
-    // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
         Some(write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
         }
-        None => Ok(None),
-        _ => Err(RuntimeError::ReadPermanentValueError),
+        _ => Ok(None),
     }
 }
 
