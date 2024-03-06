@@ -258,6 +258,7 @@ where
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), ContextError> {
+        println!("ExecutionContext for IbcContext emitted event: {event:?}");
         let event = event.try_into().expect("The event should be converted");
         self.inner
             .borrow_mut()

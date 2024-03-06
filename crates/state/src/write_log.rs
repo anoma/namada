@@ -370,6 +370,7 @@ impl WriteLog {
 
     /// Set an IBC event and return the gas cost.
     pub fn emit_ibc_event(&mut self, event: IbcEvent) -> u64 {
+        println!("Write log received event: {event:?}");
         let len = event
             .attributes
             .iter()

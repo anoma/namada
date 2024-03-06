@@ -173,6 +173,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
+        println!("IbcStorageContext for PseudoExecutionContext emitted event: {event:?}");
         self.event.insert(event);
         Ok(())
     }
