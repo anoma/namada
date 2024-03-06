@@ -248,36 +248,41 @@ where
             }
 
             // Check the rate limit
-            let deposit_key = deposit_key(token);
-            let deposit: Amount = self
-                .ctx
-                .read_post(&deposit_key)
-                .map_err(Error::NativeVpError)?
-                .unwrap_or_default();
-            let withdraw_key = withdraw_key(token);
-            let withdraw: Amount = self
-                .ctx
-                .read_post(&withdraw_key)
-                .map_err(Error::NativeVpError)?
-                .unwrap_or_default();
-            let diff = if deposit < withdraw {
-                withdraw
-                    .checked_sub(deposit)
-                    .expect("withdraw should be bigger than deposit")
-            } else {
-                deposit
-                    .checked_sub(withdraw)
-                    .expect("deposit should be bigger than withdraw")
-            };
-            if throughput_limit < diff {
+            let throughput = self.calc_throughput(token)?;
+            if throughput_limit < throughput {
                 return Err(Error::RateLimit(format!(
                     "Transfer exceeding the per-epoch throughput limit is not \
                      allowed: Per-epoch throughput limit {throughput_limit}, \
-                     actual throughput {diff}"
+                     actual throughput {throughput}"
                 )));
             }
         }
         Ok(true)
+    }
+
+    fn calc_throughput(&self, token: &Address) -> VpResult<Amount> {
+        let deposit_key = deposit_key(token);
+        let deposit: Amount = self
+            .ctx
+            .read_post(&deposit_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        let withdraw_key = withdraw_key(token);
+        let withdraw: Amount = self
+            .ctx
+            .read_post(&withdraw_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        let throughput = if deposit < withdraw {
+            withdraw
+                .checked_sub(deposit)
+                .expect("withdraw should be bigger than deposit")
+        } else {
+            deposit
+                .checked_sub(withdraw)
+                .expect("deposit should be bigger than withdraw")
+        };
+        Ok(throughput)
     }
 }
 
