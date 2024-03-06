@@ -71,12 +71,14 @@ fn transfer(c: &mut Criterion) {
                         .to_owned();
                     let albert_payment_addr = shielded_ctx
                         .wallet
-                        .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+                        .find_payment_addr_atomic(ALBERT_PAYMENT_ADDRESS)
+                        .expect("Failed to read from the wallet storage.")
                         .unwrap()
                         .to_owned();
                     let bertha_payment_addr = shielded_ctx
                         .wallet
-                        .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
+                        .find_payment_addr_atomic(BERTHA_PAYMENT_ADDRESS)
+                        .expect("Failed to read from the wallet storage.")
                         .unwrap()
                         .to_owned();
 

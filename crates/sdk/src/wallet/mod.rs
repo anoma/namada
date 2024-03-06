@@ -543,15 +543,16 @@ impl<U> Wallet<U> {
     // }
 
     /// XXX HERE
-    /// Find the payment address with the given alias in the wallet and return
-    /// it
-    pub fn find_payment_addr(
-        &self,
-        alias: impl AsRef<str>,
-    ) -> Option<&PaymentAddress> {
-        self.store.find_payment_addr(alias.as_ref())
-    }
+    // /// Find the payment address with the given alias in the wallet and
+    // return /// it
+    // pub fn find_payment_addr(
+    //     &self,
+    //     alias: impl AsRef<str>,
+    // ) -> Option<&PaymentAddress> {
+    //     self.store.find_payment_addr(alias.as_ref())
+    // }
 
+    /// XXX HERE
     /// Find an alias by the payment address if it's in the wallet.
     pub fn find_alias_by_payment_addr(
         &self,
@@ -826,6 +827,19 @@ impl<U: WalletStorage> Wallet<U> {
             .ok_or_else(|| {
                 FindKeyError::KeyNotFound(alias.as_ref().to_string())
             }))
+    }
+
+    /// Find the payment address with the given alias in the wallet and return
+    /// it
+    pub fn find_payment_addr_atomic(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Result<Option<PaymentAddress>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_payment_addr(alias.as_ref())
+            .cloned())
     }
 }
 

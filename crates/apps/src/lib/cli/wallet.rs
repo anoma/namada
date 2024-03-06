@@ -965,7 +965,10 @@ fn payment_address_or_alias_find(
         );
     } else if alias.is_some() {
         let alias = alias.unwrap().to_lowercase();
-        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+        if let Some(payment_addr) = wallet
+            .find_payment_addr_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found payment address {}", payment_addr);
         } else {
             display_line!(
@@ -1141,7 +1144,10 @@ fn shielded_key_address_find_by_alias(
 
     // Find payment addresses
     if !keys_only {
-        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+        if let Some(payment_addr) = wallet
+            .find_payment_addr_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found payment address:").unwrap();
             display_line!(io,

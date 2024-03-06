@@ -571,8 +571,8 @@ impl ArgFromContext for PaymentAddress {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
             ctx.wallet
-                .find_payment_addr(raw)
-                .cloned()
+                .find_payment_addr_atomic(raw)
+                .expect("Failed to read from the wallet storage.")
                 .ok_or_else(|| format!("Unknown payment address {}", raw))
         })
     }
