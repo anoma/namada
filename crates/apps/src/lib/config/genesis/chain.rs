@@ -136,10 +136,12 @@ impl Finalized {
                 config.address.clone(),
                 false,
             );
-            wallet.add_vp_type_to_address(
-                AddressVpType::Token,
-                config.address.clone(),
-            );
+            wallet
+                .add_vp_type_to_address_atomic(
+                    AddressVpType::Token,
+                    config.address.clone(),
+                )
+                .expect("Failed to update the wallet store.");
         }
         if let Some(pre_genesis_wallet) = pre_genesis_wallet {
             wallet.extend(pre_genesis_wallet);
@@ -157,7 +159,7 @@ impl Finalized {
                     alias,
                     validator_wallet,
                 )
-                .expect("Could not apply pre-genesis validator wallet.")
+                .expect("Failed to apply pre-genesis validator wallet.")
         }
 
         // Add some internal addresses to the wallet

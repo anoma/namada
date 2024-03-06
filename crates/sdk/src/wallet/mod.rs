@@ -472,50 +472,39 @@ impl<U> Wallet<U> {
         &mut self.store
     }
 
-    /// XXX HERE
-    /// Extend this wallet from pre-genesis validator wallet.
-    pub fn extend_from_pre_genesis_validator(
-        &mut self,
-        validator_address: Address,
-        validator_alias: Alias,
-        other: pre_genesis::ValidatorWallet,
-    ) {
-        self.store.extend_from_pre_genesis_validator(
-            validator_address,
-            validator_alias,
-            other,
-        )
-    }
+    // /// Extend this wallet from pre-genesis validator wallet.
+    // pub fn extend_from_pre_genesis_validator(
+    //     &mut self,
+    //     validator_address: Address,
+    //     validator_alias: Alias,
+    //     other: pre_genesis::ValidatorWallet,
+    // ) {
+    //     self.store.extend_from_pre_genesis_validator(
+    //         validator_address,
+    //         validator_alias,
+    //         other,
+    //     )
+    // }
 
     /// Gets all addresses given a vp_type
-    pub fn get_addresses_with_vp_type(
-        &self,
-        vp_type: AddressVpType,
-    ) -> HashSet<Address> {
-        self.store.get_addresses_with_vp_type(vp_type)
-    }
+    // pub fn get_addresses_with_vp_type(
+    //     &self,
+    //     vp_type: AddressVpType,
+    // ) -> HashSet<Address> {
+    //     self.store.get_addresses_with_vp_type(vp_type)
+    // }
 
-    /// Add a vp_type to a given address
-    pub fn add_vp_type_to_address(
-        &mut self,
-        vp_type: AddressVpType,
-        address: Address,
-    ) {
-        // defaults to an empty set
-        self.store.add_vp_type_to_address(vp_type, address)
-    }
+    // /// Add a vp_type to a given address
+    // pub fn add_vp_type_to_address(
+    //     &mut self,
+    //     vp_type: AddressVpType,
+    //     address: Address,
+    // ) {
+    //     // defaults to an empty set
+    //     self.store.add_vp_type_to_address(vp_type, address)
+    // }
 
-    /// Get addresses with tokens VP type keyed and ordered by their aliases.
-    pub fn tokens_with_aliases(&self) -> BTreeMap<String, Address> {
-        self.get_addresses_with_vp_type(AddressVpType::Token)
-            .into_iter()
-            .map(|addr| {
-                let alias = self.lookup_alias(&addr);
-                (alias, addr)
-            })
-            .collect()
-    }
-
+    /// XXX HERE
     /// Find the stored address by an alias.
     pub fn find_address(
         &self,
@@ -728,13 +717,49 @@ impl<U: WalletStorage> Wallet<U> {
         validator_alias: Alias,
         other: pre_genesis::ValidatorWallet,
     ) -> Result<(), LoadStoreError> {
-        self.utils.clone().update_store(
-            partial!(Store::extend_from_pre_genesis_validator => _,
+        self.utils.clone().update_store(|store| {
+            store.extend_from_pre_genesis_validator(
                 validator_address,
                 validator_alias,
-                other
-            ),
-        )
+                other,
+            )
+        })
+    }
+
+    /// Gets all addresses given a vp_type
+    pub fn get_addresses_with_vp_type_atomic(
+        &self,
+        vp_type: AddressVpType,
+    ) -> Result<HashSet<Address>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_addresses_with_vp_type(vp_type))
+    }
+
+    /// Add a vp_type to a given address
+    pub fn add_vp_type_to_address_atomic(
+        &mut self,
+        vp_type: AddressVpType,
+        address: Address,
+    ) -> Result<(), LoadStoreError> {
+        self.utils.clone().update_store(|store| {
+            store.add_vp_type_to_address(vp_type, address)
+        })
+    }
+
+    /// Get addresses with tokens VP type keyed and ordered by their aliases.
+    pub fn tokens_with_aliases(
+        &self,
+    ) -> Result<BTreeMap<String, Address>, LoadStoreError> {
+        Ok(self
+            .get_addresses_with_vp_type_atomic(AddressVpType::Token)?
+            .into_iter()
+            .map(|addr| {
+                let alias = self.lookup_alias(&addr);
+                (alias, addr)
+            })
+            .collect())
     }
 }
 

@@ -797,7 +797,11 @@ async fn query_tokens(
                 tokens.insert(alias, token.clone());
             }
         }
-        None => tokens = wallet.tokens_with_aliases(),
+        None => {
+            tokens = wallet
+                .tokens_with_aliases()
+                .expect("Failed to read tokens from the wallet store.")
+        }
     }
 
     if !show_ibc_tokens {
@@ -1248,7 +1252,8 @@ pub async fn print_decoded_balance_with_epoch(
     let tokens = context
         .wallet()
         .await
-        .get_addresses_with_vp_type(AddressVpType::Token);
+        .get_addresses_with_vp_type_atomic(AddressVpType::Token)
+        .expect("Failed to read from the wallet storage");
     if balance.is_zero() {
         display_line!(context.io(), "No shielded balance found for given key");
     }
@@ -2540,7 +2545,8 @@ pub async fn query_conversions(
     let tokens = context
         .wallet()
         .await
-        .get_addresses_with_vp_type(AddressVpType::Token);
+        .get_addresses_with_vp_type_atomic(AddressVpType::Token)
+        .expect("Failed to read from the wallet storage.");
     let conversions = rpc::query_conversions(context.client())
         .await
         .expect("Conversions should be defined");
