@@ -6,9 +6,13 @@ use std::sync::Mutex;
 use lazy_static::lazy_static;
 #[cfg(feature = "migrations")]
 pub use linkme::distributed_slice;
+/// Predicate that checks if an arbitrary byte array deserializes as some type `T`
+/// erased inside of the callback. If the serialization is correct, the full path of `T`
+/// is returned as a string (via [`std::any::type_name`]).
+type CbFromByteArrayToTypeName = fn(Vec<u8>) -> Option<String>;
 
 lazy_static! {
-    pub static ref TYPE_DESERIALIZERS: Mutex<HashMap<[u8; 32], fn(Vec<u8>) -> Option<String>>> =
+    pub static ref TYPE_DESERIALIZERS: Mutex<HashMap<[u8; 32], CbFromByteArrayToTypeName>> =
         Mutex::new(HashMap::new());
 }
 
