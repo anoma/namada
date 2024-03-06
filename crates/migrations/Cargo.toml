@@ -14,9 +14,6 @@ version.workspace = true
 
 [lib]
 
-[features]
-migrations = ["linkme"]
-
 [dependencies]
 data-encoding.workspace = true
 lazy_static.workspace = true

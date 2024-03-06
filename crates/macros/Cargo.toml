@@ -15,9 +15,6 @@ version.workspace = true
 [lib]
 proc-macro = true
 
-[features]
-migrations = ["namada_migrations/migrations"]
-
 [dependencies]
 data-encoding.workspace = true
 paste.workspace = true
