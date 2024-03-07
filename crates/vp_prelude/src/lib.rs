@@ -285,6 +285,13 @@ impl<'view> VpEnv<'view> for Ctx {
         }
     }
 
+    fn yield_value<V: AsRef<[u8]>>(&self, value: V) {
+        let value = value.as_ref();
+        unsafe {
+            namada_vp_yield_value(value.as_ptr() as _, value.len() as _);
+        }
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,

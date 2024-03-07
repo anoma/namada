@@ -336,6 +336,8 @@ where
     pub eval_runner: HostRef<'a, &'a EVAL>,
     /// Cache for 2-step reads from host environment.
     pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
+    /// Storage for byte buffer values yielded from the guest.
+    pub yielded_value: MutHostRef<'a, &'a Option<Vec<u8>>>,
     /// The storage keys that have been changed. Used for calls to `eval`.
     pub keys_changed: HostRef<'a, &'a BTreeSet<Key>>,
     /// The verifiers whose validity predicates should be triggered. Used for
@@ -402,6 +404,7 @@ where
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -418,6 +421,7 @@ where
             iterators,
             verifiers,
             result_buffer,
+            yielded_value,
             keys_changed,
             eval_runner,
             #[cfg(feature = "wasm-runtime")]
@@ -476,6 +480,7 @@ where
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -491,6 +496,7 @@ where
         let sentinel = unsafe { HostRef::new(sentinel) };
         let verifiers = unsafe { HostRef::new(verifiers) };
         let result_buffer = unsafe { MutHostRef::new(result_buffer) };
+        let yielded_value = unsafe { MutHostRef::new(yielded_value) };
         let keys_changed = unsafe { HostRef::new(keys_changed) };
         let eval_runner = unsafe { HostRef::new(eval_runner) };
         #[cfg(feature = "wasm-runtime")]
@@ -507,6 +513,7 @@ where
             tx_index,
             eval_runner,
             result_buffer,
+            yielded_value,
             keys_changed,
             verifiers,
             #[cfg(feature = "wasm-runtime")]
@@ -562,6 +569,7 @@ where
             tx_index: self.tx_index.clone(),
             eval_runner: self.eval_runner.clone(),
             result_buffer: self.result_buffer.clone(),
+            yielded_value: self.yielded_value.clone(),
             keys_changed: self.keys_changed.clone(),
             verifiers: self.verifiers.clone(),
             #[cfg(feature = "wasm-runtime")]
@@ -2351,6 +2359,31 @@ where
     Ok(())
 }
 
+/// Yield a byte array value from the guest.
+pub fn vp_yield_value<MEM, D, H, EVAL, CA>(
+    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    buf_ptr: u64,
+    buf_len: u64,
+) -> vp_host_fns::EnvResult<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    EVAL: VpEvaluator,
+    CA: WasmCacheAccess,
+{
+    // NB: ignore gas costs, as this host fn is essentially
+    // only used to yield borsh encoded error values back
+    // to the host
+    let (value_to_yield, _gas) =
+        env.memory
+            .read_bytes(buf_ptr, buf_len as _)
+            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let host_buf = unsafe { env.ctx.yielded_value.get() };
+    host_buf.replace(value_to_yield);
+    Ok(())
+}
+
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
@@ -2464,6 +2497,7 @@ pub mod testing {
         tx_index: &TxIndex,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
@@ -2493,6 +2527,7 @@ pub mod testing {
             iterators,
             verifiers,
             result_buffer,
+            yielded_value,
             keys_changed,
             eval_runner,
             #[cfg(feature = "wasm-runtime")]

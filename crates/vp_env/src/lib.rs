@@ -91,6 +91,9 @@ where
         event_type: String,
     ) -> Result<Vec<IbcEvent>, namada_storage::Error>;
 
+    /// Yield a byte array value back to the host environment.
+    fn yield_value<V: AsRef<[u8]>>(&self, value: V);
+
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix<'iter>(

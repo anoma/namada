@@ -51,6 +51,7 @@ pub struct TestVpEnv {
     pub verifiers: BTreeSet<Address>,
     pub eval_runner: native_vp_host_env::VpEval,
     pub result_buffer: Option<Vec<u8>>,
+    pub yielded_value: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
 }
@@ -82,6 +83,7 @@ impl Default for TestVpEnv {
             verifiers: BTreeSet::default(),
             eval_runner,
             result_buffer: None,
+            yielded_value: None,
             vp_wasm_cache,
             vp_cache_dir,
         }
@@ -261,6 +263,7 @@ mod native_vp_host_env {
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
@@ -275,6 +278,7 @@ mod native_vp_host_env {
                                 tx_index,
                                 verifiers,
                                 result_buffer,
+                                yielded_value,
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
@@ -305,6 +309,7 @@ mod native_vp_host_env {
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
@@ -319,6 +324,7 @@ mod native_vp_host_env {
                                 tx_index,
                                 verifiers,
                                 result_buffer,
+                                yielded_value,
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
@@ -372,4 +378,5 @@ mod native_vp_host_env {
         max_signatures_len: u64,
     ) -> i64);
     native_host_fn!(vp_charge_gas(used_gas: u64));
+    native_host_fn!(vp_yield_value(buf_ptr: u64, buf_len: u64));
 }

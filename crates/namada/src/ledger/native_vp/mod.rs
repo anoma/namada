@@ -442,6 +442,10 @@ where
             .into_storage_result()
     }
 
+    fn yield_value<V: AsRef<[u8]>>(&self, _: V) {
+        // NOOP in native vps
+    }
+
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
@@ -477,6 +481,7 @@ where
             let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
                 PrefixIterators::default();
             let mut result_buffer: Option<Vec<u8>> = None;
+            let mut yielded_value: Option<Vec<u8>> = None;
             let mut vp_wasm_cache = self.vp_wasm_cache.clone();
 
             let ctx = VpCtx::new(
@@ -491,6 +496,7 @@ where
                 &mut iterators,
                 self.verifiers,
                 &mut result_buffer,
+                &mut yielded_value,
                 self.keys_changed,
                 &eval_runner,
                 &mut vp_wasm_cache,

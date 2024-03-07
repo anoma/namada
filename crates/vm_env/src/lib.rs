@@ -233,6 +233,9 @@ pub mod vp {
             event_type_len: u64,
         ) -> i64;
 
+        // Yield a byte array value back to the host.
+        pub fn namada_vp_yield_value(buf_ptr: u64, buf_len: u64);
+
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 

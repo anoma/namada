@@ -238,6 +238,7 @@ where
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
     let eval_runner =
         VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
             db: PhantomData,
@@ -258,6 +259,7 @@ where
         &mut iterators,
         verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
