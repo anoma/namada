@@ -874,26 +874,19 @@ impl<U: WalletIo> Wallet<U> {
         Some(derive_hd_secret_key(
             scheme,
             seed.as_bytes(),
-            derivation_path.clone(),
+            derivation_path,
         ))
     }
 
-    /// Restore a spending key from the user mnemonic code (read from stdin)
-    /// using a given ZIP32 derivation path and insert it into the store with
-    /// the provided alias, converted to lower case.
-    /// The key is encrypted with the provided password. If no password
-    /// provided, will prompt for password from stdin.
-    /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and a reference-counting pointer to the key.
-    pub fn derive_store_spending_key_from_mnemonic_code(
-        &mut self,
-        alias: String,
-        alias_force: bool,
+    /// XXX OK
+    /// Derive a spending key from the user mnemonic code (read from stdin)
+    /// using a given ZIP32 derivation path.
+    pub fn derive_spending_key_from_mnemonic_code(
+        &self,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
-        password: Option<Zeroizing<String>>,
-    ) -> Option<(String, ExtendedSpendingKey)> {
+    ) -> Option<ExtendedSpendingKey> {
         let (mnemonic, passphrase) =
             if let Some(mnemonic_passphrase) = mnemonic_passphrase {
                 mnemonic_passphrase
@@ -907,17 +900,7 @@ impl<U: WalletIo> Wallet<U> {
                 (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
-        let spend_key =
-            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
-
-        self.insert_spending_key(
-            alias,
-            alias_force,
-            spend_key,
-            password,
-            Some(derivation_path),
-        )
-        .map(|alias| (alias, spend_key))
+        Some(derive_hd_spending_key(seed.as_bytes(), derivation_path))
     }
 
     /// Generate a spending key similarly to how it's done for keypairs
@@ -1468,6 +1451,42 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
                 Some(derivation_path),
             )
             .map(|o| o.map(|alias| (alias, sk)))
+            .transpose()
+        })
+        .transpose()
+    }
+
+    // XXX OK
+    /// Derive a spending key from the user mnemonic code (read from stdin)
+    /// using a given ZIP32 derivation path and insert it into the store with
+    /// the provided alias, converted to lower case.
+    /// The key is encrypted with the provided password. If no password
+    /// provided, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and the derived spending key.
+    pub fn derive_store_spending_key_from_mnemonic_code(
+        &mut self,
+        alias: String,
+        alias_force: bool,
+        derivation_path: DerivationPath,
+        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        prompt_bip39_passphrase: bool,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Option<(String, ExtendedSpendingKey)>, LoadStoreError> {
+        self.derive_spending_key_from_mnemonic_code(
+            derivation_path.clone(),
+            mnemonic_passphrase,
+            prompt_bip39_passphrase,
+        )
+        .and_then(|spend_key| {
+            self.insert_spending_key_atomic(
+                alias,
+                alias_force,
+                spend_key,
+                password,
+                Some(derivation_path),
+            )
+            .map(|o| o.map(|alias| (alias, spend_key)))
             .transpose()
         })
         .transpose()

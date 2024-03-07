@@ -228,6 +228,7 @@ fn shielded_key_derive(
                 prompt_bip39_passphrase,
                 encryption_password,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 edisplay_line!(io, "Failed to derive a key.");
                 display_line!(io, "No changes are persisted. Exiting.");
