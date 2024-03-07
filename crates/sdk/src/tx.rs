@@ -733,6 +733,62 @@ pub async fn build_validator_metadata_change(
             );
             return Err(Error::from(TxSubmitError::InvalidEmail));
         }
+        // Check that the email is within 500 characters
+        if email.len() > 500 {
+            edisplay_line!(
+                context.io(),
+                "Email provided is too long, must be within 500 characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+
+    // Check that any new metadata provided is within 500 characters
+    if let Some(description) = description.as_ref() {
+        if description.len() > 500 {
+            edisplay_line!(
+                context.io(),
+                "Description provided is too long, must be within 500 characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(website) = website.as_ref() {
+        if website.len() > 500 {
+            edisplay_line!(
+                context.io(),
+                "Website provided is too long, must be within 500 characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(discord_handle) = discord_handle.as_ref() {
+        if discord_handle.len() > 500 {
+            edisplay_line!(
+                context.io(),
+                "Discord handle provided is too long, must be within 500 characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(avatar) = avatar.as_ref() {
+        if avatar.len() > 500 {
+            edisplay_line!(
+                context.io(),
+                "Avatar provided is too long, must be within 500 characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
     }
 
     // If there's a new commission rate, it must be valid
