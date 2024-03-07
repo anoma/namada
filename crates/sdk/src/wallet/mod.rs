@@ -542,9 +542,8 @@ impl<U> Wallet<U> {
     //     })
     // }
 
-    /// XXX HERE
     // /// Find the payment address with the given alias in the wallet and
-    // return /// it
+    // /// return it
     // pub fn find_payment_addr(
     //     &self,
     //     alias: impl AsRef<str>,
@@ -606,18 +605,18 @@ impl<U> Wallet<U> {
     //         .collect()
     // }
 
-    /// XXX HERE
-    /// Get all known viewing keys by their alias
-    pub fn get_spending_keys(
-        &self,
-    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
-        self.store
-            .get_spending_keys()
-            .iter()
-            .map(|(alias, value)| (alias.into(), value))
-            .collect()
-    }
+    // /// Get all known viewing keys by their alias
+    // pub fn get_spending_keys(
+    //     &self,
+    // ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
+    //     self.store
+    //         .get_spending_keys()
+    //         .iter()
+    //         .map(|(alias, value)| (alias.into(), value))
+    //         .collect()
+    // }
 
+    /// XXX HERE
     /// Check if alias is an encrypted secret key
     pub fn is_encrypted_secret_key(
         &self,
@@ -921,6 +920,22 @@ impl<U: WalletStorage> Wallet<U> {
             .get_viewing_keys()
             .iter()
             .map(|(alias, value)| (alias.into(), *value))
+            .collect())
+    }
+
+    /// Get all known viewing keys by their alias
+    pub fn get_spending_keys_atomic(
+        &self,
+    ) -> Result<
+        HashMap<String, StoredKeypair<ExtendedSpendingKey>>,
+        LoadStoreError,
+    > {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_spending_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), value.clone()))
             .collect())
     }
 
