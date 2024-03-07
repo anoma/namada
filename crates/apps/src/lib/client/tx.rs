@@ -556,7 +556,7 @@ pub async fn submit_become_validator(
     namada
         .wallet_mut()
         .await
-        .insert_keypair(
+        .insert_keypair_atomic(
             protocol_key_alias,
             args.tx.wallet_alias_force,
             protocol_sk.clone(),
@@ -564,6 +564,7 @@ pub async fn submit_become_validator(
             None,
             None,
         )
+        .expect("Failed to update the wallet storage.")
         .ok_or(error::Error::Other(String::from(
             "Failed to store the keypair.",
         )))?;

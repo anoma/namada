@@ -1409,7 +1409,15 @@ fn transparent_secret_key_add(
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = wallet
-        .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
+        .insert_keypair_atomic(
+            alias,
+            alias_force,
+            sk,
+            encryption_password,
+            None,
+            None,
+        )
+        .expect("Failed to update the wallet storage.")
         .unwrap_or_else(|| {
             edisplay_line!(io, "Failed to add a keypair.");
             display_line!(io, "No changes are persisted. Exiting.");
