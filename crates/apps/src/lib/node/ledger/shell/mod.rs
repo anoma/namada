@@ -1985,6 +1985,7 @@ mod test_utils {
             fee_unshielding_gas_limit: 0,
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
+            is_native_token_transferable: true,
         };
         parameters::init_storage(&params, &mut shell.state)
             .expect("Test failed");

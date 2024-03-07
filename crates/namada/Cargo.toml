@@ -50,6 +50,7 @@ http-client = ["tendermint-rpc/http-client"]
 testing = [
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
+  "namada_parameters/testing",
   "namada_proof_of_stake/testing",
   "namada_sdk/testing",
   "namada_state/testing",
