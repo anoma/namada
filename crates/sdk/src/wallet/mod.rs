@@ -1125,35 +1125,34 @@ impl<U: WalletIo> Wallet<U> {
     //         })
     // }
 
-    /// Find the spending key with the given alias in the wallet and return it.
-    /// If the spending key is encrypted but a password is not supplied, then it
-    /// will be interactively prompted.
-    pub fn find_spending_key(
-        &mut self,
-        alias: impl AsRef<str>,
-        password: Option<Zeroizing<String>>,
-    ) -> Result<ExtendedSpendingKey, FindKeyError> {
-        // Try cache first
-        if let Some(cached_key) = self
-            .decrypted_spendkey_cache
-            .get(&Alias::from(alias.as_ref()))
-        {
-            return Ok(*cached_key);
-        }
-        // If not cached, look-up in store
-        let stored_spendkey = self
-            .store
-            .find_spending_key(alias.as_ref())
-            .ok_or_else(|| {
-                FindKeyError::KeyNotFound(alias.as_ref().to_string())
-            })?;
-        Self::decrypt_stored_key::<_>(
-            &mut self.decrypted_spendkey_cache,
-            stored_spendkey,
-            alias.into(),
-            password,
-        )
-    }
+    // /// Find the spending key with the given alias in the wallet and return
+    // it. /// If the spending key is encrypted but a password is not
+    // supplied, then it /// will be interactively prompted.
+    // pub fn find_spending_key(
+    //     &mut self,
+    //     alias: impl AsRef<str>,
+    //     password: Option<Zeroizing<String>>,
+    // ) -> Result<ExtendedSpendingKey, FindKeyError> {
+    //     // Try cache first
+    //     if let Some(cached_key) =
+    //         self.decrypted_spendkey_cache.get(&alias.as_ref().into())
+    //     {
+    //         return Ok(*cached_key);
+    //     }
+    //     // If not cached, look-up in store
+    //     let stored_spendkey = self
+    //         .store
+    //         .find_spending_key(alias.as_ref())
+    //         .ok_or_else(|| {
+    //             FindKeyError::KeyNotFound(alias.as_ref().to_string())
+    //         })?;
+    //     Self::decrypt_stored_key::<_>(
+    //         &mut self.decrypted_spendkey_cache,
+    //         stored_spendkey,
+    //         alias.into(),
+    //         password,
+    //     )
+    // }
 
     // /// Find the stored key by a public key.
     // /// If the key is encrypted and password not supplied, then password will
@@ -1464,6 +1463,39 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             Err(FindKeyError::KeyNotFound(
                 alias_pkh_or_pk.as_ref().to_string(),
             ))
+        };
+        Ok(res)
+    }
+
+    /// Find the spending key with the given alias in the wallet and return it.
+    /// If the spending key is encrypted but a password is not supplied, then it
+    /// will be interactively prompted.
+    pub fn find_spending_key_atomic(
+        &mut self,
+        alias: impl AsRef<str>,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Result<ExtendedSpendingKey, FindKeyError>, LoadStoreError> {
+        // Try cache first
+        if let Some(cached_key) = self
+            .decrypted_spendkey_cache
+            .get(&Alias::from(alias.as_ref()))
+        {
+            return Ok(Ok(*cached_key));
+        }
+        // If not cached, look-up in store
+        let res = if let Some(stored_spendkey) = self
+            .utils
+            .load_store_read_only()?
+            .find_spending_key(alias.as_ref())
+        {
+            Self::decrypt_stored_key::<_>(
+                &mut self.decrypted_spendkey_cache,
+                stored_spendkey,
+                alias.into(),
+                password,
+            )
+        } else {
+            Err(FindKeyError::KeyNotFound(alias.as_ref().to_string()))
         };
         Ok(res)
     }

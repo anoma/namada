@@ -1021,7 +1021,8 @@ impl BenchShieldedCtx {
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
             .wallet
-            .find_spending_key(ALBERT_SPENDING_KEY, None)
+            .find_spending_key_atomic(ALBERT_SPENDING_KEY, None)
+            .expect("Failed to read from the wallet storage.")
             .unwrap();
         self.shielded = async_runtime
             .block_on(crate::client::masp::syncing(

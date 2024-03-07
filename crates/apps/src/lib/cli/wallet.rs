@@ -1145,7 +1145,10 @@ fn shielded_key_address_find_by_alias(
             if decrypt {
                 // Check if alias is also a spending key. Decrypt and print it
                 // if requested.
-                match wallet.find_spending_key(&alias, None) {
+                match wallet
+                    .find_spending_key_atomic(&alias, None)
+                    .expect("Failed to read from the wallet storage.")
+                {
                     Ok(spending_key) => {
                         if unsafe_show_secret {
                             display_line!(io, &mut w_lock; "    Spending key: {}", spending_key).unwrap();
@@ -1281,7 +1284,8 @@ fn key_export(
         .expect("Failed to read from the wallet storage.")
         .map(|sk| Box::new(sk) as Box<dyn BorshSerializeExt>)
         .or(wallet
-            .find_spending_key(&alias, None)
+            .find_spending_key_atomic(&alias, None)
+            .expect("Failed to read from the wallet storage.")
             .map(|spk| Box::new(spk) as Box<dyn BorshSerializeExt>));
     key_to_export
         .map(|key| {

@@ -545,7 +545,8 @@ impl ArgFromMutContext for ExtendedSpendingKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
             ctx.wallet
-                .find_spending_key(raw, None)
+                .find_spending_key_atomic(raw, None)
+                .expect("Failed to read from the wallet storage.")
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }

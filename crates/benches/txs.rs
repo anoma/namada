@@ -66,7 +66,8 @@ fn transfer(c: &mut Criterion) {
 
                     let albert_spending_key = shielded_ctx
                         .wallet
-                        .find_spending_key(ALBERT_SPENDING_KEY, None)
+                        .find_spending_key_atomic(ALBERT_SPENDING_KEY, None)
+                        .expect("Failed to read from the wallet storage.")
                         .unwrap()
                         .to_owned();
                     let albert_payment_addr = shielded_ctx
