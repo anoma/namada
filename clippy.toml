@@ -1,0 +1,6 @@
+disallowed-methods = [
+  { path = "std::time::Instant::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "chrono::DateTime::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "chrono::Utc::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "namada_core::time::DateTimeUtc::now", reason = "Do not use current date/time in code that must be deterministic" },
+]
