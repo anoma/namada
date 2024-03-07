@@ -281,19 +281,12 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
 
     for change in &updates.changes {
         match change.update(&mut db_visitor) {
-            Ok(Some(deserialized)) => {
-                tracing::info!(
-                    "Writing key <{}> with value: {}...",
-                    change.key(),
-                    deserialized
-                );
-            }
-            Ok(None) => {
-                tracing::info!("Deleting key <{}>", change.key());
+            Ok(status) => {
+                tracing::info!("{}", status);
             }
             e => {
                 tracing::error!(
-                    "Attempt to write to key <{}> failed.",
+                    "Attempt to write to key/pattern <{}> failed.",
                     change.key()
                 );
                 e.unwrap();

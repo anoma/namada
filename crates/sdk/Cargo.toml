@@ -125,6 +125,7 @@ tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
 zeroize.workspace = true
+regex = "1.10.2"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }

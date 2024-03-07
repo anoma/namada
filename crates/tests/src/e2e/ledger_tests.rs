@@ -48,7 +48,9 @@ use super::helpers::{
     get_height, get_pregenesis_wallet, wait_for_block_height,
     wait_for_wasm_pre_compile,
 };
-use super::setup::{get_all_wasms_hashes, set_ethereum_bridge_mode, NamadaCmd};
+use super::setup::{
+    get_all_wasms_hashes, set_ethereum_bridge_mode, working_dir, NamadaCmd,
+};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
     is_debug_mode, parse_reached_epoch,
@@ -340,6 +342,94 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
     // There should be no previous state
     session.exp_string("No state could be found")?;
 
+    Ok(())
+}
+
+/// This test makes sure the tool for migrating the DB
+/// during a hard-fork works correctly.
+///
+/// 1. Run the ledger node, halting at height 2
+/// 2. Update the db
+/// 3. Run the ledger node, halting at height 4
+/// 4. restart ledge with migrated db
+/// 5. Check that a key was changed successfully
+#[test]
+fn test_db_migration() -> Result<()> {
+    let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node, halting at height 2
+    let mut ledger = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run-until", "--block-height", "2", "--halt",],
+        Some(40)
+    )?;
+    // There should be no previous state
+    ledger.exp_string("No state could be found")?;
+    // Wait to commit a block
+    ledger.exp_string("Reached block height 2, halting the chain.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
+    ledger.exp_eof()?;
+    drop(ledger);
+    let migrations_json_path = working_dir()
+        .join("examples")
+        .join("migration_example.json");
+    // 2. Update the db
+    let mut session = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &[
+            "ledger",
+            "update-db",
+            "--path",
+            migrations_json_path.to_string_lossy().as_ref(),
+        ],
+        Some(10),
+    )?;
+    session.exp_eof()?;
+    std::env::set_var("NAMADA_INITIAL_HEIGHT", "3");
+    // 3. Run the ledger node, halting at height 4
+    let mut ledger = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "run-until", "--block-height", "4", "--halt",],
+        Some(40)
+    )?;
+    ledger.exp_string("Reached block height 4, halting the chain.")?;
+    ledger.exp_string(LEDGER_SHUTDOWN)?;
+    ledger.exp_eof()?;
+    drop(ledger);
+
+    // 4. restart ledge with migrated db
+    std::env::remove_var("NAMADA_INITIAL_HEIGHT");
+    let mut ledger =
+        run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    // 5. Check that a key was changed successfully
+    let mut query = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        &[
+            "balance",
+            "--owner",
+            "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn"
+        ],
+        Some(20),
+    )?;
+    query.exp_regex("nam: 3200000036910")?;
+    ledger.interrupt()?;
     Ok(())
 }
 

@@ -3364,6 +3364,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
+ "regex",
  "ripemd",
  "serde",
  "serde_json",
@@ -3640,6 +3641,7 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "regex",
  "ripemd",
  "serde",
  "serde_json",
@@ -3707,6 +3709,7 @@ dependencies = [
  "namada_merkle_tree",
  "namada_replay_protection",
  "namada_tx",
+ "regex",
  "thiserror",
  "tracing",
 ]

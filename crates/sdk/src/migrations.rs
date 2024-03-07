@@ -2,6 +2,8 @@
 use core::fmt::Formatter;
 #[cfg(feature = "migrations")]
 use core::fmt::{Display, Formatter};
+#[cfg(feature = "migrations")]
+use core::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -11,6 +13,7 @@ use namada_core::storage::Key;
 use namada_migrations::get_deserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::TypeHash;
+use regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -18,6 +21,7 @@ pub trait DBUpdateVisitor {
     fn read(&self, key: &Key) -> Option<Vec<u8>>;
     fn write(&mut self, key: &Key, value: impl AsRef<[u8]>);
     fn delete(&mut self, key: &Key);
+    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)>;
 }
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -90,15 +94,23 @@ pub enum DbUpdateType {
         force: bool,
     },
     Delete(Key),
+    RepeatAdd {
+        pattern: String,
+        value: UpdateValue,
+        force: bool,
+    },
+    RepeatDelete(String),
 }
 
 #[cfg(feature = "migrations")]
 impl DbUpdateType {
     /// Get the key being modified
-    pub fn key(&self) -> &Key {
+    pub fn key(&self) -> String {
         match self {
-            DbUpdateType::Add { key, .. } => key,
-            DbUpdateType::Delete(key) => key,
+            DbUpdateType::Add { key, .. } => key.to_string(),
+            DbUpdateType::Delete(key) => key.to_string(),
+            DbUpdateType::RepeatAdd { pattern, .. } => pattern.to_string(),
+            DbUpdateType::RepeatDelete(pattern) => pattern.to_string(),
         }
     }
 
@@ -106,7 +118,8 @@ impl DbUpdateType {
     /// hash.
     pub fn validate(&self) -> eyre::Result<()> {
         match self {
-            DbUpdateType::Add { value, .. } => {
+            DbUpdateType::RepeatAdd { value, .. }
+            | DbUpdateType::Add { value, .. } => {
                 let deserializer =
                     namada_migrations::get_deserializer(&value.type_hash)
                         .ok_or_else(|| {
@@ -124,7 +137,7 @@ impl DbUpdateType {
                 })?;
                 Ok(())
             }
-            DbUpdateType::Delete(_) => Ok(()),
+            DbUpdateType::Delete(_) | DbUpdateType::RepeatDelete(_) => Ok(()),
         }
     }
 
@@ -134,7 +147,7 @@ impl DbUpdateType {
     pub fn update<DB: DBUpdateVisitor>(
         &self,
         db: &mut DB,
-    ) -> eyre::Result<Option<String>> {
+    ) -> eyre::Result<UpdateStatus> {
         match self {
             Self::Add { key, value, force } => {
                 let deserialized = if !force {
@@ -172,11 +185,74 @@ impl DbUpdateType {
                     None
                 };
                 db.write(key, &value.bytes);
-                Ok(deserialized)
+                Ok(deserialized
+                    .map(|d| UpdateStatus::Add(vec![(key.to_string(), d)]))
+                    .unwrap_or_else(|| UpdateStatus::Add(vec![])))
             }
             Self::Delete(key) => {
                 db.delete(key);
-                Ok(None)
+                Ok(UpdateStatus::Deleted(vec![key.to_string()]))
+            }
+            DbUpdateType::RepeatAdd {
+                pattern,
+                value,
+                force,
+            } => {
+                let pattern = Regex::new(pattern).unwrap();
+                let mut pairs = vec![];
+                let (deserialized, deserializer) = if !force {
+                    let deserializer =
+                        namada_migrations::get_deserializer(&value.type_hash)
+                            .ok_or_else(|| {
+                            eyre::eyre!(
+                                "Type hash {:?} did not correspond to a \
+                                 deserializer in TYPE_DESERIALIZERS.",
+                                value.type_hash
+                            )
+                        })?;
+                    let deserialized = deserializer(value.bytes.clone())
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "The value {:?} for pattern {} could not be \
+                                 successfully deserialized",
+                                value,
+                                pattern,
+                            )
+                        })?;
+                    (Some(deserialized), Some(deserializer))
+                } else {
+                    (None, None)
+                };
+                for (key, prev) in db.get_pattern(pattern.clone()) {
+                    if let (Some(func), Some(d)) =
+                        (deserializer, deserialized.as_ref())
+                    {
+                        func(prev).ok_or_else(|| {
+                            eyre::eyre!(
+                                "The previous value under the key {} did not \
+                                 have the same type as that provided: Input \
+                                 was {}",
+                                key,
+                                d,
+                            )
+                        })?;
+                        pairs.push((key.to_string(), d.clone()));
+                    }
+                    db.write(&Key::from_str(&key).unwrap(), &value.bytes);
+                }
+                Ok(UpdateStatus::Add(pairs))
+            }
+            DbUpdateType::RepeatDelete(pattern) => {
+                let pattern = Regex::new(pattern).unwrap();
+                Ok(UpdateStatus::Deleted(
+                    db.get_pattern(pattern.clone())
+                        .into_iter()
+                        .map(|(key, _)| {
+                            db.delete(&Key::from_str(&key).unwrap());
+                            key
+                        })
+                        .collect(),
+                ))
             }
         }
     }
@@ -206,8 +282,8 @@ impl Display for DbUpdateType {
 
                 let Some(value) = deserializer(bytes.clone()) else {
                     return f.write_str(&format!(
-                        "The value {:?} for key<{}> could not be successfully \
-                         deserialized",
+                        "The value {:?} for key <{}> could not be \
+                         successfully deserialized",
                         bytes, key
                     ));
                 };
@@ -220,6 +296,62 @@ impl Display for DbUpdateType {
             DbUpdateType::Delete(key) => {
                 f.write_str(&format!("Delete key: <{}>", key))
             }
+            DbUpdateType::RepeatAdd {
+                pattern,
+                value: UpdateValue { type_hash, bytes },
+                ..
+            } => {
+                let Some(deserializer) = get_deserializer(type_hash) else {
+                    return f.write_str(&format!(
+                        "Type hash {:?} did not correspond to a deserializer \
+                         in TYPE_DESERIALIZERS.",
+                        type_hash
+                    ));
+                };
+
+                let Some(value) = deserializer(bytes.clone()) else {
+                    return f.write_str(&format!(
+                        "The value {:?} for pattern <{}> could not be \
+                         successfully deserialized",
+                        bytes, pattern
+                    ));
+                };
+
+                f.write_str(&format!(
+                    "Write to pattern: <{}> with value: {}",
+                    pattern, value
+                ))
+            }
+            DbUpdateType::RepeatDelete(pattern) => {
+                f.write_str(&format!("Delete pattern: <{}>", pattern))
+            }
         }
+    }
+}
+
+pub enum UpdateStatus {
+    Deleted(Vec<String>),
+    Add(Vec<(String, String)>),
+}
+
+#[cfg(feature = "migrations")]
+impl Display for UpdateStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Deleted(keys) => {
+                for key in keys {
+                    f.write_str(&format!("Deleting key <{}>", key))?;
+                }
+            }
+            Self::Add(pairs) => {
+                for (k, v) in pairs {
+                    f.write_str(&format!(
+                        "Writing key <{}> with value: {}",
+                        k, v
+                    ))?;
+                }
+            }
+        }
+        Ok(())
     }
 }

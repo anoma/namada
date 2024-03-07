@@ -1649,6 +1649,13 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
             .batch_delete_subspace_val(&mut self.batch, last_height, key, true)
             .expect("Failed to delete key from storage");
     }
+
+    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
+        self.db
+            .iter_pattern(None, pattern)
+            .map(|(k, v, _)| (k, v))
+            .collect()
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
