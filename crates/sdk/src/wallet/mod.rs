@@ -916,15 +916,15 @@ impl<U: WalletIo> Wallet<U> {
             .map(|alias| (alias, spend_key))
     }
 
+    // XXX REMOVE
     /// Generate a new keypair, derive an implicit address from its public key
     /// and insert them into the store with the provided alias, converted to
-    /// lower case. If none provided, the alias will be the public key hash (in
-    /// lowercase too). If the alias already exists, optionally force overwrite
+    /// lower case. If the alias already exists, optionally force overwrite
     /// the keypair for the alias.
     /// If no encryption password is provided, the keypair will be stored raw
     /// without encryption.
     /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and a reference-counting pointer to the key.
+    /// and the generated keypair.
     pub fn gen_store_secret_key(
         &mut self,
         scheme: SchemeType,
@@ -1490,5 +1490,33 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             .transpose()
         })
         .transpose()
+    }
+
+    /// Generate a new keypair, derive an implicit address from its public key
+    /// and insert them into the store with the provided alias, converted to
+    /// lower case. If the alias already exists, optionally force overwrite
+    /// the keypair for the alias.
+    /// If no encryption password is provided, the keypair will be stored raw
+    /// without encryption.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and the generated keypair.
+    pub fn gen_store_secret_key_atomic(
+        &mut self,
+        scheme: SchemeType,
+        alias: Option<String>,
+        alias_force: bool,
+        password: Option<Zeroizing<String>>,
+        rng: &mut (impl CryptoRng + RngCore),
+    ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
+        let sk = gen_secret_key(scheme, rng);
+        self.insert_keypair_atomic(
+            alias.unwrap_or_default(),
+            force_alias,
+            sk.clone(),
+            password,
+            None,
+            None,
+        )
+        .map(|o| o.map(|alias| (alias, sk)))
     }
 }

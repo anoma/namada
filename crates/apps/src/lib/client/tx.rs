@@ -355,7 +355,7 @@ pub async fn submit_change_consensus_key(
             let password =
                 read_and_confirm_encryption_password(args.unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
@@ -363,6 +363,7 @@ pub async fn submit_change_consensus_key(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -448,7 +449,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(args.unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone().into()),
@@ -456,6 +457,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -479,7 +481,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(args.unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
@@ -487,6 +489,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -510,7 +513,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(args.unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
@@ -518,6 +521,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
