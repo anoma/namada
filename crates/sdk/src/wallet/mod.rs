@@ -486,7 +486,7 @@ impl<U> Wallet<U> {
     //     )
     // }
 
-    /// Gets all addresses given a vp_type
+    // /// Gets all addresses given a vp_type
     // pub fn get_addresses_with_vp_type(
     //     &self,
     //     vp_type: AddressVpType,
@@ -616,7 +616,6 @@ impl<U> Wallet<U> {
     //         .collect()
     // }
 
-    /// XXX HERE
     // /// Check if alias is an encrypted secret key
     // pub fn is_encrypted_secret_key(
     //     &self,
@@ -627,17 +626,18 @@ impl<U> Wallet<U> {
     //         .map(|stored_keypair| stored_keypair.is_encrypted())
     // }
 
-    /// Check if alias is an encrypted spending key
-    pub fn is_encrypted_spending_key(
-        &self,
-        alias: impl AsRef<str>,
-    ) -> Option<bool> {
-        self.store
-            .find_spending_key(alias)
-            .map(|stored_spend_key| stored_spend_key.is_encrypted())
-    }
+    // /// Check if alias is an encrypted spending key
+    // pub fn is_encrypted_spending_key(
+    //     &self,
+    //     alias: impl AsRef<str>,
+    // ) -> Option<bool> {
+    //     self.store
+    //         .find_spending_key(alias)
+    //         .map(|stored_spend_key| stored_spend_key.is_encrypted())
+    // }
 }
 
+// XXX HERE
 impl<U: WalletStorage> Wallet<U> {
     /// Load a wallet from the store file.
     pub fn load(&mut self) -> Result<(), LoadStoreError> {
@@ -949,6 +949,18 @@ impl<U: WalletStorage> Wallet<U> {
             .load_store_read_only()?
             .find_secret_key(alias)
             .map(|stored_keypair| stored_keypair.is_encrypted()))
+    }
+
+    /// Check if alias is an encrypted spending key
+    pub fn is_encrypted_spending_key_atomic(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Result<Option<bool>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_spending_key(alias)
+            .map(|stored_spend_key| stored_spend_key.is_encrypted()))
     }
 }
 

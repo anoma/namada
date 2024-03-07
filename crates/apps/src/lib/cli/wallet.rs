@@ -1109,7 +1109,10 @@ fn shielded_key_address_find_by_alias(
 
     // Find shielded keys
     if !addresses_only {
-        let encrypted = match wallet.is_encrypted_spending_key(&alias) {
+        let encrypted = match wallet
+            .is_encrypted_spending_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             None => "external",
             Some(res) if res => "encrypted",
             _ => "not encrypted",
