@@ -146,7 +146,9 @@ impl Finalized {
                 .expect("Failed to update the wallet storage.");
         }
         if let Some(pre_genesis_wallet) = pre_genesis_wallet {
-            wallet.extend(pre_genesis_wallet);
+            wallet
+                .extend_atomic(pre_genesis_wallet)
+                .expect("Failed to apply pre-genesis wallet.");
         }
         if let Some((alias, validator_wallet)) = validator {
             let tendermint_pk = validator_wallet.tendermint_node_key.ref_to();

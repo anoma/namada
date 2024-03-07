@@ -340,6 +340,10 @@ pub mod fs {
 
     impl FsWalletUtils {
         /// Initialize a wallet at the given directory
+        // pub fn new(store_dir: PathBuf) -> Wallet<Self> {
+        //     Wallet::new(Self { store_dir })
+        // }
+
         pub fn new(store_dir: PathBuf) -> Wallet<Self> {
             Wallet::new(Self { store_dir }, Store::default())
         }
@@ -822,6 +826,16 @@ impl<U: WalletStorage> Wallet<U> {
                 FindKeyError::KeyNotFound(alias_or_pkh.as_ref().to_string())
             }))
     }
+
+    /// Extend this wallet from another wallet (typically pre-genesis).
+    /// Note that this method ignores `store.validator_data` if any.
+    pub fn extend_atomic(
+        &mut self,
+        wallet: Self,
+    ) -> Result<(), LoadStoreError> {
+        let other_store = wallet.utils.load_store_read_only()?;
+        self.utils.update_store(|store| store.extend(other_store))
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {
@@ -1081,6 +1095,7 @@ impl<U: WalletIo> Wallet<U> {
         disposable_keypair
     }
 
+    /// XXX OK
     /// Decrypt stored key, if it's not stored un-encrypted.
     /// If a given storage key needs to be decrypted and password is not
     /// supplied, then interactively prompt for password and if successfully
@@ -1169,12 +1184,6 @@ impl<U: WalletIo> Wallet<U> {
                 alias
             })
             .map(Into::into)
-    }
-
-    /// Extend this wallet from another wallet (typically pre-genesis).
-    /// Note that this method ignores `store.validator_data` if any.
-    pub fn extend(&mut self, wallet: Self) {
-        self.store.extend(wallet.store)
     }
 
     /// Remove keys and addresses associated with the given alias
