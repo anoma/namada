@@ -597,16 +597,16 @@ impl<U> Wallet<U> {
     //         .collect()
     // }
 
-    /// XXX HERE
-    /// Get all known viewing keys by their alias
-    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
-        self.store
-            .get_viewing_keys()
-            .iter()
-            .map(|(alias, value)| (alias.into(), *value))
-            .collect()
-    }
+    // /// Get all known viewing keys by their alias
+    // pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
+    //     self.store
+    //         .get_viewing_keys()
+    //         .iter()
+    //         .map(|(alias, value)| (alias.into(), *value))
+    //         .collect()
+    // }
 
+    /// XXX HERE
     /// Get all known viewing keys by their alias
     pub fn get_spending_keys(
         &self,
@@ -910,6 +910,20 @@ impl<U: WalletStorage> Wallet<U> {
             .map(|(alias, value)| (alias.into(), *value))
             .collect())
     }
+
+    /// Get all known viewing keys by their alias
+    pub fn get_viewing_keys_atomic(
+        &self,
+    ) -> Result<HashMap<String, ExtendedViewingKey>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_viewing_keys()
+            .iter()
+            .map(|(alias, value)| (alias.into(), *value))
+            .collect())
+    }
+
 }
 
 impl<U: WalletIo> Wallet<U> {

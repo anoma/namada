@@ -310,7 +310,8 @@ impl CliApi {
                         let chain_ctx = ctx.take_chain_or_exit();
                         let vks = chain_ctx
                             .wallet
-                            .get_viewing_keys()
+                            .get_viewing_keys_atomic()
+                            .expect("Failed to read from the wallet storage.")
                             .values()
                             .copied()
                             .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)

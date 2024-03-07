@@ -190,12 +190,16 @@ pub async fn query_transfers(
             context.io(),
             &query_owner,
             &query_token,
-            &wallet.get_viewing_keys(),
+            &wallet
+                .get_viewing_keys_atomic()
+                .expect("Failed to read from the wallet storage."),
         )
         .await
         .unwrap();
     // To facilitate lookups of human-readable token names
-    let vks = wallet.get_viewing_keys();
+    let vks = wallet
+        .get_viewing_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
     let fvk_map: HashMap<_, _> = vks
         .values()
@@ -491,7 +495,8 @@ pub async fn query_pinned_balance(
     };
     // Get the viewing keys with which to try note decryptions
     let viewing_keys: Vec<ViewingKey> = wallet
-        .get_viewing_keys()
+        .get_viewing_keys_atomic()
+        .expect("Failed to read from the wallet storage.")
         .values()
         .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
         .collect();
@@ -977,7 +982,8 @@ pub async fn query_shielded_balance(
         None => context
             .wallet()
             .await
-            .get_viewing_keys()
+            .get_viewing_keys_atomic()
+            .expect("Failed to read from the wallet storage.")
             .values()
             .copied()
             .collect(),
