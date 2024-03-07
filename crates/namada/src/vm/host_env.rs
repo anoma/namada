@@ -1933,10 +1933,7 @@ where
     Ok(len)
 }
 
-/// Verify a transaction signature
-/// TODO: this is just a warkaround to track gas for multiple signature
-/// verifications. When the runtime gas meter is implemented, this function can
-/// be removed
+/// Verify a transaction signature in the host environment for better performance
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<MEM, D, H, EVAL, CA>,
