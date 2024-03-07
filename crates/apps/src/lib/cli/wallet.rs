@@ -525,13 +525,14 @@ async fn transparent_key_and_address_derive(
             .expect("unable to decode address from hardware wallet");
 
         wallet
-            .insert_public_key(
+            .insert_public_key_atomic(
                 alias,
                 pubkey,
                 Some(address),
                 Some(derivation_path),
                 alias_force,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 display_line!(io, "No changes are persisted. Exiting.");
                 cli::safe_exit(1)
@@ -1444,7 +1445,14 @@ fn transparent_public_key_add(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_public_key(alias.clone(), pubkey, None, None, alias_force)
+        .insert_public_key_atomic(
+            alias.clone(),
+            pubkey,
+            None,
+            None,
+            alias_force,
+        )
+        .expect("Failed to update the wallet storage.")
         .is_none()
     {
         edisplay_line!(io, "Public key not added");

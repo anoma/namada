@@ -1144,27 +1144,6 @@ impl<U: WalletIo> Wallet<U> {
             })
     }
 
-    /// Insert a new public key with the given alias. If the alias is already
-    /// used, then display a prompt for overwrite confirmation.
-    pub fn insert_public_key(
-        &mut self,
-        alias: String,
-        pubkey: common::PublicKey,
-        address: Option<Address>,
-        path: Option<DerivationPath>,
-        force_alias: bool,
-    ) -> Option<String> {
-        self.store
-            .insert_public_key::<U>(
-                alias.into(),
-                pubkey,
-                address,
-                path,
-                force_alias,
-            )
-            .map(Into::into)
-    }
-
     /// Insert a viewing key into the wallet under the given alias
     pub fn insert_viewing_key(
         &mut self,
@@ -1392,5 +1371,28 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             self.decrypted_key_cache.insert(alias.clone(), sk);
             alias.into()
         }))
+    }
+
+    /// Insert a new public key with the given alias. If the alias is already
+    /// used, then display a prompt for overwrite confirmation.
+    pub fn insert_public_key_atomic(
+        &mut self,
+        alias: String,
+        pubkey: common::PublicKey,
+        address: Option<Address>,
+        path: Option<DerivationPath>,
+        force_alias: bool,
+    ) -> Result<Option<String>, LoadStoreError> {
+        let mut pk_alias: Option<Alias> = Option::default();
+        self.utils.update_store(|store| {
+            pk_alias = store.insert_public_key::<U>(
+                alias.into(),
+                pubkey,
+                address,
+                path,
+                force_alias,
+            )
+        })?;
+        Ok(pk_alias.map(Into::into))
     }
 }
