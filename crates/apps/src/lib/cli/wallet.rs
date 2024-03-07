@@ -362,7 +362,8 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, alias_force)
+                .insert_viewing_key_atomic(alias, viewing_key, alias_force)
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);

@@ -1144,18 +1144,6 @@ impl<U: WalletIo> Wallet<U> {
             })
     }
 
-    /// Insert a viewing key into the wallet under the given alias
-    pub fn insert_viewing_key(
-        &mut self,
-        alias: String,
-        view_key: ExtendedViewingKey,
-        force_alias: bool,
-    ) -> Option<String> {
-        self.store
-            .insert_viewing_key::<U>(alias.into(), view_key, force_alias)
-            .map(Into::into)
-    }
-
     /// Insert a spending key into the wallet under the given alias
     pub fn insert_spending_key(
         &mut self,
@@ -1394,5 +1382,23 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             )
         })?;
         Ok(pk_alias.map(Into::into))
+    }
+
+    /// Insert a viewing key into the wallet under the given alias
+    pub fn insert_viewing_key_atomic(
+        &mut self,
+        alias: String,
+        view_key: ExtendedViewingKey,
+        force_alias: bool,
+    ) -> Result<Option<String>, LoadStoreError> {
+        let mut vk_alias: Option<Alias> = Option::default();
+        self.utils.update_store(|store| {
+            vk_alias = store.insert_viewing_key::<U>(
+                alias.into(),
+                view_key,
+                force_alias,
+            )
+        })?;
+        Ok(vk_alias.map(Into::into))
     }
 }
