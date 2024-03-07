@@ -7,6 +7,7 @@ use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::internal::KeyVal;
@@ -2055,6 +2056,8 @@ where
     use std::rc::Rc;
 
     use namada_ibc::{CompatibleIbcTxHostEnvState, IbcActions, TransferModule};
+
+    tx_charge_gas::<MEM, D, H, CA>(env, IBC_TX_GAS)?;
 
     let tx_data = unsafe { env.ctx.tx.get().data() }.ok_or_else(|| {
         let sentinel = unsafe { env.ctx.sentinel.get() };

@@ -54,6 +54,9 @@ pub const IBC_ACTION_VALIDATE_GAS: u64 = 7_511;
 pub const IBC_ACTION_EXECUTE_GAS: u64 = 47_452;
 /// The cost to execute a masp tx verification
 pub const MASP_VERIFY_SHIELDED_TX_GAS: u64 = 62_381_957;
+/// The cost to execute an ibc transaction TODO: remove once ibc tx goes back to
+/// wasm
+pub const IBC_TX_GAS: u64 = 585_022;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
