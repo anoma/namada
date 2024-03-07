@@ -5,6 +5,7 @@ use namada::core::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
 use namada_apps::config::ValidatorLocalConfig;
 use namada_apps::node::ledger;
+use namada_sdk::display_line;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
@@ -41,7 +42,8 @@ pub fn main() -> Result<()> {
             cmds::Ledger::UpdateDB(cmds::LedgerUpdateDB(args)) => {
                 #[cfg(not(feature = "migrations"))]
                 {
-                    panic!(
+                    display_line!(
+                        io,
                         "This command is only available if built with the \
                          \"migrations\" feature."
                     )
@@ -57,7 +59,8 @@ pub fn main() -> Result<()> {
             cmds::Ledger::QueryDB(cmds::LedgerQueryDB(args)) => {
                 #[cfg(not(feature = "migrations"))]
                 {
-                    panic!(
+                    display_line!(
+                        io,
                         "This command is only available if built with the \
                          \"migrations\" feature."
                     )
