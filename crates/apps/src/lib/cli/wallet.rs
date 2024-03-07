@@ -521,9 +521,9 @@ async fn transparent_key_and_address_derive(
             });
 
         let pubkey = common::PublicKey::try_from_slice(&response.public_key)
-            .expect("unable to decode public key from hardware wallet");
+            .expect("Unable to decode public key from hardware wallet.");
         let address = Address::from_str(&response.address_str)
-            .expect("unable to decode address from hardware wallet");
+            .expect("Unable to decode address from hardware wallet.");
 
         wallet
             .insert_public_key_atomic(
