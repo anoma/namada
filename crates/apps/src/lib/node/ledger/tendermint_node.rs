@@ -217,6 +217,23 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
+pub fn reset_state(tendermint_dir: impl AsRef<Path>) -> Result<()> {
+    let tendermint_path = from_env_or_default()?;
+    let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();
+    // reset all the Tendermint state, if any
+    std::process::Command::new(tendermint_path)
+        .args([
+            "unsafe-reset-all",
+            // NOTE: log config: https://docs.tendermint.com/master/nodes/logging.html#configuring-log-levels
+            // "--log-level=\"*debug\"",
+            "--home",
+            &tendermint_dir,
+        ])
+        .output()
+        .expect("Failed to reset tendermint node's data");
+    Ok(())
+}
+
 pub fn rollback(tendermint_dir: impl AsRef<Path>) -> Result<BlockHeight> {
     let tendermint_path = from_env_or_default()?;
     let tendermint_dir = tendermint_dir.as_ref().to_string_lossy();

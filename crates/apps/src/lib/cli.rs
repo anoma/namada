@@ -840,6 +840,7 @@ pub mod cmds {
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
         UpdateDB(LedgerUpdateDB),
+        QueryDB(LedgerQueryDB),
         RollBack(LedgerRollBack),
     }
 
@@ -852,11 +853,13 @@ pub mod cmds {
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
                 let update_db = SubCmd::parse(matches).map(Self::UpdateDB);
+                let query_db = SubCmd::parse(matches).map(Self::QueryDB);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
                     .or(update_db)
+                    .or(query_db)
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
@@ -877,6 +880,7 @@ pub mod cmds {
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
                 .subcommand(LedgerUpdateDB::def())
+                .subcommand(LedgerQueryDB::def())
                 .subcommand(LedgerRollBack::def())
         }
     }
@@ -963,7 +967,7 @@ pub mod cmds {
     pub struct LedgerUpdateDB(pub args::LedgerUpdateDb);
 
     impl SubCmd for LedgerUpdateDB {
-        const CMD: &'static str = "update_db";
+        const CMD: &'static str = "update-db";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches
@@ -972,11 +976,35 @@ pub mod cmds {
         }
 
         fn def() -> App {
-            App::new(Self::CMD).about(
-                "Applies a set of updates to the DB for hard forking. The \
-                 input should be a path to a file dictating a set of keys and \
-                 their new values. Can be dry-run for testing.",
-            )
+            App::new(Self::CMD)
+                .about(
+                    "Applies a set of updates to the DB for hard forking. The \
+                     input should be a path to a file dictating a set of keys \
+                     and their new values. Can be dry-run for testing.",
+                )
+                .add_args::<args::LedgerUpdateDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerQueryDB(pub args::LedgerQueryDb);
+
+    impl SubCmd for LedgerQueryDB {
+        const CMD: &'static str = "query-db";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerQueryDb::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the value of keys from the DB while the ledger is \
+                     not running.",
+                )
+                .add_args::<args::LedgerQueryDb>()
         }
     }
 
@@ -2200,6 +2228,7 @@ pub mod cmds {
         ValidateGenesisTemplates(ValidateGenesisTemplates),
         TestGenesis(TestGenesis),
         SignGenesisTxs(SignGenesisTxs),
+        ParseMigrationJson(MigrationJson),
     }
 
     impl SubCmd for Utils {
@@ -2233,6 +2262,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::SignGenesisTxs);
                 let test_genesis =
                     SubCmd::parse(matches).map(Self::TestGenesis);
+                let parse_migrations_json =
+                    SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
@@ -2247,6 +2278,7 @@ pub mod cmds {
                     .or(validate_genesis_templates)
                     .or(test_genesis)
                     .or(genesis_tx)
+                    .or(parse_migrations_json)
             })
         }
 
@@ -2267,6 +2299,7 @@ pub mod cmds {
                 .subcommand(ValidateGenesisTemplates::def())
                 .subcommand(TestGenesis::def())
                 .subcommand(SignGenesisTxs::def())
+                .subcommand(MigrationJson::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2493,6 +2526,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Sign genesis transaction(s).")
                 .add_args::<args::SignGenesisTxs>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct MigrationJson(pub args::MigrationJson);
+
+    impl SubCmd for MigrationJson {
+        const CMD: &'static str = "parse-migration-json";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::MigrationJson::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Parse and print a migration JSON file.")
+                .add_args::<args::MigrationJson>()
         }
     }
 
@@ -2956,6 +3008,7 @@ pub mod args {
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use data_encoding::HEXUPPER;
     use namada::core::address::{Address, EstablishedAddress};
     use namada::core::chain::{ChainId, ChainIdPrefix};
     use namada::core::dec::Dec;
@@ -3121,6 +3174,8 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.";
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
+    pub const KEY_HASH_LIST: ArgMulti<String, GlobPlus> =
+        arg_multi("key-hash-list");
     pub const LEDGER_ADDRESS: ArgDefault<Url> =
         arg("node").default(DefaultFn(|| {
             let raw = "http://127.0.0.1:26657";
@@ -3420,6 +3475,43 @@ pub mod args {
             .arg(DRY_RUN_TX.def().help(
                 "If set, applies the updates but does not persist them. Using \
                  for testing and debugging.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerQueryDb {
+        pub key_hash_pairs: Vec<(storage::Key, [u8; 32])>,
+    }
+
+    impl Args for LedgerQueryDb {
+        fn parse(matches: &ArgMatches) -> Self {
+            let pairs = KEY_HASH_LIST
+                .parse(matches)
+                .into_iter()
+                .map(|pair| {
+                    let (hash, key) = pair
+                        .split_once(':')
+                        .expect("Key hash pairs must be colon separated.");
+                    let hash: [u8; 32] = HEXUPPER
+                        .decode(hash.to_uppercase().as_bytes())
+                        .unwrap()
+                        .try_into()
+                        .unwrap();
+                    let key = storage::Key::parse(key).unwrap();
+                    (key, hash)
+                })
+                .collect();
+
+            Self {
+                key_hash_pairs: pairs,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(KEY_HASH_LIST.def().help(
+                "A comma separated list of entries of the form \
+                 <hex_type_hash>:<key>.",
             ))
         }
     }
@@ -7309,6 +7401,26 @@ pub mod args {
             .arg(USE_DEVICE.def().help(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct MigrationJson {
+        pub path: PathBuf,
+    }
+
+    impl Args for MigrationJson {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+
+            Self { path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help(
+                "Path to the migrations JSON file. Requires the binary to be \
+                 built with the \"migrations\" feature.",
             ))
         }
     }

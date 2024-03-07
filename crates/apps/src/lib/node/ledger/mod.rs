@@ -18,6 +18,7 @@ use namada::core::storage::{BlockHeight, Key};
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
+use namada::state::DB;
 use namada::tendermint::abci::request::CheckTxKind;
 use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
@@ -222,8 +223,6 @@ pub fn dump_db(
         historic,
     }: args::LedgerDumpDb,
 ) {
-    use namada::state::DB;
-
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);
 
@@ -231,13 +230,39 @@ pub fn dump_db(
     db.dump_block(out_file_path, historic, block_height);
 }
 
+#[cfg(feature = "migrations")]
+pub fn query_db(config: config::Ledger, keys: &[(Key, [u8; 32])]) {
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    for (key, type_hash) in keys {
+        let bytes = db.read_subspace_val(key).unwrap();
+        if let Some(bytes) = bytes {
+            let deserializer = namada_migrations::get_deserializer(type_hash)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Could not find a deserializer for the type provided \
+                         with key <{}>",
+                        key
+                    )
+                });
+            let value = deserializer(bytes).unwrap_or_else(|| {
+                panic!("Unable to deserialize the value under key <{}>", key)
+            });
+            tracing::info!("Key <{}>: {}", key, value);
+        } else {
+            tracing::info!("Key <{}> is not present in storage.", key);
+        }
+    }
+}
+
 /// Change the funds of an account in-place. Use with
 /// caution, as this modifies state in storage without
 /// going through the consensus protocol.
+#[cfg(feature = "migrations")]
 pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
     use std::io::Read;
-
-    use namada::ledger::storage::DB;
 
     let mut update_json = String::new();
     let mut file = std::fs::File::open(updates)
@@ -257,14 +282,14 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
     for change in &updates.changes {
         match change.update(&mut db_visitor) {
             Ok(Some(deserialized)) => {
-                tracing::debug!(
+                tracing::info!(
                     "Writing key <{}> with value: {}...",
                     change.key(),
                     deserialized
                 );
             }
             Ok(None) => {
-                tracing::debug!("Deleting key <{}>", change.key());
+                tracing::info!("Deleting key <{}>", change.key());
             }
             e => {
                 tracing::error!(
@@ -276,15 +301,15 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
         }
     }
     if !dry_run {
-        tracing::debug!("Persisting DB changes...");
+        tracing::info!("Persisting DB changes...");
         let batch = db_visitor.take_batch();
         let mut db = db;
         db.exec_batch(batch).expect("Failed to execute write batch");
         db.flush(true).expect("Failed to flush data to disk");
 
-        // reset CometBFT's state, such that we can resume with a different app
+        // reset CometBFT's state, such that we can resume with a different appq
         // hash
-        tendermint_node::reset(cometbft_path)
+        tendermint_node::reset_state(cometbft_path)
             .expect("Failed to reset CometBFT state");
     }
 }

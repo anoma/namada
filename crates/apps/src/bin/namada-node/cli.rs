@@ -39,12 +39,32 @@ pub fn main() -> Result<()> {
                     .wrap_err("Failed to rollback the Namada node")?;
             }
             cmds::Ledger::UpdateDB(cmds::LedgerUpdateDB(args)) => {
+                #[cfg(not(feature = "migrations"))]
+                {
+                    panic!(
+                        "This command is only available if build with the \
+                         \"migrations\" feature."
+                    )
+                }
                 let chain_ctx = ctx.take_chain_or_exit();
+                #[cfg(feature = "migrations")]
                 ledger::update_db_keys(
                     chain_ctx.config.ledger,
                     args.updates,
                     args.dry_run,
                 );
+            }
+            cmds::Ledger::QueryDB(cmds::LedgerQueryDB(args)) => {
+                #[cfg(not(feature = "migrations"))]
+                {
+                    panic!(
+                        "This command is only available if build with the \
+                         \"migrations\" feature."
+                    )
+                }
+                let chain_ctx = ctx.take_chain_or_exit();
+                #[cfg(feature = "migrations")]
+                ledger::query_db(chain_ctx.config.ledger, &args.key_hash_pairs);
             }
         },
         cmds::NamadaNode::Config(sub) => match sub {

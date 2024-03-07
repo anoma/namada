@@ -1,10 +1,16 @@
+#[cfg(not(feature = "migrations"))]
 use core::fmt::Formatter;
+#[cfg(feature = "migrations")]
+use core::fmt::{Display, Formatter};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use namada_core::storage::Key;
-use namada_migrations::{TypeHash, TYPE_DESERIALIZERS};
+#[cfg(feature = "migrations")]
+use namada_migrations::get_deserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::TypeHash;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -22,6 +28,7 @@ pub struct UpdateValue {
     bytes: Vec<u8>,
 }
 
+#[cfg(feature = "migrations")]
 impl<T: TypeHash + BorshSerialize> From<T> for UpdateValue {
     fn from(value: T) -> Self {
         Self {
@@ -85,6 +92,7 @@ pub enum DbUpdateType {
     Delete(Key),
 }
 
+#[cfg(feature = "migrations")]
 impl DbUpdateType {
     /// Get the key being modified
     pub fn key(&self) -> &Key {
@@ -99,15 +107,15 @@ impl DbUpdateType {
     pub fn validate(&self) -> eyre::Result<()> {
         match self {
             DbUpdateType::Add { value, .. } => {
-                let locked = TYPE_DESERIALIZERS.lock().unwrap();
                 let deserializer =
-                    locked.get(&value.type_hash).ok_or_else(|| {
-                        eyre::eyre!(
-                            "Type hash {:?} did not correspond to a \
-                             deserializer in TYPE_DESERIALIZERS.",
-                            value.type_hash
-                        )
-                    })?;
+                    namada_migrations::get_deserializer(&value.type_hash)
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "Type hash {:?} did not correspond to a \
+                                 deserializer in TYPE_DESERIALIZERS.",
+                                value.type_hash
+                            )
+                        })?;
                 _ = deserializer(value.bytes.clone()).ok_or_else(|| {
                     eyre::eyre!(
                         "The value {:?} could not be successfully deserialized",
@@ -130,10 +138,9 @@ impl DbUpdateType {
         match self {
             Self::Add { key, value, force } => {
                 let deserialized = if !force {
-                    let locked = TYPE_DESERIALIZERS.lock().unwrap();
-
                     let deserializer =
-                        locked.get(&value.type_hash).ok_or_else(|| {
+                        namada_migrations::get_deserializer(&value.type_hash)
+                            .ok_or_else(|| {
                             eyre::eyre!(
                                 "Type hash {:?} did not correspond to a \
                                  deserializer in TYPE_DESERIALIZERS.",
@@ -178,4 +185,41 @@ impl DbUpdateType {
 #[derive(Serialize, Deserialize)]
 pub struct DbChanges {
     pub changes: Vec<DbUpdateType>,
+}
+
+#[cfg(feature = "migrations")]
+impl Display for DbUpdateType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DbUpdateType::Add {
+                key,
+                value: UpdateValue { type_hash, bytes },
+                ..
+            } => {
+                let Some(deserializer) = get_deserializer(type_hash) else {
+                    return f.write_str(&format!(
+                        "Type hash {:?} did not correspond to a deserializer \
+                         in TYPE_DESERIALIZERS.",
+                        type_hash
+                    ));
+                };
+
+                let Some(value) = deserializer(bytes.clone()) else {
+                    return f.write_str(&format!(
+                        "The value {:?} for key<{}> could not be successfully \
+                         deserialized",
+                        bytes, key
+                    ));
+                };
+
+                f.write_str(&format!(
+                    "Write to key: <{}> with value: {}",
+                    key, value
+                ))
+            }
+            DbUpdateType::Delete(key) => {
+                f.write_str(&format!("Delete key: <{}>", key))
+            }
+        }
+    }
 }
