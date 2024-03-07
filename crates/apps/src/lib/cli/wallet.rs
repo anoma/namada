@@ -1463,7 +1463,8 @@ fn transparent_address_add(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_address(&alias, address, alias_force)
+        .insert_address_atomic(&alias, address, alias_force)
+        .expect("Failed to update the wallet storage.")
         .is_none()
     {
         edisplay_line!(io, "Address not added");

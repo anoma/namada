@@ -131,11 +131,13 @@ impl Finalized {
     ) -> Wallet<CliWalletUtils> {
         let mut wallet = crate::wallet::load_or_new(base_dir);
         for (alias, config) in &self.tokens.token {
-            wallet.insert_address(
-                alias.normalize(),
-                config.address.clone(),
-                false,
-            );
+            wallet
+                .insert_address_atomic(
+                    alias.normalize(),
+                    config.address.clone(),
+                    false,
+                )
+                .expect("Failed to update the wallet storage.");
             wallet
                 .add_vp_type_to_address_atomic(
                     AddressVpType::Token,
@@ -172,11 +174,13 @@ impl Finalized {
             InternalAddress::Governance,
             InternalAddress::Pgf,
         ] {
-            wallet.insert_address(
-                int_add.to_string().to_lowercase(),
-                Address::Internal(int_add.clone()),
-                false,
-            );
+            wallet
+                .insert_address_atomic(
+                    int_add.to_string().to_lowercase(),
+                    Address::Internal(int_add.clone()),
+                    false,
+                )
+                .expect("Failed to update the wallet storage.");
         }
 
         wallet

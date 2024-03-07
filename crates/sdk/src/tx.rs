@@ -506,11 +506,15 @@ pub async fn save_initialized_accounts<N: Namada>(
                 None => N::WalletUtils::read_alias(&encoded).into(),
             };
             let alias = alias.into_owned();
-            let added = context.wallet_mut().await.insert_address(
-                alias.clone(),
-                address.clone(),
-                args.wallet_alias_force,
-            );
+            let added = context
+                .wallet_mut()
+                .await
+                .insert_address_atomic(
+                    alias.clone(),
+                    address.clone(),
+                    args.wallet_alias_force,
+                )
+                .expect("Failed to update the wallet storage.");
             match added {
                 Some(new_alias) if new_alias != encoded => {
                     display_line!(

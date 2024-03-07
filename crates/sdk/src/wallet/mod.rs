@@ -1255,21 +1255,21 @@ impl<U: WalletIo> Wallet<U> {
         }
     }
 
-    /// Add a new address with the given alias. If the alias is already used,
-    /// will ask whether the existing alias should be replaced, a different
-    /// alias is desired, or the alias creation should be cancelled. Return
-    /// the chosen alias if the address has been added, otherwise return
-    /// nothing.
-    pub fn insert_address(
-        &mut self,
-        alias: impl AsRef<str>,
-        address: Address,
-        force_alias: bool,
-    ) -> Option<String> {
-        self.store
-            .insert_address::<U>(alias.into(), address, force_alias)
-            .map(Into::into)
-    }
+    // /// Add a new address with the given alias. If the alias is already used,
+    // /// will ask whether the existing alias should be replaced, a different
+    // /// alias is desired, or the alias creation should be cancelled. Return
+    // /// the chosen alias if the address has been added, otherwise return
+    // /// nothing.
+    // pub fn insert_address(
+    //     &mut self,
+    //     alias: impl AsRef<str>,
+    //     address: Address,
+    //     force_alias: bool,
+    // ) -> Option<String> {
+    //     self.store
+    //         .insert_address::<U>(alias.into(), address, force_alias)
+    //         .map(Into::into)
+    // }
 
     /// Add a new keypair with the given alias. If the alias is already used,
     /// will ask whether the existing alias should be replaced, a different
@@ -1279,7 +1279,7 @@ impl<U: WalletIo> Wallet<U> {
     pub fn insert_keypair(
         &mut self,
         alias: String,
-        alias_force: bool,
+        force_alias: bool,
         sk: common::SecretKey,
         password: Option<Zeroizing<String>>,
         address: Option<Address>,
@@ -1498,5 +1498,24 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             Err(FindKeyError::KeyNotFound(alias.as_ref().to_string()))
         };
         Ok(res)
+    }
+
+    /// Add a new address with the given alias. If the alias is already used,
+    /// will ask whether the existing alias should be replaced, a different
+    /// alias is desired, or the alias creation should be cancelled. Return
+    /// the chosen alias if the address has been added, otherwise return
+    /// nothing.
+    pub fn insert_address_atomic(
+        &mut self,
+        alias: impl AsRef<str>,
+        address: Address,
+        force_alias: bool,
+    ) -> Result<Option<String>, LoadStoreError> {
+        let mut addr_alias: Option<Alias> = Option::default();
+        self.utils.update_store(|store| {
+            addr_alias =
+                store.insert_address::<U>(alias.into(), address, force_alias);
+        })?;
+        Ok(addr_alias.map(Into::into))
     }
 }
