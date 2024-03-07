@@ -1,5 +1,7 @@
 //! The key and values that may be persisted in a DB.
 
+use regex::Regex;
+
 /// A key-value pair as raw bytes
 pub type KVBytes = (Box<[u8]>, Box<[u8]>);
 
@@ -29,5 +31,33 @@ impl<I> PrefixIterator<I> {
 impl<I> std::fmt::Debug for PrefixIterator<I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("PrefixIterator")
+    }
+}
+
+/// Storage prefix iterator generic wrapper type.
+pub struct PatternIterator<I> {
+    /// The concrete iterator implementation
+    pub iter: I,
+    /// The pattern we are matching keys against.
+    pub pattern: Regex,
+}
+
+impl<I> PatternIterator<I> {
+    /// Initialize a new prefix iterator
+    pub fn new<E>(iter: I, pattern: Regex) -> Self
+        where
+            E: std::error::Error,
+            I: Iterator<Item = Result<KVBytes, E>>,
+    {
+         Self {
+            iter,
+            pattern,
+        }
+    }
+}
+
+impl<I> std::fmt::Debug for PatternIterator<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("PatternIterator")
     }
 }

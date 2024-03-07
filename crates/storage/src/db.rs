@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use regex::Regex;
 
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
@@ -266,6 +267,7 @@ pub trait DB: Debug {
 pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// WARNING: This only works for values that have been committed to DB.
     /// To be able to see values written or deleted, but not yet committed,
@@ -274,6 +276,14 @@ pub trait DBIter<'iter> {
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> Self::PrefixIter;
+
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Read account subspace key value pairs with the given pattern from the DB,
+    /// ordered by the storage keys.
+    fn iter_pattern(&'iter self, prefix: Option<&Key>, pattern: Regex) -> Self::PatternIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;

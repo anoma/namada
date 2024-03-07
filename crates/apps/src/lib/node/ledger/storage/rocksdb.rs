@@ -61,10 +61,11 @@ use namada::replay_protection;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
+    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, PatternIterator, StoreType, DB,
 };
 use namada::token::ConversionState;
 use rayon::prelude::*;
+use regex::Regex;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
@@ -1537,12 +1538,21 @@ impl DB for RocksDB {
 
 impl<'iter> DBIter<'iter> for RocksDB {
     type PrefixIter = PersistentPrefixIterator<'iter>;
+    type PatternIter = PersistentPatternIterator<'iter>;
 
     fn iter_prefix(
         &'iter self,
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
+    }
+
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> PersistentPatternIterator<'iter> {
+        iter_subspace_pattern(self, prefix, pattern)
     }
 
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
@@ -1598,6 +1608,18 @@ fn iter_subspace_prefix<'iter>(
     iter_prefix(db, subspace_cf, stripped_prefix, prefix)
 }
 
+fn iter_subspace_pattern<'iter>(
+    db: &'iter RocksDB,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'iter> {
+    let subspace_cf = db
+        .get_column_family(SUBSPACE_CF)
+        .expect("{SUBSPACE_CF} column family should exist");
+    let stripped_prefix = None;
+    iter_pattern(db, subspace_cf, stripped_prefix, prefix, pattern)
+}
+
 fn iter_diffs_prefix<'a>(
     db: &'a RocksDB,
     height: BlockHeight,
@@ -1650,6 +1672,24 @@ fn iter_prefix<'a>(
     PersistentPrefixIterator(PrefixIterator::new(iter, stripped_prefix))
 }
 
+/// Create an iterator over key-vals in the given CF matching the given
+/// pattern(s).
+fn iter_pattern<'a>(
+    db: &'a RocksDB,
+    cf: &'a ColumnFamily,
+    stripped_prefix: Option<&Key>,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'a> {
+    PersistentPatternIterator {
+        inner: PatternIterator {
+            iter: iter_prefix(db, cf, stripped_prefix, prefix),
+            pattern,
+        },
+        finished: false,
+    }
+}
+
 #[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
@@ -1679,6 +1719,31 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                     }
                 }
                 None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PersistentPatternIterator<'a> {
+    inner: PatternIterator<PersistentPrefixIterator<'a > >,
+    finished: bool,
+}
+
+impl<'a> Iterator for PersistentPatternIterator<'a> {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        if self.finished {
+            return None;
+        }
+        loop {
+            let next_result = self.inner.iter.next()?;
+            if self.inner.pattern.is_match(&next_result.0) {
+                return Some(next_result)
+            } else {
+                self.finished = true;
             }
         }
     }
