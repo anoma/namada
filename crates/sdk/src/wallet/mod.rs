@@ -588,16 +588,16 @@ impl<U> Wallet<U> {
     //         .collect()
     // }
 
-    /// XXX HERE
-    /// Get all known payment addresses by their alias
-    pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
-        self.store
-            .get_payment_addrs()
-            .iter()
-            .map(|(alias, value)| (alias.into(), *value))
-            .collect()
-    }
+    // /// Get all known payment addresses by their alias
+    // pub fn get_payment_addrs(&self) -> HashMap<String, PaymentAddress> {
+    //     self.store
+    //         .get_payment_addrs()
+    //         .iter()
+    //         .map(|(alias, value)| (alias.into(), *value))
+    //         .collect()
+    // }
 
+    /// XXX HERE
     /// Get all known viewing keys by their alias
     pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
         self.store
@@ -895,6 +895,19 @@ impl<U: WalletStorage> Wallet<U> {
             .get_addresses()
             .iter()
             .map(|(alias, value)| (alias.into(), value.clone()))
+            .collect())
+    }
+
+    /// Get all known payment addresses by their alias
+    pub fn get_payment_addrs_atomic(
+        &self,
+    ) -> Result<HashMap<String, PaymentAddress>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .get_payment_addrs()
+            .iter()
+            .map(|(alias, value)| (alias.into(), *value))
             .collect())
     }
 }

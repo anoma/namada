@@ -483,7 +483,8 @@ pub async fn query_pinned_balance(
         vec![pa]
     } else {
         wallet
-            .get_payment_addrs()
+            .get_payment_addrs_atomic()
+            .expect("Failed to read from the wallet storage.")
             .into_values()
             .filter(PaymentAddress::is_pinned)
             .collect()
