@@ -1369,3 +1369,51 @@ impl<U: WalletIo> Wallet<U> {
         self.store.remove_alias(&alias.into())
     }
 }
+
+impl<U: WalletIo + WalletStorage> Wallet<U> {
+    /// Find the stored key by a public key.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
+    pub fn find_key_by_pk_atomic(
+        &mut self,
+        pk: &common::PublicKey,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Result<common::SecretKey, FindKeyError>, LoadStoreError> {
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        let pkh: PublicKeyHash = pk.into();
+        self.find_key_by_pkh_atomic(&pkh, password)
+    }
+
+    /// Find the stored key by a public key hash.
+    /// If the key is encrypted and password is not supplied, then password will
+    /// be interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
+    pub fn find_key_by_pkh_atomic(
+        &mut self,
+        pkh: &PublicKeyHash,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Result<common::SecretKey, FindKeyError>, LoadStoreError> {
+        let store = self.utils.load_store_read_only()?;
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        let alias = store
+            .find_alias_by_pkh(pkh)
+            .unwrap_or_else(|| pkh.to_string().into());
+        // Try read cache
+        if let Some(cached_key) = self.decrypted_key_cache.get(&alias) {
+            return Ok(Ok(cached_key.clone()));
+        }
+        // Look-up from store
+        let res = if let Some(stored_key) = store.find_key_by_pkh(pkh) {
+            Self::decrypt_stored_key(
+                &mut self.decrypted_key_cache,
+                stored_key,
+                alias,
+                password,
+            )
+        } else {
+            Err(FindKeyError::KeyNotFound(pkh.to_string()))
+        };
+        Ok(res)
+    }
+}

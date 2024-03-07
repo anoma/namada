@@ -880,7 +880,9 @@ fn transparent_key_find(
 ) {
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
-        Some(pk) => wallet.find_key_by_pk(&pk, None),
+        Some(pk) => wallet
+            .find_key_by_pk_atomic(&pk, None)
+            .expect("Failed to read from the wallet storage."),
         None => {
             let alias = alias.map(|a| a.to_lowercase()).or(public_key_hash);
             match alias {

@@ -229,7 +229,8 @@ where
             let pkh = PublicKeyHash::from(&pk);
             wallet
                 // TODO: optionally encrypt validator keys
-                .find_key_by_pkh(&pkh, None)
+                .find_key_by_pkh_atomic(&pkh, None)
+                .expect("Failed to read from the wallet storage.")
                 .ok()
                 .or_else(|| {
                     wallet.take_validator_data_atomic().map(extract_key)

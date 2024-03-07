@@ -122,13 +122,14 @@ pub async fn find_pk(
 /// Load the secret key corresponding to the given public key from the wallet.
 /// If the keypair is encrypted but a password is not supplied, then it is
 /// interactively prompted. Errors if the key cannot be found or loaded.
-pub fn find_key_by_pk<U: WalletIo>(
+pub fn find_key_by_pk<U: WalletIo + WalletStorage>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     public_key: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
     wallet
-        .find_key_by_pk(public_key, args.password.clone())
+        .find_key_by_pk_atomic(public_key, args.password.clone())
+        .expect("Failed to read from the wallet storage.")
         .map_err(|err| {
             Error::Other(format!(
                 "Unable to load the keypair from the wallet for public key \
@@ -208,7 +209,7 @@ pub async fn sign_tx<'a, D, F, U>(
 ) -> Result<(), Error>
 where
     D: Clone + MaybeSend,
-    U: WalletIo,
+    U: WalletIo + WalletStorage,
     F: std::future::Future<Output = Result<Tx, Error>>,
 {
     let mut used_pubkeys = HashSet::new();

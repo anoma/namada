@@ -606,7 +606,8 @@ pub async fn submit_become_validator(
         tendermint_node::write_validator_key(
             &tendermint_home,
             &wallet
-                .find_key_by_pk(&consensus_key, None)
+                .find_key_by_pk_atomic(&consensus_key, None)
+                .expect("Failed to read from the wallet storage.")
                 .expect("unable to find consensus key pair in the wallet"),
         )
         .unwrap();
