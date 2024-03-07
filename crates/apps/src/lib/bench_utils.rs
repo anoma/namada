@@ -953,18 +953,24 @@ impl Default for BenchShieldedCtx {
         let mut chain_ctx = ctx.take_chain_or_exit();
 
         // Generate spending key for Albert and Bertha
-        chain_ctx.wallet.gen_store_spending_key(
-            ALBERT_SPENDING_KEY.to_string(),
-            None,
-            true,
-            &mut OsRng,
-        );
-        chain_ctx.wallet.gen_store_spending_key(
-            BERTHA_SPENDING_KEY.to_string(),
-            None,
-            true,
-            &mut OsRng,
-        );
+        chain_ctx
+            .wallet
+            .gen_store_spending_key_atomic(
+                ALBERT_SPENDING_KEY.to_string(),
+                None,
+                true,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.");
+        chain_ctx
+            .wallet
+            .gen_store_spending_key_atomic(
+                BERTHA_SPENDING_KEY.to_string(),
+                None,
+                true,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.");
         crate::wallet::save(&chain_ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha

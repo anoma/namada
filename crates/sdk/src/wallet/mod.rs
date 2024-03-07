@@ -903,19 +903,6 @@ impl<U: WalletIo> Wallet<U> {
         Some(derive_hd_spending_key(seed.as_bytes(), derivation_path))
     }
 
-    /// Generate a spending key similarly to how it's done for keypairs
-    pub fn gen_store_spending_key(
-        &mut self,
-        alias: String,
-        password: Option<Zeroizing<String>>,
-        force_alias: bool,
-        csprng: &mut (impl CryptoRng + RngCore),
-    ) -> Option<(String, ExtendedSpendingKey)> {
-        let spend_key = gen_spending_key(csprng);
-        self.insert_spending_key(alias, force_alias, spend_key, password, None)
-            .map(|alias| (alias, spend_key))
-    }
-
     // XXX REMOVE
     /// Generate a new keypair, derive an implicit address from its public key
     /// and insert them into the store with the provided alias, converted to
@@ -945,6 +932,7 @@ impl<U: WalletIo> Wallet<U> {
         .map(|alias| (alias, sk))
     }
 
+    // XXX OK
     /// Generate a BIP39 mnemonic code, and derive HD wallet seed from it using
     /// the given passphrase. If no passphrase is provided, optionally prompt
     /// for a passphrase.
@@ -1518,5 +1506,24 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             None,
         )
         .map(|o| o.map(|alias| (alias, sk)))
+    }
+
+    /// Generate a new spending key similarly to how it's done for keypairs
+    pub fn gen_store_spending_key_atomic(
+        &mut self,
+        alias: String,
+        password: Option<Zeroizing<String>>,
+        force_alias: bool,
+        csprng: &mut (impl CryptoRng + RngCore),
+    ) -> Result<Option<(String, ExtendedSpendingKey)>, LoadStoreError> {
+        let spend_key = gen_spending_key(csprng);
+        self.insert_spending_key_atomic(
+            alias,
+            force_alias,
+            spend_key,
+            password,
+            None,
+        )
+        .map(|o| o.map(|alias| (alias, spend_key)))
     }
 }

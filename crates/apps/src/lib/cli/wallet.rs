@@ -269,7 +269,14 @@ fn shielded_key_gen(
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = if raw {
-        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
+        wallet
+            .gen_store_spending_key_atomic(
+                alias,
+                password,
+                alias_force,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.")
     } else {
         let derivation_path = decode_shielded_derivation_path(derivation_path)
             .unwrap_or_else(|err| {
