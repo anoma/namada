@@ -479,7 +479,7 @@ async fn transparent_key_and_address_derive(
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_store_key_from_mnemonic_code(
+            .derive_store_secret_key_from_mnemonic_code(
                 scheme,
                 Some(alias),
                 alias_force,
@@ -488,6 +488,7 @@ async fn transparent_key_and_address_derive(
                 prompt_bip39_passphrase,
                 encryption_password,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 edisplay_line!(io, "Failed to derive a keypair.");
                 display_line!(io, "No changes are persisted. Exiting.");
