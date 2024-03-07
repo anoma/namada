@@ -334,7 +334,8 @@ fn payment_address_gen(
         .expect("a PaymentAddress");
     let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
     let alias = wallet
-        .insert_payment_addr(alias, payment_addr, alias_force)
+        .insert_payment_addr_atomic(alias, payment_addr, alias_force)
+        .expect("Failed to update the wallet storage.")
         .unwrap_or_else(|| {
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
@@ -390,7 +391,8 @@ fn shielded_key_address_add(
         }
         MaspValue::PaymentAddress(payment_addr) => {
             let alias = wallet
-                .insert_payment_addr(alias, payment_addr, alias_force)
+                .insert_payment_addr_atomic(alias, payment_addr, alias_force)
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Payment address not added");
                     cli::safe_exit(1);

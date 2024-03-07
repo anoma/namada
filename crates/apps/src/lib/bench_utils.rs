@@ -992,11 +992,12 @@ impl Default for BenchShieldedCtx {
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = chain_ctx
                 .wallet
-                .insert_payment_addr(
+                .insert_payment_addr_atomic(
                     alias,
                     PaymentAddress::from(payment_addr).pinned(false),
                     true,
                 )
+                .expect("Failed to update the wallet storage.")
                 .unwrap();
         }
 

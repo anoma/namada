@@ -1171,18 +1171,6 @@ impl<U: WalletIo> Wallet<U> {
             .map(Into::into)
     }
 
-    /// Insert a payment address into the wallet under the given alias
-    pub fn insert_payment_addr(
-        &mut self,
-        alias: String,
-        payment_addr: PaymentAddress,
-        force_alias: bool,
-    ) -> Option<String> {
-        self.store
-            .insert_payment_addr::<U>(alias.into(), payment_addr, force_alias)
-            .map(Into::into)
-    }
-
     /// Extend this wallet from another wallet (typically pre-genesis).
     /// Note that this method ignores `store.validator_data` if any.
     pub fn extend(&mut self, wallet: Self) {
@@ -1430,5 +1418,23 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
                 alias
             })
             .map(Into::into))
+    }
+
+    /// Insert a payment address into the wallet under the given alias
+    pub fn insert_payment_addr_atomic(
+        &mut self,
+        alias: String,
+        payment_addr: PaymentAddress,
+        force_alias: bool,
+    ) -> Result<Option<String>, LoadStoreError> {
+        let mut pay_addr_alias: Option<Alias> = Option::default();
+        self.utils.update_store(|store| {
+            pay_addr_alias = store.insert_payment_addr::<U>(
+                alias.into(),
+                payment_addr,
+                force_alias,
+            )
+        })?;
+        Ok(pay_addr_alias.map(Into::into))
     }
 }
