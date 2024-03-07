@@ -17,7 +17,7 @@ use namada::tx::{CompressedSignature, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
-use namada_sdk::wallet::{Wallet, WalletIo};
+use namada_sdk::wallet::{Wallet, WalletIo, WalletStorage};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
@@ -201,7 +201,8 @@ pub async fn submit_reveal_aux(
         let public_key = context
             .wallet_mut()
             .await
-            .find_public_key_by_pkh(pkh)
+            .find_public_key_by_pkh_atomic(pkh)
+            .expect("Failed to read from the wallet storage")
             .map_err(|e| error::Error::Other(e.to_string()))?;
 
         if tx::is_reveal_pk_needed(context.client(), address, args.force)

@@ -518,7 +518,10 @@ impl ArgFromContext for common::PublicKey {
             // Or it can be a public key hash in hex string
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
-                    ctx.wallet.find_public_key_by_pkh(&pkh).unwrap()
+                    ctx.wallet
+                        .find_public_key_by_pkh_atomic(&pkh)
+                        .expect("Failed to read from the wallet storage.")
+                        .unwrap()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {

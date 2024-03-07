@@ -102,7 +102,8 @@ pub async fn find_pk(
         Address::Implicit(ImplicitAddress(pkh)) => Ok(context
             .wallet_mut()
             .await
-            .find_public_key_by_pkh(pkh)
+            .find_public_key_by_pkh_atomic(pkh)
+            .expect("Failed to read from the wallet storage.")
             .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \

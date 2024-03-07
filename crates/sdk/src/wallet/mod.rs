@@ -792,6 +792,21 @@ impl<U: WalletStorage> Wallet<U> {
             .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string())))
     }
 
+    /// Find the public key by a public key hash.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted for. Any keys that are decrypted are stored in
+    /// and read from a cache to avoid prompting for password multiple times.
+    pub fn find_public_key_by_pkh_atomic(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Result<Result<common::PublicKey, FindKeyError>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_public_key_by_pkh(pkh)
+            .cloned()
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string())))
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {
@@ -1149,19 +1164,19 @@ impl<U: WalletIo> Wallet<U> {
     //         .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     // }
 
-    /// Find the public key by a public key hash.
-    /// If the key is encrypted and password not supplied, then password will be
-    /// interactively prompted for. Any keys that are decrypted are stored in
-    /// and read from a cache to avoid prompting for password multiple times.
-    pub fn find_public_key_by_pkh(
-        &self,
-        pkh: &PublicKeyHash,
-    ) -> Result<common::PublicKey, FindKeyError> {
-        self.store
-            .find_public_key_by_pkh(pkh)
-            .cloned()
-            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
-    }
+    // /// Find the public key by a public key hash.
+    // /// If the key is encrypted and password not supplied, then password will
+    // be /// interactively prompted for. Any keys that are decrypted are
+    // stored in /// and read from a cache to avoid prompting for password
+    // multiple times. pub fn find_public_key_by_pkh(
+    //     &self,
+    //     pkh: &PublicKeyHash,
+    // ) -> Result<common::PublicKey, FindKeyError> {
+    //     self.store
+    //         .find_public_key_by_pkh(pkh)
+    //         .cloned()
+    //         .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
+    // }
 
     /// Find the stored key by a public key hash.
     /// If the key is encrypted and password is not supplied, then password will
