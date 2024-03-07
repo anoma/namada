@@ -1023,7 +1023,10 @@ fn transparent_key_address_find_by_alias(
     // Find transparent keys
     if !addresses_only {
         // Check if alias is a public key
-        if let Ok(public_key) = wallet.find_public_key(&alias) {
+        if let Ok(public_key) = wallet
+            .find_public_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found transparent keys:").unwrap();
             let encrypted = match wallet

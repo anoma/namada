@@ -525,7 +525,10 @@ impl ArgFromContext for common::PublicKey {
                 })
                 // Or it can be an alias that may be found in the wallet
                 .or_else(|_parse_err| {
-                    ctx.wallet.find_public_key(raw).map_err(|x| x.to_string())
+                    ctx.wallet
+                        .find_public_key_atomic(raw)
+                        .expect("Failed to read from the wallet storage.")
+                        .map_err(|x| x.to_string())
                 })
         })
     }
