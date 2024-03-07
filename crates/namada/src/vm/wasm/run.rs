@@ -636,6 +636,7 @@ mod tests {
     use crate::vm::wasm;
 
     const TX_GAS_LIMIT: u64 = 10_000_000_000;
+    const OUT_OF_GAS_LIMIT: u64 = 10_000;
 
     /// Test that we sanitize accesses to invalid addresses in wasm memory.
     #[test]
@@ -1281,6 +1282,169 @@ mod tests {
         )
         .unwrap();
         assert!(!passed);
+    }
+
+    /// Test that when a function runs out of gas in guest, the execution is
+    /// aborted
+    #[test]
+    fn test_tx_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a function runs out of gas in host, the execution is
+    /// aborted from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_tx_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in guest, the execution is aborted
+    #[test]
+    fn test_vp_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
+            code_hash,
+            &outer_tx,
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in host, the execution is aborted
+    /// from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_vp_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
+            code_hash,
+            &outer_tx,
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
     }
 
     fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {

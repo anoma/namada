@@ -37,6 +37,35 @@ pub mod main {
     }
 }
 
+/// A tx that endlessly charges gas from the host environment
+#[cfg(feature = "tx_infinite_host_gas")]
+pub mod main {
+    use namada_tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+        let target_key = parameters_storage::get_tx_allowlist_storage_key();
+        loop {
+            // NOTE: don't propagate the error to verify that execution abortion is done in host and does not require guest cooperation
+            let _ = ctx.write(&target_key, vec!["hash"]);
+        }
+    }
+}
+
+/// A tx that endlessly charges gas from the guest environment
+#[cfg(feature = "tx_infinite_guest_gas")]
+pub mod main {
+    use namada_tx_prelude::*;
+
+    #[transaction]
+    fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+        let mut _a = 0u64;
+        loop {
+            _a += 1;
+        }
+    }
+}
+
 /// A tx to be used as proposal_code
 #[cfg(feature = "tx_proposal_code")]
 pub mod main {
@@ -262,5 +291,48 @@ pub mod main {
         log_string(format!("key {}", key));
         let _result: Vec<u8> = ctx.read_pre(&key)?.unwrap();
         accept()
+    }
+}
+
+/// A vp that endlessly charges gas from the host environment
+#[cfg(feature = "vp_infinite_host_gas")]
+pub mod main {
+    use namada_vp_prelude::*;
+
+    #[validity_predicate]
+    fn validate_tx(
+        ctx: &Ctx,
+        _tx_data: Tx,
+        _addr: Address,
+        _keys_changed: BTreeSet<storage::Key>,
+        _verifiers: BTreeSet<Address>,
+    ) -> VpResult {
+        let target_key =
+            namada_tx_prelude::parameters_storage::get_tx_allowlist_storage_key(
+            );
+        loop {
+            // NOTE: don't propagate the error to verify that execution abortion is done in host and does not require guest cooperation
+            let _ = ctx.read_bytes_pre(&target_key);
+        }
+    }
+}
+
+/// A vp that endlessly charges gas from the guest environment
+#[cfg(feature = "vp_infinite_guest_gas")]
+pub mod main {
+    use namada_vp_prelude::*;
+
+    #[validity_predicate]
+    fn validate_tx(
+        _ctx: &Ctx,
+        _tx_data: Tx,
+        _addr: Address,
+        _keys_changed: BTreeSet<storage::Key>,
+        _verifiers: BTreeSet<Address>,
+    ) -> VpResult {
+        let mut _a = 0u64;
+        loop {
+            _a += 1;
+        }
     }
 }

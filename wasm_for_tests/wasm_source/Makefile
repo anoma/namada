@@ -8,15 +8,19 @@ nightly := $(shell cat ../../rust-nightly-version)
 wasms := tx_memory_limit
 wasms += tx_no_op
 wasms += tx_fail
+wasms += tx_infinite_guest_gas
+wasms += tx_infinite_host_gas
+wasms += tx_proposal_code
+wasms += tx_proposal_masp_reward
 wasms += tx_read_storage_key
 wasms += tx_write
 wasms += vp_always_false
 wasms += vp_always_true
 wasms += vp_eval
+wasms += vp_infinite_guest_gas
+wasms += vp_infinite_host_gas
 wasms += vp_memory_limit
 wasms += vp_read_storage_key
-wasms += tx_proposal_code
-wasms += tx_proposal_masp_reward
 
 
 # Build all wasms
