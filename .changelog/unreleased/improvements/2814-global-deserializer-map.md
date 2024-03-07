@@ -1,2 +1,2 @@
  - This PR adds a proc macro that registers the deserializer of a type in a hashmap. This allows us to verify that 
-   data blob deserializes as correctly if where are in possession of the hash map key. ([\#2814](https://github.com/anoma/namada/pull/2814))
+   data blob deserializes correctly if we are in possession of the hash map key. ([\#2814](https://github.com/anoma/namada/pull/2814))
