@@ -1024,7 +1024,10 @@ fn transparent_key_address_find_by_alias(
         if let Ok(public_key) = wallet.find_public_key(&alias) {
             found = true;
             display_line!(io, &mut w_lock; "Found transparent keys:").unwrap();
-            let encrypted = match wallet.is_encrypted_secret_key(&alias) {
+            let encrypted = match wallet
+                .is_encrypted_secret_key_atomic(&alias)
+                .expect("Failed to read from the wallet storage.")
+            {
                 None => "external",
                 Some(res) if res => "encrypted",
                 _ => "not encrypted",
