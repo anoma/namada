@@ -188,9 +188,14 @@ fn validate_pos_changes(
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
     let is_valid_metadata_change = || {
-        let metadata = is_validator_metadata_key(key);
-        match metadata {
-            Some(address) => address == owner && **valid_sig,
+        let validator = is_validator_metadata_key(key);
+        let metadata = ctx
+            .post()
+            .read::<String>(key)?
+            .expect("Metadata should exist in post state");
+        let valid_len = metadata.len() <= 500; // FIXME: hard-code for now
+        match validator {
+            Some(address) => valid_len && address == owner && **valid_sig,
             None => false,
         }
     };
