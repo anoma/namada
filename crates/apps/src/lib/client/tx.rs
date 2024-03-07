@@ -62,7 +62,7 @@ pub async fn aux_signing_data(
     Ok(signing_data)
 }
 
-pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
+pub async fn with_hardware_wallet<'a, U: WalletIo + WalletStorage + Clone>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
@@ -72,7 +72,8 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
     let path = wallet
         .read()
         .await
-        .find_path_by_pkh(&(&pubkey).into())
+        .find_path_by_pkh_atomic(&(&pubkey).into())
+        .expect("Failed to read from the wallet storage.")
         .map_err(|_| {
             error::Error::Other(
                 "Unable to find derivation path for key".to_string(),

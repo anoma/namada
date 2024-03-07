@@ -779,6 +779,19 @@ impl<U: WalletStorage> Wallet<U> {
             .find_spending_key(alias)
             .map(|stored_spend_key| stored_spend_key.is_encrypted()))
     }
+
+    /// Find a derivation path by public key hash
+    pub fn find_path_by_pkh_atomic(
+        &self,
+        pkh: &PublicKeyHash,
+    ) -> Result<Result<DerivationPath, FindKeyError>, LoadStoreError> {
+        Ok(self
+            .utils
+            .load_store_read_only()?
+            .find_path_by_pkh(pkh)
+            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string())))
+    }
+
 }
 
 impl<U: WalletIo> Wallet<U> {
@@ -1126,15 +1139,15 @@ impl<U: WalletIo> Wallet<U> {
         self.find_key_by_pkh(&pkh, password)
     }
 
-    /// Find a derivation path by public key hash
-    pub fn find_path_by_pkh(
-        &self,
-        pkh: &PublicKeyHash,
-    ) -> Result<DerivationPath, FindKeyError> {
-        self.store
-            .find_path_by_pkh(pkh)
-            .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
-    }
+    // /// Find a derivation path by public key hash
+    // pub fn find_path_by_pkh(
+    //     &self,
+    //     pkh: &PublicKeyHash,
+    // ) -> Result<DerivationPath, FindKeyError> {
+    //     self.store
+    //         .find_path_by_pkh(pkh)
+    //         .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
+    // }
 
     /// Find the public key by a public key hash.
     /// If the key is encrypted and password not supplied, then password will be
