@@ -4712,12 +4712,12 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<UpdateStewardCommission<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let _commission = std::fs::read(self.commission)?;
+            let commission = std::fs::read(self.commission)?;
 
             Ok(UpdateStewardCommission::<SdkTypes> {
                 tx,
                 steward: ctx.borrow_chain_or_exit().get(&self.steward),
-                commission: _commission,
+                commission,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4856,11 +4856,11 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<InitProposal<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let _proposal_data = std::fs::read(self.proposal_data)?;
+            let proposal_data = std::fs::read(self.proposal_data)?;
 
             Ok(InitProposal::<SdkTypes> {
                 tx,
-                proposal_data: _proposal_data,
+                proposal_data,
                 is_offline: self.is_offline,
                 is_pgf_stewards: self.is_pgf_stewards,
                 is_pgf_funding: self.is_pgf_funding,
@@ -4950,9 +4950,10 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<VoteProposal<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
-            let _proposal_data = self.proposal_data.map(|path| {
-                std::fs::read(path).expect("Should be able to read the file.")
-            });
+            let proposal_data = self
+                .proposal_data
+                .map(std::fs::read)
+                .transpose()?;
 
             Ok(VoteProposal::<SdkTypes> {
                 tx,
@@ -4960,7 +4961,7 @@ pub mod args {
                 vote: self.vote,
                 voter: ctx.borrow_chain_or_exit().get(&self.voter),
                 is_offline: self.is_offline,
-                proposal_data: _proposal_data,
+                proposal_data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -6401,9 +6402,8 @@ pub mod args {
                                     ),
                                 )
                             })
-                            .unwrap()
                     })
-                    .collect(),
+                    .collect::<Result<Vec<_>, _>>()?,
                 disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
