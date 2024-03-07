@@ -315,8 +315,10 @@ impl AbciService {
                 .map(|res| {
                     // emit a log line stating that we are sleeping until
                     // genesis.
+                    #[allow(clippy::disallowed_methods)]
+                    let now = Utc::now();
                     if let Some(Ok(sleep_time)) = genesis_time
-                        .map(|t| t.0.signed_duration_since(Utc::now()).to_std())
+                        .map(|t| t.0.signed_duration_since(now).to_std())
                     {
                         if !sleep_time.is_zero() {
                             tracing::info!(

@@ -527,6 +527,7 @@ where
             if self.in_mem.header.is_none() {
                 self.in_mem.header = Some(storage::Header {
                     hash: Hash::default(),
+                    #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash::default(),
                 });
@@ -981,10 +982,11 @@ where
     pub fn get_last_block_timestamp(&self) -> Result<DateTimeUtc> {
         let last_block_height = self.in_mem.get_block_height().0;
 
-        Ok(self
-            .db
-            .read_block_header(last_block_height)?
-            .map_or_else(DateTimeUtc::now, |header| header.time))
+        Ok(self.db.read_block_header(last_block_height)?.map_or_else(
+            #[allow(clippy::disallowed_methods)]
+            DateTimeUtc::now,
+            |header| header.time,
+        ))
     }
 }
 

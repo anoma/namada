@@ -379,6 +379,7 @@ pub fn wait_for_block_height(
     height: u64,
     timeout_secs: u64,
 ) -> Result<()> {
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(timeout_secs, 0);
     loop {
@@ -386,6 +387,7 @@ pub fn wait_for_block_height(
         if current >= height {
             break Ok(());
         }
+        #[allow(clippy::disallowed_methods)]
         if Instant::now().duration_since(start) > loop_timeout {
             return Err(eyre!(
                 "Timed out waiting for height {height}, current {current}"
@@ -425,6 +427,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
             build_cmd.release()
         };
 
+        #[allow(clippy::disallowed_methods)]
         let now = time::Instant::now();
         // ideally we would print the compile command here, but escargot doesn't
         // implement Display or Debug for CargoBuild

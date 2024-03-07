@@ -2003,6 +2003,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     crate::rpc::query_block(context.client())
                         .await?
                         .map_or_else(|| 1, |block| u64::from(block.height));
+                #[allow(clippy::disallowed_methods)]
                 let current_time = DateTimeUtc::now();
                 let delta_time =
                     expiration.0.signed_duration_since(current_time.0);

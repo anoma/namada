@@ -148,7 +148,10 @@ impl Display for DateTimeUtc {
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
-        Self(Utc::now())
+        Self(
+            #[allow(clippy::disallowed_methods)]
+            Utc::now(),
+        )
     }
 
     /// Returns a [`DateTimeUtc`] corresponding to the provided Unix timestamp.

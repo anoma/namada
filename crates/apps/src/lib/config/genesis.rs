@@ -340,6 +340,7 @@ pub fn make_dev_genesis(
     let mut genesis = finalize(
         templates,
         ChainIdPrefix::from_str("test").unwrap(),
+        #[allow(clippy::disallowed_methods)]
         DateTimeUtc::now(),
         Duration::from_secs(30).into(),
     );
