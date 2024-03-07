@@ -1081,36 +1081,36 @@ impl<U: WalletIo> Wallet<U> {
         disposable_keypair
     }
 
-    /// Find the stored key by an alias, a public key hash or a public key.
-    /// If the key is encrypted and password not supplied, then password will be
-    /// interactively prompted. Any keys that are decrypted are stored in and
-    /// read from a cache to avoid prompting for password multiple times.
-    pub fn find_secret_key(
-        &mut self,
-        alias_pkh_or_pk: impl AsRef<str>,
-        password: Option<Zeroizing<String>>,
-    ) -> Result<common::SecretKey, FindKeyError> {
-        // Try cache first
-        if let Some(cached_key) = self
-            .decrypted_key_cache
-            .get(&Alias::from(alias_pkh_or_pk.as_ref()))
-        {
-            return Ok(cached_key.clone());
-        }
-        // If not cached, look-up in store
-        let stored_key = self
-            .store
-            .find_secret_key(alias_pkh_or_pk.as_ref())
-            .ok_or_else(|| {
-            FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
-        })?;
-        Self::decrypt_stored_key::<_>(
-            &mut self.decrypted_key_cache,
-            stored_key,
-            alias_pkh_or_pk.into(),
-            password,
-        )
-    }
+    // /// Find the stored key by an alias, a public key hash or a public key.
+    // /// If the key is encrypted and password not supplied, then password will
+    // be /// interactively prompted. Any keys that are decrypted are stored
+    // in and /// read from a cache to avoid prompting for password multiple
+    // times. pub fn find_secret_key(
+    //     &mut self,
+    //     alias_pkh_or_pk: impl AsRef<str>,
+    //     password: Option<Zeroizing<String>>,
+    // ) -> Result<common::SecretKey, FindKeyError> {
+    //     // Try cache first
+    //     if let Some(cached_key) = self
+    //         .decrypted_key_cache
+    //         .get(&alias_pkh_or_pk.as_ref().into())
+    //     {
+    //         return Ok(cached_key.clone());
+    //     }
+    //     // If not cached, look-up in store
+    //     let stored_key = self
+    //         .store
+    //         .find_secret_key(alias_pkh_or_pk.as_ref())
+    //         .ok_or_else(|| {
+    //         FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
+    //     })?;
+    //     Self::decrypt_stored_key::<_>(
+    //         &mut self.decrypted_key_cache,
+    //         stored_key,
+    //         alias_pkh_or_pk.into(),
+    //         password,
+    //     )
+    // }
 
     // /// Find the public key by an alias or a public key hash.
     // pub fn find_public_key(
@@ -1428,6 +1428,42 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             )
         } else {
             Err(FindKeyError::KeyNotFound(pkh.to_string()))
+        };
+        Ok(res)
+    }
+
+    /// Find the stored key by an alias, a public key hash or a public key.
+    /// If the key is encrypted and password not supplied, then password will be
+    /// interactively prompted. Any keys that are decrypted are stored in and
+    /// read from a cache to avoid prompting for password multiple times.
+    pub fn find_secret_key_atomic(
+        &mut self,
+        alias_pkh_or_pk: impl AsRef<str>,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Result<common::SecretKey, FindKeyError>, LoadStoreError> {
+        // Try cache first
+        if let Some(cached_key) = self
+            .decrypted_key_cache
+            .get(&Alias::from(alias_pkh_or_pk.as_ref()))
+        {
+            return Ok(Ok(cached_key.clone()));
+        }
+        // If not cached, look-up in store
+        let res = if let Some(stored_key) = self
+            .utils
+            .load_store_read_only()?
+            .find_secret_key(alias_pkh_or_pk.as_ref())
+        {
+            Self::decrypt_stored_key::<_>(
+                &mut self.decrypted_key_cache,
+                stored_key,
+                alias_pkh_or_pk.into(),
+                password,
+            )
+        } else {
+            Err(FindKeyError::KeyNotFound(
+                alias_pkh_or_pk.as_ref().to_string(),
+            ))
         };
         Ok(res)
     }

@@ -894,7 +894,9 @@ fn transparent_key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_secret_key(alias, None),
+                Some(alias) => wallet
+                    .find_secret_key_atomic(alias, None)
+                    .expect("Failed to read from the wallet storage."),
             }
         }
     };
@@ -1056,7 +1058,10 @@ fn transparent_key_address_find_by_alias(
             if decrypt {
                 // Check if alias is also a secret key. Decrypt and print it if
                 // requested.
-                match wallet.find_secret_key(&alias, None) {
+                match wallet
+                    .find_secret_key_atomic(&alias, None)
+                    .expect("Failed to read from the wallet storage.")
+                {
                     Ok(keypair) => {
                         if unsafe_show_secret {
                             display_line!(io, &mut w_lock; "    Secret key: {}", keypair) .unwrap();
@@ -1272,7 +1277,8 @@ fn key_export(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let key_to_export = wallet
-        .find_secret_key(&alias, None)
+        .find_secret_key_atomic(&alias, None)
+        .expect("Failed to read from the wallet storage.")
         .map(|sk| Box::new(sk) as Box<dyn BorshSerializeExt>)
         .or(wallet
             .find_spending_key(&alias, None)
@@ -1299,7 +1305,9 @@ fn key_convert(
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    let sk = wallet.find_secret_key(&alias, None);
+    let sk = wallet
+        .find_secret_key_atomic(&alias, None)
+        .expect("Failed to read from the wallet storage.");
     let key: serde_json::Value = validator_key_to_json(&sk.unwrap()).unwrap();
     let file_name = format!("priv_validator_key_{}.json", alias);
     let file = File::create(&file_name).unwrap();

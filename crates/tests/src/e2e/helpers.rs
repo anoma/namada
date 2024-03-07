@@ -196,7 +196,8 @@ pub fn get_validator_pk(test: &Test, who: Who) -> Option<common::PublicKey> {
     };
     let mut wallet = get_node_wallet(test, who);
     let sk = wallet
-        .find_secret_key(format!("validator-{index}-balance-key"), None)
+        .find_secret_key_atomic(format!("validator-{index}-balance-key"), None)
+        .expect("Failed to read from the wallet storage.")
         .ok()?;
     Some(sk.ref_to())
 }
@@ -220,8 +221,11 @@ pub fn get_pregenesis_pk<P: AsRef<Path>>(
     base_dir_path: P,
 ) -> Option<common::PublicKey> {
     let mut wallet = get_pregenesis_wallet(base_dir_path);
-    let sk = wallet.find_secret_key(alias, None).ok()?;
-    Some(sk.ref_to())
+    let sk = wallet
+        .find_secret_key_atomic(alias, None)
+        .expect("Failed to read from the wallet storage.")
+        .ok()?;
+    Some(sk.to_public())
 }
 
 /// Get a pregenesis public key.

@@ -501,7 +501,8 @@ impl ArgFromMutContext for common::SecretKey {
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it can be an alias
             ctx.wallet
-                .find_secret_key(raw, None)
+                .find_secret_key_atomic(raw, None)
+                .expect("Failed to read from the wallet storage.")
                 .map_err(|_find_err| format!("Unknown key {}", raw))
         })
     }

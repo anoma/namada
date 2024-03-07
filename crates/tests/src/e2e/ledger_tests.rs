@@ -2035,7 +2035,10 @@ fn change_consensus_key() -> Result<()> {
 
     // Get the new consensus SK
     let new_key_alias = "validator-0-consensus-key-1";
-    let new_sk = wallet.find_secret_key(new_key_alias, None).unwrap();
+    let new_sk = wallet
+        .find_secret_key_atomic(new_key_alias, None)
+        .expect("Failed to read from the wallet storage.")
+        .unwrap();
     // Write the key to CometBFT dir
     let cometbft_dir = test.get_cometbft_home(Who::Validator(0));
     namada_apps::node::ledger::tendermint_node::write_validator_key(
