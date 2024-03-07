@@ -5,7 +5,7 @@
 
 use namada_tx_prelude::*;
 
-#[transaction(gas = 585022)]
+#[transaction]
 fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     // let signed = tx_data;
     // let data = signed.data().ok_or_err_msg("Missing data").or_else(|err| {
