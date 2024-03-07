@@ -867,7 +867,9 @@ fn key_address_remove(
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    wallet.remove_all_by_alias(alias.clone());
+    wallet
+        .remove_all_by_alias_atomic(alias.clone())
+        .expect("Failed to update the wallet storage.");
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));

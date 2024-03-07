@@ -836,6 +836,15 @@ impl<U: WalletStorage> Wallet<U> {
         let other_store = wallet.utils.load_store_read_only()?;
         self.utils.update_store(|store| store.extend(other_store))
     }
+
+    /// Remove keys and addresses associated with the given alias
+    pub fn remove_all_by_alias_atomic(
+        &mut self,
+        alias: String,
+    ) -> Result<(), LoadStoreError> {
+        self.utils
+            .update_store(|store| store.remove_alias(&alias.into()))
+    }
 }
 
 impl<U: WalletIo> Wallet<U> {
@@ -1184,11 +1193,6 @@ impl<U: WalletIo> Wallet<U> {
                 alias
             })
             .map(Into::into)
-    }
-
-    /// Remove keys and addresses associated with the given alias
-    pub fn remove_all_by_alias(&mut self, alias: String) {
-        self.store.remove_alias(&alias.into())
     }
 }
 
