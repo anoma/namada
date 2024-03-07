@@ -374,13 +374,14 @@ fn shielded_key_address_add(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = wallet
-                .insert_spending_key(
+                .insert_spending_key_atomic(
                     alias,
                     alias_force,
                     spending_key,
                     password,
                     None,
                 )
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Spending key not added");
                     cli::safe_exit(1);

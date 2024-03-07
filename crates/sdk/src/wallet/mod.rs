@@ -1144,6 +1144,7 @@ impl<U: WalletIo> Wallet<U> {
             })
     }
 
+    // XXX REMOVE
     /// Insert a spending key into the wallet under the given alias
     pub fn insert_spending_key(
         &mut self,
@@ -1400,5 +1401,34 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             )
         })?;
         Ok(vk_alias.map(Into::into))
+    }
+
+    /// Insert a spending key into the wallet under the given alias
+    pub fn insert_spending_key_atomic(
+        &mut self,
+        alias: String,
+        force_alias: bool,
+        spend_key: ExtendedSpendingKey,
+        password: Option<Zeroizing<String>>,
+        path: Option<DerivationPath>,
+    ) -> Result<Option<String>, LoadStoreError> {
+        let mut spend_key_alias: Option<Alias> = Option::default();
+        self.utils.update_store(|store| {
+            spend_key_alias = store.insert_spending_key::<U>(
+                alias.into(),
+                spend_key,
+                password,
+                path,
+                force_alias,
+            )
+        })?;
+        Ok(spend_key_alias
+            .map(|alias| {
+                // Cache the newly added key
+                self.decrypted_spendkey_cache
+                    .insert(alias.clone(), spend_key);
+                alias
+            })
+            .map(Into::into))
     }
 }
