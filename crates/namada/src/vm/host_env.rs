@@ -1991,9 +1991,8 @@ where
             namada_tx::VerifySigError::Gas(inner) => {
                 Err(vp_host_fns::RuntimeError::OutOfGas(inner))
             }
-            namada_tx::VerifySigError::InvalidSectionSignature(_) => {
-                sentinel.borrow_mut().set_invalid_signature();
-                Ok(HostEnvResult::Fail.to_i64())
+            namada_tx::VerifySigError::InvalidSectionSignature(inner) => {
+                Err(vp_host_fns::RuntimeError::InvalidSectionSignature(inner))
             }
             _ => Ok(HostEnvResult::Fail.to_i64()),
         },
@@ -2494,7 +2493,6 @@ pub mod testing {
             state.in_mem(),
             state.db(),
             gas_meter,
-            sentinel,
             tx,
             tx_index,
             iterators,

@@ -10,7 +10,6 @@ use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
     TX_INDEX_LENGTH,
 };
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
@@ -47,6 +46,8 @@ pub enum RuntimeError {
     NoValueInResultBuffer,
     #[error("Invalid transaction signature")]
     InvalidTxSignature,
+    #[error("The section signature is invalid: {0}")]
+    InvalidSectionSignature(String),
 }
 
 /// VP environment function result
