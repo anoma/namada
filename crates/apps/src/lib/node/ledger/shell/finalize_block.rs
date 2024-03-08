@@ -82,7 +82,8 @@ where
             self.state.in_mem().update_epoch_blocks_delay
         );
 
-        // Finalize the transactions' hashes from the previous block
+        // Finalize the transactions' hashes from the previous block. Also cache
+        // "last" hashes from the previous block in case of a rollback
         let (write_log, _in_mem, db) = self.state.split_borrow();
         for (raw_key, _, _) in db.iter_replay_protection() {
             let hash = raw_key.parse().expect("Failed hash conversion");

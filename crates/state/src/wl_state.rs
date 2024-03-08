@@ -215,7 +215,10 @@ where
         }
         debug_assert!(self.0.write_log.block_write_log.is_empty());
 
-        // Replay protections specifically
+        // Replay protections specifically. Starts with pruning the buffer from
+        // the previous block
+        self.prune_replay_protection_buffer(batch)?;
+
         for (hash, entry) in
             std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
         {
@@ -227,17 +230,29 @@ where
                         // further
                         &replay_protection::last_key(&hash),
                     )?,
-                ReProtStorageModification::Delete => self
-                    .delete_replay_protection_entry(
+                ReProtStorageModification::Delete => {
+                    // Cache in case of a rollback
+                    self.write_replay_protection_entry(
+                        batch,
+                        &replay_protection::buffer_key(&hash),
+                    )?;
+
+                    self.delete_replay_protection_entry(
                         batch,
                         // Can only delete tx hashes from the previous block,
                         // no further
                         &replay_protection::last_key(&hash),
-                    )?,
+                    )?
+                }
                 ReProtStorageModification::Finalize => {
                     self.write_replay_protection_entry(
                         batch,
                         &replay_protection::all_key(&hash),
+                    )?;
+                    // Cache in case of a rollback
+                    self.write_replay_protection_entry(
+                        batch,
+                        &replay_protection::buffer_key(&hash),
                     )?;
                     self.delete_replay_protection_entry(
                         batch,
@@ -389,6 +404,14 @@ where
     ) -> Result<()> {
         self.db.delete_replay_protection_entry(batch, key)?;
         Ok(())
+    }
+
+    /// Delete the replay protection buffer
+    pub fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
+        Ok(self.db.prune_replay_protection_buffer(batch)?)
     }
 
     /// Iterate the replay protection storage from the last block
