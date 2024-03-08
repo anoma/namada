@@ -35,6 +35,9 @@
 //! - `replay_protection`: hashes of processed tx
 //!     - `all`: the hashes included up to the last block
 //!     - `last`: the hashes included in the last block
+//! - `gas`: gas consumed by each tx
+//!     - `{tx_id}/all`: the gas consumed included up to the last block
+//!     - `{tx_id}/last`: the gas included in the last block
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -76,12 +79,16 @@ use crate::config::utils::num_of_threads;
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
 
+const ENV_VAR_ROCKSDB_COMPRESSION_THREADS: &str =
+    "NAMADA_ROCKSDB_COMPRESSION_THREADS";
+
 /// Column family names
 const SUBSPACE_CF: &str = "subspace";
 const DIFFS_CF: &str = "diffs";
 const STATE_CF: &str = "state";
 const BLOCK_CF: &str = "block";
 const REPLAY_PROTECTION_CF: &str = "replay_protection";
+const GAS_CF: &str = "gas";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -105,6 +112,11 @@ pub fn open(
         // If not set, default to quarter of logical CPUs count
         logical_cores / 4,
     ) as i32;
+    let compression_threads = num_of_threads(
+        ENV_VAR_ROCKSDB_COMPRESSION_THREADS,
+        // If not set, default to quarter of logical CPUs count
+        logical_cores / 8,
+    ) as i32;
     tracing::info!(
         "Using {} compactions threads for RocksDB.",
         compaction_threads
@@ -112,6 +124,11 @@ pub fn open(
 
     // DB options
     let mut db_opts = Options::default();
+    db_opts.set_wal_compression_type(DBCompressionType::Zstd);
+    db_opts.set_compression_options_parallel_threads(compression_threads);
+    // TODO: set some parameters that makes sense
+    // db_opts.add_compact_on_deletion_collector_factory(window_size,
+    // num_dels_trigger, deletion_ratio)
 
     // This gives `compaction_threads` number to compaction threads and 1 thread
     // for flush background jobs: https://github.com/facebook/rocksdb/blob/17ce1ca48be53ba29138f92dafc9c853d9241377/options/options.cc#L622
@@ -184,6 +201,13 @@ pub fn open(
         REPLAY_PROTECTION_CF,
         replay_protection_cf_opts,
     ));
+
+    // for gas (insert/update-intensive)
+    let mut gas_cf_opts = Options::default();
+    gas_cf_opts.set_level_compaction_dynamic_level_bytes(true);
+    gas_cf_opts.set_compaction_style(DBCompactionStyle::Level);
+    gas_cf_opts.set_block_based_table_factory(&table_opts);
+    cfs.push(ColumnFamilyDescriptor::new(GAS_CF, gas_cf_opts));
 
     rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
         .map(RocksDB)
