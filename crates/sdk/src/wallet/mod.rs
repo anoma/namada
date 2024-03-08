@@ -108,14 +108,6 @@ pub trait WalletStorage: Sized + Clone {
     /// Load a wallet from the store file.
     fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError>;
 
-    // XXX REMOVE
-    /// Atomically update the wallet store
-    fn update<U>(
-        &self,
-        wallet: &mut Wallet<U>,
-        transform: impl FnOnce(&mut Wallet<U>),
-    ) -> Result<(), LoadStoreError>;
-
     /// Atomically update the wallet store
     fn update_store(
         &self,
@@ -233,53 +225,6 @@ pub mod fs {
             Store::decode(store).map_err(LoadStoreError::Decode)
         }
 
-        fn update<U>(
-            &self,
-            wallet: &mut Wallet<U>,
-            transform: impl FnOnce(&mut Wallet<U>),
-        ) -> Result<(), LoadStoreError> {
-            let wallet_file = self.store_dir().join(FILE_NAME);
-            let mut options = fs::OpenOptions::new();
-            options.create(true).write(true).truncate(true);
-            let mut lock =
-                RwLock::new(options.open(&wallet_file).map_err(|err| {
-                    LoadStoreError::UpdateWallet(
-                        self.store_dir().to_str().unwrap().parse().unwrap(),
-                        err.to_string(),
-                    )
-                })?);
-            let mut guard = lock.write().map_err(|err| {
-                LoadStoreError::UpdateWallet(
-                    self.store_dir().to_str().unwrap().parse().unwrap(),
-                    err.to_string(),
-                )
-            })?;
-            let mut store = Vec::<u8>::new();
-            (&*guard).read_to_end(&mut store).map_err(|err| {
-                LoadStoreError::UpdateWallet(
-                    self.store_dir().to_str().unwrap().parse().unwrap(),
-                    err.to_string(),
-                )
-            })?;
-            wallet.store =
-                Store::decode(store).map_err(LoadStoreError::Decode)?;
-
-            // Apply wallet transformation
-            transform(wallet);
-
-            let data = wallet.store.encode();
-            // XXX
-            // Make sure the dir exists
-            // let wallet_dir = wallet_path.parent().unwrap();
-            // fs::create_dir_all(wallet_dir).map_err(|err| {
-            //     LoadStoreError::StoreNewWallet(err.to_string())
-            // })?;
-            // Write the file
-            guard
-                .write_all(&data)
-                .map_err(|err| LoadStoreError::StoreNewWallet(err.to_string()))
-        }
-
         fn update_store(
             &self,
             update: impl FnOnce(&mut Store),
@@ -288,7 +233,7 @@ pub mod fs {
             let mut options = fs::OpenOptions::new();
             options.create(true).write(true).truncate(true);
             let mut lock =
-                RwLock::new(options.open(&wallet_file).map_err(|err| {
+                RwLock::new(options.open(wallet_file).map_err(|err| {
                     LoadStoreError::UpdateWallet(
                         self.store_dir().to_str().unwrap().parse().unwrap(),
                         err.to_string(),
@@ -417,7 +362,6 @@ impl<U> Wallet<U> {
     pub fn new(utils: U, store: Store) -> Self {
         Self {
             utils,
-            // store: Store::default(),
             store,
             decrypted_key_cache: HashMap::default(),
             decrypted_spendkey_cache: HashMap::default(),
