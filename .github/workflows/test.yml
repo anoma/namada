@@ -42,7 +42,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: test
         run: |
-          BRANCH_NAME=$(git symbolic-ref --short HEAD)
+          BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+          echo "Branch name is: ${BRANCH_NAME}"
           HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e || true)
           HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
           if [ "$HERMES_VERSION" = "null" ]; then
