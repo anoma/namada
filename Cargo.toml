@@ -15,11 +15,11 @@ members = [
   "crates/macros",
   "crates/macros",
   "crates/merkle_tree",
+  "crates/namada",
   "crates/parameters",
   "crates/proof_of_stake",
   "crates/replay_protection",
   "crates/sdk",
-  "crates/namada",
   "crates/shielded_token",
   "crates/state",
   "crates/storage",
@@ -27,9 +27,9 @@ members = [
   "crates/tests",
   "crates/token",
   "crates/trans_token",
+  "crates/tx",
   "crates/tx_env",
   "crates/tx_prelude",
-  "crates/tx",
   "crates/vm_env",
   "crates/vote_ext",
   "crates/vp_env",
@@ -39,9 +39,9 @@ members = [
 
 # wasm packages have to be built separately
 exclude = [
+  "test_fixtures",
   "wasm",
   "wasm_for_tests",
-  "test_fixtures",
 ]
 
 [workspace.package]
@@ -56,29 +56,29 @@ repository = "https://github.com/anoma/namada"
 version = "0.31.9"
 
 [workspace.dependencies]
-ark-bls12-381 = {version = "0.3"}
-ark-serialize = {version = "0.3"}
+ark-bls12-381 = { version = "0.3" }
+ark-serialize = { version = "0.3" }
 ark-std = "0.3.0"
 # branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "515687fe7884cb365067ac86c66ac3613de176bb", default-features = false, features = ["std", "borsh"]}
+arse-merkle-tree = { package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "515687fe7884cb365067ac86c66ac3613de176bb", default-features = false, features = ["std", "borsh"] }
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
-async-trait = {version = "0.1.51"}
+async-trait = { version = "0.1.51" }
 base58 = "0.2.0"
 base64 = "0.13.0"
 bech32 = "0.8.0"
-bimap = {version = "0.6.2", features = ["serde"]}
+bimap = { version = "0.6.2", features = ["serde"] }
 bit-set = "0.5.2"
 blake2b-rs = "0.2.0"
 bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
-borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
+borsh = { version = "1.2.0", features = ["unstable__schema", "derive"] }
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
-chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
+chrono = { version = "0.4.22", default-features = false, features = ["clock", "std"] }
 circular-queue = "0.2.6"
 clap = "4.3.4"
-clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
+clru = { git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566" }
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
 config = "0.11.0"
@@ -90,9 +90,9 @@ drain_filter_polyfill = "0.1.3"
 ed25519-consensus = "1.2.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
+ethbridge-bridge-contract = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
+ethbridge-bridge-events = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
+ethbridge-events = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
 ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
 ethers = "2.0.0"
 expectrl = "0.7.0"
@@ -102,14 +102,14 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = {version = "0.48.1", default-features = false, features = ["serde"]}
+ibc = { version = "0.48.1", default-features = false, features = ["serde"] }
 ibc-derive = "0.4.0"
-ibc-testkit = {version = "0.48.1", default-features = false}
+ibc-testkit = { version = "0.48.1", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 itertools = "0.10.0"
 jubjub = "0.10"
-k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
+k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"] }
 lazy_static = "1.4.0"
 ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.12" }
 ledger-transport-hid = "0.10.0"
@@ -132,8 +132,8 @@ proptest = "1.4.0"
 proptest-state-machine = "0.1.0"
 prost = "0.12.0"
 prost-types = "0.12.0"
-rand = {version = "0.8", default-features = false}
-rand_core = {version = "0.6", default-features = false}
+rand = { version = "0.8", default-features = false }
+rand_core = { version = "0.6", default-features = false }
 rayon = "=1.5.3"
 regex = "1.4.5"
 reqwest = "0.11.4"
@@ -141,29 +141,29 @@ ripemd = "0.1"
 rlimit = "0.5.4"
 # rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
 # TEMP branch "tomas/no-jemalloc-win", replace once upstreamed
-rocksdb = {git = "https://github.com/heliaxdev/rust-rocksdb", rev = "4dc7f4fdfa17e923d3078d51261e3db66707754d", features = ['zstd'], default-features = false}
+rocksdb = { git = "https://github.com/heliaxdev/rust-rocksdb", rev = "4dc7f4fdfa17e923d3078d51261e3db66707754d", features = ['zstd'], default-features = false }
 rpassword = "5.0.1"
-serde = {version = "1.0.125", features = ["derive"]}
+serde = { version = "1.0.125", features = ["derive"] }
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
 sha2 = "0.9.3"
 signal-hook = "0.3.9"
 slip10_ed25519 = "0.1.3"
 # sysinfo with disabled multithread feature
-sysinfo = {version = "0.27.8", default-features = false}
+sysinfo = { version = "0.27.8", default-features = false }
 tar = "0.4.37"
-tempfile = {version = "3.2.0"}
-tendermint = {version = "0.34.0", features = ["secp256k1"]}
+tempfile = { version = "3.2.0" }
+tendermint = { version = "0.34.0", features = ["secp256k1"] }
 tendermint-config = "0.34.0"
 tendermint-light-client = "0.34.0"
 tendermint-proto = "0.34.0"
-tendermint-rpc = {version = "0.34.0", default-features = false}
-test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
-tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
+tendermint-rpc = { version = "0.34.0", default-features = false }
+test-log = { version = "0.2.14", default-features = false, features = ["trace"] }
+tiny-bip39 = { git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57" }
 tiny-hderive = "0.3.0"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 thiserror = "1.0.38"
-tokio = {version = "1.8.2", default-features = false}
+tokio = { version = "1.8.2", default-features = false }
 tokio-test = "0.4.2"
 toml = "0.5.8"
 tonic = "0.8.3"
@@ -171,11 +171,11 @@ tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # https://github.com/penumbra-zone/tower-abci/pull/40 based on 0.11.1
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "a41ab4b336875084e04f4803868adf41ef62a67c"}
+tower-abci = { git = "https://github.com/heliaxdev/tower-abci.git", rev = "a41ab4b336875084e04f4803868adf41ef62a67c" }
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
-tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+tracing-subscriber = { version = "0.3.7", default-features = false, features = ["env-filter", "fmt"] }
 wasmparser = "0.107.0"
 winapi = "0.3.9"
 yansi = "0.5.1"

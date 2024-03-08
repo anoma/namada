@@ -180,6 +180,11 @@ pub trait State: StateRead + StorageWrite {
     fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log_mut().write_tx_hash(hash)
     }
+
+    /// Write the provided tx hash to write log.
+    fn write_tx_gas(&mut self, hash: Hash, gas: u64) -> write_log::Result<()> {
+        self.write_log_mut().write_tx_gas(hash, gas)
+    }
 }
 
 #[macro_export]
