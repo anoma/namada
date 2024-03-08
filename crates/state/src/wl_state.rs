@@ -94,7 +94,6 @@ where
         cache: Option<&D::Cache>,
         chain_id: ChainId,
         native_token: Address,
-        validate_merkle_root: bool,
         storage_read_past_height_limit: Option<u64>,
         merkle_tree_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
@@ -111,7 +110,7 @@ where
             in_mem,
             merkle_tree_key_filter,
         });
-        state.load_last_state(validate_merkle_root);
+        state.load_last_state();
         state
     }
 
@@ -476,7 +475,7 @@ where
 
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
-    fn load_last_state(&mut self, validate: bool) {
+    fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
             merkle_tree_stores,
             hash,
@@ -520,9 +519,8 @@ where
             let tree = MerkleTree::new(merkle_tree_stores)
                 .or_else(|_| self.rebuild_full_merkle_tree(height))
                 .unwrap();
-            if validate {
-                tree.validate().map_err(Error::MerkleTreeError).unwrap();
-            }
+
+            tree.validate().map_err(Error::MerkleTreeError).unwrap();
 
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;

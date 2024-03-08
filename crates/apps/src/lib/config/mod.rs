@@ -113,8 +113,6 @@ pub struct Shell {
     pub storage_read_past_height_limit: Option<u64>,
     /// Use the [`Ledger::db_dir()`] method to read the value.
     db_dir: PathBuf,
-    /// Validate that the merkelized data matches the save root.
-    pub validate_merkle_tree: bool,
     /// Use the [`Ledger::cometbft_dir()`] method to read the value.
     cometbft_dir: PathBuf,
     /// An optional action to take when a given blockheight is reached.
@@ -146,7 +144,6 @@ impl Ledger {
                 // Default corresponds to 1 hour of past blocks at 1 block/sec
                 storage_read_past_height_limit: Some(3600),
                 db_dir: DB_DIR.into(),
-                validate_merkle_tree: false,
                 cometbft_dir: COMETBFT_DIR.into(),
                 action_at_height: None,
                 tendermint_mode: mode,

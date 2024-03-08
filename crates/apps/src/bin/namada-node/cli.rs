@@ -13,10 +13,7 @@ pub fn main() -> Result<()> {
     match cmd {
         cmds::NamadaNode::Ledger(sub) => match sub {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
-                let mut chain_ctx = ctx.take_chain_or_exit();
-                if args.validate_merkle_tree {
-                    chain_ctx.config.ledger.shell.validate_merkle_tree = true;
-                }
+                let chain_ctx = ctx.take_chain_or_exit();
                 let wasm_dir = chain_ctx.wasm_dir();
                 sleep_until(args.start_time);
                 ledger::run(chain_ctx.config.ledger, wasm_dir);
