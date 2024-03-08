@@ -33,7 +33,7 @@ wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
-namada_tests = {path = "../../crates/tests"}
+namada_tests = {path = "../../crates/tests", default-features = false, features = ["wasm-runtime"]}
 
 [profile.release]
 # smaller and faster wasm https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto
