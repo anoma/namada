@@ -33,7 +33,7 @@ pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
 };
-pub use namada_storage::types::{KVBytes, PrefixIterator, PatternIterator};
+pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
     mockdb, tx_queue, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch,

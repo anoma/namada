@@ -61,7 +61,8 @@ use namada::replay_protection;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, PatternIterator, StoreType, DB,
+    DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
+    StoreType, DB,
 };
 use namada::token::ConversionState;
 use rayon::prelude::*;
@@ -1537,8 +1538,8 @@ impl DB for RocksDB {
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
-    type PrefixIter = PersistentPrefixIterator<'iter>;
     type PatternIter = PersistentPatternIterator<'iter>;
+    type PrefixIter = PersistentPrefixIterator<'iter>;
 
     fn iter_prefix(
         &'iter self,
@@ -1726,7 +1727,7 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
 
 #[derive(Debug)]
 pub struct PersistentPatternIterator<'a> {
-    inner: PatternIterator<PersistentPrefixIterator<'a > >,
+    inner: PatternIterator<PersistentPrefixIterator<'a>>,
     finished: bool,
 }
 
@@ -1741,7 +1742,7 @@ impl<'a> Iterator for PersistentPatternIterator<'a> {
         loop {
             let next_result = self.inner.iter.next()?;
             if self.inner.pattern.is_match(&next_result.0) {
-                return Some(next_result)
+                return Some(next_result);
             } else {
                 self.finished = true;
             }

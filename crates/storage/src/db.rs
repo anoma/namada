@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use regex::Regex;
 
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
@@ -13,6 +12,7 @@ use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
 };
+use regex::Regex;
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
@@ -281,9 +281,13 @@ pub trait DBIter<'iter> {
     /// To be able to see values written or deleted, but not yet committed,
     /// use the `StorageWithWriteLog`.
     ///
-    /// Read account subspace key value pairs with the given pattern from the DB,
-    /// ordered by the storage keys.
-    fn iter_pattern(&'iter self, prefix: Option<&Key>, pattern: Regex) -> Self::PatternIter;
+    /// Read account subspace key value pairs with the given pattern from the
+    /// DB, ordered by the storage keys.
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;

@@ -7,7 +7,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use itertools::Either;
-use regex::Regex;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::hash::Hash;
 use namada_core::storage::{
@@ -20,6 +19,7 @@ use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
 use namada_replay_protection as replay_protection;
+use regex::Regex;
 
 use crate::conversion_state::ConversionState;
 use crate::db::{
@@ -678,8 +678,8 @@ impl DB for MockDB {
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
-    type PrefixIter = MockPrefixIterator;
     type PatternIter = MockPatternIterator;
+    type PrefixIter = MockPrefixIterator;
 
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> MockPrefixIterator {
         let stripped_prefix = "subspace/".to_owned();
@@ -701,13 +701,19 @@ impl<'iter> DBIter<'iter> for MockDB {
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
-    fn iter_pattern(&'iter self, prefix: Option<&Key>, pattern: Regex) -> Self::PatternIter {
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter {
         MockPatternIterator {
-            inner: PatternIterator {iter: self.iter_prefix(prefix), pattern},
+            inner: PatternIterator {
+                iter: self.iter_prefix(prefix),
+                pattern,
+            },
             finished: false,
         }
     }
-
 
     fn iter_results(&'iter self) -> MockPrefixIterator {
         let stripped_prefix = "results/".to_owned();
@@ -835,7 +841,7 @@ impl Iterator for MockPatternIterator {
         loop {
             let next_result = self.inner.iter.next()?;
             if self.inner.pattern.is_match(&next_result.0) {
-                return Some(next_result)
+                return Some(next_result);
             } else {
                 self.finished = true;
             }

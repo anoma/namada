@@ -45,14 +45,11 @@ pub struct PatternIterator<I> {
 impl<I> PatternIterator<I> {
     /// Initialize a new prefix iterator
     pub fn new<E>(iter: I, pattern: Regex) -> Self
-        where
-            E: std::error::Error,
-            I: Iterator<Item = Result<KVBytes, E>>,
+    where
+        E: std::error::Error,
+        I: Iterator<Item = Result<KVBytes, E>>,
     {
-         Self {
-            iter,
-            pattern,
-        }
+        Self { iter, pattern }
     }
 }
 
