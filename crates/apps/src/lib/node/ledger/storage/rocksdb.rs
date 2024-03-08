@@ -910,7 +910,6 @@ impl DB for RocksDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             height,
             time,
             epoch,
@@ -1056,13 +1055,6 @@ impl DB for RocksDB {
                     .0
                     .put_cf(block_cf, key.to_string(), h.serialize_to_vec());
             }
-        }
-        // Block hash
-        {
-            let key = prefix_key
-                .push(&"hash".to_owned())
-                .map_err(Error::KeyError)?;
-            batch.0.put_cf(block_cf, key.to_string(), encode(&hash));
         }
         // Block time
         {
@@ -1787,7 +1779,7 @@ mod test {
     use namada::core::address::{
         gen_established_address, EstablishedAddressGen,
     };
-    use namada::core::storage::{BlockHash, Epochs};
+    use namada::core::storage::Epochs;
     use namada::state::{MerkleTree, Sha256Hasher};
     use tempfile::tempdir;
     use test_log::test;
@@ -2252,7 +2244,6 @@ mod test {
     ) -> Result<()> {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
-        let hash = BlockHash::default();
         let time = DateTimeUtc::now();
         let next_epoch_min_start_height = BlockHeight::default();
         let next_epoch_min_start_time = DateTimeUtc::now();
@@ -2264,7 +2255,6 @@ mod test {
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
-            hash: &hash,
             height,
             time,
             epoch,

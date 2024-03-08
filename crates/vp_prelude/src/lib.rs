@@ -23,9 +23,7 @@ pub use namada_core::borsh::{
 use namada_core::chain::CHAIN_ID_LENGTH;
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::internal::HostEnvResult;
-use namada_core::storage::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex, BLOCK_HASH_LENGTH,
-};
+use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, TxIndex};
 pub use namada_core::*;
 pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
@@ -244,11 +242,6 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
-        // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
-        get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_epoch()
@@ -381,10 +374,6 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
-        get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
@@ -455,10 +444,6 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
-        get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> Result<Epoch, Error> {
         get_block_epoch()
     }
@@ -522,16 +507,6 @@ fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
         )),
         None => Ok(None),
     }
-}
-
-fn get_block_hash() -> Result<BlockHash, Error> {
-    let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
-    unsafe {
-        namada_vp_get_block_hash(result.as_ptr() as _);
-    }
-    let slice =
-        unsafe { slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH) };
-    Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
 }
 
 fn get_block_epoch() -> Result<Epoch, Error> {

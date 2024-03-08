@@ -478,7 +478,6 @@ where
         {
             {
                 let in_mem = &mut self.0.in_mem;
-                in_mem.block.hash = hash.clone();
                 in_mem.block.height = height;
                 in_mem.block.epoch = epoch;
                 in_mem.block.results = results;
@@ -536,7 +535,6 @@ where
         let state = BlockStateWrite {
             merkle_tree_stores: self.in_mem.block.tree.stores(),
             header: self.in_mem.header.as_ref(),
-            hash: &self.in_mem.block.hash,
             height: self.in_mem.block.height,
             time: self
                 .in_mem

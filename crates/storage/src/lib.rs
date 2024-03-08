@@ -81,10 +81,6 @@ pub trait StorageRead {
     /// Getting the block header.
     fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
-    /// Getting the block hash. The height is that of the block to which the
-    /// current transaction is being applied.
-    fn get_block_hash(&self) -> Result<BlockHash>;
-
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
@@ -372,10 +368,6 @@ pub mod testing {
             _height: BlockHeight,
         ) -> Result<Option<Header>> {
             Ok(None)
-        }
-
-        fn get_block_hash(&self) -> Result<BlockHash> {
-            Ok(BlockHash::default())
         }
 
         fn get_block_epoch(&self) -> Result<Epoch> {

@@ -63,7 +63,7 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
-    use namada::core::storage::{BlockHash, Epoch};
+    use namada::core::storage::Epoch;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
@@ -95,7 +95,7 @@ mod test_queries {
                     epoch_assertions
                 {
                     shell.state.in_mem_mut().begin_block(
-                        BlockHash::default(), curr_block_height.into()).unwrap();
+                        curr_block_height.into()).unwrap();
 
                     if prev_epoch != Some(curr_epoch) {
                         prev_epoch = Some(curr_epoch);

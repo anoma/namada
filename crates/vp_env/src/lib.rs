@@ -11,9 +11,7 @@ use namada_core::hash::Hash;
 use namada_core::ibc::{
     get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
 };
-use namada_core::storage::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
-};
+use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_core::token::Transfer;
 use namada_storage::{OptionExt, ResultExt, StorageRead};
 use namada_tx::Tx;
@@ -67,10 +65,6 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<Option<Header>, namada_storage::Error>;
-
-    /// Getting the block hash. The height is that of the block to which the
-    /// current transaction is being applied.
-    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.

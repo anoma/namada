@@ -234,7 +234,6 @@ impl DB for MockDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             time,
             height,
             epoch,
@@ -310,13 +309,6 @@ impl DB for MockDB {
                     .borrow_mut()
                     .insert(key.to_string(), h.serialize_to_vec());
             }
-        }
-        // Block hash
-        {
-            let key = prefix_key
-                .push(&"hash".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0.borrow_mut().insert(key.to_string(), encode(&hash));
         }
         // Block time
         {

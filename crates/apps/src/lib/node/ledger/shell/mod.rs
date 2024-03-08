@@ -1934,7 +1934,7 @@ mod test_utils {
         shell
             .state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
+            .begin_block(BlockHeight(1))
             .expect("begin_block failed");
         let keypair = gen_keypair();
         // enqueue a wrapper tx

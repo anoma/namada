@@ -14,7 +14,6 @@ pub mod shim {
     pub type TxBytes = prost::bytes::Bytes;
 
     #[derive(Error, Debug)]
-    #[allow(clippy::large_enum_variant)]
     pub enum Error {
         #[error("Error converting Request from ABCI to ABCI++: {0:?}")]
         ConvertReq(Req),

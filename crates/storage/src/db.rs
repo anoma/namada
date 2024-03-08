@@ -84,8 +84,6 @@ pub struct BlockStateWrite<'a> {
     pub merkle_tree_stores: MerkleTreeStoresWrite<'a>,
     /// Header of the block
     pub header: Option<&'a Header>,
-    /// Hash of the block
-    pub hash: &'a BlockHash,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block
