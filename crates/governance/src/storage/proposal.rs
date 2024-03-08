@@ -535,9 +535,11 @@ impl StorageProposal {
         is_validator: bool,
     ) -> bool {
         if is_validator {
-            self.voting_start_epoch <= current_epoch
-                && current_epoch * 3
-                    <= self.voting_start_epoch + self.voting_end_epoch * 2
+            crate::utils::is_valid_validator_voting_period(
+                current_epoch,
+                self.voting_start_epoch,
+                self.voting_end_epoch,
+            )
         } else {
             let valid_start_epoch = current_epoch >= self.voting_start_epoch;
             let valid_end_epoch = current_epoch <= self.voting_end_epoch;
