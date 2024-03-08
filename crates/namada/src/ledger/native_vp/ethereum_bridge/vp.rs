@@ -1,14 +1,13 @@
 //! Validity predicate for the Ethereum bridge
 use std::collections::{BTreeSet, HashSet};
 
-use eyre::{eyre, Result};
 use namada_core::address::Address;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
 use namada_tx::Tx;
 
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::state::StateRead;
 use crate::token::storage_key::{balance_key, is_balance_key};
 use crate::token::Amount;
@@ -17,7 +16,7 @@ use crate::vm::WasmCacheAccess;
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct Error(#[from] eyre::Error);
+pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, S, CA>
@@ -146,10 +145,11 @@ fn validate_changed_keys(
         })
         .collect();
     if keys_changed.is_empty() {
-        return Err(Error(eyre!(
+        return Err(native_vp::Error::SimpleMessage(
             "No keys changed under our account so this validity predicate \
-             shouldn't have been triggered"
-        )));
+             shouldn't have been triggered",
+        )
+        .into());
     }
     tracing::debug!(
         relevant_keys.len = keys_changed.len(),
