@@ -1289,42 +1289,6 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         Ok(pay_addr_alias.map(Into::into))
     }
 
-    // XXX OK
-    /// Derive a keypair from the user mnemonic code (read from stdin) using
-    /// a given BIP44 derivation path and derive an implicit address from its
-    /// public part and insert them into the store with the provided alias,
-    /// converted to lower case. If none provided, the alias will be the public
-    /// key hash (in lower case too).
-    /// The key is encrypted with the provided password. If no password
-    /// provided, will prompt for password from stdin.
-    /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and the derived secret key.
-    #[allow(clippy::too_many_arguments)]
-    pub fn derive_store_secret_key_from_mnemonic_code(
-        &mut self,
-        scheme: SchemeType,
-        alias: String,
-        alias_force: bool,
-        derivation_path: DerivationPath,
-        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
-        prompt_bip39_passphrase: bool,
-        password: Option<Zeroizing<String>>,
-    ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
-        Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)
-            .and_then(|seed| {
-                self.derive_store_hd_secret_key_atomic(
-                    scheme,
-                    alias,
-                    alias_force,
-                    seed,
-                    derivation_path,
-                    password,
-                )
-                .transpose()
-            })
-            .transpose()
-    }
-
     /// Derive a keypair from the given seed and path, derive an implicit
     /// address from this keypair, and insert them into the store with the
     /// provided alias, converted to lower case. If the alias already
@@ -1358,6 +1322,42 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             )?
             .map(|alias| (alias, sk));
         Ok(res)
+    }
+
+    // XXX OK
+    /// Derive a keypair from the user mnemonic code (read from stdin) using
+    /// a given BIP44 derivation path and derive an implicit address from its
+    /// public part and insert them into the store with the provided alias,
+    /// converted to lower case. If none provided, the alias will be the public
+    /// key hash (in lower case too).
+    /// The key is encrypted with the provided password. If no password
+    /// provided, will prompt for password from stdin.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and the derived secret key.
+    #[allow(clippy::too_many_arguments)]
+    pub fn derive_store_hd_secret_key_from_mnemonic_code(
+        &mut self,
+        scheme: SchemeType,
+        alias: String,
+        force_alias: bool,
+        derivation_path: DerivationPath,
+        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        prompt_bip39_passphrase: bool,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
+        Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)
+            .and_then(|seed| {
+                self.derive_store_hd_secret_key_atomic(
+                    scheme,
+                    alias,
+                    force_alias,
+                    seed,
+                    derivation_path,
+                    password,
+                )
+                .transpose()
+            })
+            .transpose()
     }
 
     // XXX OK

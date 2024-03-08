@@ -487,7 +487,7 @@ async fn transparent_key_and_address_derive(
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_store_secret_key_from_mnemonic_code(
+            .derive_store_hd_secret_key_from_mnemonic_code(
                 scheme,
                 alias,
                 alias_force,
