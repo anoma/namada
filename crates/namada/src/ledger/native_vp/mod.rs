@@ -12,7 +12,6 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use borsh::BorshDeserialize;
-use eyre::WrapErr;
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_core::validity_predicate::VpSentinel;
@@ -571,25 +570,12 @@ where
 /// A convenience trait for reading and automatically deserializing a value from
 /// storage
 pub trait StorageReader {
-    /// If `maybe_bytes` is not empty, return an `Option<T>` containing the
-    /// deserialization of the bytes inside `maybe_bytes`.
-    fn deserialize_if_present<T: BorshDeserialize>(
-        maybe_bytes: Option<Vec<u8>>,
-    ) -> eyre::Result<Option<T>> {
-        maybe_bytes
-            .map(|ref bytes| {
-                T::try_from_slice(bytes)
-                    .wrap_err_with(|| "couldn't deserialize".to_string())
-            })
-            .transpose()
-    }
-
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
     fn read_pre_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> eyre::Result<Option<T>>;
+    ) -> Result<Option<T>, state::StorageError>;
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
@@ -597,7 +583,7 @@ pub trait StorageReader {
     fn read_post_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> eyre::Result<Option<T>>;
+    ) -> Result<Option<T>, state::StorageError>;
 }
 
 impl<'a, S, CA> StorageReader for &Ctx<'a, S, CA>
@@ -607,24 +593,26 @@ where
 {
     /// Helper function. After reading posterior state,
     /// borsh deserialize to specified type
-    fn read_post_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    fn read_post_value<T>(
+        &self,
+        key: &Key,
+    ) -> Result<Option<T>, state::StorageError>
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_bytes_post(self, key)
-            .wrap_err_with(|| format!("couldn't read_bytes_post {}", key))?;
-        Self::deserialize_if_present(maybe_bytes)
+        Ctx::read_post(self, key)
     }
 
     /// Helper function. After reading prior state,
     /// borsh deserialize to specified type
-    fn read_pre_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    fn read_pre_value<T>(
+        &self,
+        key: &Key,
+    ) -> Result<Option<T>, state::StorageError>
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_bytes_pre(self, key)
-            .wrap_err_with(|| format!("couldn't read_bytes_pre {}", key))?;
-        Self::deserialize_if_present(maybe_bytes)
+        Ctx::read_pre(self, key)
     }
 }
 
@@ -644,23 +632,21 @@ pub(super) mod testing {
         fn read_pre_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> eyre::Result<Option<T>> {
-            let bytes = match self.pre.get(key) {
-                Some(bytes) => bytes.to_owned(),
-                None => return Ok(None),
-            };
-            Self::deserialize_if_present(Some(bytes))
+        ) -> Result<Option<T>, state::StorageError> {
+            self.pre
+                .get(key)
+                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
+                .transpose()
         }
 
         fn read_post_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> eyre::Result<Option<T>> {
-            let bytes = match self.post.get(key) {
-                Some(bytes) => bytes.to_owned(),
-                None => return Ok(None),
-            };
-            Self::deserialize_if_present(Some(bytes))
+        ) -> Result<Option<T>, state::StorageError> {
+            self.post
+                .get(key)
+                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
+                .transpose()
         }
     }
 }
