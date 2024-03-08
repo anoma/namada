@@ -190,7 +190,7 @@ jobs:
   test-unit:
     runs-on: 
       group: namada-runners
-      labels: ubuntu-22-small
+      labels: ubuntu-22
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -467,7 +467,7 @@ jobs:
   namada-release:
     runs-on: 
       group: namada-runners
-      labels: ubuntu-22
+      labels: ubuntu-22-big
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -568,7 +568,7 @@ jobs:
   namada-e2e:
     runs-on: 
       group: namada-runners
-      labels: ubuntu-22-small
+      labels: ubuntu-22
     needs: [build-wasm, namada-release]
     # timeout-minutes: 80
     strategy:
