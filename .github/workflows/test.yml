@@ -1,0 +1,56 @@
+name: Run checks
+
+on:
+  push:
+    branches:
+      - main
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: false
+  GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+  SCCACHE_BUCKET: github-runners-remote-cache-shared
+  AWS_REGION: us-east-2
+  ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
+
+jobs:
+  test:
+    runs-on: [ubuntu-latest]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: test
+        run: |
+          BRANCH_NAME=$(git symbolic-ref --short HEAD)
+          echo "Using hermes for branch: ${BRANCH_NAME}"
+          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
+          HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
+          if [ -z "$HERMES_VERSION" ]
+          then
+            HERMES_VERSION=$HERMES_VERSION_DEFAULT
+          fi
+          echo "Using hermes version: ${HERMES_VERSION}"
+          curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+          unzip hermes.zip
+          mv hermes /usr/local/bin
