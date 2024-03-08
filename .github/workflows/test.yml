@@ -49,6 +49,7 @@ jobs:
           cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r
           cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e || true
           HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
+          echo "899"
           echo $HERMES_VERSION
           echo "1312321"
           HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
