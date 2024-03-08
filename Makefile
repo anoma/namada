@@ -129,18 +129,6 @@ install: cometbft
 cometbft:
 	./scripts/get_cometbft.sh
 
-run-ledger:
-	# runs the node
-	$(cargo) run --bin namadan -- ledger run
-
-run-gossip:
-	# runs the node gossip node
-	$(cargo) run --bin namadan -- gossip run
-
-reset-ledger:
-	# runs the node
-	$(cargo) run --bin namadan -- ledger reset
-
 audit:
 	$(cargo) audit $(foreach ignore,$(audit-ignores), --ignore $(ignore))
 
@@ -309,6 +297,7 @@ dev-deps:
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
 	$(cargo) install cargo-watch unclog wasm-opt
+	$(cargo) install sort
 
 test-miri:
 	$(cargo) +$(nightly) miri setup
@@ -316,4 +305,4 @@ test-miri:
 	MIRIFLAGS="-Zmiri-disable-isolation" $(cargo) +$(nightly) miri test
 
 
-.PHONY : build check build-release clippy install run-ledger run-gossip reset-ledger test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit bench
+.PHONY : build check build-release clippy install test test-debug fmt watch clean build-doc doc build-wasm-scripts-docker debug-wasm-scripts-docker build-wasm-scripts debug-wasm-scripts clean-wasm-scripts dev-deps test-miri test-unit bench
