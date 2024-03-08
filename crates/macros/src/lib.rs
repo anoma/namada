@@ -198,10 +198,16 @@ pub fn validity_predicate(
             // run validation with the concrete type(s)
             match #ident(&ctx, tx_data, addr, keys_changed, verifiers)
             {
-                Ok(true) => 1,
-                Ok(false) => 0,
+                Ok(()) => 1,
                 Err(err) => {
                     namada_vp_prelude::debug_log!("Validity predicate error: {}", err);
+                    let err = err.serialize_to_vec();
+                    unsafe {
+                        namada_vp_yield_value(
+                            err.as_ptr() as _,
+                            err.len() as _,
+                        );
+                    }
                     0
                 },
             }

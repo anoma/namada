@@ -318,7 +318,7 @@ mod tests {
         vp_host_env::init();
 
         assert!(
-            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap()
+            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_ok()
         );
     }
 
@@ -351,7 +351,7 @@ mod tests {
 
         assert!(
             validate_tx(&CTX, tx_data, addr.clone(), keys_changed, verifiers)
-                .unwrap(),
+                .is_ok(),
             "Revealing PK that's not yet revealed and is matching the address \
              must be accepted"
         );
@@ -377,7 +377,7 @@ mod tests {
         vp_host_env::set(vp_env);
 
         assert!(
-            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_err(),
             "Revealing PK that's already revealed should be rejected"
         );
     }
@@ -418,7 +418,7 @@ mod tests {
         vp_host_env::set(vp_env);
 
         assert!(
-            !validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap(),
+            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_err(),
             "Mismatching PK must be rejected"
         );
     }
@@ -475,7 +475,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -556,8 +556,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -652,7 +652,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -710,8 +710,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -783,7 +783,7 @@ mod tests {
 
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -844,7 +844,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -898,7 +898,7 @@ mod tests {
                 vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).is_err());
         }
 
     fn test_signed_arb_storage_write(
@@ -944,7 +944,7 @@ mod tests {
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).is_ok());
         }
     }
 
@@ -982,8 +982,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 }

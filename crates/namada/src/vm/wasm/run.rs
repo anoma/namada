@@ -2,11 +2,12 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::error::Error as _;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::validity_predicate::VpSentinel;
+use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::write_log::StorageModification;
 use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
@@ -22,6 +23,7 @@ use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
 use crate::internal::HostEnvResult;
 use crate::ledger::gas::VpGasMeter;
+use crate::ledger::vp_host_fns;
 use crate::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
@@ -29,7 +31,7 @@ use crate::vm::types::VpInput;
 use crate::vm::wasm::host_env::{tx_imports, vp_imports};
 use crate::vm::wasm::{memory, Cache, CacheName, VpCache};
 use crate::vm::{
-    validate_untrusted_wasm, WasmCacheAccess, WasmValidationError,
+    validate_untrusted_wasm, MutHostRef, WasmCacheAccess, WasmValidationError,
 };
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -39,6 +41,10 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Expected VP error, but found none")]
+    MissingVpError,
+    #[error("VP error: {0}")]
+    VpError(VpError),
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("Memory error: {0}")]
@@ -245,7 +251,6 @@ where
             hasher: PhantomData,
             cache_access: PhantomData,
         };
-    let sentinel = RefCell::new(VpSentinel::default());
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
@@ -253,7 +258,6 @@ where
         state.in_mem(),
         state.db(),
         gas_meter,
-        &sentinel,
         tx,
         tx_index,
         &mut iterators,
@@ -267,9 +271,10 @@ where
 
     let initial_memory =
         memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
+    let yielded_value_borrow = env.ctx.yielded_value.clone();
     let imports = vp_imports(&store, initial_memory, env);
 
-    match run_vp(
+    run_vp(
         module,
         imports,
         &vp_code_hash,
@@ -277,34 +282,8 @@ where
         address,
         keys_changed,
         verifiers,
-    ) {
-        Ok(accept) => {
-            if sentinel.borrow().is_invalid_signature() {
-                if accept {
-                    // This is unexpected, if the signature is invalid the vp
-                    // should have rejected the tx. Something must be wrong with
-                    // the VP logic and we take the signature verification
-                    // result as the reference. In this case we override the vp
-                    // result and log the issue
-                    tracing::warn!(
-                        "VP of {address} accepted the transaction but \
-                         signaled that the signature was invalid. Overriding \
-                         the vp result to reject the transaction..."
-                    );
-                }
-                Err(Error::InvalidTxSignature)
-            } else {
-                Ok(accept)
-            }
-        }
-        Err(err) => {
-            if sentinel.borrow().is_out_of_gas() {
-                Err(Error::GasError(err.to_string()))
-            } else {
-                Err(err)
-            }
-        }
-    }
+        yielded_value_borrow,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -316,7 +295,8 @@ fn run_vp(
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-) -> Result<bool> {
+    yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
+) -> Result<()> {
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,
@@ -366,9 +346,40 @@ fn run_vp(
             verifiers_ptr,
             verifiers_len,
         )
-        .map_err(Error::RuntimeError)?;
+        .map_err(|rt_error| {
+            let maybe_gas_err = || {
+                let source_err = rt_error.source()?;
+                let downcasted_tx_rt_err: &vp_host_fns::RuntimeError =
+                    source_err.downcast_ref()?;
+
+                if let vp_host_fns::RuntimeError::OutOfGas(out_of_gas_err) =
+                    downcasted_tx_rt_err
+                {
+                    Some(Error::GasError(rt_error.to_string()))
+                } else {
+                    None
+                }
+            };
+            maybe_gas_err().unwrap_or(Error::RuntimeError(rt_error))
+        })?;
     tracing::debug!("is_valid {}", is_valid);
-    Ok(is_valid == 1)
+
+    if is_valid == 1 {
+        Ok(())
+    } else {
+        // NB: drop imports so we can safely access the
+        // `&mut` ptrs we shared with the guest
+        _ = (instance, vp_imports);
+
+        unsafe { yielded_value.get() }.take().map_or_else(
+            || Err(Error::MissingVpError),
+            |borsh_encoded_err| {
+                let vp_err = VpError::try_from_slice(&borsh_encoded_err)
+                    .map_err(|e| Error::ConversionError(e.to_string()))?;
+                Err(vp_err)
+            },
+        )
+    }
 }
 
 /// Validity predicate wasm evaluator for `eval` host function calls.
@@ -426,7 +437,7 @@ where
         ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let address = unsafe { ctx.address.get() };
         let keys_changed = unsafe { ctx.keys_changed.get() };
         let verifiers = unsafe { ctx.verifiers.get() };
@@ -448,6 +459,7 @@ where
             memory: WasmMemory::default(),
             ctx,
         };
+        let yielded_value_borrow = env.ctx.yielded_value.clone();
         let imports = vp_imports(&store, initial_memory, env);
 
         run_vp(
@@ -458,6 +470,7 @@ where
             address,
             keys_changed,
             verifiers,
+            yielded_value_borrow,
         )
     }
 }

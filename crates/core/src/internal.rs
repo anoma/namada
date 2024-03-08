@@ -39,6 +39,23 @@ impl HostEnvResult {
     pub fn is_fail(int: i64) -> bool {
         int == Self::Fail.to_i64()
     }
+
+    /// Expect [`HostEnvResult::Success`].
+    pub fn success_or_else<F, E>(int: i64, or_else: F) -> Result<(), E>
+    where
+        F: FnOnce() -> E,
+    {
+        if Self::is_success(int) {
+            Ok(())
+        } else {
+            Err(or_else())
+        }
+    }
+
+    /// Expect [`HostEnvResult::Success`].
+    pub fn success_or<E>(int: i64, or_else: E) -> Result<(), E> {
+        Self::success_or_else(int, || or_else)
+    }
 }
 
 impl From<bool> for HostEnvResult {

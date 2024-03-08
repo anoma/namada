@@ -26,12 +26,14 @@ use namada_core::internal::HostEnvResult;
 use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, TxIndex, BLOCK_HASH_LENGTH,
 };
+pub use namada_core::validity_predicate::{VpError, VpErrorExtResult};
 pub use namada_core::*;
 pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;
 pub use namada_storage::{
-    iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt, StorageRead,
+    iter_prefix, iter_prefix_bytes, Error as StorageError, OptionExt,
+    ResultExt, StorageRead,
 };
 pub use namada_tx::{Section, Tx};
 use namada_vm_env::vp::*;
@@ -57,21 +59,24 @@ pub fn log_string<T: AsRef<str>>(msg: T) {
 }
 
 /// Checks if a proposal id is being executed
-pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpResult {
+pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpEnvResult<bool> {
     let proposal_execution_key =
         gov_storage::keys::get_proposal_execution_key(proposal_id);
 
-    ctx.has_key_pre(&proposal_execution_key)
+    ctx.has_key_pre(&proposal_execution_key).into_vp_error()
 }
 
 /// Verify section signatures
 pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let max_signatures_per_transaction =
-        parameters::max_signatures_per_transaction(&ctx.pre())?;
+        parameters::max_signatures_per_transaction(&ctx.pre())
+            .into_vp_error()?;
 
     let public_keys_index_map =
-        account::public_keys_index_map(&ctx.pre(), owner)?;
-    let threshold = account::threshold(&ctx.pre(), owner)?.unwrap_or(1);
+        account::public_keys_index_map(&ctx.pre(), owner).into_vp_error()?;
+    let threshold = account::threshold(&ctx.pre(), owner)
+        .into_vp_error()?
+        .unwrap_or(1);
 
     // Serialize parameters
     let max_signatures = max_signatures_per_transaction.serialize_to_vec();
@@ -79,21 +84,22 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let targets = [tx.raw_header_hash()].serialize_to_vec();
     let signer = owner.serialize_to_vec();
 
-    let valid = unsafe {
-        namada_vp_verify_tx_section_signature(
-            targets.as_ptr() as _,
-            targets.len() as _,
-            public_keys_map.as_ptr() as _,
-            public_keys_map.len() as _,
-            signer.as_ptr() as _,
-            signer.len() as _,
-            threshold,
-            max_signatures.as_ptr() as _,
-            max_signatures.len() as _,
-        )
-    };
-
-    Ok(HostEnvResult::is_success(valid))
+    HostEnvResult::success_or(
+        unsafe {
+            namada_vp_verify_tx_section_signature(
+                targets.as_ptr() as _,
+                targets.len() as _,
+                public_keys_map.as_ptr() as _,
+                public_keys_map.len() as _,
+                signer.as_ptr() as _,
+                signer.len() as _,
+                threshold,
+                max_signatures.as_ptr() as _,
+                max_signatures.len() as _,
+            )
+        },
+        VpError::InvalidSignature,
+    )
 }
 
 /// Format and log a string in a debug build.
@@ -174,19 +180,19 @@ pub struct CtxPostStorageRead<'a> {
 }
 
 /// Result of `VpEnv` or `namada_storage::StorageRead` method call
-pub type EnvResult<T> = Result<T, Error>;
+pub type VpEnvResult<T> = Result<T, VpError>;
 
 /// Validity predicate result
-pub type VpResult = EnvResult<bool>;
+pub type VpResult = VpEnvResult<()>;
 
 /// Accept a transaction
 pub fn accept() -> VpResult {
-    Ok(true)
+    Ok(())
 }
 
 /// Reject a transaction
 pub fn reject() -> VpResult {
-    Ok(false)
+    Err(VpError::Unspecified)
 }
 
 #[derive(Debug)]
@@ -208,7 +214,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn read_temp<T: BorshDeserialize>(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<T>, Error> {
+    ) -> Result<Option<T>, StorageError> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_vp_read_temp(key.as_ptr() as _, key.len() as _) };
@@ -219,19 +225,19 @@ impl<'view> VpEnv<'view> for Ctx {
     fn read_bytes_temp(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, Error> {
+    ) -> Result<Option<Vec<u8>>, StorageError> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_vp_read_temp(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_height()
     }
@@ -239,17 +245,17 @@ impl<'view> VpEnv<'view> for Ctx {
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Error> {
+    ) -> Result<Option<Header>, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_epoch()
     }
@@ -259,11 +265,11 @@ impl<'view> VpEnv<'view> for Ctx {
         get_pred_epochs()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, StorageError> {
         get_tx_index()
     }
 
-    fn get_native_token(&self) -> Result<Address, Error> {
+    fn get_native_token(&self) -> Result<Address, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_native_token()
     }
@@ -271,7 +277,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn get_ibc_events(
         &self,
         event_type: String,
-    ) -> Result<Vec<ibc::IbcEvent>, Error> {
+    ) -> Result<Vec<ibc::IbcEvent>, StorageError> {
         let read_result = unsafe {
             namada_vp_get_ibc_events(
                 event_type.as_ptr() as _,
@@ -295,11 +301,15 @@ impl<'view> VpEnv<'view> for Ctx {
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, StorageError> {
         iter_prefix_pre_impl(prefix)
     }
 
-    fn eval(&self, vp_code_hash: Hash, input_data: Tx) -> Result<bool, Error> {
+    fn eval(
+        &self,
+        vp_code_hash: Hash,
+        input_data: Tx,
+    ) -> Result<bool, StorageError> {
         let input_data_bytes = borsh::to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(
@@ -312,7 +322,7 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(HostEnvResult::is_success(result))
     }
 
-    fn get_tx_code_hash(&self) -> Result<Option<Hash>, Error> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>, StorageError> {
         let result = Vec::with_capacity(HASH_LENGTH + 1);
         unsafe {
             namada_vp_get_tx_code_hash(result.as_ptr() as _);
@@ -330,7 +340,7 @@ impl<'view> VpEnv<'view> for Ctx {
         })
     }
 
-    fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
+    fn charge_gas(&self, used_gas: u64) -> Result<(), StorageError> {
         unsafe { namada_vp_charge_gas(used_gas) };
         Ok(())
     }
@@ -339,14 +349,17 @@ impl<'view> VpEnv<'view> for Ctx {
 impl StorageRead for CtxPreStorageRead<'_> {
     type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self: 'iter;
 
-    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
+    fn read_bytes(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<Vec<u8>>, StorageError> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_vp_read_pre(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, StorageError> {
         let key = key.to_string();
         let found =
             unsafe { namada_vp_has_key_pre(key.as_ptr() as _, key.len() as _) };
@@ -356,7 +369,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, StorageError> {
         iter_prefix_pre_impl(prefix)
     }
 
@@ -365,7 +378,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, StorageError> {
         let read_result = unsafe { namada_vp_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -373,26 +386,26 @@ impl StorageRead for CtxPreStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String, StorageError> {
         get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, StorageError> {
         get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Error> {
+    ) -> Result<Option<Header>, StorageError> {
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, StorageError> {
         get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, StorageError> {
         get_block_epoch()
     }
 
@@ -400,11 +413,11 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_pred_epochs()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, StorageError> {
         get_tx_index()
     }
 
-    fn get_native_token(&self) -> Result<Address, Error> {
+    fn get_native_token(&self) -> Result<Address, StorageError> {
         get_native_token()
     }
 }
@@ -412,14 +425,17 @@ impl StorageRead for CtxPreStorageRead<'_> {
 impl StorageRead for CtxPostStorageRead<'_> {
     type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self:'iter;
 
-    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
+    fn read_bytes(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<Vec<u8>>, StorageError> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_vp_read_post(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool, StorageError> {
         let key = key.to_string();
         let found = unsafe {
             namada_vp_has_key_post(key.as_ptr() as _, key.len() as _)
@@ -430,7 +446,7 @@ impl StorageRead for CtxPostStorageRead<'_> {
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, Error> {
+    ) -> Result<Self::PrefixIter<'iter>, StorageError> {
         iter_prefix_post_impl(prefix)
     }
 
@@ -439,7 +455,7 @@ impl StorageRead for CtxPostStorageRead<'_> {
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+    ) -> Result<Option<(String, Vec<u8>)>, StorageError> {
         let read_result = unsafe { namada_vp_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -447,26 +463,26 @@ impl StorageRead for CtxPostStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String, StorageError> {
         get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight, StorageError> {
         get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Error> {
+    ) -> Result<Option<Header>, StorageError> {
         get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, Error> {
+    fn get_block_hash(&self) -> Result<BlockHash, StorageError> {
         get_block_hash()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<Epoch, StorageError> {
         get_block_epoch()
     }
 
@@ -474,18 +490,18 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_pred_epochs()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, Error> {
+    fn get_tx_index(&self) -> Result<TxIndex, StorageError> {
         get_tx_index()
     }
 
-    fn get_native_token(&self) -> Result<Address, Error> {
+    fn get_native_token(&self) -> Result<Address, StorageError> {
         get_native_token()
     }
 }
 
 fn iter_prefix_pre_impl(
     prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
+) -> Result<KeyValIterator<(String, Vec<u8>)>, StorageError> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         namada_vp_iter_prefix_pre(prefix.as_ptr() as _, prefix.len() as _)
@@ -495,7 +511,7 @@ fn iter_prefix_pre_impl(
 
 fn iter_prefix_post_impl(
     prefix: &storage::Key,
-) -> Result<KeyValIterator<(String, Vec<u8>)>, Error> {
+) -> Result<KeyValIterator<(String, Vec<u8>)>, StorageError> {
     let prefix = prefix.to_string();
     let iter_id = unsafe {
         namada_vp_iter_prefix_post(prefix.as_ptr() as _, prefix.len() as _)
@@ -503,7 +519,7 @@ fn iter_prefix_post_impl(
     Ok(KeyValIterator(iter_id, PhantomData))
 }
 
-fn get_chain_id() -> Result<String, Error> {
+fn get_chain_id() -> Result<String, StorageError> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
         namada_vp_get_chain_id(result.as_ptr() as _);
@@ -516,11 +532,13 @@ fn get_chain_id() -> Result<String, Error> {
     )
 }
 
-fn get_block_height() -> Result<BlockHeight, Error> {
+fn get_block_height() -> Result<BlockHeight, StorageError> {
     Ok(BlockHeight(unsafe { namada_vp_get_block_height() }))
 }
 
-fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
+fn get_block_header(
+    height: BlockHeight,
+) -> Result<Option<Header>, StorageError> {
     let read_result = unsafe { namada_vp_get_block_header(height.0) };
     match read_from_buffer(read_result, namada_vp_result_buffer) {
         Some(value) => Ok(Some(
@@ -531,7 +549,7 @@ fn get_block_header(height: BlockHeight) -> Result<Option<Header>, Error> {
     }
 }
 
-fn get_block_hash() -> Result<BlockHash, Error> {
+fn get_block_hash() -> Result<BlockHash, StorageError> {
     let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
     unsafe {
         namada_vp_get_block_hash(result.as_ptr() as _);
@@ -541,25 +559,25 @@ fn get_block_hash() -> Result<BlockHash, Error> {
     Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
 }
 
-fn get_block_epoch() -> Result<Epoch, Error> {
+fn get_block_epoch() -> Result<Epoch, StorageError> {
     Ok(Epoch(unsafe { namada_vp_get_block_epoch() }))
 }
 
-fn get_tx_index() -> Result<TxIndex, Error> {
+fn get_tx_index() -> Result<TxIndex, StorageError> {
     Ok(TxIndex(unsafe { namada_vp_get_tx_index() }))
 }
 
-fn get_pred_epochs() -> Result<Epochs, Error> {
+fn get_pred_epochs() -> Result<Epochs, StorageError> {
     let read_result = unsafe { namada_vp_get_pred_epochs() };
     let bytes = read_from_buffer(read_result, namada_vp_result_buffer).ok_or(
-        Error::SimpleMessage(
+        StorageError::SimpleMessage(
             "Missing result from `namada_vp_get_pred_epochs` call",
         ),
     )?;
     Ok(namada_core::decode(bytes).expect("Cannot decode pred epochs"))
 }
 
-fn get_native_token() -> Result<Address, Error> {
+fn get_native_token() -> Result<Address, StorageError> {
     let result = Vec::with_capacity(address::ADDRESS_LEN);
     unsafe {
         namada_vp_get_native_token(result.as_ptr() as _);
