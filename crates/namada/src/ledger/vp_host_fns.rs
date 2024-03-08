@@ -45,6 +45,8 @@ pub enum RuntimeError {
     InvalidCodeHash,
     #[error("No value found in result buffer")]
     NoValueInResultBuffer,
+    #[error("Invalid transaction signature")]
+    InvalidTxSignature,
 }
 
 /// VP environment function result
@@ -54,10 +56,8 @@ pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 pub fn add_gas(
     gas_meter: &RefCell<VpGasMeter>,
     used_gas: u64,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<()> {
     gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
-        sentinel.borrow_mut().set_out_of_gas();
         tracing::info!("Stopping VP execution because of gas error: {}", err);
         RuntimeError::OutOfGas(err)
     })
@@ -69,13 +69,12 @@ pub fn read_pre<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
     let (log_val, gas) = state.write_log().read_pre(key);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
@@ -97,7 +96,7 @@ where
             // When not found in write log, try to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
-            add_gas(gas_meter, gas, sentinel)?;
+            add_gas(gas_meter, gas)?;
             Ok(value)
         }
     }
@@ -109,14 +108,13 @@ pub fn read_post<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
             Ok(Some(value.clone()))
@@ -138,7 +136,7 @@ where
             // When not found in write log, try to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
-            add_gas(gas_meter, gas, sentinel)?;
+            add_gas(gas_meter, gas)?;
             Ok(value)
         }
     }
@@ -150,14 +148,13 @@ pub fn read_temp<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Temp { ref value }) => {
             Ok(Some(value.clone()))
@@ -173,14 +170,13 @@ pub fn has_key_pre<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<bool>
 where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read_pre(key);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
         Some(&write_log::StorageModification::Delete) => {
@@ -193,7 +189,7 @@ where
             // When not found in write log, try to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
-            add_gas(gas_meter, gas, sentinel)?;
+            add_gas(gas_meter, gas)?;
             Ok(present)
         }
     }
@@ -205,14 +201,13 @@ pub fn has_key_post<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<bool>
 where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
     let (log_val, gas) = state.write_log().read(key);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
         Some(&write_log::StorageModification::Delete) => {
@@ -225,7 +220,7 @@ where
             // When not found in write log, try to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
-            add_gas(gas_meter, gas, sentinel)?;
+            add_gas(gas_meter, gas)?;
             Ok(present)
         }
     }
@@ -235,13 +230,12 @@ where
 pub fn get_chain_id<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<String>
 where
     S: StateRead + Debug,
 {
     let (chain_id, gas) = state.in_mem().get_chain_id();
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(chain_id)
 }
 
@@ -250,13 +244,12 @@ where
 pub fn get_block_height<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<BlockHeight>
 where
     S: StateRead + Debug,
 {
     let (height, gas) = state.in_mem().get_block_height();
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(height)
 }
 
@@ -265,14 +258,13 @@ pub fn get_block_header<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     height: BlockHeight,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Header>>
 where
     S: StateRead + Debug,
 {
     let (header, gas) = StateRead::get_block_header(state, Some(height))
         .map_err(RuntimeError::StorageError)?;
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(header)
 }
 
@@ -281,13 +273,12 @@ where
 pub fn get_block_hash<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<BlockHash>
 where
     S: StateRead + Debug,
 {
     let (hash, gas) = state.in_mem().get_block_hash();
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(hash)
 }
 
@@ -296,13 +287,8 @@ where
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
     tx: &Tx,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(
-        gas_meter,
-        HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
-    )?;
+    add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -315,13 +301,12 @@ pub fn get_tx_code_hash(
 pub fn get_block_epoch<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Epoch>
 where
     S: StateRead + Debug,
 {
     let (epoch, gas) = state.in_mem().get_current_epoch();
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(epoch)
 }
 
@@ -330,12 +315,10 @@ where
 pub fn get_tx_index(
     gas_meter: &RefCell<VpGasMeter>,
     tx_index: &TxIndex,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<TxIndex> {
     add_gas(
         gas_meter,
         TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
     )?;
     Ok(*tx_index)
 }
@@ -344,7 +327,6 @@ pub fn get_tx_index(
 pub fn get_native_token<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Address>
 where
     S: StateRead + Debug,
@@ -352,7 +334,6 @@ where
     add_gas(
         gas_meter,
         ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
     )?;
     Ok(state.in_mem().native_token.clone())
 }
@@ -361,7 +342,6 @@ where
 pub fn get_pred_epochs<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Epochs>
 where
     S: StateRead + Debug,
@@ -371,7 +351,6 @@ where
         state.in_mem().block.pred_epochs.first_block_heights.len() as u64
             * 8
             * MEMORY_ACCESS_GAS_PER_BYTE,
-        sentinel,
     )?;
     Ok(state.in_mem().block.pred_epochs.clone())
 }
@@ -404,13 +383,12 @@ pub fn iter_prefix_pre<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<namada_state::PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(iter)
 }
 
@@ -424,13 +402,12 @@ pub fn iter_prefix_post<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<namada_state::PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix);
-    add_gas(gas_meter, gas, sentinel)?;
+    add_gas(gas_meter, gas)?;
     Ok(iter)
 }
 
@@ -438,13 +415,12 @@ where
 pub fn iter_next<DB>(
     gas_meter: &RefCell<VpGasMeter>,
     iter: &mut namada_state::PrefixIter<DB>,
-    sentinel: &RefCell<VpSentinel>,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
 {
     if let Some((key, val, gas)) = iter.next() {
-        add_gas(gas_meter, gas, sentinel)?;
+        add_gas(gas_meter, gas)?;
         return Ok(Some((key, val)));
     }
     Ok(None)

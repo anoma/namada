@@ -14,7 +14,6 @@ use std::fmt::Debug;
 use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::GasMetering;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
@@ -67,8 +66,6 @@ where
     pub iterators: RefCell<PrefixIterators<'a, <S as StateRead>::D>>,
     /// VP gas meter.
     pub gas_meter: &'a RefCell<VpGasMeter>,
-    /// Errors sentinel
-    pub sentinel: &'a RefCell<VpSentinel>,
     /// Read-only state access.
     pub state: &'a S,
     /// The transaction code is used for signature verification
@@ -124,7 +121,6 @@ where
         tx: &'a Tx,
         tx_index: &'a TxIndex,
         gas_meter: &'a RefCell<VpGasMeter>,
-        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
         #[cfg(feature = "wasm-runtime")]
@@ -135,7 +131,6 @@ where
             state,
             iterators: RefCell::new(PrefixIterators::default()),
             gas_meter,
-            sentinel,
             tx,
             tx_index,
             keys_changed,
@@ -172,23 +167,13 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_pre(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
-        vp_host_fns::has_key_pre(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::has_key_pre(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -200,7 +185,6 @@ where
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -212,12 +196,8 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<<S as StateRead>::D>(
-            self.ctx.gas_meter,
-            iter,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
@@ -268,23 +248,13 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_post(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
-        vp_host_fns::has_key_post(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::has_key_post(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -296,7 +266,6 @@ where
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -308,12 +277,8 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<<S as StateRead>::D>(
-            self.ctx.gas_meter,
-            iter,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
@@ -373,7 +338,7 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>, state::StorageError> {
-        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+        vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
             .into_storage_result()
     }
@@ -382,17 +347,17 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+        vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
-        vp_host_fns::get_chain_id(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_chain_id(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
-        vp_host_fns::get_block_height(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_height(self.gas_meter, self.state)
             .into_storage_result()
     }
 
@@ -400,37 +365,32 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<Option<Header>, state::StorageError> {
-        vp_host_fns::get_block_header(
-            self.gas_meter,
-            self.state,
-            height,
-            self.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::get_block_header(self.gas_meter, self.state, height)
+            .into_storage_result()
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        vp_host_fns::get_block_hash(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_hash(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
-        vp_host_fns::get_block_epoch(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_epoch(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
-        vp_host_fns::get_tx_index(self.gas_meter, self.tx_index, self.sentinel)
+        vp_host_fns::get_tx_index(self.gas_meter, self.tx_index)
             .into_storage_result()
     }
 
     fn get_native_token(&self) -> Result<Address, state::StorageError> {
-        vp_host_fns::get_native_token(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_native_token(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
-        vp_host_fns::get_pred_epochs(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_pred_epochs(self.gas_meter, self.state)
             .into_storage_result()
     }
 
@@ -455,7 +415,6 @@ where
             self.state.write_log(),
             self.state.db(),
             prefix,
-            self.sentinel,
         )
         .into_storage_result()
     }
@@ -490,7 +449,6 @@ where
                 self.state.in_mem(),
                 self.state.db(),
                 self.gas_meter,
-                self.sentinel,
                 self.tx,
                 self.tx_index,
                 &mut iterators,
@@ -532,7 +490,7 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
-        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx, self.sentinel)
+        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx)
             .into_storage_result()
     }
 

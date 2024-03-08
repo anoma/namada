@@ -347,20 +347,22 @@ fn run_vp(
             verifiers_len,
         )
         .map_err(|rt_error| {
-            let maybe_gas_err = || {
+            let downcasted_err = || {
                 let source_err = rt_error.source()?;
-                let downcasted_tx_rt_err: &vp_host_fns::RuntimeError =
+                let downcasted_vp_rt_err: &vp_host_fns::RuntimeError =
                     source_err.downcast_ref()?;
 
-                if let vp_host_fns::RuntimeError::OutOfGas(out_of_gas_err) =
-                    downcasted_tx_rt_err
-                {
-                    Some(Error::GasError(rt_error.to_string()))
-                } else {
-                    None
+                match downcasted_vp_rt_err {
+                    vp_host_fns::RuntimeError::OutOfGas(err) => {
+                        Some(Error::GasError(rt_error.to_string()))
+                    }
+                    vp_host_fns::RuntimeError::InvalidTxSignature => {
+                        Some(Error::InvalidTxSignature)
+                    }
+                    _ => None,
                 }
             };
-            maybe_gas_err().unwrap_or(Error::RuntimeError(rt_error))
+            downcasted_err().unwrap_or(Error::RuntimeError(rt_error))
         })?;
     tracing::debug!("is_valid {}", is_valid);
 

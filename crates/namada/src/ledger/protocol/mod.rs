@@ -8,7 +8,6 @@ use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
@@ -861,20 +860,18 @@ where
                     })
                 }
                 Address::Internal(internal_addr) => {
-                    let sentinel = RefCell::new(VpSentinel::default());
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
                         tx,
                         tx_index,
                         &gas_meter,
-                        &sentinel,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
 
-                    let accepted: Result<bool> = match internal_addr {
+                    match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
                             pos.validate_tx(tx, &keys_changed, &verifiers)
@@ -943,17 +940,7 @@ where
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
-                    };
-
-                    accepted.map_err(|err| {
-                        // No need to check invalid sig because internal vps
-                        // don't check the signature
-                        if sentinel.borrow().is_out_of_gas() {
-                            Error::GasError(err.to_string())
-                        } else {
-                            err
-                        }
-                    })
+                    }
                 }
             };
 
