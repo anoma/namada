@@ -46,6 +46,7 @@ jobs:
           echo "Using hermes for branch: ${BRANCH_NAME}"
           cat .github/workflows/scripts/hermes.json
           cat .github/workflows/scripts/hermes.json | jq
+          cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid}
           cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e || true
           HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
           echo $HERMES_VERSION
