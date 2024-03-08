@@ -133,10 +133,8 @@ tiny-bip39.workspace = true
 tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
-wasm-instrument = { version = "0.4.0", features = [
-  "sign_ext",
-], optional = true }
-wasmer = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasm-instrument = { workspace = true, optional = true }
+wasmer = { workspace = true, optional = true }
 wasmer-cache = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
 wasmer-compiler-singlepass = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
 wasmer-engine-dylib = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }

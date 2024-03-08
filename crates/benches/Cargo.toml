@@ -37,6 +37,11 @@ name = "host_env"
 harness = false
 path = "host_env.rs"
 
+[[bench]]
+name = "wasm_opcodes"
+harness = false
+path = "wasm_opcodes.rs"
+
 [dependencies]
 
 [dev-dependencies]
@@ -46,7 +51,11 @@ masp_primitives.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
+lazy_static.workspace= true
+prost.workspace = true
 rand_core.workspace = true
 rand.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
+wasm-instrument.workspace = true
+wasmer.workspace = true

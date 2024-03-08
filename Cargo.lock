@@ -4295,13 +4295,17 @@ dependencies = [
  "borsh",
  "borsh-ext",
  "criterion",
+ "lazy_static",
  "masp_primitives",
  "namada",
  "namada_apps",
+ "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "sha2 0.9.9",
  "tempfile",
+ "wasm-instrument",
+ "wasmer",
 ]
 
 [[package]]

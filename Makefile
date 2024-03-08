@@ -261,7 +261,7 @@ clean:
 	$(cargo) clean
 
 bench:
-	$(cargo) bench --package namada_benchmarks 
+	$(cargo) bench --package namada_benchmarks
 
 build-doc:
 	$(cargo) doc --no-deps
