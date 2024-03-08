@@ -868,39 +868,6 @@ impl<U: WalletIo> Wallet<U> {
         .map(|alias| (alias, sk))
     }
 
-    /// Generate a disposable signing key for fee payment and store it under the
-    /// precomputed alias in the wallet. This is simply a wrapper around
-    /// `gen_key` to manage the alias
-    pub fn gen_disposable_signing_key(
-        &mut self,
-        rng: &mut (impl CryptoRng + RngCore),
-    ) -> common::SecretKey {
-        // Create the alias
-        let mut ctr = 1;
-        let mut alias = format!("disposable_{ctr}");
-
-        while self.store().contains_alias(&Alias::from(&alias)) {
-            ctr += 1;
-            alias = format!("disposable_{ctr}");
-        }
-        // Generate a disposable keypair to sign the wrapper if requested
-        // TODO: once the wrapper transaction has been applied, this key can be
-        // deleted from wallet (the transaction being accepted is not enough
-        // cause we could end up doing a rollback)
-        let (alias, disposable_keypair) = self
-            .gen_store_secret_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                false,
-                None,
-                rng,
-            )
-            .expect("Failed to initialize disposable keypair");
-
-        println!("Created disposable keypair with alias {alias}");
-        disposable_keypair
-    }
-
     /// XXX OK
     /// Decrypt stored key, if it's not stored un-encrypted.
     /// If a given storage key needs to be decrypted and password is not
@@ -1427,5 +1394,38 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             None,
         )
         .map(|o| o.map(|alias| (alias, spend_key)))
+    }
+
+    /// Generate a disposable signing key for fee payment and store it under the
+    /// precomputed alias in the wallet. This is simply a wrapper around
+    /// `gen_key` to manage the alias
+    pub fn gen_disposable_signing_key_atomic(
+        &mut self,
+        rng: &mut (impl CryptoRng + RngCore),
+    ) -> Result<common::SecretKey, LoadStoreError> {
+        // Create the alias
+        let mut ctr = 1;
+        let mut alias = format!("disposable_{ctr}");
+
+        while self.store().contains_alias(&Alias::from(&alias)) {
+            ctr += 1;
+            alias = format!("disposable_{ctr}");
+        }
+        // Generate a disposable keypair to sign the wrapper if requested
+        // TODO: once the wrapper transaction has been applied, this key can be
+        // deleted from wallet (the transaction being accepted is not enough
+        // cause we could end up doing a rollback)
+        let (alias, disposable_keypair) = self
+            .gen_store_secret_key_atomic(
+                SchemeType::Ed25519,
+                Some(alias),
+                false,
+                None,
+                rng,
+            )?
+            .expect("Failed to initialize disposable keypair");
+
+        println!("Created disposable keypair with alias {alias}");
+        Ok(disposable_keypair)
     }
 }
