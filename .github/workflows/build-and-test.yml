@@ -648,8 +648,9 @@ jobs:
           mv cometbft /usr/local/bin
       - name: Download Hermes
         run: |
+          BRANCH_NAME=$(git symbolic-ref --short HEAD)
           echo "Using hermes for branch: ${BRANCH_NAME}"
-          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_ENV:-invalid} -r -e)
+          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
           HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
           if [ -z "$HERMES_VERSION" ]
           then
@@ -659,8 +660,6 @@ jobs:
           curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
           unzip hermes.zip
           mv hermes /usr/local/bin
-        env:
-          BRANCH_NAME: ${GITHUB_REF##*/}
       - name: Change permissions
         run: |
           chmod +x target/release/namada
