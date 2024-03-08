@@ -3953,8 +3953,7 @@ mod test_finalize_block {
         let enqueued_slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(&val1.address)
-            .at(&height.0)
-            .front(&shell.state)
+            .get(&shell.state, &height.0)
             .unwrap()
             .unwrap();
         assert_eq!(enqueued_slash.epoch, misbehavior_epoch);

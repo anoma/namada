@@ -167,7 +167,7 @@ where
     if enqueued.contains(storage, &evidence_block_height)? {
         return Ok(());
     } else {
-        enqueued.at(&evidence_block_height).push(storage, slash)?;
+        enqueued.insert(storage, evidence_block_height, slash)?;
     }
 
     // Update the most recent slash (infraction) epoch for the validator

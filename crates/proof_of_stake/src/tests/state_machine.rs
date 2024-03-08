@@ -1393,8 +1393,7 @@ impl ConcretePosState {
         let slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(validator)
-            .at(&infraction_height)
-            .back(&self.s)
+            .get(&self.s, &infraction_height)
             .unwrap();
         if let Some(slash) = slash {
             assert_eq!(slash.epoch, infraction_epoch);
