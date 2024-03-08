@@ -612,14 +612,16 @@ fn transparent_key_and_address_gen(
             &mut OsRng,
             prompt_bip39_passphrase,
         );
-        wallet.derive_store_hd_secret_key(
-            scheme,
-            Some(alias),
-            alias_force,
-            seed,
-            derivation_path,
-            encryption_password,
-        )
+        wallet
+            .derive_store_hd_secret_key_atomic(
+                scheme,
+                alias,
+                alias_force,
+                seed,
+                derivation_path,
+                encryption_password,
+            )
+            .expect("Failed to update the wallet storage.")
     }
     .map(|x| x.0)
     .unwrap_or_else(|| {

@@ -899,40 +899,6 @@ impl<U: WalletIo> Wallet<U> {
         .map(|alias| (alias, sk))
     }
 
-    /// Derive a keypair from the given seed and path, derive an implicit
-    /// address from this keypair, and insert them into the store with the
-    /// provided alias, converted to lower case. If none provided, the alias
-    /// will be the public key hash (in lowercase too). If the alias already
-    /// exists, optionally force overwrite the keypair for the alias.
-    /// If no encryption password is provided, the keypair will be stored raw
-    /// without encryption.
-    /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and the key itself.
-    pub fn derive_store_hd_secret_key(
-        &mut self,
-        scheme: SchemeType,
-        alias: Option<String>,
-        alias_force: bool,
-        seed: Seed,
-        derivation_path: DerivationPath,
-        password: Option<Zeroizing<String>>,
-    ) -> Option<(String, common::SecretKey)> {
-        let sk = derive_hd_secret_key(
-            scheme,
-            seed.as_bytes(),
-            derivation_path.clone(),
-        );
-        self.insert_keypair(
-            alias.unwrap_or_default(),
-            alias_force,
-            sk.clone(),
-            password,
-            None,
-            Some(derivation_path),
-        )
-        .map(|alias| (alias, sk))
-    }
-
     /// Derive a masp shielded key from the given seed and path, and insert it
     /// into the store with the provided alias, converted to lower case. If the
     /// alias already exists, optionally force overwrite the key for the
@@ -1383,6 +1349,41 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         .transpose()
     }
 
+    /// Derive a keypair from the given seed and path, derive an implicit
+    /// address from this keypair, and insert them into the store with the
+    /// provided alias, converted to lower case. If the alias already
+    /// exists, optionally force overwrite the keypair for the alias.
+    /// If no encryption password is provided, the keypair will be stored raw
+    /// without encryption.
+    /// Stores the key in decrypted key cache and returns the alias of the
+    /// derived key and the key itself.
+    pub fn derive_store_hd_secret_key_atomic(
+        &mut self,
+        scheme: SchemeType,
+        alias: String,
+        force_alias: bool,
+        seed: Seed,
+        derivation_path: DerivationPath,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
+        let sk = derive_hd_secret_key(
+            scheme,
+            seed.as_bytes(),
+            derivation_path.clone(),
+        );
+        let res = self
+            .insert_keypair_atomic(
+                alias,
+                force_alias,
+                sk.clone(),
+                password,
+                None,
+                Some(derivation_path),
+            )?
+            .map(|alias| (alias, sk));
+        Ok(res)
+    }
+
     // XXX OK
     /// Derive a spending key from the user mnemonic code (read from stdin)
     /// using a given ZIP32 derivation path and insert it into the store with
@@ -1419,6 +1420,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         .transpose()
     }
 
+    // XXX OK DONT TOUCH
     /// Generate a new keypair, derive an implicit address from its public key
     /// and insert them into the store with the provided alias, converted to
     /// lower case. If the alias already exists, optionally force overwrite
@@ -1447,6 +1449,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         .map(|o| o.map(|alias| (alias, sk)))
     }
 
+    // XXX OK DONT TOUCH
     /// Generate a new spending key similarly to how it's done for keypairs
     pub fn gen_store_spending_key_atomic(
         &mut self,
