@@ -306,9 +306,9 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(10);
+                epochs_per_year_from_min_duration(20);
             // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 10;
+            genesis.parameters.pos_params.pipeline_len = 5;
             genesis.parameters.parameters.max_proposal_bytes =
                 Default::default();
             genesis.parameters.pgf_params.stewards =
@@ -347,7 +347,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     delegate_token(&test_a)?;
     let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
     let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
-    let delegated = epoch + 10u64;
+    let delegated = epoch + 5u64;
     while epoch <= delegated {
         sleep(5);
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
@@ -364,12 +364,11 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     submit_votes(&test_a)?;
 
     // wait for the grace
-    let grace_epoch = start_epoch + 12u64 + 6u64;
+    let grace_epoch = start_epoch + 12u64 + 6u64 + 1u64;
     while epoch <= grace_epoch {
         sleep(5);
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
-    sleep(5);
 
     // Check balances after funding over IBC
     check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;

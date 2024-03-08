@@ -156,6 +156,9 @@ pub enum TxSubmitError {
     /// The address is not a valid steward
     #[error("The address {0} is not a valid steward.")]
     InvalidSteward(Address),
+    /// Invalid bond pair
+    #[error("Invalid bond pair: source {0} cannot bond to validator {1}.")]
+    InvalidBondPair(Address, Address),
     /// Rate of epoch change too large for current epoch
     #[error(
         "New rate, {0}, is too large of a change with respect to the \
@@ -265,7 +268,7 @@ pub enum TxSubmitError {
     ImplicitInternalError,
     /// Unexpected Error
     #[error("Unexpected behavior reading the unbonds data has occurred")]
-    UnboundError,
+    UnbondError,
     /// Epoch not in storage
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,

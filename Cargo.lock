@@ -477,17 +477,16 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.65.1"
+version = "0.69.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
+checksum = "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.1",
  "cexpr",
  "clang-sys",
+ "itertools 0.10.5",
  "lazy_static",
  "lazycell",
- "peeking_take_while",
- "prettyplease 0.2.15",
  "proc-macro2",
  "quote",
  "regex",
@@ -2547,8 +2546,6 @@ dependencies = [
  "libc",
  "libgit2-sys",
  "log",
- "openssl-probe",
- "openssl-sys",
  "url",
 ]
 
@@ -3729,9 +3726,7 @@ checksum = "f2a2bb3680b094add03bb3732ec520ece34da31a8cd2d633d1389d0f0fb60d0c"
 dependencies = [
  "cc",
  "libc",
- "libssh2-sys",
  "libz-sys",
- "openssl-sys",
  "pkg-config",
 ]
 
@@ -3764,8 +3759,8 @@ dependencies = [
 
 [[package]]
 name = "librocksdb-sys"
-version = "0.11.0+8.1.1"
-source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
+version = "0.16.0+8.10.0"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=4dc7f4fdfa17e923d3078d51261e3db66707754d#4dc7f4fdfa17e923d3078d51261e3db66707754d"
 dependencies = [
  "bindgen",
  "bzip2-sys",
@@ -3791,20 +3786,6 @@ dependencies = [
  "sha2 0.8.2",
  "subtle 2.4.1",
  "typenum",
-]
-
-[[package]]
-name = "libssh2-sys"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dc8a030b787e2119a731f1951d6a773e2280c660f8ec4b0f5e1505a386e71ee"
-dependencies = [
- "cc",
- "libc",
- "libz-sys",
- "openssl-sys",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]
@@ -4122,7 +4103,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4206,7 +4187,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4218,7 +4199,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4309,7 +4290,7 @@ dependencies = [
 
 [[package]]
 name = "namada_benchmarks"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4325,7 +4306,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "bech32 0.8.1",
  "borsh",
@@ -4373,7 +4354,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4384,7 +4365,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4416,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "namada_examples"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "data-encoding",
  "masp_proofs",
@@ -4428,7 +4409,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4440,7 +4421,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4458,7 +4439,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "ibc",
@@ -4483,7 +4464,7 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "borsh-ext",
@@ -4497,7 +4478,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "pretty_assertions",
  "proc-macro2",
@@ -4507,7 +4488,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4523,7 +4504,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4534,7 +4515,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4563,14 +4544,14 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_sdk"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4634,7 +4615,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4651,7 +4632,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_matches",
  "borsh",
@@ -4678,7 +4659,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
@@ -4693,7 +4674,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
@@ -4702,7 +4683,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4754,7 +4735,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -4764,7 +4745,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4772,7 +4753,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "ark-bls12-381",
  "assert_matches",
@@ -4796,7 +4777,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -4804,7 +4785,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4826,7 +4807,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "masp_primitives",
@@ -4835,7 +4816,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "data-encoding",
@@ -4846,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -4858,7 +4839,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.31.8"
+version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_account",
@@ -5429,12 +5410,6 @@ dependencies = [
  "digest 0.10.7",
  "hmac 0.12.1",
 ]
-
-[[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "peg"
@@ -6284,8 +6259,8 @@ dependencies = [
 
 [[package]]
 name = "rocksdb"
-version = "0.21.0"
-source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=20f158ade557eea2d62baece0a5b5b55a34f4915#20f158ade557eea2d62baece0a5b5b55a34f4915"
+version = "0.22.0"
+source = "git+https://github.com/heliaxdev/rust-rocksdb?rev=4dc7f4fdfa17e923d3078d51261e3db66707754d#4dc7f4fdfa17e923d3078d51261e3db66707754d"
 dependencies = [
  "libc",
  "librocksdb-sys",
