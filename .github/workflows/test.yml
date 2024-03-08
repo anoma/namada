@@ -44,8 +44,7 @@ jobs:
         run: |
           BRANCH_NAME=$(git symbolic-ref --short HEAD)
           echo "Using hermes for branch: ${BRANCH_NAME}"
-          cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e
-          echo $?
+          cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e || true
           HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
           echo $HERMES_VERSION
           HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
