@@ -48,7 +48,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
 namada = {path = "../../crates/namada"}
-namada_tests = {path = "../../crates/tests"}
+namada_tests = {path = "../../crates/tests", default-features = false, features = ["wasm-runtime"]}
 namada_test_utils = {path = "../../crates/test_utils"}
 namada_tx_prelude = {path = "../../crates/tx_prelude"}
 namada_vp_prelude = {path = "../../crates/vp_prelude"}

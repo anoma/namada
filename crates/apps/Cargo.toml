@@ -50,7 +50,7 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = []
+default = ["migrations"]
 mainnet = [
   "namada/mainnet",
 ]
