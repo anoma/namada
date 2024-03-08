@@ -8,6 +8,9 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{DecodePartial, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
 pub use ibc::*;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -35,6 +38,7 @@ pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -68,6 +72,7 @@ impl FromStr for IbcTokenHash {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -147,7 +152,7 @@ impl BorshDeserialize for MsgShieldedTransfer {
 }
 
 /// IBC shielded transfer
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct IbcShieldedTransfer {
     /// The IBC event type
     pub transfer: Transfer,

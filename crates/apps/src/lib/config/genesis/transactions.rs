@@ -27,6 +27,9 @@ use namada::tx::data::{pos, Fee, TxType};
 use namada::tx::{
     verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
 };
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_sdk::args::Tx as TxArgs;
 use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
@@ -671,6 +674,7 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -981,6 +985,7 @@ impl<T: TemplateValidation> From<BondTx<T>> for SignedBondTx<T> {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,

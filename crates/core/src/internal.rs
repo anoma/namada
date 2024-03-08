@@ -1,6 +1,9 @@
 //! Shared internal types between the host env and guest (wasm).
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 
 /// A result of a wasm call to host functions that may fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,7 +16,7 @@ pub enum HostEnvResult {
 
 /// Key-value pair represents data from account's subspace.
 /// It is used for prefix iterator's WASM host_env functions.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct KeyVal {
     /// The storage key
     pub key: String,

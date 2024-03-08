@@ -3341,6 +3341,7 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
+ "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_replay_protection",
@@ -3479,6 +3480,7 @@ version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
+ "namada_macros",
  "serde",
  "thiserror",
 ]
@@ -3530,8 +3532,12 @@ dependencies = [
 name = "namada_macros"
 version = "0.31.9"
 dependencies = [
+ "data-encoding",
+ "lazy_static",
+ "paste",
  "proc-macro2",
  "quote",
+ "sha2 0.9.9",
  "syn 1.0.109",
 ]
 
@@ -3543,6 +3549,7 @@ dependencies = [
  "eyre",
  "ics23",
  "namada_core",
+ "namada_macros",
  "prost 0.12.3",
  "sparse-merkle-tree",
  "thiserror",
@@ -3569,6 +3576,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_governance",
+ "namada_macros",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
@@ -3613,6 +3621,7 @@ dependencies = [
  "namada_ethereum_bridge",
  "namada_governance",
  "namada_ibc",
+ "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
@@ -3670,6 +3679,7 @@ dependencies = [
  "itertools 0.10.5",
  "namada_core",
  "namada_gas",
+ "namada_macros",
  "namada_merkle_tree",
  "namada_parameters",
  "namada_replay_protection",
@@ -3692,6 +3702,7 @@ dependencies = [
  "itertools 0.10.5",
  "namada_core",
  "namada_gas",
+ "namada_macros",
  "namada_merkle_tree",
  "namada_replay_protection",
  "namada_tx",
@@ -3770,6 +3781,7 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_gas",
+ "namada_macros",
  "num-derive",
  "num-traits",
  "proptest",
@@ -3827,6 +3839,7 @@ version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
+ "namada_macros",
  "namada_tx",
  "serde",
 ]

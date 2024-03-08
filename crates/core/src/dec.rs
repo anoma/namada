@@ -10,6 +10,9 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::eyre;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use num_traits::CheckedMul;
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +41,7 @@ pub type Result<T> = std::result::Result<T, Error>;
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Serialize,
