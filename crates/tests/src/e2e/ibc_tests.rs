@@ -79,6 +79,7 @@ use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
@@ -89,7 +90,7 @@ use crate::e2e::helpers::{
     get_established_addr_from_pregenesis, get_validator_pk,
     wait_for_wasm_pre_compile,
 };
-use crate::e2e::ledger_tests::prepare_proposal_data;
+use crate::e2e::ledger_tests::{prepare_proposal_data, write_json_file};
 use crate::e2e::setup::{
     self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
@@ -375,6 +376,94 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn proposal_ibc_token_inflation() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(60);
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    // Proposal on the destination (Chain B)
+    // Delegate some token
+    delegate_token(&test_b)?;
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    let delegated = epoch + 2u64;
+    while epoch <= delegated {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    // inflation proposal on Chain B
+    let start_epoch = propose_inflation(&test_b)?;
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // Vote
+    while epoch <= start_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    submit_votes(&test_b)?;
+
+    // wait for the next epoch of the grace
+    wait_epochs(&test_b, 6 + 1)?;
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b: PortId = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // Get masp proof for the following IBC transfer from the destination chain
+    // It will send 1 APFEL to PA(B) on Chain B
+    // PA(B) on Chain B will receive APFEL on chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, APFEL)?;
+    // wait the next epoch not to update the epoch during the IBC transfer
+    wait_epochs(&test_b, 1)?;
+    let file_path = gen_ibc_shielded_transfer(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr.to_string(),
+        1,
+        &port_id_b,
+        &channel_id_b,
+    )?;
+
+    // Transfer 1 from Chain A to a z-address on Chain B
+    transfer(
+        &test_a,
+        ALBERT,
+        AB_PAYMENT_ADDRESS,
+        APFEL,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(&file_path.to_string_lossy()),
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+
+    // wait the next epoch to dispense the rewrad
+    wait_epochs(&test_b, 1)?;
+
+    // Check balances
+    check_inflated_balance(&test_b)?;
+
+    Ok(())
+}
+
 fn run_two_nets(
     update_genesis: impl FnMut(
         templates::All<templates::Unvalidated>,
@@ -575,6 +664,30 @@ fn wait_for_packet_relay(
         }
     }
     Err(eyre!("Pending packet is still left"))
+}
+
+fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let mut epoch = None;
+    for _ in 0..10 {
+        match get_epoch(test, &rpc) {
+            Ok(e) => {
+                epoch = Some(e);
+                break;
+            }
+            Err(_) => sleep(10),
+        }
+    }
+    let (mut epoch, target_epoch) = match epoch {
+        Some(e) => (e, e + duration_epochs),
+        None => return Err(eyre!("Query epoch failed")),
+    };
+    while epoch < target_epoch {
+        sleep(10);
+        epoch = get_epoch(test, &rpc).unwrap_or_default();
+    }
+    Ok(())
 }
 
 fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
@@ -1270,6 +1383,39 @@ fn transfer_timeout(
     Ok(())
 }
 
+fn gen_ibc_shielded_transfer(
+    test: &Test,
+    target: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<PathBuf> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let output_folder = test.test_dir.path().to_string_lossy();
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        target.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount.to_string(),
+        "--port-id",
+        port_id.as_ref(),
+        "--channel-id",
+        channel_id.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    Ok(file_path)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn shielded_transfer(
     test_a: &Test,
@@ -1283,34 +1429,17 @@ fn shielded_transfer(
 ) -> Result<()> {
     // Get masp proof for the following IBC transfer from the destination chain
     // It will send 10 BTC from Chain A to PA(B) on Chain B
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    // Chain B will receive Chain A's BTC
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let output_folder = test_b.test_dir.path().to_string_lossy();
     // PA(B) on Chain B will receive BTC on chain A
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(test_a, BTC)?;
-    let amount = Amount::native_whole(10).to_string_native();
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
+    let file_path = gen_ibc_shielded_transfer(
+        test_b,
         AB_PAYMENT_ADDRESS,
-        "--token",
-        &token_addr.to_string(),
-        "--amount",
-        &amount,
-        "--port-id",
-        port_id_b.as_ref(),
-        "--channel-id",
-        channel_id_b.as_ref(),
-        "--node",
-        &rpc_b,
-    ];
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    client.assert_success();
+        token_addr.to_string(),
+        10,
+        port_id_b,
+        channel_id_b,
+    )?;
 
     // Send a token to the shielded address on Chain A
     transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
@@ -1710,6 +1839,53 @@ fn propose_funding(
         &rpc_a,
     ];
     let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_ACCEPTED)?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn propose_inflation(test: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "id": 0,
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
+                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
+                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "grace_epoch": start_epoch + 6_u64,
+        },
+        "data": TestWasms::TxProposalIbcTokenInflation.read_bytes()
+    });
+
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
     client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2138,6 +2314,39 @@ fn check_funded_balances(
     let expected = format!("{ibc_denom}: 5");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
     client.exp_string(&expected)?;
+    client.assert_success();
+
+    Ok(())
+}
+
+fn check_inflated_balance(test: &Test) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        AB_VIEWING_KEY,
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AB_VIEWING_KEY,
+        "--token",
+        NAM,
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(100))?;
+    let (_, matched) = client.exp_regex("nam: .*")?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let mut iter = regex.find_iter(&matched);
+    let balance: f64 = iter.next().unwrap().as_str().parse().unwrap();
+    assert!(balance > 0.0);
     client.assert_success();
 
     Ok(())
