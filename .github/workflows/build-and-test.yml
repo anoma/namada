@@ -649,11 +649,9 @@ jobs:
       - name: Download Hermes
         run: |
           BRANCH_NAME=$(git symbolic-ref --short HEAD)
-          echo "Using hermes for branch: ${BRANCH_NAME}"
-          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e)
+          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.json | jq .${BRANCH_NAME:-invalid} -r -e || true)
           HERMES_VERSION_DEFAULT=$(cat .github/workflows/scripts/hermes.json | jq .default -r)
-          if [ -z "$HERMES_VERSION" ]
-          then
+          if [ "$HERMES_VERSION" = "null" ]; then
             HERMES_VERSION=$HERMES_VERSION_DEFAULT
           fi
           echo "Using hermes version: ${HERMES_VERSION}"
