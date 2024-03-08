@@ -44,7 +44,9 @@ use namada_governance::storage::proposal::{
 };
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
-use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::parameters::{
+    PosParams, MAX_VALIDATOR_METADATA_LEN,
+};
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
@@ -733,11 +735,12 @@ pub async fn build_validator_metadata_change(
             );
             return Err(Error::from(TxSubmitError::InvalidEmail));
         }
-        // Check that the email is within 500 characters
-        if email.len() > 500 {
+        // Check that the email is within MAX_VALIDATOR_METADATA_LEN characters
+        if email.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
             edisplay_line!(
                 context.io(),
-                "Email provided is too long, must be within 500 characters"
+                "Email provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
             );
             if !tx_args.force {
                 return Err(Error::from(TxSubmitError::MetadataTooLong));
@@ -745,12 +748,14 @@ pub async fn build_validator_metadata_change(
         }
     }
 
-    // Check that any new metadata provided is within 500 characters
+    // Check that any new metadata provided is within MAX_VALIDATOR_METADATA_LEN
+    // characters
     if let Some(description) = description.as_ref() {
-        if description.len() > 500 {
+        if description.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
             edisplay_line!(
                 context.io(),
-                "Description provided is too long, must be within 500 characters"
+                "Description provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
             );
             if !tx_args.force {
                 return Err(Error::from(TxSubmitError::MetadataTooLong));
@@ -758,10 +763,11 @@ pub async fn build_validator_metadata_change(
         }
     }
     if let Some(website) = website.as_ref() {
-        if website.len() > 500 {
+        if website.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
             edisplay_line!(
                 context.io(),
-                "Website provided is too long, must be within 500 characters"
+                "Website provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
             );
             if !tx_args.force {
                 return Err(Error::from(TxSubmitError::MetadataTooLong));
@@ -769,10 +775,11 @@ pub async fn build_validator_metadata_change(
         }
     }
     if let Some(discord_handle) = discord_handle.as_ref() {
-        if discord_handle.len() > 500 {
+        if discord_handle.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
             edisplay_line!(
                 context.io(),
-                "Discord handle provided is too long, must be within 500 characters"
+                "Discord handle provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
             );
             if !tx_args.force {
                 return Err(Error::from(TxSubmitError::MetadataTooLong));
@@ -780,10 +787,11 @@ pub async fn build_validator_metadata_change(
         }
     }
     if let Some(avatar) = avatar.as_ref() {
-        if avatar.len() > 500 {
+        if avatar.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
             edisplay_line!(
                 context.io(),
-                "Avatar provided is too long, must be within 500 characters"
+                "Avatar provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
             );
             if !tx_args.force {
                 return Err(Error::from(TxSubmitError::MetadataTooLong));
