@@ -840,24 +840,6 @@ impl<U: WalletIo> Wallet<U> {
     }
 
     /// XXX OK
-    /// Derive a keypair from the user mnemonic code (read from stdin) using
-    /// a given BIP44 derivation path.
-    pub fn derive_secret_key_from_mnemonic_code(
-        scheme: SchemeType,
-        derivation_path: DerivationPath,
-        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
-        prompt_bip39_passphrase: bool,
-    ) -> Option<common::SecretKey> {
-        let seed =
-            Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)?;
-        Some(derive_hd_secret_key(
-            scheme,
-            seed.as_bytes(),
-            derivation_path,
-        ))
-    }
-
-    /// XXX OK
     /// Derive a spending key from the user mnemonic code (read from stdin)
     /// using a given ZIP32 derivation path.
     pub fn derive_spending_key_from_mnemonic_code(
@@ -1321,32 +1303,26 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
     pub fn derive_store_secret_key_from_mnemonic_code(
         &mut self,
         scheme: SchemeType,
-        alias: Option<String>,
+        alias: String,
         alias_force: bool,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
-        Self::derive_secret_key_from_mnemonic_code(
-            scheme,
-            derivation_path.clone(),
-            mnemonic_passphrase,
-            prompt_bip39_passphrase,
-        )
-        .and_then(|sk| {
-            self.insert_keypair_atomic(
-                alias.unwrap_or_default(),
-                alias_force,
-                sk.clone(),
-                password,
-                None,
-                Some(derivation_path),
-            )
-            .map(|o| o.map(|alias| (alias, sk)))
+        Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)
+            .and_then(|seed| {
+                self.derive_store_hd_secret_key_atomic(
+                    scheme,
+                    alias,
+                    alias_force,
+                    seed,
+                    derivation_path,
+                    password,
+                )
+                .transpose()
+            })
             .transpose()
-        })
-        .transpose()
     }
 
     /// Derive a keypair from the given seed and path, derive an implicit

@@ -489,7 +489,7 @@ async fn transparent_key_and_address_derive(
         wallet
             .derive_store_secret_key_from_mnemonic_code(
                 scheme,
-                Some(alias),
+                alias,
                 alias_force,
                 derivation_path,
                 None,
