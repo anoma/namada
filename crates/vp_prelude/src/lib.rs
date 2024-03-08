@@ -309,7 +309,7 @@ impl<'view> VpEnv<'view> for Ctx {
         &self,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool, StorageError> {
+    ) -> Result<(), StorageError> {
         let input_data_bytes = borsh::to_vec(&input_data).unwrap();
         let result = unsafe {
             namada_vp_eval(

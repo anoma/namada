@@ -417,13 +417,14 @@ where
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
-        match self.eval_native_result(ctx, vp_code_hash, input_data) {
-            Ok(ok) => HostEnvResult::from(ok),
-            Err(err) => {
-                tracing::warn!("VP eval error {}", err);
-                HostEnvResult::Fail
-            }
-        }
+        self.eval_native_result(ctx, vp_code_hash, input_data)
+            .map_or_else(
+                |err| {
+                    tracing::warn!("VP eval error {err}");
+                    HostEnvResult::Fail
+                },
+                |()| HostEnvResult::Success,
+            )
     }
 }
 

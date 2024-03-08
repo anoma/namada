@@ -423,7 +423,7 @@ where
         &self,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool, state::StorageError> {
+    ) -> Result<(), state::StorageError> {
         #[cfg(feature = "wasm-runtime")]
         {
             use std::marker::PhantomData;
@@ -459,17 +459,13 @@ where
                 &eval_runner,
                 &mut vp_wasm_cache,
             );
-            match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
-            {
-                Ok(result) => Ok(result),
-                Err(err) => {
+            eval_runner
+                .eval_native_result(ctx, vp_code_hash, input_data)
+                .inspect_err(|err| {
                     tracing::warn!(
-                        "VP eval from a native VP failed with: {}",
-                        err
+                        "VP eval from a native VP failed with: {err}",
                     );
-                    Ok(false)
-                }
-            }
+                })
         }
 
         #[cfg(not(feature = "wasm-runtime"))]

@@ -121,7 +121,6 @@ mod test_nuts {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::storage::TxIndex;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_ethereum_bridge::storage::wrapped_erc20s;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
@@ -187,14 +186,12 @@ mod test_nuts {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::<_, WasmCacheRwAccess>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,
             &tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             VpCache::new(temp_dir(), 100usize),

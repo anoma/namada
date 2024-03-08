@@ -1025,13 +1025,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1371,13 +1365,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1435,13 +1423,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1522,13 +1504,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1604,13 +1580,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1703,13 +1673,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1788,13 +1752,7 @@ mod test_bridge_pool_vp {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let vp = BridgePoolVp {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let mut tx = Tx::from_type(TxType::Raw);

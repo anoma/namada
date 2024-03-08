@@ -313,7 +313,6 @@ mod tests {
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
     use namada_state::testing::TestState;
@@ -725,14 +724,12 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -804,14 +801,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -931,14 +926,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1043,14 +1036,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1140,14 +1131,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1262,14 +1251,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1375,14 +1362,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1473,14 +1458,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1599,14 +1582,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1724,14 +1705,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1834,14 +1813,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1939,14 +1916,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2082,14 +2057,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2278,14 +2251,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2426,14 +2397,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2578,14 +2547,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2731,14 +2698,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,

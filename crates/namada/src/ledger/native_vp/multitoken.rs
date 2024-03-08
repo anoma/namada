@@ -215,7 +215,6 @@ mod tests {
     use std::cell::RefCell;
 
     use borsh_ext::BorshSerializeExt;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_state::testing::TestState;
     use namada_tx::data::TxType;
@@ -285,14 +284,12 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(sender);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -341,14 +338,12 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -404,14 +399,12 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -465,14 +458,12 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -519,14 +510,12 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -582,14 +571,12 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -625,14 +612,12 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -669,14 +654,12 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,

@@ -111,7 +111,7 @@ where
         &self,
         vp_code: Hash,
         input_data: Tx,
-    ) -> Result<bool, namada_storage::Error>;
+    ) -> Result<(), namada_storage::Error>;
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;

@@ -167,7 +167,6 @@ mod tests {
     use std::env::temp_dir;
 
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
@@ -243,7 +242,6 @@ mod tests {
         tx: &'a Tx,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
-        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
@@ -253,7 +251,6 @@ mod tests {
             tx,
             &TxIndex(0),
             gas_meter,
-            sentinel,
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),
@@ -384,16 +381,8 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
@@ -437,16 +426,8 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
@@ -493,16 +474,8 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
