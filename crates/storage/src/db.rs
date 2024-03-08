@@ -289,6 +289,9 @@ pub trait DBIter<'iter> {
 
     /// Read replay protection storage from the last block
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
+
+    /// Read gas storage from the last block
+    fn iter_gas(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.

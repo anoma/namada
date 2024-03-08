@@ -57,7 +57,7 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::replay_protection;
+use namada::{gas, replay_protection};
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
@@ -1580,6 +1580,15 @@ impl<'iter> DBIter<'iter> for RocksDB {
 
         let stripped_prefix = Some(replay_protection::last_prefix());
         iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
+    }
+
+    fn iter_gas(&'iter self) -> Self::PrefixIter {
+        let gas_cf = self
+            .get_column_family(GAS_CF)
+            .expect("{GAS_CF} column family should exist");
+
+        let stripped_prefix = Some(gas::storage::last_prefix());
+        iter_prefix(self, gas_cf, stripped_prefix.as_ref(), None)
     }
 }
 

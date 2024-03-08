@@ -400,6 +400,15 @@ where
         }))
     }
 
+    /// Iterate the gas storage from the last block
+    pub fn iter_gas(
+        &self,
+    ) -> Box<dyn Iterator<Item = Hash> + '_> {
+        Box::new(self.db.iter_gas().map(|(raw_key, _, _)| {
+            raw_key.parse().expect("Failed hash conversion")
+        }))
+    }
+
     /// Get oldest epoch which has the valid signed nonce of the bridge pool
     fn get_oldest_epoch_with_valid_nonce(&self) -> Result<Option<Epoch>> {
         let last_height = self.in_mem.get_last_block_height();

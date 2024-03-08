@@ -745,6 +745,14 @@ impl<'iter> DBIter<'iter> for MockDB {
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
+
+    fn iter_gas(&'iter self) -> Self::PrefixIter {
+        let stripped_prefix =
+            format!("gas/{}/", namada_gas::storage::last_prefix());
+        let prefix = stripped_prefix.clone();
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
+    }
 }
 
 /// A prefix iterator base for the [`MockPrefixIterator`].

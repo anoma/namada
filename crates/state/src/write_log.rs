@@ -2,6 +2,7 @@
 //! before they are committed to the ledger's storage.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt::Display;
 
 use itertools::Itertools;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
@@ -33,6 +34,8 @@ pub enum Error {
     WriteTempAfterDelete,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
+    #[error("Gas key: {0}")]
+    Gas(String),
 }
 
 /// Result for functions that may fail
@@ -74,6 +77,34 @@ pub(crate) enum ReProtStorageModification {
     Finalize,
 }
 
+impl Display for ReProtStorageModification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReProtStorageModification::Write => write!(f, "write"),
+            ReProtStorageModification::Delete => write!(f, "delete"),
+            ReProtStorageModification::Finalize => write!(f, "finalize"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Gas substorage modification
+pub(crate) enum GasStorageModification {
+    /// Write an entry
+    Write,
+    /// Finalize an entry
+    Finalize,
+}
+
+impl Display for GasStorageModification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GasStorageModification::Write => write!(f, "write"),
+            GasStorageModification::Finalize => write!(f, "finalize"),
+        }
+    }
+}
+
 /// The write log storage
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
@@ -87,7 +118,7 @@ pub struct WriteLog {
     /// A precommit bucket for the `tx_write_log`. This is useful for
     /// validation when a clean `tx_write_log` is needed without committing any
     /// modification already in there. These modifications can be temporarily
-    /// stored here and then discarded or committed to the `block_write_log`,
+    /// stored here and then discarded or committed to the `block_write_log`git ,
     /// together with th content of `tx_write_log`. No direct key
     /// write/update/delete should ever happen on this field, this log should
     /// only be populated through a dump of the `tx_write_log` and should be
@@ -99,6 +130,9 @@ pub struct WriteLog {
     /// Storage modifications for the replay protection storage, always
     /// committed regardless of the result of the transaction
     pub(crate) replay_protection: HashMap<Hash, ReProtStorageModification>,
+    /// Storage modifications for the gas substorage space, always
+    /// committed regardless of the result of the transaction
+    pub(crate) gas: HashMap<Hash, (u64, GasStorageModification)>,
 }
 
 /// Write log prefix iterator
@@ -126,6 +160,7 @@ impl Default for WriteLog {
             tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
             replay_protection: HashMap::with_capacity(1_000),
+            gas: HashMap::with_capacity(1_000),
         }
     }
 }
@@ -591,44 +626,81 @@ impl WriteLog {
 
     /// Write the transaction hash
     pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Write)
-            .is_some()
-        {
-            // Cannot write an hash if other requests have already been
-            // committed for the same hash
-            return Err(Error::ReplayProtection(format!(
-                "Requested a write on hash {hash} over a previous request"
-            )));
-        }
-
-        Ok(())
+        self.write_tx_hash_storage_modification(
+            hash,
+            ReProtStorageModification::Write,
+        )
     }
 
     /// Remove the transaction hash
     pub(crate) fn delete_tx_hash(&mut self, hash: Hash) {
-        self.replay_protection
-            .insert(hash, ReProtStorageModification::Delete);
+        let _ = self.write_tx_hash_storage_modification(
+            hash,
+            ReProtStorageModification::Delete,
+        );
     }
 
     /// Move the transaction hash of the previous block to the list of all
     /// blocks. This functions should be called at the beginning of the block
     /// processing, before any other replay protection operation is done
     pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Finalize)
-            .is_some()
-        {
-            // Cannot finalize an hash if other requests have already been
-            // committed for the same hash
-            return Err(Error::ReplayProtection(format!(
-                "Requested a finalize on hash {hash} over a previous request"
-            )));
-        }
+        self.write_tx_hash_storage_modification(
+            hash,
+            ReProtStorageModification::Finalize,
+        )
+    }
 
-        Ok(())
+    pub fn write_tx_gas(&mut self, hash: Hash, gas: u64) -> Result<()> {
+        self.write_tx_gas_storage_modification(
+            hash,
+            gas,
+            GasStorageModification::Write,
+        )
+    }
+
+    pub fn finalize_tx_gas(&mut self, hash: Hash, gas: u64) -> Result<()> {
+        self.write_tx_gas_storage_modification(
+            hash,
+            gas,
+            GasStorageModification::Finalize,
+        )
+    }
+
+    fn write_tx_hash_storage_modification(
+        &mut self,
+        hash: Hash,
+        storage_modification: ReProtStorageModification,
+    ) -> Result<()> {
+        match storage_modification {
+            ReProtStorageModification::Delete => {
+                self.replay_protection.insert(hash, storage_modification);
+                Ok(())
+            },
+            _ => {
+                self
+                .replay_protection
+                .insert(hash, storage_modification).map_or_else(|| Ok(()), |storage_modification| {
+                    Err(Error::ReplayProtection(format!(
+                        "Requested a {storage_modification} on hash {hash} over a previous request"
+                    )))
+                })
+            },
+        }
+    }
+
+    fn write_tx_gas_storage_modification(
+        &mut self,
+        hash: Hash,
+        gas: u64,
+        storage_modification: GasStorageModification,
+    ) -> Result<()> {
+        self
+            .gas
+            .insert(hash, (gas, storage_modification)).map_or_else(|| Ok(()), |(_, storage_modification)| {
+                Err(Error::Gas(format!(
+                    "Requested a gas {storage_modification} on hash {hash} over a previous request"
+                )))
+            })
     }
 }
 
@@ -879,11 +951,9 @@ mod tests {
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3"] {
             let hash = Hash::sha256(tx.as_bytes());
-            assert!(
-                state
-                    .has_replay_protection_entry(&hash)
-                    .expect("read failed")
-            );
+            assert!(state
+                .has_replay_protection_entry(&hash)
+                .expect("read failed"));
         }
 
         {
@@ -915,17 +985,13 @@ mod tests {
 
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
-            assert!(
-                state
-                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
-                    .expect("read failed")
-            );
+            assert!(state
+                .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                .expect("read failed"));
         }
-        assert!(
-            !state
-                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
-                .expect("read failed")
-        );
+        assert!(!state
+            .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+            .expect("read failed"));
 
         // try to delete finalized hash which shouldn't work
         state
@@ -936,11 +1002,9 @@ mod tests {
         state.commit_block().expect("commit failed");
 
         assert!(state.write_log.replay_protection.is_empty());
-        assert!(
-            state
-                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
-                .expect("read failed")
-        );
+        assert!(state
+            .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
+            .expect("read failed"));
     }
 
     prop_compose! {
