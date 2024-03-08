@@ -705,6 +705,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
+        start_block: Option<BlockHeight>,
     ) -> Result<(), Error> {
         // add new viewing keys
         // Reload the state from file to get the last confirmed state and
@@ -736,9 +737,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             return Ok(());
         };
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
-        // get the bounds on the block heights to fetch
-        let start_idx =
+
+        let temp_start_idx =
             std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
+
+        let start_idx = match start_block {
+            Some(block) => Some(block),
+            None => temp_start_idx,
+        };
+        // get the bounds on the block heights to fetch
+        
         // Load all transactions accepted until this point
         // N.B. the cache is a hash map
         self.unscanned.extend(
@@ -2396,7 +2404,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks)
+        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks,None)
             .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;

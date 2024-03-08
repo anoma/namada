@@ -37,7 +37,7 @@ pub async fn syncing<
     let logger = CliLogger::new(io);
     let sync = async move {
         shielded
-            .fetch(client, &logger, last_query_height, batch_size, sks, fvks)
+            .fetch(client, &logger, last_query_height, batch_size, sks, fvks,None)
             .await
             .map(|_| shielded)
     };
