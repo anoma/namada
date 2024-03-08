@@ -839,19 +839,6 @@ impl<U: WalletIo> Wallet<U> {
         Some(Seed::new(&mnemonic, &passphrase))
     }
 
-    /// XXX OK
-    /// Derive a spending key from the user mnemonic code (read from stdin)
-    /// using a given ZIP32 derivation path.
-    pub fn derive_spending_key_from_mnemonic_code(
-        derivation_path: DerivationPath,
-        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
-        prompt_bip39_passphrase: bool,
-    ) -> Option<ExtendedSpendingKey> {
-        let seed =
-            Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)?;
-        Some(derive_hd_spending_key(seed.as_bytes(), derivation_path))
-    }
-
     // XXX REMOVE
     /// Generate a new keypair, derive an implicit address from its public key
     /// and insert them into the store with the provided alias, converted to
@@ -1373,29 +1360,24 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
     pub fn derive_store_hd_spending_key_from_mnemonic_code(
         &mut self,
         alias: String,
-        alias_force: bool,
+        force_alias: bool,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Result<Option<(String, ExtendedSpendingKey)>, LoadStoreError> {
-        Self::derive_spending_key_from_mnemonic_code(
-            derivation_path.clone(),
-            mnemonic_passphrase,
-            prompt_bip39_passphrase,
-        )
-        .and_then(|spend_key| {
-            self.insert_spending_key_atomic(
-                alias,
-                alias_force,
-                spend_key,
-                password,
-                Some(derivation_path),
-            )
-            .map(|o| o.map(|alias| (alias, spend_key)))
+        Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)
+            .and_then(|seed| {
+                self.derive_store_hd_spendind_key_atomic(
+                    alias,
+                    force_alias,
+                    seed,
+                    derivation_path,
+                    password,
+                )
+                .transpose()
+            })
             .transpose()
-        })
-        .transpose()
     }
 
     // XXX OK DONT TOUCH
@@ -1411,7 +1393,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         &mut self,
         scheme: SchemeType,
         alias: Option<String>,
-        alias_force: bool,
+        force_alias: bool,
         password: Option<Zeroizing<String>>,
         rng: &mut (impl CryptoRng + RngCore),
     ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
