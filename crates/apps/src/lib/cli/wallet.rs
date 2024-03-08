@@ -220,7 +220,7 @@ fn shielded_key_derive(
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_store_spending_key_from_mnemonic_code(
+            .derive_store_hd_spending_key_from_mnemonic_code(
                 alias,
                 alias_force,
                 derivation_path,
@@ -296,13 +296,15 @@ fn shielded_key_gen(
             &mut OsRng,
             prompt_bip39_passphrase,
         );
-        wallet.derive_store_hd_spendind_key(
-            alias,
-            alias_force,
-            seed,
-            derivation_path,
-            password,
-        )
+        wallet
+            .derive_store_hd_spendind_key_atomic(
+                alias,
+                alias_force,
+                seed,
+                derivation_path,
+                password,
+            )
+            .expect("Failed to update the wallet storage.")
     }
     .map(|x| x.0)
     .unwrap_or_else(|| {

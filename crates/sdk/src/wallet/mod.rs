@@ -881,34 +881,6 @@ impl<U: WalletIo> Wallet<U> {
         .map(|alias| (alias, sk))
     }
 
-    /// Derive a masp shielded key from the given seed and path, and insert it
-    /// into the store with the provided alias, converted to lower case. If the
-    /// alias already exists, optionally force overwrite the key for the
-    /// alias.
-    /// If no encryption password is provided, the key will be stored raw
-    /// without encryption.
-    /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and the key itself.
-    pub fn derive_store_hd_spendind_key(
-        &mut self,
-        alias: String,
-        force_alias: bool,
-        seed: Seed,
-        derivation_path: DerivationPath,
-        password: Option<Zeroizing<String>>,
-    ) -> Option<(String, ExtendedSpendingKey)> {
-        let spend_key =
-            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
-        self.insert_spending_key(
-            alias,
-            force_alias,
-            spend_key,
-            password,
-            Some(derivation_path),
-        )
-        .map(|alias| (alias, spend_key))
-    }
-
     /// Generate a disposable signing key for fee payment and store it under the
     /// precomputed alias in the wallet. This is simply a wrapper around
     /// `gen_key` to manage the alias
@@ -1324,6 +1296,36 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         Ok(res)
     }
 
+    /// Derive a masp shielded key from the given seed and path, and insert it
+    /// into the store with the provided alias, converted to lower case. If the
+    /// alias already exists, optionally force overwrite the key for the
+    /// alias.
+    /// If no encryption password is provided, the key will be stored raw
+    /// without encryption.
+    /// Stores the key in decrypted key cache and returns the alias of the key
+    /// and the key itself.
+    pub fn derive_store_hd_spendind_key_atomic(
+        &mut self,
+        alias: String,
+        force_alias: bool,
+        seed: Seed,
+        derivation_path: DerivationPath,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<Option<(String, ExtendedSpendingKey)>, LoadStoreError> {
+        let spend_key =
+            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
+        let res = self
+            .insert_spending_key_atomic(
+                alias,
+                force_alias,
+                spend_key,
+                password,
+                Some(derivation_path),
+            )?
+            .map(|alias| (alias, spend_key));
+        Ok(res)
+    }
+
     // XXX OK
     /// Derive a keypair from the user mnemonic code (read from stdin) using
     /// a given BIP44 derivation path and derive an implicit address from its
@@ -1368,7 +1370,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
     /// provided, will prompt for password from stdin.
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and the derived spending key.
-    pub fn derive_store_spending_key_from_mnemonic_code(
+    pub fn derive_store_hd_spending_key_from_mnemonic_code(
         &mut self,
         alias: String,
         alias_force: bool,
