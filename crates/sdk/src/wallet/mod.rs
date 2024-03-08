@@ -839,35 +839,6 @@ impl<U: WalletIo> Wallet<U> {
         Some(Seed::new(&mnemonic, &passphrase))
     }
 
-    // XXX REMOVE
-    /// Generate a new keypair, derive an implicit address from its public key
-    /// and insert them into the store with the provided alias, converted to
-    /// lower case. If the alias already exists, optionally force overwrite
-    /// the keypair for the alias.
-    /// If no encryption password is provided, the keypair will be stored raw
-    /// without encryption.
-    /// Stores the key in decrypted key cache and returns the alias of the key
-    /// and the generated keypair.
-    pub fn gen_store_secret_key(
-        &mut self,
-        scheme: SchemeType,
-        alias: Option<String>,
-        alias_force: bool,
-        password: Option<Zeroizing<String>>,
-        rng: &mut (impl CryptoRng + RngCore),
-    ) -> Option<(String, common::SecretKey)> {
-        let sk = gen_secret_key(scheme, rng);
-        self.insert_keypair(
-            alias.unwrap_or_default(),
-            alias_force,
-            sk.clone(),
-            password,
-            None,
-            None,
-        )
-        .map(|alias| (alias, sk))
-    }
-
     /// XXX OK
     /// Decrypt stored key, if it's not stored un-encrypted.
     /// If a given storage key needs to be decrypted and password is not
@@ -899,64 +870,6 @@ impl<U: WalletIo> Wallet<U> {
             }
             StoredKeypair::Raw(raw) => Ok(raw.clone()),
         }
-    }
-
-    // XXX REMOVE
-    /// Add a new keypair with the given alias. If the alias is already used,
-    /// will ask whether the existing alias should be replaced, a different
-    /// alias is desired, or the alias creation should be cancelled. Return
-    /// the chosen alias if the keypair has been added, otherwise return
-    /// nothing.
-    pub fn insert_keypair(
-        &mut self,
-        alias: String,
-        force_alias: bool,
-        sk: common::SecretKey,
-        password: Option<Zeroizing<String>>,
-        address: Option<Address>,
-        path: Option<DerivationPath>,
-    ) -> Option<String> {
-        self.store
-            .insert_keypair::<U>(
-                alias.into(),
-                sk.clone(),
-                password,
-                address,
-                path,
-                alias_force,
-            )
-            .map(|alias| {
-                // Cache the newly added key
-                self.decrypted_key_cache.insert(alias.clone(), sk);
-                alias.into()
-            })
-    }
-
-    // XXX REMOVE
-    /// Insert a spending key into the wallet under the given alias
-    pub fn insert_spending_key(
-        &mut self,
-        alias: String,
-        force_alias: bool,
-        spend_key: ExtendedSpendingKey,
-        password: Option<Zeroizing<String>>,
-        path: Option<DerivationPath>,
-    ) -> Option<String> {
-        self.store
-            .insert_spending_key::<U>(
-                alias.into(),
-                spend_key,
-                password,
-                path,
-                force_alias,
-            )
-            .map(|alias| {
-                // Cache the newly added key
-                self.decrypted_spendkey_cache
-                    .insert(alias.clone(), spend_key);
-                alias
-            })
-            .map(Into::into)
     }
 }
 
