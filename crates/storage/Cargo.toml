@@ -36,6 +36,7 @@ itertools.workspace = true
 linkme = {workspace = true, optional = true}
 thiserror.workspace = true
 tracing.workspace = true
+regex = "1.10.2"
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
