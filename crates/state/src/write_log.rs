@@ -91,7 +91,7 @@ impl Display for ReProtStorageModification {
 /// Gas substorage modification
 pub(crate) enum GasStorageModification {
     /// Write an entry
-    Write,
+    Write(u64),
     /// Finalize an entry
     Finalize,
 }
@@ -99,7 +99,7 @@ pub(crate) enum GasStorageModification {
 impl Display for GasStorageModification {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            GasStorageModification::Write => write!(f, "write"),
+            GasStorageModification::Write(gas) => write!(f, "write({})", gas),
             GasStorageModification::Finalize => write!(f, "finalize"),
         }
     }
@@ -118,8 +118,8 @@ pub struct WriteLog {
     /// A precommit bucket for the `tx_write_log`. This is useful for
     /// validation when a clean `tx_write_log` is needed without committing any
     /// modification already in there. These modifications can be temporarily
-    /// stored here and then discarded or committed to the `block_write_log`git ,
-    /// together with th content of `tx_write_log`. No direct key
+    /// stored here and then discarded or committed to the `block_write_log`git
+    /// , together with th content of `tx_write_log`. No direct key
     /// write/update/delete should ever happen on this field, this log should
     /// only be populated through a dump of the `tx_write_log` and should be
     /// cleaned either when committing or dumping the `tx_write_log`
@@ -132,7 +132,7 @@ pub struct WriteLog {
     pub(crate) replay_protection: HashMap<Hash, ReProtStorageModification>,
     /// Storage modifications for the gas substorage space, always
     /// committed regardless of the result of the transaction
-    pub(crate) gas: HashMap<Hash, (u64, GasStorageModification)>,
+    pub(crate) gas: HashMap<Hash, GasStorageModification>,
 }
 
 /// Write log prefix iterator
@@ -653,15 +653,13 @@ impl WriteLog {
     pub fn write_tx_gas(&mut self, hash: Hash, gas: u64) -> Result<()> {
         self.write_tx_gas_storage_modification(
             hash,
-            gas,
-            GasStorageModification::Write,
+            GasStorageModification::Write(gas),
         )
     }
 
-    pub fn finalize_tx_gas(&mut self, hash: Hash, gas: u64) -> Result<()> {
+    pub fn finalize_tx_gas(&mut self, hash: Hash) -> Result<()> {
         self.write_tx_gas_storage_modification(
             hash,
-            gas,
             GasStorageModification::Finalize,
         )
     }
@@ -675,32 +673,36 @@ impl WriteLog {
             ReProtStorageModification::Delete => {
                 self.replay_protection.insert(hash, storage_modification);
                 Ok(())
-            },
-            _ => {
-                self
+            }
+            _ => self
                 .replay_protection
-                .insert(hash, storage_modification).map_or_else(|| Ok(()), |storage_modification| {
-                    Err(Error::ReplayProtection(format!(
-                        "Requested a {storage_modification} on hash {hash} over a previous request"
-                    )))
-                })
-            },
+                .insert(hash, storage_modification)
+                .map_or_else(
+                    || Ok(()),
+                    |storage_modification| {
+                        Err(Error::ReplayProtection(format!(
+                            "Requested a {storage_modification} on hash \
+                             {hash} over a previous request"
+                        )))
+                    },
+                ),
         }
     }
 
     fn write_tx_gas_storage_modification(
         &mut self,
         hash: Hash,
-        gas: u64,
         storage_modification: GasStorageModification,
     ) -> Result<()> {
-        self
-            .gas
-            .insert(hash, (gas, storage_modification)).map_or_else(|| Ok(()), |(_, storage_modification)| {
+        self.gas.insert(hash, storage_modification).map_or_else(
+            || Ok(()),
+            |storage_modification| {
                 Err(Error::Gas(format!(
-                    "Requested a gas {storage_modification} on hash {hash} over a previous request"
+                    "Requested a gas {storage_modification} on hash {hash} \
+                     over a previous request"
                 )))
-            })
+            },
+        )
     }
 }
 
@@ -951,9 +953,11 @@ mod tests {
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3"] {
             let hash = Hash::sha256(tx.as_bytes());
-            assert!(state
-                .has_replay_protection_entry(&hash)
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&hash)
+                    .expect("read failed")
+            );
         }
 
         {
@@ -985,13 +989,17 @@ mod tests {
 
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
-            assert!(state
-                .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
         }
-        assert!(!state
-            .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
-            .expect("read failed"));
+        assert!(
+            !state
+                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+                .expect("read failed")
+        );
 
         // try to delete finalized hash which shouldn't work
         state
@@ -1002,9 +1010,11 @@ mod tests {
         state.commit_block().expect("commit failed");
 
         assert!(state.write_log.replay_protection.is_empty());
-        assert!(state
-            .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
-            .expect("read failed"));
+        assert!(
+            state
+                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
+                .expect("read failed")
+        );
     }
 
     prop_compose! {

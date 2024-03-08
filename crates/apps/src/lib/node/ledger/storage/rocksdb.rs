@@ -57,13 +57,13 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::{gas, replay_protection};
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
 };
 use namada::token::ConversionState;
+use namada::{gas, replay_protection};
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
@@ -1528,6 +1528,41 @@ impl DB for RocksDB {
         batch.0.delete_cf(replay_protection_cf, key.to_string());
 
         Ok(())
+    }
+
+    fn write_gas_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        key: &Key,
+        gas: &[u8],
+    ) -> Result<()> {
+        let gas_cf = self.get_column_family(GAS_CF)?;
+
+        batch.0.put_cf(gas_cf, key.to_string(), gas);
+
+        Ok(())
+    }
+
+    fn delete_gas_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        key: &Key,
+    ) -> Result<()> {
+        let gas_cf = self.get_column_family(GAS_CF)?;
+
+        batch.0.delete_cf(gas_cf, key.to_string());
+
+        Ok(())
+    }
+
+    /// Read a gas entry
+    fn read_gas_entry(&self, key: &Key) -> Result<Option<u64>> {
+        let gas_cf = self.get_column_family(GAS_CF)?;
+
+        self.0
+            .get_cf(gas_cf, key.to_string())
+            .map(|gas| decode::<u64>(gas?).ok())
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 }
 

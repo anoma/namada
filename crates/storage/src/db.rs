@@ -255,6 +255,24 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         key: &Key,
     ) -> Result<()>;
+
+    /// Write a gas entry
+    fn write_gas_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        key: &Key,
+        gas: &[u8],
+    ) -> Result<()>;
+
+    /// Delete a gas entry
+    fn delete_gas_entry(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        key: &Key,
+    ) -> Result<()>;
+
+    /// Read a gas entry
+    fn read_gas_entry(&self, key: &Key) -> Result<Option<u64>>;
 }
 
 /// A database prefix iterator.

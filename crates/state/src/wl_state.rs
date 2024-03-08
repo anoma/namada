@@ -4,8 +4,8 @@ use std::ops::{Deref, DerefMut};
 use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
-use namada_core::storage;
 use namada_core::time::DateTimeUtc;
+use namada_core::{encode, storage};
 use namada_parameters::EpochDuration;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
@@ -13,7 +13,8 @@ use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 
 use crate::in_memory::InMemory;
 use crate::write_log::{
-    ReProtStorageModification, StorageModification, WriteLog,
+    GasStorageModification, ReProtStorageModification, StorageModification,
+    WriteLog,
 };
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
@@ -248,6 +249,33 @@ where
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
+        // gas specifically
+        for (hash, entry) in
+            std::mem::take(&mut self.0.write_log.gas).into_iter()
+        {
+            match entry {
+                GasStorageModification::Write(gas) => self.write_gas_entry(
+                    batch,
+                    &namada_gas::storage::last_key(&hash),
+                    gas,
+                )?,
+                GasStorageModification::Finalize => {
+                    let all_gas_key = namada_gas::storage::all_key(&hash);
+                    let gas = self.read_gas_entry(&all_gas_key)?;
+                    if let Some(gas) = gas {
+                        self.write_gas_entry(batch, &all_gas_key, gas)?;
+                        self.delete_gas_entry(
+                            batch,
+                            &namada_gas::storage::last_key(&hash),
+                        )?;
+                    } else {
+                        // what should we do here?
+                    }
+                }
+            }
+        }
+        debug_assert!(self.0.write_log.gas.is_empty());
+
         if let Some(address_gen) = self.0.write_log.address_gen.take() {
             self.0.in_mem.address_gen = address_gen
         }
@@ -401,12 +429,36 @@ where
     }
 
     /// Iterate the gas storage from the last block
-    pub fn iter_gas(
-        &self,
-    ) -> Box<dyn Iterator<Item = Hash> + '_> {
+    pub fn iter_gas(&self) -> Box<dyn Iterator<Item = Hash> + '_> {
         Box::new(self.db.iter_gas().map(|(raw_key, _, _)| {
             raw_key.parse().expect("Failed hash conversion")
         }))
+    }
+
+    /// Write the provided tx gas to storage
+    pub fn write_gas_entry(
+        &mut self,
+        batch: &mut D::WriteBatch,
+        key: &Key,
+        gas: u64,
+    ) -> Result<()> {
+        self.db.write_gas_entry(batch, key, &encode(&gas))?;
+        Ok(())
+    }
+
+    /// Delete the provided tx gas from storage
+    pub fn delete_gas_entry(
+        &mut self,
+        batch: &mut D::WriteBatch,
+        key: &Key,
+    ) -> Result<()> {
+        self.db.delete_gas_entry(batch, key)?;
+        Ok(())
+    }
+
+    /// Write the provided tx gas to storage
+    pub fn read_gas_entry(&self, key: &Key) -> Result<Option<u64>> {
+        self.db.read_gas_entry(key).map_err(Error::DbError)
     }
 
     /// Get oldest epoch which has the valid signed nonce of the bridge pool

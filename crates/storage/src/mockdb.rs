@@ -664,6 +664,43 @@ impl DB for MockDB {
 
         Ok(())
     }
+
+    fn write_gas_entry(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        key: &Key,
+        gas: &[u8],
+    ) -> Result<()> {
+        let key = Key::parse("gas").map_err(Error::KeyError)?.join(key);
+
+        match self.0.borrow_mut().insert(key.to_string(), gas.to_vec()) {
+            Some(_) => {
+                Err(Error::DBError(format!("Gas key {key} already in storage")))
+            }
+            None => Ok(()),
+        }
+    }
+
+    fn delete_gas_entry(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        key: &Key,
+    ) -> Result<()> {
+        let key = Key::parse("gas").map_err(Error::KeyError)?.join(key);
+
+        self.0.borrow_mut().remove(&key.to_string());
+
+        Ok(())
+    }
+
+    fn read_gas_entry(&self, key: &Key) -> Result<Option<u64>> {
+        let key = Key::parse("gas").map_err(Error::KeyError)?.join(key);
+        Ok(self
+            .0
+            .borrow()
+            .get(&key.to_string())
+            .map(|gas| decode(gas).unwrap()))
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {

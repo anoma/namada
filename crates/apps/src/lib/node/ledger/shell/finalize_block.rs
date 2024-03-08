@@ -91,6 +91,15 @@ where
                 .expect("Failed tx hashes finalization")
         }
 
+        // Finalize the transactions' gases (💨) from the previous block
+        let (write_log, _in_mem, db) = self.state.split_borrow();
+        for (raw_key, _, _) in db.iter_gas() {
+            let hash = raw_key.parse().expect("Failed hash conversion");
+            write_log
+                .finalize_tx_gas(hash)
+                .expect("Failed tx hashes finalization")
+        }
+
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
         let votes = pos_votes_from_abci(&self.state, &req.votes);
