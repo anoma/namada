@@ -792,29 +792,64 @@ impl<U: WalletStorage> Wallet<U> {
 }
 
 impl<U: WalletIo> Wallet<U> {
+    // XXX OK
+    /// Generate a BIP39 mnemonic code, and derive HD wallet seed from it using
+    /// the given passphrase. If no passphrase is provided, optionally prompt
+    /// for a passphrase.
+    pub fn gen_hd_seed(
+        passphrase: Option<Zeroizing<String>>,
+        rng: &mut U::Rng,
+        prompt_bip39_passphrase: bool,
+    ) -> (Mnemonic, Seed) {
+        const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
+        let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng);
+        println!(
+            "Safely store your {} words mnemonic.",
+            MNEMONIC_TYPE.word_count()
+        );
+        println!("{}", mnemonic.clone().into_phrase());
+
+        let passphrase = passphrase.unwrap_or_else(|| {
+            if prompt_bip39_passphrase {
+                U::read_mnemonic_passphrase(true)
+            } else {
+                Zeroizing::default()
+            }
+        });
+        let seed = Seed::new(&mnemonic, &passphrase);
+        (mnemonic, seed)
+    }
+
+    /// XXX OK
+    /// Derive HD wallet seed from the BIP39 mnemonic code and passphrase. If no
+    /// passphrase is provided, optionally prompt for a passphrase.
+    pub fn derive_hd_seed(
+        mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
+        prompt_bip39_passphrase: bool,
+    ) -> Option<Seed> {
+        let (mnemonic, passphrase) = mnemonic_passphrase.or_else(|| {
+            let mnemonic = U::read_mnemonic_code()?;
+            let passphrase = if prompt_bip39_passphrase {
+                U::read_mnemonic_passphrase(false)
+            } else {
+                Zeroizing::default()
+            };
+            Some((mnemonic, passphrase))
+        })?;
+        Some(Seed::new(&mnemonic, &passphrase))
+    }
+
     /// XXX OK
     /// Derive a keypair from the user mnemonic code (read from stdin) using
     /// a given BIP44 derivation path.
     pub fn derive_secret_key_from_mnemonic_code(
-        &self,
         scheme: SchemeType,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
     ) -> Option<common::SecretKey> {
-        let (mnemonic, passphrase) =
-            if let Some(mnemonic_passphrase) = mnemonic_passphrase {
-                mnemonic_passphrase
-            } else {
-                let mnemonic = U::read_mnemonic_code()?;
-                let passphrase = if prompt_bip39_passphrase {
-                    U::read_mnemonic_passphrase(false)
-                } else {
-                    Zeroizing::default()
-                };
-                (mnemonic, passphrase)
-            };
-        let seed = Seed::new(&mnemonic, &passphrase);
+        let seed =
+            Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)?;
         Some(derive_hd_secret_key(
             scheme,
             seed.as_bytes(),
@@ -826,24 +861,12 @@ impl<U: WalletIo> Wallet<U> {
     /// Derive a spending key from the user mnemonic code (read from stdin)
     /// using a given ZIP32 derivation path.
     pub fn derive_spending_key_from_mnemonic_code(
-        &self,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
     ) -> Option<ExtendedSpendingKey> {
-        let (mnemonic, passphrase) =
-            if let Some(mnemonic_passphrase) = mnemonic_passphrase {
-                mnemonic_passphrase
-            } else {
-                let mnemonic = U::read_mnemonic_code()?;
-                let passphrase = if prompt_bip39_passphrase {
-                    U::read_mnemonic_passphrase(false)
-                } else {
-                    Zeroizing::default()
-                };
-                (mnemonic, passphrase)
-            };
-        let seed = Seed::new(&mnemonic, &passphrase);
+        let seed =
+            Self::derive_hd_seed(mnemonic_passphrase, prompt_bip39_passphrase)?;
         Some(derive_hd_spending_key(seed.as_bytes(), derivation_path))
     }
 
@@ -874,34 +897,6 @@ impl<U: WalletIo> Wallet<U> {
             None,
         )
         .map(|alias| (alias, sk))
-    }
-
-    // XXX OK
-    /// Generate a BIP39 mnemonic code, and derive HD wallet seed from it using
-    /// the given passphrase. If no passphrase is provided, optionally prompt
-    /// for a passphrase.
-    pub fn gen_hd_seed(
-        passphrase: Option<Zeroizing<String>>,
-        rng: &mut U::Rng,
-        prompt_bip39_passphrase: bool,
-    ) -> (Mnemonic, Seed) {
-        const MNEMONIC_TYPE: MnemonicType = MnemonicType::Words24;
-        let mnemonic = U::generate_mnemonic_code(MNEMONIC_TYPE, rng);
-        println!(
-            "Safely store your {} words mnemonic.",
-            MNEMONIC_TYPE.word_count()
-        );
-        println!("{}", mnemonic.clone().into_phrase());
-
-        let passphrase = passphrase.unwrap_or_else(|| {
-            if prompt_bip39_passphrase {
-                U::read_mnemonic_passphrase(true)
-            } else {
-                Zeroizing::default()
-            }
-        });
-        let seed = Seed::new(&mnemonic, &passphrase);
-        (mnemonic, seed)
     }
 
     /// Derive a keypair from the given seed and path, derive an implicit
@@ -1367,7 +1362,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Result<Option<(String, common::SecretKey)>, LoadStoreError> {
-        self.derive_secret_key_from_mnemonic_code(
+        Self::derive_secret_key_from_mnemonic_code(
             scheme,
             derivation_path.clone(),
             mnemonic_passphrase,
@@ -1405,7 +1400,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         prompt_bip39_passphrase: bool,
         password: Option<Zeroizing<String>>,
     ) -> Result<Option<(String, ExtendedSpendingKey)>, LoadStoreError> {
-        self.derive_spending_key_from_mnemonic_code(
+        Self::derive_spending_key_from_mnemonic_code(
             derivation_path.clone(),
             mnemonic_passphrase,
             prompt_bip39_passphrase,
