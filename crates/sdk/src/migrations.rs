@@ -340,13 +340,13 @@ impl Display for UpdateStatus {
         match self {
             Self::Deleted(keys) => {
                 for key in keys {
-                    f.write_str(&format!("Deleting key <{}>", key))?;
+                    f.write_str(&format!("Deleting key <{}>\n", key))?;
                 }
             }
             Self::Add(pairs) => {
                 for (k, v) in pairs {
                     f.write_str(&format!(
-                        "Writing key <{}> with value: {}",
+                        "Writing key <{}> with value: {}\n",
                         k, v
                     ))?;
                 }

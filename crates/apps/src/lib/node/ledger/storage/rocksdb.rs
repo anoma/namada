@@ -1808,7 +1808,6 @@ fn iter_pattern<'a>(
             iter: iter_prefix(db, cf, stripped_prefix, prefix),
             pattern,
         },
-        finished: false,
     }
 }
 
@@ -1849,7 +1848,6 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
 #[derive(Debug)]
 pub struct PersistentPatternIterator<'a> {
     inner: PatternIterator<PersistentPrefixIterator<'a>>,
-    finished: bool,
 }
 
 impl<'a> Iterator for PersistentPatternIterator<'a> {
@@ -1857,15 +1855,10 @@ impl<'a> Iterator for PersistentPatternIterator<'a> {
 
     /// Returns the next pair and the gas cost
     fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
-        if self.finished {
-            return None;
-        }
         loop {
             let next_result = self.inner.iter.next()?;
             if self.inner.pattern.is_match(&next_result.0) {
                 return Some(next_result);
-            } else {
-                self.finished = true;
             }
         }
     }
