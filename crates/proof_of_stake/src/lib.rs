@@ -2680,7 +2680,7 @@ where
 /// Jail a validator by removing it from and updating the validator sets and
 /// changing a its state to `Jailed`. Validators are jailed for liveness and for
 /// misbehaving.
-fn jail_validator<S>(
+pub fn jail_validator<S>(
     storage: &mut S,
     params: &PosParams,
     validator: &Address,
