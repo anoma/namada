@@ -24,6 +24,7 @@ path = "make-db-migration.rs"
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
 namada_apps = {path = "../crates/apps", features = ["migrations"]}
 namada_migrations = {path = "../crates/migrations"}
+namada_parameters = { path = "../crates/parameters"}
 namada_trans_token = {path = "../crates/trans_token", features = ["migrations"]}
 namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing", "migrations"] }
 data-encoding.workspace = true

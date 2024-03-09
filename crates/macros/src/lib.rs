@@ -369,11 +369,11 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
 }
 
 #[proc_macro]
-pub fn derive_borshdeserializer(item: TokenStream) -> TokenStream {
-    derive_borshdeserializer_inner(item.into()).into()
+pub fn derive_typehash(item: TokenStream) -> TokenStream {
+    derive_typehash_inner(item.into()).into()
 }
 
-fn derive_borshdeserializer_inner(item: TokenStream2) -> TokenStream2 {
+fn derive_typehash_inner(item: TokenStream2) -> TokenStream2 {
     let type_def = syn::parse2::<syn::Type>(item).expect(
         "Could not parse input to `derive_borshdesrializer` as a type.",
     );
@@ -387,7 +387,20 @@ fn derive_borshdeserializer_inner(item: TokenStream2) -> TokenStream2 {
     let mut hasher = sha2::Sha256::new();
     hasher.update(type_def.to_token_stream().to_string().as_bytes());
     let type_hash: [u8; 32] = hasher.finalize().into();
-    impl_borsh_deserializer(type_hash, type_def)
+    let hash = syn::ExprArray {
+        attrs: vec![],
+        bracket_token: Default::default(),
+        elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
+            syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Byte(LitByte::new(
+                    b,
+                    proc_macro2::Span::call_site(),
+                )),
+            })
+        })),
+    };
+    quote!(#hash)
 }
 
 fn impl_borsh_deserializer<T: ToTokens>(
@@ -410,6 +423,7 @@ fn impl_borsh_deserializer<T: ToTokens>(
     let hex = data_encoding::HEXUPPER.encode(&type_hash);
     let deserializer_ident =
         syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
+
     quote!(
         #[cfg(feature = "migrations")]
         #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]

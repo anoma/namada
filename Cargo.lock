@@ -4436,6 +4436,7 @@ dependencies = [
  "masp_proofs",
  "namada_apps",
  "namada_migrations",
+ "namada_parameters",
  "namada_sdk",
  "namada_trans_token",
  "proptest",
@@ -4554,9 +4555,11 @@ dependencies = [
 name = "namada_migrations"
 version = "0.31.9"
 dependencies = [
+ "borsh",
  "data-encoding",
  "lazy_static",
  "linkme",
+ "namada_macros",
  "serde 1.0.193",
 ]
 

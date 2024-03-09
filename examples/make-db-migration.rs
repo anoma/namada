@@ -1,9 +1,15 @@
+use data_encoding::HEXLOWER;
+use namada_apps::wasm_loader::read_wasm;
+use namada_parameters::storage;
 use namada_sdk::address::Address;
+use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::migrations;
+use namada_sdk::storage::Key;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
 
-fn main() {
+#[allow(dead_code)]
+fn example() {
     let person =
         Address::decode("tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn")
             .unwrap();
@@ -32,4 +38,93 @@ fn main() {
     };
     std::fs::write("migrations.json", serde_json::to_string(&changes).unwrap())
         .unwrap();
+}
+
+fn main() {
+    se_migration()
+}
+
+fn se_migration() {
+    // Get VP
+    let wasm_path = "wasm";
+    let bytes = read_wasm(wasm_path, "vp_user.wasm").expect("bingbong");
+    let vp_hash = CodeHash::sha256(&bytes);
+
+    // account VPs
+    let account_vp_str = "#tnam[a-z,0-9]*\\/\\?".to_string();
+    let accounts_update = migrations::DbUpdateType::RepeatAdd {
+        pattern: account_vp_str,
+        value: vp_hash.into(),
+        force: false,
+    };
+
+    // wasm/hash and wasm/name
+    let wasm_name_key = Key::wasm_code_name("vp_user.wasm".to_string());
+    let wasm_hash_key = Key::wasm_hash("vp_user.wasm");
+    let wasm_name_update = migrations::DbUpdateType::Add {
+        key: wasm_name_key,
+        value: vp_hash.into(),
+        force: false,
+    };
+    let wasm_hash_update = migrations::DbUpdateType::Add {
+        key: wasm_hash_key,
+        value: vp_hash.into(),
+        force: false,
+    };
+
+    // wasm/code/<uc hash>
+    let code_key = Key::wasm_code(&vp_hash);
+    let code_update = migrations::DbUpdateType::Add {
+        key: code_key,
+        value: bytes.into(),
+        force: true,
+    };
+
+    // VP allowlist
+    let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
+    let new_hash_str = HEXLOWER.encode(vp_hash.as_ref());
+    let new_vp_allowlist = vec![
+        "8781c170ad1e3d2bbddc308b77b7a2edda3fff3bc5d746232feec968ee4fe3cd"
+            .to_string(),
+        new_hash_str,
+    ];
+    let allowlist_update = migrations::DbUpdateType::Add {
+        key: vp_allowlist_key,
+        value: new_vp_allowlist.into(),
+        force: true,
+    };
+
+    let updates = [
+        accounts_update,
+        wasm_name_update,
+        wasm_hash_update,
+        code_update,
+        allowlist_update,
+    ];
+
+    let changes = migrations::DbChanges {
+        changes: updates.into_iter().collect(),
+    };
+    std::fs::write("migrations.json", serde_json::to_string(&changes).unwrap())
+        .unwrap();
+}
+
+#[test]
+fn bingbong() {
+    let key = storage::get_vp_allowlist_storage_key();
+    let type_hash = namada_migrations::foreign_types::HASHVECSTR;
+    let hex = HEXUPPER.encode(&type_hash);
+    println!("{}", hex);
+    println!("{}", key);
+
+    let token_amount_hash = HEXUPPER.encode(&Amount::HASH);
+    println!("{}", token_amount_hash);
+
+    let serialized = "0200000040000000383738316331373061643165336432626264646333303862373762376132656464613366666633626335643734363233326665656339363865653466653363644000000031323965653762656536386230326266616536333864613261363334623865636266666132636233663436636661386531373262616630303936323765633738";
+    // let serialized = serialized.chars().map(|bing|
+    // u8::try_from(bing).unwrap()).collect::<Vec<_>>();
+    let serialized = HEXUPPER.decode(serialized.as_bytes()).unwrap();
+    let allowlist =
+        Vec::<String>::try_from_slice(serialized.as_slice()).unwrap();
+    println!("{:?}", allowlist);
 }
