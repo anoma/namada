@@ -734,9 +734,15 @@ where
             todo!("BING");
         }
 
-        let bing_bong = (end_epoch - start_epoch).0 >= min_period;
-        if bing_bong {
-            todo!("BONG");
+        let proposal_meets_min_period =
+            (end_epoch - start_epoch).0 >= min_period;
+        if !proposal_meets_min_period {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} does not meet the required \
+                 minimum period of {min_period} epochs. Starting epoch is \
+                 {start_epoch}, and ending epoch is {end_epoch}.",
+            ))
+            .into());
         }
 
         Ok(())
