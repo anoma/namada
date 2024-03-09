@@ -1933,7 +1933,8 @@ where
     Ok(len)
 }
 
-/// Verify a transaction signature in the host environment for better performance
+/// Verify a transaction signature in the host environment for better
+/// performance
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<MEM, D, H, EVAL, CA>,

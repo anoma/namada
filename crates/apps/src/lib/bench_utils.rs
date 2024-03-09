@@ -61,6 +61,7 @@ use namada::ibc::core::host::types::path::{
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
 use namada::ibc::storage::port_key;
+use namada::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
 use namada::io::StdIo;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
@@ -329,7 +330,7 @@ impl BenchShell {
         tx
     }
 
-    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
+    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: Vec<u8>) -> Tx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Decrypted(
             namada::tx::data::DecryptedTx::Decrypted,
@@ -341,10 +342,7 @@ impl BenchShell {
             code_hash,
             Some(wasm_code_path.to_string()),
         ));
-
-        let mut data = vec![];
-        prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-        tx.set_data(Data::new(data));
+        tx.set_data(Data::new(msg));
 
         // NOTE: the Ibc VP doesn't actually check the signature
         tx
@@ -384,7 +382,10 @@ impl BenchShell {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        self.generate_ibc_tx(TX_IBC_WASM, msg)
+        let mut data = vec![];
+        prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+
+        self.generate_ibc_tx(TX_IBC_WASM, data)
     }
 
     pub fn execute_tx(&mut self, tx: &Tx) {
@@ -560,6 +561,15 @@ impl BenchShell {
             .unwrap();
 
         self.inner.commit();
+        self.inner
+            .state
+            .in_mem_mut()
+            .set_header(namada::core::storage::Header {
+                hash: Hash::default(),
+                time: DateTimeUtc::now(),
+                next_validators_hash: Hash::default(),
+            })
+            .unwrap();
     }
 
     // Commit a masp transaction and cache the tx and the changed keys for
@@ -982,6 +992,7 @@ impl Default for BenchShieldedCtx {
 
 impl BenchShieldedCtx {
     pub fn generate_masp_tx(
+        // FIXME: why not mut ref?
         mut self,
         amount: Amount,
         source: TransferSource,
@@ -1069,5 +1080,74 @@ impl BenchShieldedCtx {
             wallet: wallet.into_inner(),
         };
         (ctx, tx)
+    }
+
+    // FIXME: why not &mut ref?
+    pub fn generate_shielded_action(
+        self,
+        amount: Amount,
+        source: TransferSource,
+        target: TransferTarget,
+    ) -> (Self, Tx) {
+        let (ctx, tx) = self.generate_masp_tx(
+            amount,
+            source.clone(),
+            TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+        );
+
+        let token = PrefixedCoin {
+            denom: address::testing::nam().to_string().parse().unwrap(),
+            amount: amount
+                .to_string_native()
+                .split('.')
+                .next()
+                .unwrap()
+                .to_string()
+                .parse()
+                .unwrap(),
+        };
+        let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
+
+        // FIXME: remove gas fro reading from write log and always charge
+        // storage gas?
+        let now: namada::tendermint::Time =
+            DateTimeUtc::now().try_into().unwrap();
+        let now: IbcTimestamp = now.into();
+        let timeout_timestamp =
+            (now + std::time::Duration::new(3600, 0)).unwrap();
+        let msg = MsgTransfer {
+            port_id_on_a: PortId::transfer(),
+            chan_id_on_a: ChannelId::new(5),
+            packet_data: PacketData {
+                token,
+                sender: source.effective_address().to_string().into(),
+                receiver: target.effective_address().to_string().into(),
+                memo: "".parse().unwrap(),
+            },
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+
+        let transfer =
+            Transfer::deserialize(&mut tx.data().unwrap().as_slice()).unwrap();
+        let masp_tx = tx
+            .get_section(&transfer.shielded.unwrap())
+            .unwrap()
+            .masp_tx()
+            .unwrap();
+        let msg = MsgShieldedTransfer {
+            message: msg,
+            shielded_transfer: IbcShieldedTransfer {
+                transfer,
+                masp_tx: masp_tx.clone(),
+            },
+        };
+
+        let mut ibc_tx = ctx
+            .shell
+            .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
+        ibc_tx.add_masp_tx_section(masp_tx);
+
+        (ctx, ibc_tx)
     }
 }
