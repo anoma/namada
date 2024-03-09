@@ -319,7 +319,7 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         test,
         Bin::Client,
         &["epoch", "--node", ledger_address],
-        Some(10)
+        Some(20)
     )?;
     let (unread, matched) = find.exp_regex("Last committed epoch: .*")?;
     let epoch_str = strip_trailing_newline(&matched)
