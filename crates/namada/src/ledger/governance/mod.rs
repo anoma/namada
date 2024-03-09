@@ -673,8 +673,9 @@ where
         let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
         if has_pre_start_epoch {
             let error = native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} already had a pre_start epoch \
-                 written to storage in its slot.",
+                "Failed to validate start epoch. Proposal with id \
+                 {proposal_id} already had a pre_start epoch written to \
+                 storage in its slot.",
             ))
             .into();
             tracing::info!("{error}");
@@ -684,8 +685,9 @@ where
         let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
         if has_pre_end_epoch {
             let error = native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} already had a pre_end epoch \
-                 written to storage in its slot.",
+                "Failed to validate start epoch. Proposal with id \
+                 {proposal_id} already had a pre_end epoch written to storage \
+                 in its slot.",
             ))
             .into();
             tracing::info!("{error}");
@@ -749,7 +751,7 @@ where
     }
 
     /// Validate a end_epoch key
-    fn is_valid_end_epoch(&self, proposal_id: u64) -> Result<bool> {
+    fn is_valid_end_epoch(&self, proposal_id: u64) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -761,10 +763,25 @@ where
         let current_epoch = self.ctx.get_block_epoch()?;
 
         let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
-        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        if has_pre_start_epoch {
+            let error = native_vp::Error::new_alloc(format!(
+                "Failed to validate end epoch. Proposal with id {proposal_id} \
+                 already had a pre_start epoch written to storage in its slot.",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
+        }
 
-        if has_pre_start_epoch || has_pre_end_epoch {
-            return Ok(false);
+        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        if has_pre_end_epoch {
+            let error = native_vp::Error::new_alloc(format!(
+                "Failed to validate end epoch. Proposal with id {proposal_id} \
+                 already had a pre_end epoch written to storage in its slot.",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
         let start_epoch: Epoch =
