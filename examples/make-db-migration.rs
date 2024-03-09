@@ -45,7 +45,8 @@ fn main() {
 }
 
 fn se_migration() {
-    // TODO: may want to remove some keys corresponding to the old VP and it hash
+    // TODO: may want to remove some keys corresponding to the old VP and it
+    // hash
 
     // Get VP
     let wasm_path = "wasm";

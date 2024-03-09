@@ -291,28 +291,25 @@ pub struct DbChanges {
 impl Display for DbUpdateType {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            DbUpdateType::Add {
-                key,
-                value,
-                force,
-            } => {
+            DbUpdateType::Add { key, value, force } => {
                 let value = if !force && !value.is_raw() {
-                let Some(deserializer) = get_deserializer(&value.type_hash) else {
-                    return f.write_str(&format!(
-                        "Type hash {:?} did not correspond to a deserializer \
-                         in TYPE_DESERIALIZERS.",
-                        value.type_hash
-                    ));
-                };
+                    let Some(deserializer) = get_deserializer(&value.type_hash)
+                    else {
+                        return f.write_str(&format!(
+                            "Type hash {:?} did not correspond to a \
+                             deserializer in TYPE_DESERIALIZERS.",
+                            value.type_hash
+                        ));
+                    };
 
-                let Some(value) = deserializer(value.bytes.clone()) else {
-                    return f.write_str(&format!(
-                        "The value {:?} for key <{}> could not be \
-                         successfully deserialized",
-                        value.bytes, key
-                    ));
-                };
-                value
+                    let Some(value) = deserializer(value.bytes.clone()) else {
+                        return f.write_str(&format!(
+                            "The value {:?} for key <{}> could not be \
+                             successfully deserialized",
+                            value.bytes, key
+                        ));
+                    };
+                    value
                 } else {
                     format!("{:?}", value.bytes)
                 };
@@ -331,25 +328,26 @@ impl Display for DbUpdateType {
                 force,
             } => {
                 let value = if !force && !value.is_raw() {
-                let Some(deserializer) = get_deserializer(&value.type_hash) else {
-                    return f.write_str(&format!(
-                        "Type hash {:?} did not correspond to a deserializer \
-                         in TYPE_DESERIALIZERS.",
-                        value.type_hash
-                    ));
-                };
+                    let Some(deserializer) = get_deserializer(&value.type_hash)
+                    else {
+                        return f.write_str(&format!(
+                            "Type hash {:?} did not correspond to a \
+                             deserializer in TYPE_DESERIALIZERS.",
+                            value.type_hash
+                        ));
+                    };
 
-                let Some(value) = deserializer(value.bytes.clone()) else {
-                    return f.write_str(&format!(
-                        "The value {:?} for pattern <{}> could not be \
-                         successfully deserialized",
-                        value.bytes, pattern
-                    ));
+                    let Some(value) = deserializer(value.bytes.clone()) else {
+                        return f.write_str(&format!(
+                            "The value {:?} for pattern <{}> could not be \
+                             successfully deserialized",
+                            value.bytes, pattern
+                        ));
+                    };
+                    value
+                } else {
+                    format!("{:?}", value.bytes)
                 };
-                value
-            } else {
-                format!("{:?}", value.bytes)
-            };
 
                 f.write_str(&format!(
                     "Write to pattern: <{}> with value: {}",
