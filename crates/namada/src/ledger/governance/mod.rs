@@ -413,7 +413,7 @@ where
                         Ok(())
                     } else {
                         return Err(native_vp::Error::new_alloc(format!(
-                            "Maximum number of PGF actions \
+                            "Maximum number of steward actions \
                              ({MAX_PGF_ACTIONS}) exceeded ({})",
                             stewards.len()
                         ))
@@ -448,7 +448,7 @@ where
 
                     if !is_valid_total_pgf_actions {
                         return Err(native_vp::Error::new_alloc(format!(
-                            "Maximum number of PGF actions \
+                            "Maximum number of steward actions \
                              ({MAX_PGF_ACTIONS}) exceeded \
                              ({all_pgf_action_addresses})",
                         ))
@@ -488,7 +488,7 @@ where
                     })
                     .collect::<BTreeSet<String>>();
 
-                let total_retro_targerts = fundings
+                let total_retro_targets = fundings
                     .iter()
                     .filter(|funding| matches!(funding, PGFAction::Retro(_)))
                     .count();
@@ -496,7 +496,12 @@ where
                 let is_total_fundings_valid = fundings.len() < MAX_PGF_ACTIONS;
 
                 if !is_total_fundings_valid {
-                    todo!("RETURN ERROR");
+                    return Err(native_vp::Error::new_alloc(format!(
+                        "Maximum number of funding actions \
+                         ({MAX_PGF_ACTIONS}) exceeded ({})",
+                        fundings.len()
+                    ))
+                    .into());
                 }
 
                 // check that they are unique by checking that the set of add
@@ -505,8 +510,15 @@ where
                 let are_continuous_fundings_unique =
                     are_continuous_add_targets_unique.len()
                         + are_continuous_remove_targets_unique.len()
-                        + total_retro_targerts
+                        + total_retro_targets
                         == fundings.len();
+
+                if !are_continuous_fundings_unique {
+                    return Err(native_vp::Error::new_const(
+                        "Non-unique modified fundings",
+                    )
+                    .into());
+                }
 
                 // can't remove and add the same target in the same proposal
                 let are_targets_unique = are_continuous_add_targets_unique
@@ -514,9 +526,15 @@ where
                     .count() as u64
                     == 0;
 
-                Ok(is_total_fundings_valid
-                    && are_continuous_fundings_unique
-                    && are_targets_unique)
+                if !are_targets_unique {
+                    return Err(native_vp::Error::new_alloc(format!(
+                        "One or more payment targets were added and removed \
+                         in the same proposal",
+                    ))
+                    .into());
+                }
+
+                Ok(())
             }
             _ => Ok(true), // default proposal
         }
