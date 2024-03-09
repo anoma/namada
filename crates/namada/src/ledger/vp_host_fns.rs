@@ -10,6 +10,7 @@ use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
     TX_INDEX_LENGTH,
 };
+use namada_core::validity_predicate::VpError;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
@@ -19,6 +20,51 @@ use thiserror::Error;
 use crate::ibc::IbcEvent;
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
+
+/// Condition that must be met for a VP to halt.
+pub trait ShouldHaltVp {
+    /// Determine if the execution of a validity predicate
+    /// should be halted immediately. Generally, this means
+    /// that a tx has run out of gas.
+    fn should_halt_vp(&self) -> bool;
+}
+
+impl ShouldHaltVp for VpError {
+    fn should_halt_vp(&self) -> bool {
+        matches!(self, Self::OutOfGas)
+    }
+}
+
+impl ShouldHaltVp for RuntimeError {
+    fn should_halt_vp(&self) -> bool {
+        matches!(self, Self::OutOfGas(_))
+    }
+}
+
+impl ShouldHaltVp for crate::storage::Error {
+    fn should_halt_vp(&self) -> bool {
+        let maybe_get_err = || {
+            let boxed_err = match self {
+                crate::storage::Error::Custom(custom_err)
+                | crate::storage::Error::CustomWithMessage(_, custom_err) => {
+                    Some(custom_err)
+                }
+                _ => None,
+            }?;
+
+            let source_err = boxed_err.source()?;
+            let downcasted_vp_rt_err: &RuntimeError =
+                source_err.downcast_ref()?;
+
+            if let RuntimeError::OutOfGas(_) = downcasted_vp_rt_err {
+                Some(())
+            } else {
+                None
+            }
+        };
+        maybe_get_err().is_some()
+    }
+}
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
