@@ -37,14 +37,10 @@ pub const MAX_PGF_ACTIONS: usize = 20;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
-    #[error("Proposal field should not be empty: {0}")]
-    EmptyProposalField(String),
-    #[error("Vote key is not valid: {0}")]
-    InvalidVoteKey(String),
-}
+pub struct Error(#[from] native_vp::Error);
+
+//    #[error()]
+//    UnknownKeyChange(Key),
 
 /// Governance VP
 pub struct GovernanceVp<'a, S, CA>
@@ -68,17 +64,20 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let (is_valid_keys_set, set_count) =
             self.is_valid_init_proposal_key_set(keys_changed)?;
         if !is_valid_keys_set {
             tracing::info!("Invalid changed governance key set");
-            return Ok(false);
+            return Err(native_vp::Error::new_const(
+                "Invalid changed governance key set",
+            )
+            .into());
         };
 
         let native_token = self.ctx.pre().get_native_token()?;
 
-        Ok(keys_changed.iter().all(|key| {
+        keys_changed.iter().try_for_each(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key(key, &native_token);
 
@@ -116,19 +115,27 @@ where
                 }
                 (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
                 (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
-                (KeyType::UNKNOWN_GOVERNANCE, _) => Ok(false),
-                (KeyType::UNKNOWN, _) => Ok(true),
-                _ => Ok(false),
+                (KeyType::UNKNOWN_GOVERNANCE, _) => {
+                    Err(native_vp::Error::new_alloc(format!(
+                        "Unkown governance key change: {key}"
+                    ))
+                    .into())
+                }
+                (KeyType::UNKNOWN, _) => Ok(()),
+                _ => Err(native_vp::Error::new_alloc(format!(
+                    "Unkown governance key change: {key}"
+                ))
+                .into()),
             };
-            match &result {
-                Err(err) => tracing::info!(
+
+            result.inspect_err(|err| {
+                tracing::info!(
                     "Key {key_type:?} rejected with error: {err:#?}."
-                ),
-                Ok(false) => tracing::info!("Key {key_type:?} rejected"),
-                Ok(true) => {}
-            }
-            result.unwrap_or(false)
-        }))
+                )
+            })?;
+
+            Ok(())
+        })
     }
 }
 
@@ -179,7 +186,7 @@ where
         proposal_id: u64,
         key: &Key,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
         let voting_start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
@@ -202,16 +209,23 @@ where
                 (Some(voter_address), Some(delegator_address)) => {
                     (voter_address, delegator_address)
                 }
-                _ => return Err(Error::InvalidVoteKey(key.to_string())),
+                _ => {
+                    return Err(native_vp::Error::new_alloc(format!(
+                        "Vote key is not valid: {key}"
+                    ))
+                    .into());
+                }
             };
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
-            tracing::info!(
+            let error = native_vp::Error::new_alloc(format!(
                 "Invalid proposal ID. Expected {pre_counter} or lower, got \
-                 {proposal_id}."
-            );
-            return Ok(false);
+                 {proposal_id}"
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
         let vote_key = gov_storage::get_vote_proposal_key(
@@ -224,7 +238,10 @@ where
             .force_read::<ProposalVote>(&vote_key, ReadType::Post)
             .is_err()
         {
-            return Err(Error::InvalidVoteKey(key.to_string()));
+            return Err(native_vp::Error::new_alloc(format!(
+                "Vote key is not valid: {key}"
+            ))
+            .into());
         }
 
         // TODO: We should refactor this by modifying the vote proposal tx
@@ -232,7 +249,10 @@ where
             find_delegations(&self.ctx.pre(), voter_address, &current_epoch)
         {
             if delegations.is_empty() {
-                return Ok(false);
+                return Err(native_vp::Error::new_alloc(format!(
+                    "No delegations found for {voter_address}"
+                ))
+                .into());
             } else {
                 delegations.iter().all(|(address, _)| {
                     let vote_key = gov_storage::get_vote_proposal_key(
@@ -244,10 +264,16 @@ where
                 })
             }
         } else {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Failed to query delegations for {voter_address}"
+            ))
+            .into());
         };
         if !all_delegations_are_valid {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Not all delegations of {voter_address} were deemed valid"
+            ))
+            .into());
         }
 
         // Voted outside of voting window. We dont check for validator because
@@ -259,11 +285,13 @@ where
             pre_voting_end_epoch,
             false,
         ) {
-            tracing::info!(
+            let error = native_vp::Error::new_alloc(format!(
                 "Voted outside voting window. Current epoch: {current_epoch}, \
                  start: {pre_voting_start_epoch}, end: {pre_voting_end_epoch}."
-            );
-            return Ok(false);
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
         // first check if validator, then check if delegator
@@ -276,13 +304,20 @@ where
             )
             .unwrap_or(false);
 
-        if is_validator {
-            let valid_voting_period = is_valid_validator_voting_period(
+        if is_validator
+            && !is_valid_validator_voting_period(
                 current_epoch,
                 pre_voting_start_epoch,
                 pre_voting_end_epoch,
-            );
-            return Ok(valid_voting_period);
+            )
+        {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Validator {voter_address} voted outside of the voting \
+                 period. Current epoch: {current_epoch}, pre voting start \
+                 epoch: {pre_voting_start_epoch}, pre voting end epoch: \
+                 {pre_voting_end_epoch}."
+            ))
+            .into());
         }
 
         let is_delegator = self
@@ -293,18 +328,31 @@ where
                 delegation_address,
             )
             .unwrap_or(false);
-        Ok(is_delegator)
+
+        if !is_delegator {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Address {voter_address} is neither a validator nor a \
+                 delegator."
+            ))
+            .into());
+        }
+
+        Ok(())
     }
 
     /// Validate a content key
-    pub fn is_valid_content_key(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_content_key(&self, proposal_id: u64) -> Result<()> {
         let content_key: Key = gov_storage::get_content_key(proposal_id);
         let max_content_length_parameter_key =
             gov_storage::get_max_proposal_content_key();
 
         let has_pre_content: bool = self.ctx.has_key_pre(&content_key)?;
         if has_pre_content {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had content written \
+                 to storage."
+            ))
+            .into());
         }
 
         let max_content_length: usize =
@@ -314,16 +362,19 @@ where
 
         let is_valid = post_content.len() <= max_content_length;
         if !is_valid {
-            tracing::info!(
+            let error = native_vp::Error::new_alloc(format!(
                 "Max content length {max_content_length}, got {}.",
                 post_content.len()
-            );
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
-        Ok(is_valid)
+        Ok(())
     }
 
     /// Validate the proposal type
-    pub fn is_valid_proposal_type(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_proposal_type(&self, proposal_id: u64) -> Result<()> {
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: ProposalType =
             self.force_read(&proposal_type_key, ReadType::Post)?;
@@ -350,27 +401,66 @@ where
 
                 // we allow only a single steward to be added
                 if total_stewards_added > 1 {
-                    Ok(false)
+                    return Err(native_vp::Error::new_const(
+                        "Only one steward is allowed to be added per proposal",
+                    )
+                    .into());
                 } else if total_stewards_added == 0 {
                     let is_valid_total_pgf_actions =
                         stewards.len() < MAX_PGF_ACTIONS;
-                    return Ok(is_valid_total_pgf_actions);
+
+                    return if is_valid_total_pgf_actions {
+                        Ok(())
+                    } else {
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Maximum number of PGF actions \
+                             ({MAX_PGF_ACTIONS}) exceeded ({})",
+                            stewards.len()
+                        ))
+                        .into());
+                    };
                 } else if let Some(address) = stewards_added.first() {
                     let author_key = gov_storage::get_author_key(proposal_id);
                     let author = self
                         .force_read::<Address>(&author_key, ReadType::Post)?;
                     let is_valid_author = address.eq(&author);
 
+                    if !is_valid_author {
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Author {author} does not match added steward \
+                             address {address}",
+                        ))
+                        .into());
+                    }
+
                     let stewards_addresses_are_unique =
                         stewards.len() == all_pgf_action_addresses;
+
+                    if !stewards_addresses_are_unique {
+                        return Err(native_vp::Error::new_const(
+                            "Non-unique modified steward addresses",
+                        )
+                        .into());
+                    }
+
                     let is_valid_total_pgf_actions =
                         all_pgf_action_addresses < MAX_PGF_ACTIONS;
 
-                    return Ok(is_valid_author
-                        && stewards_addresses_are_unique
-                        && is_valid_total_pgf_actions);
+                    if !is_valid_total_pgf_actions {
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Maximum number of PGF actions \
+                             ({MAX_PGF_ACTIONS}) exceeded \
+                             ({all_pgf_action_addresses})",
+                        ))
+                        .into());
+                    }
+
+                    return Ok(());
                 } else {
-                    return Ok(false);
+                    return Err(native_vp::Error::new_const(
+                        "Invalid PGF proposal",
+                    )
+                    .into());
                 }
             }
             ProposalType::PGFPayment(fundings) => {
@@ -404,6 +494,10 @@ where
                     .count();
 
                 let is_total_fundings_valid = fundings.len() < MAX_PGF_ACTIONS;
+
+                if !is_total_fundings_valid {
+                    todo!("RETURN ERROR");
+                }
 
                 // check that they are unique by checking that the set of add
                 // plus the set of remove plus the set of retro is equal to the
@@ -700,7 +794,7 @@ where
     pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
         match tx.data() {
             Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                .map_err(Error::NativeVpError),
+                .map_err(Error),
             None => Ok(false),
         }
     }
@@ -739,7 +833,10 @@ where
         if let Some(data) = res {
             Ok(data)
         } else {
-            Err(Error::EmptyProposalField(key.to_string()))
+            Err(native_vp::Error::new_alloc(format!(
+                "Proposal field should not be empty: {key}"
+            ))
+            .into())
         }
     }
 
