@@ -46,7 +46,7 @@ pub trait NativeVp {
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> std::result::Result<bool, Self::Error>;
+    ) -> std::result::Result<(), Self::Error>;
 }
 
 /// A validity predicate's host context.
