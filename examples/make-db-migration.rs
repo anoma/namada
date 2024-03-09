@@ -45,6 +45,8 @@ fn main() {
 }
 
 fn se_migration() {
+    // TODO: may want to remove some keys corresponding to the old VP and it hash
+
     // Get VP
     let wasm_path = "wasm";
     let bytes = read_wasm(wasm_path, "vp_user.wasm").expect("bingbong");
@@ -54,8 +56,8 @@ fn se_migration() {
     let account_vp_str = "#tnam[a-z,0-9]*\\/\\?".to_string();
     let accounts_update = migrations::DbUpdateType::RepeatAdd {
         pattern: account_vp_str,
-        value: vp_hash.into(),
-        force: false,
+        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
+        force: true,
     };
 
     // wasm/hash and wasm/name
@@ -63,20 +65,28 @@ fn se_migration() {
     let wasm_hash_key = Key::wasm_hash("vp_user.wasm");
     let wasm_name_update = migrations::DbUpdateType::Add {
         key: wasm_name_key,
-        value: vp_hash.into(),
-        force: false,
+        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
+        force: true,
     };
     let wasm_hash_update = migrations::DbUpdateType::Add {
         key: wasm_hash_key,
-        value: vp_hash.into(),
-        force: false,
+        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
+        force: true,
     };
 
     // wasm/code/<uc hash>
     let code_key = Key::wasm_code(&vp_hash);
     let code_update = migrations::DbUpdateType::Add {
         key: code_key,
-        value: bytes.into(),
+        value: migrations::UpdateValue::raw(bytes.clone()),
+        force: true,
+    };
+
+    // wasm/len/<code len>
+    let len_key = Key::wasm_code_len(&vp_hash);
+    let code_len_update = migrations::DbUpdateType::Add {
+        key: len_key,
+        value: (bytes.len() as u64).into(),
         force: true,
     };
 
@@ -100,6 +110,7 @@ fn se_migration() {
         wasm_hash_update,
         code_update,
         allowlist_update,
+        code_len_update,
     ];
 
     let changes = migrations::DbChanges {

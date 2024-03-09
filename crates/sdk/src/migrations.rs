@@ -32,6 +32,19 @@ pub struct UpdateValue {
     bytes: Vec<u8>,
 }
 
+impl UpdateValue {
+    pub fn raw(bytes: Vec<u8>) -> Self {
+        Self {
+            type_hash: Default::default(),
+            bytes,
+        }
+    }
+
+    pub fn is_raw(&self) -> bool {
+        self.type_hash == [0u8; 32]
+    }
+}
+
 #[cfg(feature = "migrations")]
 impl<T: TypeHash + BorshSerialize> From<T> for UpdateValue {
     fn from(value: T) -> Self {
@@ -150,7 +163,7 @@ impl DbUpdateType {
     ) -> eyre::Result<UpdateStatus> {
         match self {
             Self::Add { key, value, force } => {
-                let deserialized = if !force {
+                let deserialized = if !force && !value.is_raw() {
                     let deserializer =
                         namada_migrations::get_deserializer(&value.type_hash)
                             .ok_or_else(|| {
@@ -187,7 +200,12 @@ impl DbUpdateType {
                 db.write(key, &value.bytes);
                 Ok(deserialized
                     .map(|d| UpdateStatus::Add(vec![(key.to_string(), d)]))
-                    .unwrap_or_else(|| UpdateStatus::Add(vec![])))
+                    .unwrap_or_else(|| {
+                        UpdateStatus::Add(vec![(
+                            key.to_string(),
+                            format!("{:?}", value.bytes),
+                        )])
+                    }))
             }
             Self::Delete(key) => {
                 db.delete(key);
@@ -200,7 +218,8 @@ impl DbUpdateType {
             } => {
                 let pattern = Regex::new(pattern).unwrap();
                 let mut pairs = vec![];
-                let (deserialized, deserializer) = if !force {
+                let (deserialized, deserializer) = if !force && !value.is_raw()
+                {
                     let deserializer =
                         namada_migrations::get_deserializer(&value.type_hash)
                             .ok_or_else(|| {
@@ -237,6 +256,11 @@ impl DbUpdateType {
                             )
                         })?;
                         pairs.push((key.to_string(), d.clone()));
+                    } else {
+                        pairs.push((
+                            key.to_string(),
+                            format!("{:?}", value.bytes),
+                        ));
                     }
                     db.write(&Key::from_str(&key).unwrap(), &value.bytes);
                 }
@@ -269,23 +293,28 @@ impl Display for DbUpdateType {
         match self {
             DbUpdateType::Add {
                 key,
-                value: UpdateValue { type_hash, bytes },
-                ..
+                value,
+                force,
             } => {
-                let Some(deserializer) = get_deserializer(type_hash) else {
+                let value = if !force && !value.is_raw() {
+                let Some(deserializer) = get_deserializer(&value.type_hash) else {
                     return f.write_str(&format!(
                         "Type hash {:?} did not correspond to a deserializer \
                          in TYPE_DESERIALIZERS.",
-                        type_hash
+                        value.type_hash
                     ));
                 };
 
-                let Some(value) = deserializer(bytes.clone()) else {
+                let Some(value) = deserializer(value.bytes.clone()) else {
                     return f.write_str(&format!(
                         "The value {:?} for key <{}> could not be \
                          successfully deserialized",
-                        bytes, key
+                        value.bytes, key
                     ));
+                };
+                value
+                } else {
+                    format!("{:?}", value.bytes)
                 };
 
                 f.write_str(&format!(
@@ -298,24 +327,29 @@ impl Display for DbUpdateType {
             }
             DbUpdateType::RepeatAdd {
                 pattern,
-                value: UpdateValue { type_hash, bytes },
-                ..
+                value,
+                force,
             } => {
-                let Some(deserializer) = get_deserializer(type_hash) else {
+                let value = if !force && !value.is_raw() {
+                let Some(deserializer) = get_deserializer(&value.type_hash) else {
                     return f.write_str(&format!(
                         "Type hash {:?} did not correspond to a deserializer \
                          in TYPE_DESERIALIZERS.",
-                        type_hash
+                        value.type_hash
                     ));
                 };
 
-                let Some(value) = deserializer(bytes.clone()) else {
+                let Some(value) = deserializer(value.bytes.clone()) else {
                     return f.write_str(&format!(
                         "The value {:?} for pattern <{}> could not be \
                          successfully deserialized",
-                        bytes, pattern
+                        value.bytes, pattern
                     ));
                 };
+                value
+            } else {
+                format!("{:?}", value.bytes)
+            };
 
                 f.write_str(&format!(
                     "Write to pattern: <{}> with value: {}",
