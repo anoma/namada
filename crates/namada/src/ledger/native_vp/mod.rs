@@ -24,6 +24,7 @@ use crate::address::Address;
 use crate::hash::Hash;
 use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
+// use crate::ledger::vp_host_fns::ShouldHaltVp;
 use crate::state;
 use crate::state::{ResultExt, StorageRead};
 use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
@@ -39,6 +40,7 @@ pub type Error = state::StorageError;
 pub trait NativeVp {
     /// Error type for the methods' results.
     type Error: std::error::Error;
+    // type Error: std::error::Error + ShouldHaltVp;
 
     /// Run the validity predicate
     fn validate_tx(
