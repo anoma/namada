@@ -27,150 +27,6 @@ use sha2::Digest;
 
 const VP_IMPLICIT_WASM: &str = "vp_implicit.wasm";
 
-fn vp_user(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_user");
-    let shell = BenchShell::default();
-    let vp_code_hash: Hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
-        .unwrap();
-
-    let foreign_key_write =
-        generate_foreign_key_tx(&defaults::albert_keypair());
-
-    let transfer = shell.generate_tx(
-        TX_TRANSFER_WASM,
-        Transfer {
-            source: defaults::albert_address(),
-            target: defaults::bertha_address(),
-            token: address::testing::nam(),
-            amount: Amount::native_whole(1000).native_denominated(),
-            key: None,
-            shielded: None,
-        },
-        None,
-        None,
-        vec![&defaults::albert_keypair()],
-    );
-
-    let received_transfer = shell.generate_tx(
-        TX_TRANSFER_WASM,
-        Transfer {
-            source: defaults::bertha_address(),
-            target: defaults::albert_address(),
-            token: address::testing::nam(),
-            amount: Amount::native_whole(1000).native_denominated(),
-            key: None,
-            shielded: None,
-        },
-        None,
-        None,
-        vec![&defaults::bertha_keypair()],
-    );
-
-    let vp_validator_hash = shell
-        .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
-        .unwrap();
-    let extra_section = Section::ExtraData(Code::from_hash(
-        vp_validator_hash,
-        Some(VP_USER_WASM.to_string()),
-    ));
-    let data = UpdateAccount {
-        addr: defaults::albert_address(),
-        vp_code_hash: Some(Hash(
-            extra_section
-                .hash(&mut sha2::Sha256::new())
-                .finalize_reset()
-                .into(),
-        )),
-        public_keys: vec![defaults::albert_keypair().to_public()],
-        threshold: None,
-    };
-    let vp = shell.generate_tx(
-        TX_UPDATE_ACCOUNT_WASM,
-        data,
-        None,
-        Some(vec![extra_section]),
-        vec![&defaults::albert_keypair()],
-    );
-
-    let vote = shell.generate_tx(
-        TX_VOTE_PROPOSAL_WASM,
-        VoteProposalData {
-            id: 0,
-            vote: ProposalVote::Yay,
-            voter: defaults::albert_address(),
-            delegations: vec![defaults::validator_address()],
-        },
-        None,
-        None,
-        vec![&defaults::albert_keypair()],
-    );
-
-    let pos = shell.generate_tx(
-        TX_UNBOND_WASM,
-        Bond {
-            validator: defaults::validator_address(),
-            amount: Amount::native_whole(1000),
-            source: Some(defaults::albert_address()),
-        },
-        None,
-        None,
-        vec![&defaults::albert_keypair()],
-    );
-
-    for (signed_tx, bench_name) in [
-        foreign_key_write,
-        transfer,
-        received_transfer,
-        vote,
-        pos,
-        vp,
-    ]
-    .iter()
-    .zip([
-        "foreign_key_write",
-        "transfer",
-        "received_transfer",
-        "governance_vote",
-        "pos",
-        "vp",
-    ]) {
-        let mut shell = BenchShell::default();
-        shell.execute_tx(signed_tx);
-        let (verifiers, keys_changed) = shell
-            .state
-            .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
-
-        group.bench_function(bench_name, |b| {
-            b.iter(|| {
-                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-                ));
-                assert!(
-                    // NOTE: the wasm code is always in cache so we don't
-                    // include here the cost to read and compile the vp code
-                    run::vp(
-                        vp_code_hash,
-                        signed_tx,
-                        &TxIndex(0),
-                        &defaults::albert_address(),
-                        &shell.state,
-                        &gas_meter,
-                        &keys_changed,
-                        &verifiers,
-                        shell.vp_wasm_cache.clone(),
-                    )
-                    .unwrap(),
-                    "VP \"{bench_name}\" bench call failed"
-                );
-            })
-        });
-    }
-
-    group.finish();
-}
-
 fn vp_implicit(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_implicit");
 
@@ -290,11 +146,11 @@ fn vp_implicit(c: &mut Criterion) {
             .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-                ));
                 assert!(
                     run::vp(
                         vp_code_hash,
@@ -316,7 +172,7 @@ fn vp_implicit(c: &mut Criterion) {
     group.finish();
 }
 
-fn vp_validator(c: &mut Criterion) {
+fn vp_user(c: &mut Criterion) {
     let shell = BenchShell::default();
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
@@ -442,11 +298,13 @@ fn vp_validator(c: &mut Criterion) {
             .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
 
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                    &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-                ));
+                // NOTE: the wasm code is always in cache so we don't
+                // include here the cost to read and compile the vp code
                 assert!(
                     run::vp(
                         vp_code_hash,
@@ -468,5 +326,5 @@ fn vp_validator(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(allowed_vps, vp_user, vp_implicit, vp_validator,);
+criterion_group!(allowed_vps, vp_user, vp_implicit,);
 criterion_main!(allowed_vps);
