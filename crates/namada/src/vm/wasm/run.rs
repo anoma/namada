@@ -228,7 +228,7 @@ pub fn vp<S, CA>(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
-) -> Result<bool>
+) -> Result<()>
 where
     S: StateRead,
     CA: 'static + WasmCacheAccess,
@@ -290,7 +290,7 @@ where
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
-    _vp_code_hash: &Hash,
+    vp_code_hash: &Hash,
     input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
@@ -364,7 +364,11 @@ fn run_vp(
             };
             downcasted_err().unwrap_or(Error::RuntimeError(rt_error))
         })?;
-    tracing::debug!("is_valid {}", is_valid);
+    tracing::debug!(
+        is_valid,
+        %vp_code_hash,
+        "wasm vp"
+    );
 
     if is_valid == 1 {
         Ok(())

@@ -945,34 +945,31 @@ where
             };
 
             match accept {
-                Ok(accepted) => {
-                    if accepted {
-                        result.accepted_vps.insert(addr.clone());
-                    } else {
-                        result.rejected_vps.insert(addr.clone());
-                    }
+                Ok(()) => {
+                    result.accepted_vps.insert(addr.clone());
                 }
-                Err(err) => match err {
-                    // Execution of VPs can (and must) be short-circuited
-                    // only in case of a gas overflow to prevent the
-                    // transaction from consuming resources that have not
-                    // been acquired in the corresponding wrapper tx. For
-                    // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult across all
-                    // nodes and find any invalid signatures
-                    Error::GasError(_) => {
-                        return Err(err);
+                Err(err) => {
+                    match err {
+                        // Execution of VPs can (and must) be short-circuited
+                        // only in case of a gas overflow to prevent the
+                        // transaction from consuming resources that have not
+                        // been acquired in the corresponding wrapper tx. For
+                        // all the other errors we keep evaluating the vps. This
+                        // allows to display a consistent VpsResult across all
+                        // nodes and find any invalid signatures
+                        Error::GasError(_) => {
+                            return Err(err);
+                        }
+                        Error::InvalidTxSignature => {
+                            // required by replay protection
+                            result.invalid_sig = true;
+                        }
+                        _ => {}
                     }
-                    Error::InvalidTxSignature => {
-                        result.invalid_sig = true;
-                        result.rejected_vps.insert(addr.clone());
-                        // Don't push the error since this is just a flag error
-                    }
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                    }
-                },
+
+                    result.rejected_vps.insert(addr.clone());
+                    result.errors.push((addr.clone(), err.to_string()));
+                }
             }
 
             result

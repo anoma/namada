@@ -577,12 +577,17 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    let gas_meter = env.ctx.gas_meter();
+    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
     // if we run out of gas, we need to stop the execution
-    gas_meter
-        .borrow_mut()
-        .consume(used_gas)
-        .map_err(TxRuntimeError::OutOfGas)
+    gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
+        sentinel.borrow_mut().set_out_of_gas();
+        tracing::info!(
+            "Stopping transaction execution because of gas error: {}",
+            err
+        );
+
+        TxRuntimeError::OutOfGas(err)
+    })
 }
 
 /// Called from VP wasm to request to use the given gas amount
@@ -1367,7 +1372,7 @@ where
     let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     if let Some(iter) = iterators.get_mut(iter_id) {
-        let gas_meter = env.ctx.gas_meter_and_sentinel();
+        let gas_meter = env.ctx.gas_meter();
         if let Some((key, val)) = vp_host_fns::iter_next(gas_meter, iter)? {
             let key_val = borsh::to_vec(&KeyVal { key, val })
                 .map_err(vp_host_fns::RuntimeError::EncodingError)?;
@@ -1994,7 +1999,7 @@ where
             namada_tx::VerifySigError::InvalidSectionSignature(inner) => {
                 Err(vp_host_fns::RuntimeError::InvalidSectionSignature(inner))
             }
-            _ => Ok(HostEnvResult::Fail.to_i64()),
+            err => Err(vp_host_fns::RuntimeError::Erased(err.to_string())),
         },
     }
 }
@@ -2259,17 +2264,17 @@ where
         .read_bytes(vp_code_hash_ptr, vp_code_hash_len as _)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
 
-    // The borrowed `gas_meter` and `sentinel` must be dropped before eval,
-    // which has to borrow these too.
+    // The borrowed `gas_meter` must be dropped before eval,
+    // which has to borrow it too.
     let tx = {
-        let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
-        vp_host_fns::add_gas(gas_meter, gas, sentinel)?;
+        let gas_meter = env.ctx.gas_meter();
+        vp_host_fns::add_gas(gas_meter, gas)?;
 
         let (input_data, gas) = env
             .memory
             .read_bytes(input_data_ptr, input_data_len as _)
             .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-        vp_host_fns::add_gas(gas_meter, gas, sentinel)?;
+        vp_host_fns::add_gas(gas_meter, gas)?;
         let tx: Tx = BorshDeserialize::try_from_slice(&input_data)
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
         tx
@@ -2297,16 +2302,15 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
+    let gas_meter = env.ctx.gas_meter();
     let state = env.state();
-    let native_token =
-        vp_host_fns::get_native_token(gas_meter, &state, sentinel)?;
+    let native_token = vp_host_fns::get_native_token(gas_meter, &state)?;
     let native_token_string = native_token.encode();
     let gas = env
         .memory
         .write_string(result_ptr, native_token_string)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas, sentinel)
+    vp_host_fns::add_gas(gas_meter, gas)
 }
 
 /// Log a string from exposed to the wasm VM VP environment. The message will be

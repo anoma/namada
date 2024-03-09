@@ -310,16 +310,19 @@ impl<'view> VpEnv<'view> for Ctx {
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> Result<(), StorageError> {
-        let input_data_bytes = borsh::to_vec(&input_data).unwrap();
-        let result = unsafe {
-            namada_vp_eval(
-                vp_code_hash.0.as_ptr() as _,
-                vp_code_hash.0.len() as _,
-                input_data_bytes.as_ptr() as _,
-                input_data_bytes.len() as _,
-            )
-        };
-        Ok(HostEnvResult::is_success(result))
+        let input_data_bytes = input_data.serialize_to_vec();
+
+        HostEnvResult::success_or(
+            unsafe {
+                namada_vp_eval(
+                    vp_code_hash.0.as_ptr() as _,
+                    vp_code_hash.0.len() as _,
+                    input_data_bytes.as_ptr() as _,
+                    input_data_bytes.len() as _,
+                )
+            },
+            StorageError::SimpleMessage("VP rejected the tx"),
+        )
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, StorageError> {

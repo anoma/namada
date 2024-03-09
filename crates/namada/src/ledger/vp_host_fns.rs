@@ -48,6 +48,8 @@ pub enum RuntimeError {
     InvalidTxSignature,
     #[error("The section signature is invalid: {0}")]
     InvalidSectionSignature(String),
+    #[error("{0}")]
+    Erased(String), // type erased error
 }
 
 /// VP environment function result

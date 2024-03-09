@@ -466,6 +466,7 @@ where
                         "VP eval from a native VP failed with: {err}",
                     );
                 })
+                .into_storage_result()
         }
 
         #[cfg(not(feature = "wasm-runtime"))]
