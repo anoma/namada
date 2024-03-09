@@ -1994,9 +1994,15 @@ pub async fn build_vote_proposal(
     let is_validator = rpc::is_validator(context.client(), voter).await?;
 
     if !proposal.can_be_voted(epoch, is_validator) {
-        if tx.force {
-            eprintln!("Invalid proposal {} vote period.", proposal_id);
-        } else {
+        eprintln!("Proposal {} cannot be voted on anymore.", proposal_id);
+        if is_validator {
+            eprintln!(
+                "NB: voter address {} is a validator, and validators can only \
+                 vote on proposals within the first 2/3 of the voting period.",
+                voter
+            );
+        }
+        if !tx.force {
             return Err(Error::from(
                 TxSubmitError::InvalidProposalVotingPeriod(proposal_id),
             ));
