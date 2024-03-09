@@ -29,8 +29,9 @@ mod tests {
     use namada::core::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::core::time::DateTimeUtc;
     use namada::core::{address, key};
+    use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
-    use namada::ibc::primitives::Msg;
+    use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::native_vp::ibc::{
@@ -1092,7 +1093,9 @@ mod tests {
         let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
-        actions.add_transfer_module(dummy_module.module_id(), dummy_module);
+        actions.add_transfer_module(dummy_module);
+        let dummy_module = DummyNftTransferModule {};
+        actions.add_transfer_module(dummy_module);
         actions
             .execute(&tx_data)
             .expect("closing the channel failed");
@@ -1182,11 +1185,7 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1227,7 +1226,7 @@ mod tests {
         // Start the next transaction for receiving an ack
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1313,8 +1312,7 @@ mod tests {
         // Start a transaction to send a packet
         // Set this chain is the sink zone
         let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1712,12 +1710,8 @@ mod tests {
         // Start a transaction to send a packet
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        ibc::set_timeout_timestamp(&mut msg);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        ibc::set_timeout_timestamp(&mut msg.message);
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1740,7 +1734,7 @@ mod tests {
         // Start a transaction to notify the timeout
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1799,11 +1793,7 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
@@ -1826,7 +1816,7 @@ mod tests {
         // Start a transaction to notify the timing-out on closed
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
