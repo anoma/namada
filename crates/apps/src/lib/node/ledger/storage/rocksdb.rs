@@ -65,6 +65,7 @@ use namada::state::{
     StoreType, DB,
 };
 use namada::token::ConversionState;
+use namada_sdk::migrations::DBUpdateVisitor;
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -1570,6 +1571,126 @@ impl DB for RocksDB {
         }
 
         Ok(())
+    }
+
+    #[inline]
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let last_height: BlockHeight = {
+            let state_cf = self.get_column_family(STATE_CF)?;
+
+            decode(
+                self.0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))?
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })?,
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })?
+        };
+        let desired_height = height.unwrap_or(last_height);
+
+        if desired_height != last_height {
+            todo!(
+                "Overwriting values at heights different than the last \
+                 committed height hast yet to be implemented"
+            );
+        }
+        // NB: the following code only updates values
+        // written to at the last committed height
+
+        let val = new_value.as_ref();
+
+        // update subspace value
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let subspace_key = key.to_string();
+
+        batch.0.put_cf(subspace_cf, subspace_key, val);
+
+        // update value stored in diffs
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
+        let diffs_key = Key::from(last_height.to_db_key())
+            .with_segment("new".to_owned())
+            .join(key)
+            .to_string();
+
+        batch.0.put_cf(diffs_cf, diffs_key, val);
+
+        Ok(())
+    }
+}
+
+/// A struct that can visit a set of updates,
+/// registering them all in the batch
+pub struct RocksDBUpdateVisitor<'db> {
+    db: &'db RocksDB,
+    batch: RocksDBWriteBatch,
+}
+
+impl<'db> RocksDBUpdateVisitor<'db> {
+    pub fn new(db: &'db RocksDB) -> Self {
+        Self {
+            db,
+            batch: Default::default(),
+        }
+    }
+
+    pub fn take_batch(self) -> RocksDBWriteBatch {
+        self.batch
+    }
+}
+
+impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
+    fn read(&self, key: &Key) -> Option<Vec<u8>> {
+        self.db
+            .read_subspace_val(key)
+            .expect("Failed to read from storage")
+    }
+
+    fn write(&mut self, key: &Key, value: impl AsRef<[u8]>) {
+        self.db
+            .overwrite_entry(&mut self.batch, None, key, value)
+            .expect("Failed to overwrite a key in storage")
+    }
+
+    fn delete(&mut self, key: &Key) {
+        let last_height: BlockHeight = {
+            let state_cf = self.db.get_column_family(STATE_CF).unwrap();
+
+            decode(
+                self.db
+                    .0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))
+                    .unwrap()
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })
+                    .unwrap(),
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })
+            .unwrap()
+        };
+        self.db
+            .batch_delete_subspace_val(&mut self.batch, last_height, key, true)
+            .expect("Failed to delete key from storage");
+    }
+
+    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
+        self.db
+            .iter_pattern(None, pattern)
+            .map(|(k, v, _)| (k, v))
+            .collect()
     }
 }
 

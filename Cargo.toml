@@ -114,7 +114,7 @@ ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
-linkme = "0.3"
+linkme = "0.3.24"
 # branch = "murisi/namada-integration"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2" }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2", default-features = false, features = ["local-prover"] }

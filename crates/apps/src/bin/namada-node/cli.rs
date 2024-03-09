@@ -5,6 +5,8 @@ use namada::core::time::{DateTimeUtc, Utc};
 use namada_apps::cli::{self, cmds};
 use namada_apps::config::ValidatorLocalConfig;
 use namada_apps::node::ledger;
+#[cfg(not(feature = "migrations"))]
+use namada_sdk::display_line;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;
@@ -37,6 +39,34 @@ pub fn main() -> Result<()> {
                 let chain_ctx = ctx.take_chain_or_exit();
                 ledger::rollback(chain_ctx.config.ledger)
                     .wrap_err("Failed to rollback the Namada node")?;
+            }
+            cmds::Ledger::UpdateDB(cmds::LedgerUpdateDB(args)) => {
+                #[cfg(not(feature = "migrations"))]
+                {
+                    panic!(
+                        "This command is only available if built with the \
+                         \"migrations\" feature."
+                    )
+                }
+                let chain_ctx = ctx.take_chain_or_exit();
+                #[cfg(feature = "migrations")]
+                ledger::update_db_keys(
+                    chain_ctx.config.ledger,
+                    args.updates,
+                    args.dry_run,
+                );
+            }
+            cmds::Ledger::QueryDB(cmds::LedgerQueryDB(args)) => {
+                #[cfg(not(feature = "migrations"))]
+                {
+                    panic!(
+                        "This command is only available if built with the \
+                         \"migrations\" feature."
+                    )
+                }
+                let chain_ctx = ctx.take_chain_or_exit();
+                #[cfg(feature = "migrations")]
+                ledger::query_db(chain_ctx.config.ledger, &args.key_hash_pairs);
             }
         },
         cmds::NamadaNode::Config(sub) => match sub {

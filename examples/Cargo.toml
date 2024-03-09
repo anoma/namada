@@ -16,9 +16,16 @@ version.workspace = true
 name = "generate-txs"
 path = "generate_txs.rs"
 
+[[example]]
+name = "make-db-migration"
+path = "make-db-migration.rs"
+
 [dev-dependencies]
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
-namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing"] }
+namada_apps = {path = "../crates/apps", features = ["migrations"]}
+namada_migrations = {path = "../crates/migrations"}
+namada_trans_token = {path = "../crates/trans_token", features = ["migrations"]}
+namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing", "migrations"] }
 data-encoding.workspace = true
 proptest.workspace = true
 serde_json.workspace = true
