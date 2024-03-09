@@ -56,7 +56,7 @@ mainnet = [
 ]
 # for integration tests and test utilities
 testing = ["namada_test_utils"]
-benches = ["testing", "namada_test_utils"]
+benches = ["namada_test_utils"]
 integration = []
 jemalloc = ["rocksdb/jemalloc"]
 

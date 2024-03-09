@@ -244,7 +244,7 @@ impl From<ActionError> for Error {
 }
 
 /// A dummy header used for testing
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub fn get_dummy_header() -> crate::storage::Header {
     use crate::tendermint::time::Time as TmTime;
     crate::storage::Header {

@@ -44,8 +44,9 @@ path = "wasm_opcodes.rs"
 
 [dependencies]
 
+# NOTE: this crate MUST NOT import any dependency with testing features to prevent benchmarking non-production code
 [dev-dependencies]
-namada = { path = "../namada", features = ["rand", "testing"] }
+namada = { path = "../namada", features = ["rand", "benches"] }
 namada_apps = { path = "../apps", features = ["benches"] }
 masp_primitives.workspace = true
 borsh.workspace = true

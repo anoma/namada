@@ -25,6 +25,7 @@ testing = [
   "rand",
   "proptest",
 ]
+benches = ["proptest"]
 
 [dependencies]
 namada_macros = {path = "../macros"}

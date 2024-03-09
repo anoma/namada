@@ -73,6 +73,7 @@ multicore = [
 # Download MASP params if they're not present
 download-params = ["namada_sdk/download-params"]
 rand = ["namada_sdk/rand"]
+benches = ["namada_core/benches", "namada_state/benches"]
 
 [dependencies]
 namada_account = { path = "../account" }
