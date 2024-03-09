@@ -55,6 +55,10 @@ readme = "README.md"
 repository = "https://github.com/anoma/namada"
 version = "0.31.9"
 
+[workspace.metadata.precommit]
+fmt = "make fmt"
+clippy = "make clippy"
+
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
