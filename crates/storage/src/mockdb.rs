@@ -19,13 +19,14 @@ use namada_merkle_tree::{
     base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
 };
 use namada_replay_protection as replay_protection;
+use regex::Regex;
 
 use crate::conversion_state::ConversionState;
 use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::tx_queue::TxQueue;
-use crate::types::{KVBytes, PrefixIterator};
+use crate::types::{KVBytes, PatternIterator, PrefixIterator};
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -692,6 +693,7 @@ impl DB for MockDB {
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
+    type PatternIter = MockPatternIterator;
     type PrefixIter = MockPrefixIterator;
 
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> MockPrefixIterator {
@@ -712,6 +714,20 @@ impl<'iter> DBIter<'iter> for MockDB {
         );
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
+    }
+
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter {
+        MockPatternIterator {
+            inner: PatternIterator {
+                iter: self.iter_prefix(prefix),
+                pattern,
+            },
+            finished: false,
+        }
     }
 
     fn iter_results(&'iter self) -> MockPrefixIterator {
@@ -829,6 +845,31 @@ impl Iterator for PrefixIterator<MockIterator> {
                 }
             }
             None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MockPatternIterator {
+    inner: PatternIterator<MockPrefixIterator>,
+    finished: bool,
+}
+
+impl Iterator for MockPatternIterator {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        if self.finished {
+            return None;
+        }
+        loop {
+            let next_result = self.inner.iter.next()?;
+            if self.inner.pattern.is_match(&next_result.0) {
+                return Some(next_result);
+            } else {
+                self.finished = true;
+            }
         }
     }
 }
