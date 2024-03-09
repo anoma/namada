@@ -992,7 +992,6 @@ impl Default for BenchShieldedCtx {
 
 impl BenchShieldedCtx {
     pub fn generate_masp_tx(
-        // FIXME: why not mut ref?
         mut self,
         amount: Amount,
         source: TransferSource,
@@ -1082,7 +1081,6 @@ impl BenchShieldedCtx {
         (ctx, tx)
     }
 
-    // FIXME: why not &mut ref?
     pub fn generate_shielded_action(
         self,
         amount: Amount,
@@ -1108,8 +1106,6 @@ impl BenchShieldedCtx {
         };
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
-        // FIXME: remove gas fro reading from write log and always charge
-        // storage gas?
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();

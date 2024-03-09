@@ -4,7 +4,7 @@ use wasm_instrument::parity_wasm::elements::Instruction::*;
 use wasm_instrument::parity_wasm::elements::{
     BlockType, BrTableData, SignExtInstruction,
 };
-use wasmer::{imports, Instance, Module, Store, Value};
+use wasmer::{imports, Instance, Module, Store};
 
 lazy_static! {
 static ref WASM_OPTS: Vec<wasm_instrument::parity_wasm::elements::Instruction> = vec![
@@ -379,35 +379,38 @@ fn ops(c: &mut Criterion) {
 //    - End
 fn bench_functions()
 -> Vec<(wasm_instrument::parity_wasm::elements::Instruction, String)> {
-    let instructions = WASM_OPTS.clone().into_iter().filter_map(
-        |instruction| match instruction {
-            Unreachable | Nop => {
-                let module_wat = format!(
-                    r#"
+    let instructions =
+        WASM_OPTS
+            .clone()
+            .into_iter()
+            .map(|instruction| match instruction {
+                Unreachable | Nop => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op")
             {instruction} 
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            Block(_) | Loop(_) | Br(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                Block(_) | Loop(_) | Br(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op")
             ({instruction})
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            If(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                If(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op")
             i32.const 1
@@ -418,39 +421,39 @@ fn bench_functions()
             )
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            BrIf(_) | BrTable(_) | Drop => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                BrIf(_) | BrTable(_) | Drop => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op") 
             i32.const 1
             ({instruction})
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            Return => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                Return => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op") (result i32)
             i32.const 1
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            Call(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                Call(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func 
             nop
@@ -459,13 +462,13 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            CallIndirect(_, _) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                CallIndirect(_, _) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (type $t0 (func)) 
         (func $f0 (type $t0) (nop))
@@ -477,13 +480,13 @@ fn bench_functions()
         )
     )
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            Select => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                Select => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op") (result i32)
             i32.const 10
@@ -492,13 +495,13 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            GetLocal(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                GetLocal(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op") (result i32)
             (local i32)
@@ -506,26 +509,26 @@ fn bench_functions()
             {instruction}
     ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            SetLocal(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                SetLocal(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op")
             (local i32)
             ({instruction} (i32.const 10))
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            TeeLocal(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                TeeLocal(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
       (func (export "op") (result i32)
             (local i32)
@@ -533,26 +536,26 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            GetGlobal(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                GetGlobal(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
         (global i32 (i32.const 10))
         (func (export "op") (result i32)
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            SetGlobal(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                SetGlobal(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
         (global (mut i32) (i32.const 10))
         (func (export "op")
@@ -560,43 +563,43 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            I32Load(_, _)
-            | I64Load(_, _)
-            | F32Load(_, _)
-            | F64Load(_, _)
-            | I32Load8S(_, _)
-            | I32Load8U(_, _)
-            | I32Load16S(_, _)
-            | I32Load16U(_, _)
-            | I64Load8S(_, _)
-            | I64Load8U(_, _)
-            | I64Load16S(_, _)
-            | I64Load16U(_, _)
-            | I64Load32S(_, _)
-            | I64Load32U(_, _) => {
-                let ty = match instruction {
-                    I32Load(_, _)
-                    | I32Load8S(_, _)
-                    | I32Load8U(_, _)
-                    | I32Load16S(_, _)
-                    | I32Load16U(_, _) => "i32",
-                    I64Load(_, _)
-                    | I64Load8S(_, _)
-                    | I64Load8U(_, _)
-                    | I64Load16S(_, _)
-                    | I64Load16U(_, _)
-                    | I64Load32S(_, _)
-                    | I64Load32U(_, _) => "i64",
-                    F32Load(_, _) => "f32",
-                    F64Load(_, _) => "f64",
-                    _ => unreachable!(),
-                };
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                I32Load(_, _)
+                | I64Load(_, _)
+                | F32Load(_, _)
+                | F64Load(_, _)
+                | I32Load8S(_, _)
+                | I32Load8U(_, _)
+                | I32Load16S(_, _)
+                | I32Load16U(_, _)
+                | I64Load8S(_, _)
+                | I64Load8U(_, _)
+                | I64Load16S(_, _)
+                | I64Load16U(_, _)
+                | I64Load32S(_, _)
+                | I64Load32U(_, _) => {
+                    let ty = match instruction {
+                        I32Load(_, _)
+                        | I32Load8S(_, _)
+                        | I32Load8U(_, _)
+                        | I32Load16S(_, _)
+                        | I32Load16U(_, _) => "i32",
+                        I64Load(_, _)
+                        | I64Load8S(_, _)
+                        | I64Load8U(_, _)
+                        | I64Load16S(_, _)
+                        | I64Load16U(_, _)
+                        | I64Load32S(_, _)
+                        | I64Load32U(_, _) => "i64",
+                        F32Load(_, _) => "f32",
+                        F64Load(_, _) => "f64",
+                        _ => unreachable!(),
+                    };
+                    let module_wat = format!(
+                        r#"
     (module
         (memory 1)
         (func (export "op") (result {ty})
@@ -604,34 +607,34 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            I32Store(_, _)
-            | I64Store(_, _)
-            | F32Store(_, _)
-            | F64Store(_, _)
-            | I32Store8(_, _)
-            | I32Store16(_, _)
-            | I64Store8(_, _)
-            | I64Store16(_, _)
-            | I64Store32(_, _) => {
-                let ty = match instruction {
-                    I32Store(_, _) | I32Store8(_, _) | I32Store16(_, _) => {
-                        "i32"
-                    }
-                    I64Store(_, _)
-                    | I64Store8(_, _)
-                    | I64Store16(_, _)
-                    | I64Store32(_, _) => "i64",
-                    F32Store(_, _) => "f32",
-                    F64Store(_, _) => "f64",
-                    _ => unreachable!(),
-                };
+                    (instruction, module_wat)
+                }
+                I32Store(_, _)
+                | I64Store(_, _)
+                | F32Store(_, _)
+                | F64Store(_, _)
+                | I32Store8(_, _)
+                | I32Store16(_, _)
+                | I64Store8(_, _)
+                | I64Store16(_, _)
+                | I64Store32(_, _) => {
+                    let ty = match instruction {
+                        I32Store(_, _) | I32Store8(_, _) | I32Store16(_, _) => {
+                            "i32"
+                        }
+                        I64Store(_, _)
+                        | I64Store8(_, _)
+                        | I64Store16(_, _)
+                        | I64Store32(_, _) => "i64",
+                        F32Store(_, _) => "f32",
+                        F64Store(_, _) => "f64",
+                        _ => unreachable!(),
+                    };
 
-                let module_wat = format!(
-                    r#"
+                    let module_wat = format!(
+                        r#"
     (module
         (memory 1)
         (func (export "op")
@@ -640,26 +643,26 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            CurrentMemory(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                CurrentMemory(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
         (memory 1)
         (func (export "op") (result i32)
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            GrowMemory(_) => {
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                GrowMemory(_) => {
+                    let module_wat = format!(
+                        r#"
     (module
         (memory 1)
         (func (export "op") (result i32)
@@ -667,120 +670,126 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            I32Const(_) | I64Const(_) | F32Const(_) | F64Const(_) => {
-                let ty = match instruction {
-                    I32Const(_) => "i32",
-                    I64Const(_) => "i64",
-                    F32Const(_) => "f32",
-                    F64Const(_) => "f64",
-                    _ => unreachable!(),
-                };
+                    (instruction, module_wat)
+                }
+                I32Const(_) | I64Const(_) | F32Const(_) | F64Const(_) => {
+                    let ty = match instruction {
+                        I32Const(_) => "i32",
+                        I64Const(_) => "i64",
+                        F32Const(_) => "f32",
+                        F64Const(_) => "f64",
+                        _ => unreachable!(),
+                    };
 
-                let module_wat = format!(
-                    r#"
+                    let module_wat = format!(
+                        r#"
     (module
         (func (export "op") (result {ty})
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            I32Eqz | I64Eqz | I32Clz | I32Ctz | I32Popcnt | I64Clz | I64Ctz
-            | I64Popcnt | F32Abs | F64Abs | F32Neg | F32Ceil | F32Floor
-            | F32Trunc | F32Nearest | F32Sqrt | F64Neg | F64Ceil | F64Floor
-            | F64Trunc | F64Nearest | F64Sqrt | I32WrapI64 | I32TruncSF32
-            | I32TruncUF32 | I32TruncSF64 | I32TruncUF64 | I64ExtendSI32
-            | I64ExtendUI32 | I64TruncSF32 | I64TruncUF32 | I64TruncSF64
-            | I64TruncUF64 | F32ConvertSI32 | F32ConvertUI32
-            | F32ConvertSI64 | F32ConvertUI64 | F32DemoteF64
-            | F64ConvertSI32 | F64ConvertUI32 | F64ConvertSI64
-            | F64ConvertUI64 | F64PromoteF32 | I32ReinterpretF32
-            | I64ReinterpretF64 | F32ReinterpretI32 | F64ReinterpretI64 => {
-                let (ty, result) = match instruction {
-                    I32Eqz | I32Clz | I32Ctz | I32Popcnt => ("i32", "i32"),
-                    I64Eqz | I32WrapI64 => ("i64", "i32"),
-                    I64Clz | I64Ctz | I64Popcnt => ("i64", "i64"),
-                    F32Abs | F32Neg | F32Ceil | F32Floor | F32Trunc
-                    | F32Nearest | F32Sqrt => ("f32", "f32"),
-                    F64Abs | F64Neg | F64Ceil | F64Floor | F64Trunc
-                    | F64Nearest | F64Sqrt => ("f64", "f64"),
-                    I32TruncSF32 | I32TruncUF32 | I32ReinterpretF32 => {
-                        ("f32", "i32")
-                    }
-                    I32TruncSF64 | I32TruncUF64 => ("f64", "i32"),
-                    I64ExtendSI32 | I64ExtendUI32 => ("i32", "i64"),
-                    I64TruncSF32 | I64TruncUF32 => ("f32", "i64"),
-                    I64TruncSF64 | I64TruncUF64 | I64ReinterpretF64 => {
-                        ("f64", "i64")
-                    }
-                    F32ConvertSI32 | F32ConvertUI32 | F32ReinterpretI32 => {
-                        ("i32", "f32")
-                    }
-                    F32ConvertSI64 | F32ConvertUI64 => ("i64", "f32"),
-                    F32DemoteF64 => ("f64", "f32"),
-                    F64ConvertSI32 | F64ConvertUI32 => ("i32", "f64"),
-                    F64ConvertSI64 | F64ConvertUI64 | F64ReinterpretI64 => {
-                        ("i64", "f64")
-                    }
-                    F64PromoteF32 => ("f32", "f64"),
-                    _ => unreachable!(),
-                };
+                    (instruction, module_wat)
+                }
+                I32Eqz | I64Eqz | I32Clz | I32Ctz | I32Popcnt | I64Clz
+                | I64Ctz | I64Popcnt | F32Abs | F64Abs | F32Neg | F32Ceil
+                | F32Floor | F32Trunc | F32Nearest | F32Sqrt | F64Neg
+                | F64Ceil | F64Floor | F64Trunc | F64Nearest | F64Sqrt
+                | I32WrapI64 | I32TruncSF32 | I32TruncUF32 | I32TruncSF64
+                | I32TruncUF64 | I64ExtendSI32 | I64ExtendUI32
+                | I64TruncSF32 | I64TruncUF32 | I64TruncSF64 | I64TruncUF64
+                | F32ConvertSI32 | F32ConvertUI32 | F32ConvertSI64
+                | F32ConvertUI64 | F32DemoteF64 | F64ConvertSI32
+                | F64ConvertUI32 | F64ConvertSI64 | F64ConvertUI64
+                | F64PromoteF32 | I32ReinterpretF32 | I64ReinterpretF64
+                | F32ReinterpretI32 | F64ReinterpretI64 => {
+                    let (ty, result) = match instruction {
+                        I32Eqz | I32Clz | I32Ctz | I32Popcnt => ("i32", "i32"),
+                        I64Eqz | I32WrapI64 => ("i64", "i32"),
+                        I64Clz | I64Ctz | I64Popcnt => ("i64", "i64"),
+                        F32Abs | F32Neg | F32Ceil | F32Floor | F32Trunc
+                        | F32Nearest | F32Sqrt => ("f32", "f32"),
+                        F64Abs | F64Neg | F64Ceil | F64Floor | F64Trunc
+                        | F64Nearest | F64Sqrt => ("f64", "f64"),
+                        I32TruncSF32 | I32TruncUF32 | I32ReinterpretF32 => {
+                            ("f32", "i32")
+                        }
+                        I32TruncSF64 | I32TruncUF64 => ("f64", "i32"),
+                        I64ExtendSI32 | I64ExtendUI32 => ("i32", "i64"),
+                        I64TruncSF32 | I64TruncUF32 => ("f32", "i64"),
+                        I64TruncSF64 | I64TruncUF64 | I64ReinterpretF64 => {
+                            ("f64", "i64")
+                        }
+                        F32ConvertSI32 | F32ConvertUI32 | F32ReinterpretI32 => {
+                            ("i32", "f32")
+                        }
+                        F32ConvertSI64 | F32ConvertUI64 => ("i64", "f32"),
+                        F32DemoteF64 => ("f64", "f32"),
+                        F64ConvertSI32 | F64ConvertUI32 => ("i32", "f64"),
+                        F64ConvertSI64 | F64ConvertUI64 | F64ReinterpretI64 => {
+                            ("i64", "f64")
+                        }
+                        F64PromoteF32 => ("f32", "f64"),
+                        _ => unreachable!(),
+                    };
 
-                let module_wat = format!(
-                    r#"
+                    let module_wat = format!(
+                        r#"
     (module
         (func (export "op") (result {result})
             {ty}.const 1000
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            I32Eq | I64Eq | F32Eq | F64Eq | I32Ne | I64Ne | F32Ne | F64Ne
-            | I32LtS | I64LtS | F32Lt | F64Lt | I32LtU | I32GtS | I32GtU
-            | I32LeS | I32LeU | I32GeS | I32GeU | I64LtU | I64GtS | I64GtU
-            | I64LeS | I64LeU | I64GeS | I64GeU | F32Gt | F32Le | F32Ge
-            | F64Gt | F64Le | F64Ge | I32Add | I64Add | I32Sub | I64Sub
-            | I32Mul | I32DivS | I32DivU | I32RemS | I32RemU | I32And
-            | I32Or | I32Xor | I32Shl | I32ShrS | I32ShrU | I32Rotl
-            | I32Rotr | I64Mul | I64DivS | I64DivU | I64RemS | I64RemU
-            | I64And | I64Or | I64Xor | I64Shl | I64ShrS | I64ShrU
-            | I64Rotl | I64Rotr | F32Add | F32Sub | F32Mul | F32Div
-            | F32Min | F32Max | F32Copysign | F64Add | F64Sub | F64Mul
-            | F64Div | F64Min | F64Max | F64Copysign => {
-                let (ty, result) = match instruction {
-                    I32Eq | I32Ne | I32LtS | I32LtU | I32GtS | I32GtU
-                    | I32LeS | I32LeU | I32GeS | I32GeU | I32Add | I32Sub
-                    | I32Mul | I32DivS | I32DivU | I32RemS | I32RemU
-                    | I32And | I32Or | I32Xor | I32Shl | I32ShrS | I32ShrU
-                    | I32Rotl | I32Rotr => ("i32", "i32"),
-                    I64Eq | I64Ne | I64LtS | I64LtU | I64GtS | I64GtU
-                    | I64LeS | I64LeU | I64GeS | I64GeU => ("i64", "i32"),
-                    F32Eq | F32Ne | F32Lt | F32Gt | F32Le | F32Ge => {
-                        ("f32", "i32")
-                    }
-                    F64Eq | F64Ne | F64Lt | F64Gt | F64Le | F64Ge => {
-                        ("f64", "i32")
-                    }
-                    I64Add | I64Sub | I64Mul | I64DivS | I64DivU | I64RemS
-                    | I64RemU | I64And | I64Or | I64Xor | I64Shl | I64ShrS
-                    | I64ShrU | I64Rotl | I64Rotr => ("i64", "i64"),
-                    F32Add | F32Sub | F32Mul | F32Div | F32Min | F32Max
-                    | F32Copysign => ("f32", "f32"),
-                    F64Add | F64Sub | F64Mul | F64Div | F64Min | F64Max
-                    | F64Copysign => ("f64", "f64"),
-                    _ => unreachable!(),
-                };
-                let module_wat = format!(
-                    r#"
+                    (instruction, module_wat)
+                }
+                I32Eq | I64Eq | F32Eq | F64Eq | I32Ne | I64Ne | F32Ne
+                | F64Ne | I32LtS | I64LtS | F32Lt | F64Lt | I32LtU | I32GtS
+                | I32GtU | I32LeS | I32LeU | I32GeS | I32GeU | I64LtU
+                | I64GtS | I64GtU | I64LeS | I64LeU | I64GeS | I64GeU
+                | F32Gt | F32Le | F32Ge | F64Gt | F64Le | F64Ge | I32Add
+                | I64Add | I32Sub | I64Sub | I32Mul | I32DivS | I32DivU
+                | I32RemS | I32RemU | I32And | I32Or | I32Xor | I32Shl
+                | I32ShrS | I32ShrU | I32Rotl | I32Rotr | I64Mul | I64DivS
+                | I64DivU | I64RemS | I64RemU | I64And | I64Or | I64Xor
+                | I64Shl | I64ShrS | I64ShrU | I64Rotl | I64Rotr | F32Add
+                | F32Sub | F32Mul | F32Div | F32Min | F32Max | F32Copysign
+                | F64Add | F64Sub | F64Mul | F64Div | F64Min | F64Max
+                | F64Copysign => {
+                    let (ty, result) = match instruction {
+                        I32Eq | I32Ne | I32LtS | I32LtU | I32GtS | I32GtU
+                        | I32LeS | I32LeU | I32GeS | I32GeU | I32Add
+                        | I32Sub | I32Mul | I32DivS | I32DivU | I32RemS
+                        | I32RemU | I32And | I32Or | I32Xor | I32Shl
+                        | I32ShrS | I32ShrU | I32Rotl | I32Rotr => {
+                            ("i32", "i32")
+                        }
+                        I64Eq | I64Ne | I64LtS | I64LtU | I64GtS | I64GtU
+                        | I64LeS | I64LeU | I64GeS | I64GeU => ("i64", "i32"),
+                        F32Eq | F32Ne | F32Lt | F32Gt | F32Le | F32Ge => {
+                            ("f32", "i32")
+                        }
+                        F64Eq | F64Ne | F64Lt | F64Gt | F64Le | F64Ge => {
+                            ("f64", "i32")
+                        }
+                        I64Add | I64Sub | I64Mul | I64DivS | I64DivU
+                        | I64RemS | I64RemU | I64And | I64Or | I64Xor
+                        | I64Shl | I64ShrS | I64ShrU | I64Rotl | I64Rotr => {
+                            ("i64", "i64")
+                        }
+                        F32Add | F32Sub | F32Mul | F32Div | F32Min | F32Max
+                        | F32Copysign => ("f32", "f32"),
+                        F64Add | F64Sub | F64Mul | F64Div | F64Min | F64Max
+                        | F64Copysign => ("f64", "f64"),
+                        _ => unreachable!(),
+                    };
+                    let module_wat = format!(
+                        r#"
     (module
         (func (export "op") (result {result})
             {ty}.const 2000
@@ -788,36 +797,36 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
+                    (instruction, module_wat)
+                }
 
-            SignExt(SignExtInstruction::I32Extend8S)
-            | SignExt(SignExtInstruction::I32Extend16S)
-            | SignExt(SignExtInstruction::I64Extend8S)
-            | SignExt(SignExtInstruction::I64Extend16S)
-            | SignExt(SignExtInstruction::I64Extend32S) => {
-                let (load, result) = match instruction {
-                    SignExt(SignExtInstruction::I32Extend8S) => {
-                        ("i32.load8_s", "i32")
-                    }
-                    SignExt(SignExtInstruction::I32Extend16S) => {
-                        ("i32.load16_s", "i32")
-                    }
-                    SignExt(SignExtInstruction::I64Extend8S) => {
-                        ("i64.load8_s", "i64")
-                    }
-                    SignExt(SignExtInstruction::I64Extend16S) => {
-                        ("i64.load16_s", "i64")
-                    }
-                    SignExt(SignExtInstruction::I64Extend32S) => {
-                        ("i64.load32_s", "i64")
-                    }
-                    _ => unreachable!(),
-                };
-                let module_wat = format!(
-                    r#"
+                SignExt(SignExtInstruction::I32Extend8S)
+                | SignExt(SignExtInstruction::I32Extend16S)
+                | SignExt(SignExtInstruction::I64Extend8S)
+                | SignExt(SignExtInstruction::I64Extend16S)
+                | SignExt(SignExtInstruction::I64Extend32S) => {
+                    let (load, result) = match instruction {
+                        SignExt(SignExtInstruction::I32Extend8S) => {
+                            ("i32.load8_s", "i32")
+                        }
+                        SignExt(SignExtInstruction::I32Extend16S) => {
+                            ("i32.load16_s", "i32")
+                        }
+                        SignExt(SignExtInstruction::I64Extend8S) => {
+                            ("i64.load8_s", "i64")
+                        }
+                        SignExt(SignExtInstruction::I64Extend16S) => {
+                            ("i64.load16_s", "i64")
+                        }
+                        SignExt(SignExtInstruction::I64Extend32S) => {
+                            ("i64.load32_s", "i64")
+                        }
+                        _ => unreachable!(),
+                    };
+                    let module_wat = format!(
+                        r#"
     (module
         (memory 1)
         (func (export "op") (result {result})
@@ -826,13 +835,14 @@ fn bench_functions()
             {instruction}
         ))
     "#,
-                );
+                    );
 
-                Some((instruction, module_wat))
-            }
-            _ => panic!("Found an instruction not covered by the benchmarks"),
-        },
-    );
+                    (instruction, module_wat)
+                }
+                _ => {
+                    panic!("Found an instruction not covered by the benchmarks")
+                }
+            });
 
     instructions.collect()
 }
