@@ -473,12 +473,13 @@ impl WriteLog {
         self.take_ibc_events();
     }
 
-    /// Drop the current transaction's write log and precommit when it's
-    /// declined by any of the triggered validity predicates. Starts a new
-    /// transaction write log.
+    /// Drop the current transaction's write log and IBC events and precommit
+    /// when it's declined by any of the triggered validity predicates.
+    /// Starts a new transaction write log.
     pub fn drop_tx(&mut self) {
         self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();
+        self.ibc_events.clear();
     }
 
     /// Drop the current transaction's write log but keep the precommit one.
