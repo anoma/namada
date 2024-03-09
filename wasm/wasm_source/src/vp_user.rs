@@ -406,7 +406,7 @@ mod tests {
                 &source,
                 address,
                 &token,
-                amount,
+                amount.amount(),
             )
             .unwrap();
         });
@@ -461,7 +461,7 @@ mod tests {
                 address,
                 &target,
                 &token,
-                amount,
+                amount.amount(),
             )
             .unwrap();
         });
@@ -520,7 +520,7 @@ mod tests {
                 address,
                 &target,
                 &token,
-                amount,
+                amount.amount(),
             )
             .unwrap();
         });
@@ -1133,7 +1133,7 @@ mod tests {
                 &source,
                 &target,
                 &token,
-                amount,
+                amount.amount(),
             )
             .unwrap();
         });

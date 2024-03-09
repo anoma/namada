@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -38,7 +39,10 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
-use crate::e2e::helpers::{generate_bin_command, make_hermes_config};
+use crate::e2e::helpers::{
+    find_gaia_address, generate_bin_command, make_hermes_config,
+    update_gaia_config,
+};
 
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
@@ -1148,14 +1152,18 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
         let chain_dir = test.test_dir.as_ref().join(chain_id);
-        let wallet = wallet::wallet_file(chain_dir);
+        let key_file_path = if chain_id == constants::GAIA_CHAIN_ID {
+            chain_dir.join(format!("{}_seed.json", constants::GAIA_RELAYER))
+        } else {
+            wallet::wallet_file(chain_dir)
+        };
         let args = [
             "keys",
             "add",
             "--chain",
             chain_id,
             "--key-file",
-            &wallet.to_string_lossy(),
+            &key_file_path.to_string_lossy(),
         ];
         let mut hermes = run_hermes_cmd(test, args, Some(10))?;
         hermes.assert_success();
@@ -1201,6 +1209,156 @@ where
         std::fs::create_dir_all(&log_dir)?;
         log_dir.join(format!(
             "{}-hermes-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    Ok(cmd_process)
+}
+
+pub fn setup_gaia() -> Result<Test> {
+    let working_dir = working_dir();
+    let test_dir = TestDir::new();
+    let gaia_dir = test_dir.as_ref().join(constants::GAIA_CHAIN_ID);
+    let net = Network {
+        chain_id: ChainId(constants::GAIA_CHAIN_ID.to_string()),
+    };
+    let test = Test {
+        working_dir,
+        test_dir,
+        net,
+        async_runtime: Default::default(),
+    };
+
+    // initialize
+    let args = [
+        "--chain-id",
+        constants::GAIA_CHAIN_ID,
+        "init",
+        constants::GAIA_CHAIN_ID,
+    ];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    for role in [
+        constants::GAIA_USER,
+        constants::GAIA_RELAYER,
+        constants::GAIA_VALIDATOR,
+    ] {
+        let key_file =
+            format!("{}/{role}_seed.json", gaia_dir.to_string_lossy());
+        let args = [
+            "keys",
+            "add",
+            role,
+            "--keyring-backend",
+            "test",
+            "--output",
+            "json",
+        ];
+        let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+        let result = gaia.exp_string("\n")?;
+        let mut file = File::create(key_file).unwrap();
+        file.write_all(result.as_bytes()).map_err(|e| {
+            eyre!(format!("Writing a Gaia key file failed: {}", e))
+        })?;
+    }
+
+    // Add tokens to a user account
+    let account = find_gaia_address(&test, constants::GAIA_USER)?;
+    let args = ["add-genesis-account", &account, "1000stake,1000samoleans"];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // Add the stake token to the relayer
+    let account = find_gaia_address(&test, constants::GAIA_RELAYER)?;
+    let args = ["add-genesis-account", &account, "10000stake"];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // Add the stake token to the validator
+    let validator = find_gaia_address(&test, constants::GAIA_VALIDATOR)?;
+    let stake = "100000000000stake";
+    let args = ["add-genesis-account", &validator, stake];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // stake
+    let args = [
+        "gentx",
+        constants::GAIA_VALIDATOR,
+        stake,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        constants::GAIA_CHAIN_ID,
+    ];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    let args = ["collect-gentxs"];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    update_gaia_config(&test)?;
+
+    Ok(test)
+}
+
+pub fn run_gaia_cmd<I, S>(
+    test: &Test,
+    args: I,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut run_cmd = Command::new("gaiad");
+    let gaia_dir = test.test_dir.as_ref().join("gaia");
+    run_cmd.args(["--home", &gaia_dir.to_string_lossy()]);
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}",
+            "Failed to run Gaia".underline().red(),
+            cmd_str,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-gaia-{}.log",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -1277,6 +1435,14 @@ pub mod constants {
     pub const SCHNITZEL: &str = "Schnitzel";
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
+
+    // Gaia
+    pub const GAIA_RPC: &str = "127.0.0.1:26657";
+    pub const GAIA_CHAIN_ID: &str = "gaia";
+    pub const GAIA_USER: &str = "user";
+    pub const GAIA_RELAYER: &str = "relayer";
+    pub const GAIA_VALIDATOR: &str = "validator";
+    pub const GAIA_COIN: &str = "samoleans";
 }
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.

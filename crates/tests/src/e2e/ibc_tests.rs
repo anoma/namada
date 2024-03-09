@@ -14,6 +14,8 @@ use core::time::Duration;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+use borsh::BorshDeserialize;
+use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use namada::core::address::{Address, InternalAddress};
@@ -32,7 +34,8 @@ use namada::ibc::clients::tendermint::types::{
 use namada::ibc::core::channel::types::channel::Order as ChanOrder;
 use namada::ibc::core::channel::types::msgs::{
     MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
-    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
+    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
+    MsgTimeout as IbcMsgTimeout,
 };
 use namada::ibc::core::channel::types::packet::Packet;
 use namada::ibc::core::channel::types::timeout::TimeoutHeight;
@@ -56,7 +59,8 @@ use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
 use namada::ibc::primitives::proto::Any;
-use namada::ibc::primitives::{Msg, Signer, Timestamp};
+use namada::ibc::primitives::{Signer, Timestamp, ToProto};
+use namada::ibc::{IbcShieldedTransfer, MsgRecvPacket, MsgTimeout};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -81,17 +85,18 @@ use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use prost::Message;
 use setup::constants::*;
+use sha2::{Digest, Sha256};
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
-use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{
-    epochs_per_year_from_min_duration, find_address, get_actor_rpc, get_epoch,
-    get_established_addr_from_pregenesis, get_validator_pk,
-    wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, find_address, find_gaia_address,
+    get_actor_rpc, get_epoch, get_established_addr_from_pregenesis,
+    get_validator_pk, wait_for_wasm_pre_compile,
 };
 use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::{
-    self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
+    self, run_gaia_cmd, run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia,
+    setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
     LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
@@ -102,7 +107,8 @@ use crate::{run, run_as};
 fn run_ledger_ibc() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -198,6 +204,21 @@ fn run_ledger_ibc() -> Result<()> {
         &test_b,
     )?;
 
+    shielded_transfer_timeout(
+        &test_a,
+        &test_b,
+        &client_id_a,
+        &port_id_a,
+        &channel_id_a,
+    )?;
+    // The balance should not be changed
+    check_shielded_balances_after_back(
+        &port_id_b,
+        &channel_id_b,
+        &test_a,
+        &test_b,
+    )?;
+
     // Skip tests for closing a channel and timeout_on_close since the transfer
     // channel cannot be closed
 
@@ -208,7 +229,8 @@ fn run_ledger_ibc() -> Result<()> {
 fn run_ledger_ibc_with_hermes() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year = 31536;
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -223,7 +245,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
-    let _bg_hermes = hermes.background();
+    let bg_hermes = hermes.background();
 
     // Transfer 100000 from the normal account on Chain A to Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
@@ -233,11 +255,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         None,
         None,
         false,
@@ -262,11 +283,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        "50000",
+        50000.0,
         BERTHA_KEY,
         &port_id_b,
         &channel_id_b,
-        None,
         None,
         None,
         false,
@@ -283,11 +303,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(0, 0)),
         None,
         false,
@@ -296,6 +315,233 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     // The balance should not be changed
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Send a token to the shielded address on Chain A
+    transfer_on_chain(
+        &test_a,
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        100,
+        ALBERT_KEY,
+    )?;
+    shielded_sync(&test_a, AA_VIEWING_KEY)?;
+    // Shieded transfer from Chain A to Chain B
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        10.0,
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Shielded transfer to an invalid receiver address (refund)
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        "invalid_receiver",
+        BTC,
+        10.0,
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    // The balance should not be changed
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    // Stop Hermes for timeout test
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // Send transfer will be timed out (refund)
+    transfer(
+        &test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        10.0,
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(Duration::new(10, 0)),
+        None,
+        false,
+    )?;
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    // The balance should not be changed
+    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    Ok(())
+}
+
+#[test]
+fn ibc_namada_gaia() -> Result<()> {
+    // epoch per 100 seconds
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger = ledger.background();
+    // chain B isn't used
+    ledger_b.interrupt()?;
+
+    // gaia
+    let test_gaia = setup_gaia()?;
+    let gaia = run_gaia(&test_gaia)?;
+    sleep(5);
+    let _bg_gaia = gaia.background();
+
+    setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = "transfer".parse().unwrap();
+    let port_id_gaia = "transfer".parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) =
+        create_channel_with_hermes(&test, &test_gaia)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test)?;
+    let _bg_hermes = hermes.background();
+
+    // Transfer from Namada to Gaia
+    let receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
+    transfer(
+        &test,
+        ALBERT,
+        receiver,
+        APFEL,
+        200.0,
+        ALBERT_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+
+    // Check the received token on Gaia
+    let token_addr = find_address(&test, APFEL)?;
+    let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+
+    // Transfer back from Gaia to Namada
+    let receiver = find_address(&test, ALBERT)?.to_string();
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        receiver,
+        get_gaia_denom_hash(ibc_denom),
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, ALBERT, APFEL, 999900)?;
+
+    // Transfer a token from Gaia to Namada
+    let receiver = find_address(&test, ALBERT)?.to_string();
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        receiver,
+        GAIA_COIN,
+        200,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
+    check_balance(&test, ALBERT, &ibc_denom, 200)?;
+
+    // Transfer back from Namada to Gaia
+    let receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
+    transfer(
+        &test,
+        ALBERT,
+        &receiver,
+        ibc_denom,
+        100.0,
+        ALBERT_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the received token on Gaia
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
+
+    // Shielding transfer from Gaia to Namada
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+
+    // Check the token on Namada
+    let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 100)?;
+
+    // Shielded transfer on Namada
+    transfer_on_chain(
+        &test,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        &ibc_denom,
+        50,
+        ALBERT_KEY,
+    )?;
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 50)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 50)?;
+
+    // Unshielding transfer from Namada to Gaia
+    transfer(
+        &test,
+        B_SPENDING_KEY,
+        &receiver,
+        &ibc_denom,
+        10.0,
+        BERTHA_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     Ok(())
 }
@@ -543,6 +789,18 @@ fn run_hermes(test: &Test) -> Result<NamadaCmd> {
     Ok(hermes)
 }
 
+fn run_gaia(test: &Test) -> Result<NamadaCmd> {
+    let args = [
+        "start",
+        "--pruning",
+        "nothing",
+        "--grpc.address",
+        "0.0.0.0:9090",
+    ];
+    let gaia = run_gaia_cmd(test, args, Some(40))?;
+    Ok(gaia)
+}
+
 fn wait_for_packet_relay(
     port_id: &PortId,
     channel_id: &ChannelId,
@@ -586,7 +844,13 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
         consensus_state: make_consensus_state(test_b, height)?.into(),
         signer: signer(),
     };
-    let height_a = submit_ibc_tx(test_a, message, ALBERT, ALBERT_KEY, false)?;
+    let height_a = submit_ibc_tx(
+        test_a,
+        make_ibc_data(message.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     let height = query_height(test_a)?;
     let client_state = make_client_state(test_a, height);
@@ -596,7 +860,13 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
         consensus_state: make_consensus_state(test_a, height)?.into(),
         signer: signer(),
     };
-    let height_b = submit_ibc_tx(test_b, message, ALBERT, ALBERT_KEY, false)?;
+    let height_b = submit_ibc_tx(
+        test_b,
+        make_ibc_data(message.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     let events = get_events(test_a, height_a)?;
     let client_id_a =
@@ -723,7 +993,13 @@ fn update_client(
         client_message: header.into(),
         signer: signer(),
     };
-    submit_ibc_tx(target_test, message, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        target_test,
+        make_ibc_data(message.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     check_ibc_update_query(
         target_test,
@@ -763,7 +1039,13 @@ fn connection_handshake(
         signer: signer(),
     };
     // OpenInitConnection on Chain A
-    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_a, height)?;
     let conn_id_a = get_connection_id_from_events(&events)
         .ok_or(eyre!("No connection ID is set"))?;
@@ -797,7 +1079,13 @@ fn connection_handshake(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenTryConnection on Chain B
-    let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_b, height)?;
     let conn_id_b = get_connection_id_from_events(&events)
         .ok_or(eyre!("No connection ID is set"))?;
@@ -824,7 +1112,13 @@ fn connection_handshake(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // OpenAckConnection on Chain A
-    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     // get the proofs on Chain A
     let height_a = query_height(test_a)?;
@@ -838,7 +1132,13 @@ fn connection_handshake(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenConfirmConnection on Chain B
-    submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok((conn_id_a, conn_id_b))
 }
@@ -876,7 +1176,13 @@ fn channel_handshake(
         signer: signer(),
         version_proposal: channel_version.clone(),
     };
-    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_a, height)?;
     let channel_id_a =
         get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -903,7 +1209,13 @@ fn channel_handshake(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenTryChannel on Chain B
-    let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_b, height)?;
     let channel_id_b =
         get_channel_id_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -924,7 +1236,13 @@ fn channel_handshake(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // OpenAckChannel on Chain A
-    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     // get the proofs on Chain A
     let height_a = query_height(test_a)?;
@@ -940,7 +1258,13 @@ fn channel_handshake(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // OpenConfirmChannel on Chain B
-    submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(((port_id.clone(), channel_id_a), (port_id, channel_id_b)))
 }
@@ -1009,11 +1333,10 @@ fn transfer_token(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        None,
         None,
         None,
         false,
@@ -1025,7 +1348,7 @@ fn transfer_token(
     let height_a = query_height(test_a)?;
     let proof_commitment_on_a =
         get_commitment_proof(test_a, &packet, height_a)?;
-    let msg = MsgRecvPacket {
+    let msg = IbcMsgRecvPacket {
         packet,
         proof_commitment_on_a,
         proof_height_on_a: height_a,
@@ -1034,7 +1357,13 @@ fn transfer_token(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // Receive the token on Chain B
-    let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_b, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -1057,7 +1386,13 @@ fn transfer_token(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Acknowledge on Chain A
-    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(())
 }
@@ -1077,29 +1412,29 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10.1",
+        10.1,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        None,
         None,
         Some("The amount for the IBC transfer should be an integer"),
         false,
     )?;
 
     // invalid port
+    let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10",
+        10.0,
         ALBERT_KEY,
         &"port".parse().unwrap(),
         channel_id_a,
         None,
-        None,
-        Some("Error trying to apply a transaction"),
+        // the IBC denom can't be parsed when using an invalid port
+        Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
     )?;
 
@@ -1109,11 +1444,10 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10",
+        10.0,
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
-        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -1175,11 +1509,10 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        "50000",
+        50000.0,
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
-        None,
         None,
         None,
         false,
@@ -1189,7 +1522,7 @@ fn transfer_back(
 
     let height_b = query_height(test_b)?;
     let proof = get_commitment_proof(test_b, &packet, height_b)?;
-    let msg = MsgRecvPacket {
+    let msg = IbcMsgRecvPacket {
         packet,
         proof_commitment_on_a: proof,
         proof_height_on_a: height_b,
@@ -1198,7 +1531,13 @@ fn transfer_back(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Receive the token on Chain A
-    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -1216,7 +1555,13 @@ fn transfer_back(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // Acknowledge on Chain B
-    submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(())
 }
@@ -1237,11 +1582,10 @@ fn transfer_timeout(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        None,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1255,7 +1599,7 @@ fn transfer_timeout(
     let height_b = query_height(test_b)?;
     let proof_unreceived_on_b =
         get_receipt_absence_proof(test_b, &packet, height_b)?;
-    let msg = MsgTimeout {
+    let msg = IbcMsgTimeout {
         packet,
         next_seq_recv_on_b: 1.into(), // not used
         proof_unreceived_on_b,
@@ -1265,7 +1609,13 @@ fn transfer_timeout(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Timeout on Chain A
-    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(())
 }
@@ -1281,7 +1631,36 @@ fn shielded_transfer(
     port_id_b: &PortId,
     channel_id_b: &ChannelId,
 ) -> Result<()> {
-    // Get masp proof for the following IBC transfer from the destination chain
+    // Send a token to the shielded address on Chain A
+    transfer_on_chain(
+        test_a,
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        100,
+        ALBERT_KEY,
+    )?;
+    shielded_sync(test_a, AA_VIEWING_KEY)?;
+
+    // Send a token from SP(A) on Chain A to PA(B) on Chain B
+    let height = transfer(
+        test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        10.0,
+        ALBERT_KEY,
+        port_id_a,
+        channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+    let events = get_events(test_a, height)?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
+
+    // Get masp proof on the destination chain to receive the packet
     // It will send 10 BTC from Chain A to PA(B) on Chain B
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     // Chain B will receive Chain A's BTC
@@ -1312,52 +1691,29 @@ fn shielded_transfer(
     let file_path = get_shielded_transfer_path(&mut client)?;
     client.assert_success();
 
-    // Send a token to the shielded address on Chain A
-    transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
-    let rpc = get_actor_rpc(test_a, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AA_VIEWING_KEY,
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-
-    // Send a token from SP(A) on Chain A to PA(B) on Chain B
-    let amount = Amount::native_whole(10).to_string_native();
-    let height = transfer(
-        test_a,
-        A_SPENDING_KEY,
-        AB_PAYMENT_ADDRESS,
-        BTC,
-        amount,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        Some(&file_path.to_string_lossy()),
-        None,
-        None,
-        false,
-    )?;
-    let events = get_events(test_a, height)?;
-    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
-    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
-
     let height_a = query_height(test_a)?;
     let proof_commitment_on_a =
         get_commitment_proof(test_a, &packet, height_a)?;
-    let msg = MsgRecvPacket {
+    let message = IbcMsgRecvPacket {
         packet,
         proof_commitment_on_a,
         proof_height_on_a: height_a,
         signer: signer(),
     };
+    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+        &std::fs::read(file_path)
+            .expect("Reading a shielded transfer file failed"),
+    )
+    .expect("Decoding IbcShieldedTransfer failed");
+    let data = MsgRecvPacket {
+        message,
+        shielded_transfer: Some(shielded_transfer),
+    }
+    .serialize_to_vec();
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // Receive the token on Chain B
-    let height = submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(test_b, data, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_b, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -1380,7 +1736,13 @@ fn shielded_transfer(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Acknowledge on Chain A
-    submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(())
 }
@@ -1432,11 +1794,10 @@ fn shielded_transfer_back(
         B_SPENDING_KEY,
         AA_PAYMENT_ADDRESS,
         &ibc_token,
-        "5",
+        5.0,
         ALBERT_KEY,
         port_id_b,
         channel_id_b,
-        Some(&file_path.to_string_lossy()),
         None,
         None,
         false,
@@ -1448,16 +1809,26 @@ fn shielded_transfer_back(
     let proof_commitment_on_b =
         get_commitment_proof(test_b, &packet, height_b)?;
     // the message member names are confusing, "_a" means the source
-    let msg = MsgRecvPacket {
+    let message = IbcMsgRecvPacket {
         packet,
         proof_commitment_on_a: proof_commitment_on_b,
         proof_height_on_a: height_b,
         signer: signer(),
     };
+    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+        &std::fs::read(file_path)
+            .expect("Reading a shielded transfer file failed"),
+    )
+    .expect("Decoding IbcShieldedTransfer failed");
+    let data = MsgRecvPacket {
+        message,
+        shielded_transfer: Some(shielded_transfer),
+    }
+    .serialize_to_vec();
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Receive the token on Chain A
-    let height = submit_ibc_tx(test_a, msg, ALBERT, ALBERT_KEY, false)?;
+    let height = submit_ibc_tx(test_a, data, ALBERT, ALBERT_KEY, false)?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
@@ -1476,7 +1847,100 @@ fn shielded_transfer_back(
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
     // Acknowledge on Chain B
-    submit_ibc_tx(test_b, msg, ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_b,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
+
+    Ok(())
+}
+
+fn shielded_transfer_timeout(
+    test_a: &Test,
+    test_b: &Test,
+    client_id_a: &ClientId,
+    port_id_a: &PortId,
+    channel_id_a: &ChannelId,
+) -> Result<()> {
+    // Send a token from SP(A) on Chain A to PA(B) on Chain B
+    let height = transfer(
+        test_a,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        BTC,
+        10.0,
+        ALBERT_KEY,
+        port_id_a,
+        channel_id_a,
+        Some(Duration::new(10, 0)),
+        None,
+        false,
+    )?;
+    let events = get_events(test_a, height)?;
+    let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
+
+    // wait for the timeout
+    sleep(10);
+
+    // Get masp proof on the source chain to refunding the token
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let output_folder = test_a.test_dir.path().to_string_lossy();
+    // PA(A) on Chain A will receive BTC on chain A
+    let amount = Amount::native_whole(10).to_string_native();
+    let token_addr = find_address(test_a, BTC)?.to_string();
+    // the token is prefixed for refunding
+    let args = [
+        "ibc-gen-shielded",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        AA_PAYMENT_ADDRESS,
+        "--token",
+        &token_addr.to_string(),
+        "--amount",
+        &amount,
+        "--refund",
+        "--port-id",
+        port_id_a.as_ref(),
+        "--channel-id",
+        channel_id_a.as_ref(),
+        "--node",
+        &rpc_a,
+    ];
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let mut client = run!(test_b, Bin::Client, args, Some(120))?;
+    let file_path = get_shielded_transfer_path(&mut client)?;
+    client.assert_success();
+
+    let height_b = query_height(test_b)?;
+    let proof_unreceived_on_b =
+        get_receipt_absence_proof(test_b, &packet, height_b)?;
+    let message = IbcMsgTimeout {
+        packet,
+        next_seq_recv_on_b: 1.into(), // not used
+        proof_unreceived_on_b,
+        proof_height_on_b: height_b,
+        signer: signer(),
+    };
+    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+        &std::fs::read(file_path)
+            .expect("Reading a shielded transfer file failed"),
+    )
+    .expect("Decoding IbcShieldedTransfer failed");
+    let data = MsgTimeout {
+        message,
+        shielded_transfer: Some(shielded_transfer),
+    }
+    .serialize_to_vec();
+
+    // Update the client state of Chain B on Chain A
+    update_client_with_height(test_b, test_a, client_id_a, height_b)?;
+    // Timeout on Chain A
+    submit_ibc_tx(test_a, data, ALBERT, ALBERT_KEY, false)?;
 
     Ok(())
 }
@@ -1540,14 +2004,13 @@ fn commitment_prefix() -> CommitmentPrefix {
 
 fn submit_ibc_tx(
     test: &Test,
-    message: impl Msg + std::fmt::Debug,
+    data: Vec<u8>,
     owner: &str,
     signer: &str,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let data_path = test.test_dir.path().join("tx.data");
-    let data = make_ibc_data(message);
     std::fs::write(&data_path, data).expect("writing data failed");
 
     let data_path = data_path.to_string_lossy();
@@ -1585,11 +2048,10 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
-    amount: impl AsRef<str>,
+    amount: f64,
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
-    memo: Option<&str>,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1599,6 +2061,7 @@ fn transfer(
 
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
+    let amount = amount.to_string();
     let mut tx_args = vec![
         "ibc-transfer",
         "--source",
@@ -1610,7 +2073,7 @@ fn transfer(
         "--token",
         token.as_ref(),
         "--amount",
-        amount.as_ref(),
+        &amount,
         "--channel-id",
         &channel_id,
         "--port-id",
@@ -1618,12 +2081,6 @@ fn transfer(
         "--node",
         &rpc,
     ];
-
-    let memo_path = memo.unwrap_or_default();
-    if memo.is_some() {
-        tx_args.push("--memo-path");
-        tx_args.push(memo_path);
-    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
@@ -1762,6 +2219,44 @@ fn submit_votes(test: &Test) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn transfer_from_gaia(
+    test: &Test,
+    sender: impl AsRef<str>,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<()> {
+    let port_id = port_id.to_string();
+    let channel_id = channel_id.to_string();
+    let amount = format!("{}{}", amount, token.as_ref());
+    let rpc = format!("tcp://{GAIA_RPC}");
+    let args = vec![
+        "tx",
+        "ibc-transfer",
+        "transfer",
+        &port_id,
+        &channel_id,
+        receiver.as_ref(),
+        &amount,
+        "--from",
+        sender.as_ref(),
+        "--node",
+        &rpc,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        GAIA_CHAIN_ID,
+        "--yes",
+    ];
+
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    gaia.assert_success();
+    Ok(())
+}
+
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
     // Expecting e.g. "height 1337."
@@ -1783,10 +2278,9 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     Ok(height)
 }
 
-fn make_ibc_data(message: impl Msg) -> Vec<u8> {
-    let msg = message.to_any();
+fn make_ibc_data(message: Any) -> Vec<u8> {
     let mut tx_data = vec![];
-    prost::Message::encode(&msg, &mut tx_data)
+    prost::Message::encode(&message, &mut tx_data)
         .expect("encoding IBC message shouldn't fail");
     tx_data
 }
@@ -1898,6 +2392,44 @@ fn convert_proof(tm_proof: TmProof) -> Result<CommitmentProofBytes> {
     })
 }
 
+fn check_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    token: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    if owner.as_ref().starts_with("zvk") {
+        let tx_args = vec![
+            "shielded-sync",
+            "--viewing-keys",
+            owner.as_ref(),
+            "--node",
+            &rpc,
+        ];
+        let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+        client.assert_success();
+    }
+
+    let query_args = vec![
+        "balance",
+        "--owner",
+        owner.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
 /// Check balances after IBC transfer
 fn check_balances(
     dest_port_id: &PortId,
@@ -1906,35 +2438,48 @@ fn check_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
-    let query_args = vec![
-        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("nam: 100000")?;
+    check_balance(test_a, escrow, NAM, 100000)?;
     // Check the source balance
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 1900000".to_string();
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_a, ALBERT, NAM, 1900000)?;
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    check_balance(test_b, BERTHA, ibc_denom, 100000)?;
+
+    Ok(())
+}
+
+fn get_gaia_denom_hash(denom: impl AsRef<str>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(denom.as_ref());
+    let hash = hasher.finalize();
+    format!("ibc/{hash:X}")
+}
+
+fn check_gaia_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    denom: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    let addr = find_gaia_address(test, owner)?;
+    let args = [
+        "query",
+        "bank",
+        "balances",
+        &addr,
+        "--node",
+        &format!("tcp://{GAIA_RPC}"),
     ];
-    let expected = format!("{ibc_denom}: 100000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    gaia.exp_string(&format!("amount: \"{expected_amount}\""))?;
+    let expected_denom = if denom.as_ref().contains('/') {
+        get_gaia_denom_hash(denom)
+    } else {
+        denom.as_ref().to_string()
+    };
+    gaia.exp_string(&format!("denom: {expected_denom}"))?;
     Ok(())
 }
 
@@ -1944,27 +2489,12 @@ fn check_balances_after_non_ibc(
     channel_id: &ChannelId,
     test_b: &Test,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    // Check the balance on Chain B
+    // Check the source on Chain B
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    // Check the source
-    let rpc = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc,
-    ];
-    let expected = format!("{ibc_denom}: 50000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, BERTHA, &ibc_denom, 50000)?;
 
-    // Check the traget
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", &ibc_denom, "--node", &rpc,
-    ];
-    let expected = format!("{ibc_denom}: 50000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    // Check the traget on Chain B
+    check_balance(test_b, ALBERT, &ibc_denom, 50000)?;
 
     Ok(())
 }
@@ -1976,36 +2506,16 @@ fn check_balances_after_back(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balances on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    // Check the escrowed balance
+    // Check the escrowed balance on Chain A
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
-    let query_args = vec![
-        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("nam: 50000")?;
-    // Check the source balance
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 1950000".to_string();
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_a, escrow, NAM, 50000)?;
+    // Check the source balance on Chain A
+    check_balance(test_a, ALBERT, NAM, 1950000)?;
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 0");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, BERTHA, ibc_denom, 0)?;
+
     Ok(())
 }
 
@@ -2016,36 +2526,13 @@ fn check_shielded_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balance on Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    // PA(B) on Chain B has received BTC on chain A
-    let token_addr = find_address(test_a, BTC)?.to_string();
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AB_VIEWING_KEY,
-        "--node",
-        &rpc_b,
-    ];
-    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
+    // Check the shielded balance on Chain A
+    check_balance(test_a, AA_VIEWING_KEY, BTC, 90)?;
+
+    // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    let query_args = vec![
-        "balance",
-        "--owner",
-        AB_VIEWING_KEY,
-        "--token",
-        &token_addr,
-        "--no-conversions",
-        "--node",
-        &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 10");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+
     Ok(())
 }
 
@@ -2056,61 +2543,12 @@ fn check_shielded_balances_after_back(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(test_a, BTC)?.to_string();
-    // Check the balance on Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AB_VIEWING_KEY,
-        "--node",
-        &rpc_b,
-    ];
-    let mut client = run!(test_b, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
+    // Check the source balance on Chain B
     let ibc_denom = format!("{src_port_id}/{src_channel_id}/btc");
-    let query_args = vec![
-        "balance",
-        "--owner",
-        AB_VIEWING_KEY,
-        "--token",
-        &token_addr,
-        "--no-conversions",
-        "--node",
-        &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 5");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 5)?;
 
-    // Check the balance on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AA_VIEWING_KEY,
-        "--node",
-        &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-    let query_args = vec![
-        "balance",
-        "--owner",
-        AA_VIEWING_KEY,
-        "--token",
-        &token_addr,
-        "--no-conversions",
-        "--node",
-        &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("btc: 5")?;
-    client.assert_success();
+    // Check the target balance on Chain A
+    check_balance(test_a, AA_VIEWING_KEY, BTC, 95)?;
 
     Ok(())
 }
@@ -2120,25 +2558,13 @@ fn check_funded_balances(
     dest_channel_id: &ChannelId,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balance on Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    // Check the balances on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 10");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    // Check the target of cPGF
+    check_balance(test_b, BERTHA, &ibc_denom, 10)?;
 
-    let query_args = vec![
-        "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 5");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    // Check the target of rPGF
+    check_balance(test_b, CHRISTEL, &ibc_denom, 5)?;
 
     Ok(())
 }
@@ -2260,4 +2686,19 @@ fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
     response
         .end_block_events
         .ok_or_else(|| eyre!("IBC event was not found: height {}", height))
+}
+
+fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        viewing_key.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+    Ok(())
 }

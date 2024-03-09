@@ -9,7 +9,7 @@ use color_eyre::eyre::Result;
 use namada::core::address::{Address, InternalAddress};
 use namada::core::chain::ChainId;
 use namada::core::ethereum_events::EthAddress;
-use namada::core::ibc::is_ibc_denom;
+use namada::core::ibc::{is_ibc_denom, is_nft_trace};
 use namada::core::key::*;
 use namada::core::masp::*;
 use namada::io::Io;
@@ -437,6 +437,11 @@ impl ArgFromContext for Address {
                         let ibc_denom = format!("{trace_path}/{base_token}");
                         ibc_token(ibc_denom)
                     })
+                    .ok_or(Skip)
+            })
+            .or_else(|_| {
+                is_nft_trace(raw)
+                    .map(|(_, _, _)| ibc_token(raw))
                     .ok_or(Skip)
             })
             // Or it can be an alias that may be found in the wallet

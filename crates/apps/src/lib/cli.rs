@@ -3154,6 +3154,9 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const REFUND: ArgFlag = flag("refund");
+    pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
+        arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -4064,6 +4067,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4081,6 +4085,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let refund_target = REFUND_TARGET.parse(matches);
             let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
@@ -4096,6 +4101,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                refund_target,
                 memo,
                 tx_code_path,
             }
@@ -4120,6 +4126,10 @@ pub mod args {
                         .help("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
+                .arg(REFUND_TARGET.def().help(
+                    "The refund target address when IBC shielded transfer \
+                     failure.",
+                ))
                 .arg(
                     IBC_TRANSFER_MEMO_PATH
                         .def()
@@ -5789,6 +5799,7 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
+                refund: self.refund,
             }
         }
     }
@@ -5802,6 +5813,7 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -5810,6 +5822,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
+                refund,
             }
         }
 
@@ -5830,6 +5843,11 @@ pub mod args {
                     CHANNEL_ID.def().help(
                         "The channel ID via which the token is received.",
                     ),
+                )
+                .arg(
+                    REFUND
+                        .def()
+                        .help("Generate the shielded transfer for refunding."),
                 )
         }
     }
