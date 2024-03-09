@@ -536,18 +536,22 @@ where
 
                 Ok(())
             }
-            _ => Ok(true), // default proposal
+            _ => Ok(()), // default proposal
         }
     }
 
     /// Validate a proposal code
-    pub fn is_valid_proposal_code(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_proposal_code(&self, proposal_id: u64) -> Result<()> {
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: ProposalType =
             self.force_read(&proposal_type_key, ReadType::Post)?;
 
         if !proposal_type.is_default() {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} modified a proposal code key, \
+                 but its type is not default.",
+            ))
+            .into());
         }
 
         let code_key = gov_storage::get_proposal_code_key(proposal_id);
@@ -556,7 +560,11 @@ where
 
         let has_pre_code: bool = self.ctx.has_key_pre(&code_key)?;
         if has_pre_code {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had wasm code written \
+                 to storage in its slot.",
+            ))
+            .into());
         }
 
         let max_proposal_length: usize =
@@ -564,11 +572,23 @@ where
         let post_code: Vec<u8> =
             self.ctx.read_bytes_post(&code_key)?.unwrap_or_default();
 
-        Ok(post_code.len() <= max_proposal_length)
+        let wasm_code_below_max_len = post_code.len() <= max_proposal_length;
+
+        if !wasm_code_below_max_len {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} wrote wasm code with length \
+                 {} to storage, but the max allowed length is \
+                 {max_proposal_length}.",
+                post_code.len(),
+            ))
+            .into());
+        }
+
+        Ok(())
     }
 
     /// Validate a grace_epoch key
-    pub fn is_valid_grace_epoch(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_grace_epoch(&self, proposal_id: u64) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -579,7 +599,11 @@ where
 
         let has_pre_grace_epoch = self.ctx.has_key_pre(&grace_epoch_key)?;
         if has_pre_grace_epoch {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had a grace epoch \
+                 written to storage in its slot.",
+            ))
+            .into());
         }
 
         let start_epoch: Epoch =
@@ -600,37 +624,44 @@ where
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
         if !has_post_committing_epoch {
-            tracing::info!("Committing proposal key is missing present");
+            let error = native_vp::Error::new_const(
+                "Committing proposal key is missing present",
+            )
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
         let is_valid_grace_epoch = end_epoch < grace_epoch
             && (grace_epoch - end_epoch).0 >= min_grace_epoch;
         if !is_valid_grace_epoch {
-            tracing::info!(
+            let error = native_vp::Error::new_alloc(format!(
                 "Expected min duration between the end and grace epoch \
-                 {min_grace_epoch}, but got grace = {}, end = {}",
-                grace_epoch,
-                end_epoch
-            );
+                 {min_grace_epoch}, but got grace = {grace_epoch}, end = \
+                 {end_epoch}",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
         let is_valid_max_proposal_period = start_epoch < grace_epoch
             && grace_epoch.0 - start_epoch.0 <= max_proposal_period;
         if !is_valid_max_proposal_period {
-            tracing::info!(
+            let error = native_vp::Error::new_alloc(format!(
                 "Expected max duration between the start and grace epoch \
-                 {max_proposal_period}, but got grace ={}, start = {}",
-                grace_epoch,
-                start_epoch
-            );
+                 {max_proposal_period}, but got grace = {grace_epoch}, start \
+                 = {start_epoch}",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
-        Ok(has_post_committing_epoch
-            && is_valid_grace_epoch
-            && is_valid_max_proposal_period)
+        Ok(())
     }
 
     /// Validate a start_epoch key
-    pub fn is_valid_start_epoch(&self, proposal_id: u64) -> Result<bool> {
+    pub fn is_valid_start_epoch(&self, proposal_id: u64) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -640,10 +671,25 @@ where
         let current_epoch = self.ctx.get_block_epoch()?;
 
         let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
-        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        if has_pre_start_epoch {
+            let error = native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had a pre_start epoch \
+                 written to storage in its slot.",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
+        }
 
-        if has_pre_start_epoch || has_pre_end_epoch {
-            return Ok(false);
+        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        if has_pre_end_epoch {
+            let error = native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had a pre_end epoch \
+                 written to storage in its slot.",
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
 
         let start_epoch: Epoch =
@@ -653,18 +699,47 @@ where
         let min_period: u64 =
             self.force_read(&min_period_parameter_key, ReadType::Pre)?;
 
-        if end_epoch <= start_epoch || start_epoch <= current_epoch {
-            return Ok(false);
+        if end_epoch <= start_epoch {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Ending epoch {end_epoch} cannot be lower than or equal to \
+                 the starting epoch {start_epoch} of the proposal with id \
+                 {proposal_id}.",
+            ))
+            .into());
+        }
+
+        if start_epoch <= current_epoch {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Starting epoch {start_epoch} cannot be lower than or equal \
+                 to the current epoch {current_epoch} of the proposal with id \
+                 {proposal_id}.",
+            ))
+            .into());
         }
 
         // TODO: HACK THAT NEEDS TO BE PROPERLY FIXED WITH PARAM
         let latency = 30u64;
         if start_epoch.0 - current_epoch.0 > latency {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Starting epoch {start_epoch} of the proposal with id \
+                 {proposal_id} is too far in the future (more than {latency} \
+                 epochs away from the current epoch {current_epoch}).",
+            ))
+            .into());
         }
 
-        Ok((end_epoch - start_epoch) % min_period == 0
-            && (end_epoch - start_epoch).0 >= min_period)
+        // TODO: bing bong
+        let bing_bong = (end_epoch - start_epoch) % min_period == 0;
+        if bing_bong {
+            todo!("BING");
+        }
+
+        let bing_bong = (end_epoch - start_epoch).0 >= min_period;
+        if bing_bong {
+            todo!("BONG");
+        }
+
+        Ok(())
     }
 
     /// Validate a end_epoch key
