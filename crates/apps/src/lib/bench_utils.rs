@@ -1021,6 +1021,7 @@ impl BenchShieldedCtx {
                     &target,
                     &address::testing::nam(),
                     denominated_amount,
+                    true,
                 ),
             )
             .unwrap()

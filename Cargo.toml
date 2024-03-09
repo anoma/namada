@@ -53,7 +53,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.31.8"
+version = "0.31.9"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -100,7 +100,7 @@ fd-lock = "3.0.12"
 flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
-git2 = "0.18.1"
+git2 = { version = "0.18.1", default-features = false }
 ibc = {version = "0.50.0", features = ["serde"]}
 ibc-derive = "0.6.0"
 ibc-testkit = {version = "0.50.0", default-features = false}
@@ -138,9 +138,9 @@ regex = "1.4.5"
 reqwest = "0.11.4"
 ripemd = "0.1"
 rlimit = "0.5.4"
-# rocksdb = {version = "0.21.0", features = ['zstd'], default-features = false}
+# rocksdb = {version = "0.22.0", features = ['zstd'], default-features = false}
 # TEMP branch "tomas/no-jemalloc-win", replace once upstreamed
-rocksdb = {git = "https://github.com/heliaxdev/rust-rocksdb", rev = "20f158ade557eea2d62baece0a5b5b55a34f4915", features = ['zstd'], default-features = false}
+rocksdb = {git = "https://github.com/heliaxdev/rust-rocksdb", rev = "4dc7f4fdfa17e923d3078d51261e3db66707754d", features = ['zstd'], default-features = false}
 rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
