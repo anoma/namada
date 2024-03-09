@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
-use namada_macros::StorageKeys;
+use namada_macros::{BorshDeserializer, StorageKeys};
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::address::InternalAddress;
@@ -81,6 +83,7 @@ const NAMESPACE: &str = "transfer";
     Ord,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -179,6 +182,7 @@ impl<'transfer> PendingTransferAppendix<'transfer> {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct TransferToEthereum {
@@ -208,6 +212,7 @@ pub struct TransferToEthereum {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct PendingTransfer {
@@ -345,6 +350,7 @@ impl From<&PendingTransfer> for Key {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct GasFee {

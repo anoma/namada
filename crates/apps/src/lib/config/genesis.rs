@@ -25,6 +25,9 @@ use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
 use namada::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
@@ -35,6 +38,7 @@ use crate::config::genesis::chain::{Finalized, FinalizedEstablishedAccountTx};
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     Ord,
@@ -144,7 +148,7 @@ impl FromStr for GenesisAddress {
     }
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 #[borsh(init=init)]
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
@@ -176,6 +180,7 @@ impl Genesis {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -200,7 +205,14 @@ pub struct Validator {
 }
 
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Derivative,
 )]
 #[derivative(PartialOrd, Ord)]
 pub struct EstablishedAccount {
@@ -218,7 +230,14 @@ pub struct EstablishedAccount {
 }
 
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Derivative,
 )]
 #[derivative(PartialOrd, Ord)]
 pub struct TokenAccount {
@@ -242,6 +261,7 @@ pub struct TokenAccount {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -267,6 +287,7 @@ pub struct ImplicitAccount {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Parameters {
     /// Max payload size, in bytes, for a tx batch proposal.

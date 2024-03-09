@@ -13,7 +13,7 @@ members = [
   "crates/ibc",
   "crates/light_sdk",
   "crates/macros",
-  "crates/macros",
+  "crates/migrations",
   "crates/merkle_tree",
   "crates/parameters",
   "crates/proof_of_stake",
@@ -114,6 +114,7 @@ ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
+linkme = "0.3"
 # branch = "murisi/namada-integration"
 masp_primitives = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2" }
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "30492323d98b0531fd18b6285cd94afcaa4066d2", default-features = false, features = ["local-prover"] }
@@ -146,6 +147,7 @@ serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
 sha2 = "0.9.3"
+sha2-const = "0.1.2"
 signal-hook = "0.3.9"
 slip10_ed25519 = "0.1.3"
 # sysinfo with disabled multithread feature

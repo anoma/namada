@@ -5,6 +5,9 @@ use std::fmt::Display;
 use std::ops::Div;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -72,6 +75,7 @@ const SCALE: u64 = 10_000;
     PartialEq,
     PartialOrd,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     Serialize,
@@ -205,6 +209,7 @@ pub struct VpGasMeter {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
