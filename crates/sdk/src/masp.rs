@@ -320,20 +320,26 @@ pub fn partial_deauthorize(
 }
 
 /// Verify a shielded transaction.
-pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
+pub fn verify_shielded_tx<F>(
+    transaction: &Transaction,
+    mut consume_verify_gas: F,
+) -> Result<bool, namada_state::StorageError>
+where
+    F: FnMut(u64) -> std::result::Result<(), namada_state::StorageError>,
+{
     tracing::info!("entered verify_shielded_tx()");
 
     let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
         bundle
     } else {
-        return false;
+        return Ok(false);
     };
     let tx_data = transaction.deref();
 
     // Partially deauthorize the transparent bundle
     let unauth_tx_data = match partial_deauthorize(tx_data) {
         Some(tx_data) => tx_data,
-        None => return false,
+        None => return Ok(false),
     };
 
     let txid_parts = unauth_tx_data.digest(TxIdDigester);
@@ -355,22 +361,23 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     let mut ctx = SaplingVerificationContext::new(true);
     #[cfg(feature = "testing")]
     let mut ctx = testing::MockSaplingVerificationContext::new(true);
-    // FIXME: custom costs
-    let spends_valid = sapling_bundle
-        .shielded_spends
-        .iter()
-        .all(|spend| check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk));
-    let converts_valid = sapling_bundle
-        .shielded_converts
-        .iter()
-        .all(|convert| check_convert(convert, &mut ctx, convert_vk));
-    let outputs_valid = sapling_bundle
-        .shielded_outputs
-        .iter()
-        .all(|output| check_output(output, &mut ctx, output_vk));
-
-    if !(spends_valid && outputs_valid && converts_valid) {
-        return false;
+    for spend in &sapling_bundle.shielded_spends {
+        consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
+        if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
+            return Ok(false);
+        }
+    }
+    for convert in &sapling_bundle.shielded_converts {
+        consume_verify_gas(namada_gas::MASP_VERIFY_CONVERT_GAS)?;
+        if !check_convert(convert, &mut ctx, convert_vk) {
+            return Ok(false);
+        }
+    }
+    for output in &sapling_bundle.shielded_outputs {
+        consume_verify_gas(namada_gas::MASP_VERIFY_OUTPUT_GAS)?;
+        if !check_output(output, &mut ctx, output_vk) {
+            return Ok(false);
+        }
     }
 
     tracing::info!("passed spend/output verification");
@@ -382,13 +389,14 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
         assets_and_values.components().len()
     );
 
+    consume_verify_gas(namada_gas::MASP_VERIFY_FINAL_GAS)?;
     let result = ctx.final_check(
         assets_and_values,
         sighash.as_ref(),
         sapling_bundle.authorization.binding_sig,
     );
     tracing::info!("final check result {result}");
-    result
+    Ok(result)
 }
 
 /// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or

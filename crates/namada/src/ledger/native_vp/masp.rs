@@ -13,7 +13,6 @@ use namada_core::address::Address;
 use namada_core::address::InternalAddress::Masp;
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::{IndexedTx, Key};
-use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
@@ -727,11 +726,9 @@ where
             _ => {}
         }
 
-        // Verify the proofs and charge the gas for the expensive execution
-        self.ctx
-            .charge_gas(MASP_VERIFY_SHIELDED_TX_GAS)
-            .map_err(Error::NativeVpError)?;
-        Ok(verify_shielded_tx(&shielded_tx))
+        // Verify the proofs
+        verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
+            .map_err(Error::NativeVpError)
     }
 }
 

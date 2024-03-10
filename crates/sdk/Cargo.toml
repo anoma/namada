@@ -58,6 +58,7 @@ download-params = ["masp_proofs/download-params"]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
+namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_parameters = { path = "../parameters" }
