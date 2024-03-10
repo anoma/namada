@@ -215,6 +215,10 @@ where
                 .unwrap();
         }
 
+        // Initialize IBC parameters
+        let ibc_params = genesis.get_ibc_params();
+        ibc_params.init_storage(&mut self.state).unwrap();
+
         // Depends on parameters being initialized
         self.state
             .in_mem_mut()
