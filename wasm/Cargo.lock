@@ -3611,6 +3611,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_gas",
  "namada_governance",
  "namada_ibc",
  "namada_parameters",

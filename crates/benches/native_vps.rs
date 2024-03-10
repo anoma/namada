@@ -644,11 +644,7 @@ fn masp(c: &mut Criterion) {
 }
 
 fn masp_check_spend(c: &mut Criterion) {
-    let PVKs {
-        spend_vk,
-        convert_vk,
-        output_vk,
-    } = preload_verifying_keys();
+    let spend_vk = &preload_verifying_keys().spend_vk;
 
     c.bench_function("vp_masp_check_spend", |b| {
         b.iter_batched_ref(
@@ -696,11 +692,7 @@ fn masp_check_spend(c: &mut Criterion) {
 }
 
 fn masp_check_convert(c: &mut Criterion) {
-    let PVKs {
-        spend_vk,
-        convert_vk,
-        output_vk,
-    } = preload_verifying_keys();
+    let convert_vk = &preload_verifying_keys().convert_vk;
 
     c.bench_function("vp_masp_check_convert", |b| {
         b.iter_batched_ref(
@@ -727,19 +719,10 @@ fn masp_check_convert(c: &mut Criterion) {
                     .unwrap()
                     .to_owned();
                 let ctx = SaplingVerificationContext::new(true);
-                let tx_data = transaction.deref();
-                // Partially deauthorize the transparent bundle
-                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
-                let txid_parts = unauth_tx_data.digest(TxIdDigester);
-                let sighash = signature_hash(
-                    &unauth_tx_data,
-                    &SignableInput::Shielded,
-                    &txid_parts,
-                );
 
-                (ctx, convert, sighash)
+                (ctx, convert)
             },
-            |(ctx, convert, sighash)| {
+            |(ctx, convert)| {
                 assert!(check_convert(convert, ctx, convert_vk));
             },
             BatchSize::SmallInput,
@@ -748,11 +731,7 @@ fn masp_check_convert(c: &mut Criterion) {
 }
 
 fn masp_check_output(c: &mut Criterion) {
-    let PVKs {
-        spend_vk,
-        convert_vk,
-        output_vk,
-    } = preload_verifying_keys();
+    let output_vk = &preload_verifying_keys().output_vk;
 
     c.bench_function("masp_vp_check_output", |b| {
         b.iter_batched_ref(
@@ -779,19 +758,10 @@ fn masp_check_output(c: &mut Criterion) {
                     .unwrap()
                     .to_owned();
                 let ctx = SaplingVerificationContext::new(true);
-                let tx_data = transaction.deref();
-                // Partially deauthorize the transparent bundle
-                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
-                let txid_parts = unauth_tx_data.digest(TxIdDigester);
-                let sighash = signature_hash(
-                    &unauth_tx_data,
-                    &SignableInput::Shielded,
-                    &txid_parts,
-                );
 
-                (ctx, output, sighash)
+                (ctx, output)
             },
-            |(ctx, output, sighash)| {
+            |(ctx, output)| {
                 assert!(check_output(output, ctx, output_vk));
             },
             BatchSize::SmallInput,
