@@ -1293,16 +1293,6 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b153fe7cbef478c567df0f972e02e6d736db11affe43dfc9c56a9374d1adfb87"
-dependencies = [
- "crossbeam-utils 0.7.2",
- "maybe-uninit",
-]
-
-[[package]]
-name = "crossbeam-channel"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a33c2bf77f2df06183c3aa30d1e96c0695a313d4f9c453cc3762a6db39f99200"
@@ -1333,17 +1323,6 @@ dependencies = [
  "crossbeam-utils 0.8.16",
  "memoffset 0.9.0",
  "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c7c73a2d1e9fc0886a08b93e98eb643461230d5f1925e4036204d5f2e261a8"
-dependencies = [
- "autocfg",
- "cfg-if 0.1.10",
- "lazy_static",
 ]
 
 [[package]]
@@ -7174,7 +7153,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94aecbdccbc4b557649b2d1b1a4bfc27ec85205e00fb8020fce044245a4c9e3f"
 dependencies = [
  "contracts",
- "crossbeam-channel 0.4.4",
+ "crossbeam-channel 0.5.8",
  "derive_more",
  "flex-error",
  "futures",
