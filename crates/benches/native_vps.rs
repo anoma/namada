@@ -1,10 +1,13 @@
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
+use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use masp_primitives::sapling::Node;
+use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
+use masp_primitives::transaction::txid::TxIdDigester;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::masp::{TransferSource, TransferTarget};
@@ -41,9 +44,13 @@ use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
-use namada::sdk::masp::verify_shielded_tx;
+use namada::sdk::masp::{
+    check_convert, check_output, check_spend, partial_deauthorize,
+    preload_verifying_keys, PVKs,
+};
 use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
+use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
@@ -636,32 +643,216 @@ fn masp(c: &mut Criterion) {
     group.finish();
 }
 
-fn masp_verify_shielded_tx(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_masp_verify_shielded_tx");
+fn masp_check_spend(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
 
-    for bench_name in ["shielding", "unshielding", "shielded"] {
-        group.bench_function(bench_name, |b| {
-            let (_, signed_tx) =
-                setup_storage_for_masp_verification(bench_name);
+    c.bench_function("vp_masp_check_spend", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
 
-            let transaction = signed_tx
-                .sections
-                .into_iter()
-                .filter_map(|section| match section {
-                    Section::MaspTx(transaction) => Some(transaction),
-                    _ => None,
-                })
-                .collect::<Vec<Transaction>>()
-                .first()
-                .unwrap()
-                .to_owned();
-            b.iter(|| {
-                assert!(verify_shielded_tx(&transaction));
-            })
-        });
-    }
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let spend = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_spends
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+                let tx_data = transaction.deref();
+                // Partially deauthorize the transparent bundle
+                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
+                let txid_parts = unauth_tx_data.digest(TxIdDigester);
+                let sighash = signature_hash(
+                    &unauth_tx_data,
+                    &SignableInput::Shielded,
+                    &txid_parts,
+                );
 
-    group.finish();
+                (ctx, spend, sighash)
+            },
+            |(ctx, spend, sighash)| {
+                assert!(check_spend(spend, sighash.as_ref(), ctx, spend_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_convert(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
+
+    c.bench_function("vp_masp_check_convert", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let convert = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_converts
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+                let tx_data = transaction.deref();
+                // Partially deauthorize the transparent bundle
+                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
+                let txid_parts = unauth_tx_data.digest(TxIdDigester);
+                let sighash = signature_hash(
+                    &unauth_tx_data,
+                    &SignableInput::Shielded,
+                    &txid_parts,
+                );
+
+                (ctx, convert, sighash)
+            },
+            |(ctx, convert, sighash)| {
+                assert!(check_convert(convert, ctx, convert_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_output(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
+
+    c.bench_function("masp_vp_check_output", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let output = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_outputs
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+                let tx_data = transaction.deref();
+                // Partially deauthorize the transparent bundle
+                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
+                let txid_parts = unauth_tx_data.digest(TxIdDigester);
+                let sighash = signature_hash(
+                    &unauth_tx_data,
+                    &SignableInput::Shielded,
+                    &txid_parts,
+                );
+
+                (ctx, output, sighash)
+            },
+            |(ctx, output, sighash)| {
+                assert!(check_output(output, ctx, output_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_final_check(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
+
+    let (_, signed_tx) = setup_storage_for_masp_verification("shielded");
+
+    let transaction = signed_tx
+        .sections
+        .into_iter()
+        .filter_map(|section| match section {
+            Section::MaspTx(transaction) => Some(transaction),
+            _ => None,
+        })
+        .collect::<Vec<Transaction>>()
+        .first()
+        .unwrap()
+        .to_owned();
+    let sapling_bundle = transaction.sapling_bundle().unwrap();
+    let mut ctx = SaplingVerificationContext::new(true);
+    // Partially deauthorize the transparent bundle
+    let unauth_tx_data = partial_deauthorize(transaction.deref()).unwrap();
+    let txid_parts = unauth_tx_data.digest(TxIdDigester);
+    let sighash =
+        signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
+
+    // Check spends, converts and outputs before the final check
+    assert!(sapling_bundle.shielded_spends.iter().all(|spend| {
+        check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk)
+    }));
+    assert!(
+        sapling_bundle
+            .shielded_converts
+            .iter()
+            .all(|convert| check_convert(convert, &mut ctx, convert_vk))
+    );
+    assert!(
+        sapling_bundle
+            .shielded_outputs
+            .iter()
+            .all(|output| check_output(output, &mut ctx, output_vk))
+    );
+
+    c.bench_function("vp_masp_final_check", |b| {
+        b.iter(|| {
+            assert!(ctx.final_check(
+                sapling_bundle.value_balance.clone(),
+                sighash.as_ref(),
+                sapling_bundle.authorization.binding_sig
+            ))
+        })
+    });
 }
 
 fn pgf(c: &mut Criterion) {
@@ -1251,7 +1442,10 @@ criterion_group!(
     // slash_fund,
     ibc,
     masp,
-    masp_verify_shielded_tx,
+    masp_check_spend,
+    masp_check_convert,
+    masp_check_output,
+    masp_final_check,
     vp_multitoken,
     pgf,
     eth_bridge_nut,

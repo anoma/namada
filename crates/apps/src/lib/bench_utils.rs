@@ -564,11 +564,7 @@ impl BenchShell {
         self.inner
             .state
             .in_mem_mut()
-            .set_header(namada::core::storage::Header {
-                hash: Hash::default(),
-                time: DateTimeUtc::now(),
-                next_validators_hash: Hash::default(),
-            })
+            .set_header(get_dummy_header())
             .unwrap();
     }
 

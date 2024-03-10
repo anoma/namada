@@ -153,11 +153,11 @@ pub enum TransferErr {
 /// MASP verifying keys
 pub struct PVKs {
     /// spend verifying key
-    spend_vk: PreparedVerifyingKey<Bls12>,
+    pub spend_vk: PreparedVerifyingKey<Bls12>,
     /// convert verifying key
-    convert_vk: PreparedVerifyingKey<Bls12>,
+    pub convert_vk: PreparedVerifyingKey<Bls12>,
     /// output verifying key
-    output_vk: PreparedVerifyingKey<Bls12>,
+    pub output_vk: PreparedVerifyingKey<Bls12>,
 }
 
 lazy_static! {
@@ -287,7 +287,7 @@ impl Authorization for PartialAuthorized {
 }
 
 /// Partially deauthorize the transparent bundle
-fn partial_deauthorize(
+pub fn partial_deauthorize(
     tx_data: &TransactionData<Authorized>,
 ) -> Option<TransactionData<PartialAuthorized>> {
     let transp = tx_data.transparent_bundle().and_then(|x| {
@@ -355,6 +355,7 @@ pub fn verify_shielded_tx(transaction: &Transaction) -> bool {
     let mut ctx = SaplingVerificationContext::new(true);
     #[cfg(feature = "testing")]
     let mut ctx = testing::MockSaplingVerificationContext::new(true);
+    // FIXME: custom costs
     let spends_valid = sapling_bundle
         .shielded_spends
         .iter()
