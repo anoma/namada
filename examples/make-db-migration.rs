@@ -44,9 +44,10 @@ fn main() {
     se_migration()
 }
 
+// TODO: put in the correct hash
+const REMOVED_HASH: &str = "000000000000000000000000000000000000000";
 fn se_migration() {
-    // TODO: may want to remove some keys corresponding to the old VP and it
-    // hash
+
 
     // Get VP
     let wasm_path = "wasm";
@@ -88,7 +89,7 @@ fn se_migration() {
     let code_len_update = migrations::DbUpdateType::Add {
         key: len_key,
         value: (bytes.len() as u64).into(),
-        force: true,
+        force: false,
     };
 
     // VP allowlist
@@ -102,8 +103,11 @@ fn se_migration() {
     let allowlist_update = migrations::DbUpdateType::Add {
         key: vp_allowlist_key,
         value: new_vp_allowlist.into(),
-        force: true,
+        force: false,
     };
+
+    // remove keys associated with old wasm
+    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(format!("/wasm/[a-z]+/{}", REMOVED_HASH));
 
     let updates = [
         accounts_update,
@@ -112,6 +116,7 @@ fn se_migration() {
         code_update,
         allowlist_update,
         code_len_update,
+        remove_old_wasm,
     ];
 
     let changes = migrations::DbChanges {
@@ -121,22 +126,3 @@ fn se_migration() {
         .unwrap();
 }
 
-#[test]
-fn bingbong() {
-    let key = storage::get_vp_allowlist_storage_key();
-    let type_hash = namada_migrations::foreign_types::HASHVECSTR;
-    let hex = HEXUPPER.encode(&type_hash);
-    println!("{}", hex);
-    println!("{}", key);
-
-    let token_amount_hash = HEXUPPER.encode(&Amount::HASH);
-    println!("{}", token_amount_hash);
-
-    let serialized = "0200000040000000383738316331373061643165336432626264646333303862373762376132656464613366666633626335643734363233326665656339363865653466653363644000000031323965653762656536386230326266616536333864613261363334623865636266666132636233663436636661386531373262616630303936323765633738";
-    // let serialized = serialized.chars().map(|bing|
-    // u8::try_from(bing).unwrap()).collect::<Vec<_>>();
-    let serialized = HEXUPPER.decode(serialized.as_bytes()).unwrap();
-    let allowlist =
-        Vec::<String>::try_from_slice(serialized.as_slice()).unwrap();
-    println!("{:?}", allowlist);
-}

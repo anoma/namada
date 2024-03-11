@@ -337,14 +337,39 @@ where
 }
 
 #[proc_macro_derive(BorshDeserializer)]
-pub fn derive_borsh_deserializer(struct_def: TokenStream) -> TokenStream {
-    derive_borsh_deserializer_inner(struct_def.into()).into()
+pub fn derive_borsh_deserializer(type_def: TokenStream) -> TokenStream {
+    derive_borsh_deserializer_inner(type_def.into()).into()
+}
+
+#[proc_macro]
+pub fn derive_borshdeserializer(type_def: TokenStream) -> TokenStream {
+    derive_borsh_deserialize_inner(type_def.into()).into()
+}
+
+#[proc_macro]
+pub fn derive_typehash(type_def: TokenStream) -> TokenStream {
+    let type_def = syn::parse2::<syn::Type>(type_def.into()).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (_, hash) = derive_typehash_inner(&type_def);
+    quote!(
+        impl TypeHash for #type_def {
+            const HASH: [u8; 32] = #hash;
+        }
+    ).into()
 }
 
 #[inline]
 fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
     let mut hasher = sha2::Sha256::new();
-    let (ident, generics) = syn::parse2::<ItemStruct>(item_def.clone())
+    let (type_def, generics) = syn::parse2::<ItemStruct>(item_def.clone())
         .map(|def| {
             hasher.update(def.to_token_stream().to_string().as_bytes());
             (def.ident, def.generics)
@@ -365,28 +390,6 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
              derive_borshdeserializer! macro."
         );
     }
-    impl_borsh_deserializer(type_hash, ident)
-}
-
-#[proc_macro]
-pub fn derive_typehash(item: TokenStream) -> TokenStream {
-    derive_typehash_inner(item.into()).into()
-}
-
-fn derive_typehash_inner(item: TokenStream2) -> TokenStream2 {
-    let type_def = syn::parse2::<syn::Type>(item).expect(
-        "Could not parse input to `derive_borshdesrializer` as a type.",
-    );
-    match type_def {
-        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
-        _ => panic!(
-            "The `borsh_derserializer!` macro may only be called on arrays, \
-             tuples, structs, and enums."
-        ),
-    }
-    let mut hasher = sha2::Sha256::new();
-    hasher.update(type_def.to_token_stream().to_string().as_bytes());
-    let type_hash: [u8; 32] = hasher.finalize().into();
     let hash = syn::ExprArray {
         attrs: vec![],
         bracket_token: Default::default(),
@@ -395,27 +398,7 @@ fn derive_typehash_inner(item: TokenStream2) -> TokenStream2 {
                 attrs: vec![],
                 lit: syn::Lit::Byte(LitByte::new(
                     b,
-                    proc_macro2::Span::call_site(),
-                )),
-            })
-        })),
-    };
-    quote!(#hash)
-}
-
-fn impl_borsh_deserializer<T: ToTokens>(
-    type_hash: [u8; 32],
-    type_def: T,
-) -> TokenStream2 {
-    let hash = syn::ExprArray {
-        attrs: vec![],
-        bracket_token: Default::default(),
-        elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
-            syn::Expr::Lit(syn::ExprLit {
-                attrs: vec![],
-                lit: syn::Lit::Byte(LitByte::new(
-                    b,
-                    proc_macro2::Span::call_site(),
+                    Span::call_site(),
                 )),
             })
         })),
@@ -437,6 +420,63 @@ fn impl_borsh_deserializer<T: ToTokens>(
             const HASH: [u8; 32] = #hash;
         }
     )
+}
+
+#[inline]
+fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
+    let type_def = syn::parse2::<syn::Type>(item).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (type_hash, hash) = derive_typehash_inner(&type_def);
+    let hex = data_encoding::HEXUPPER.encode(&type_hash);
+    let wrapper_ident = syn::Ident::new(&format!("Wrapper_{}", hex), Span::call_site());
+    let deserializer_ident =
+        syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
+
+    quote!(
+        #[derive(BorshSerialize)]
+        #[repr(transparent)]
+        pub struct #wrapper_ident(#type_def);
+
+        #[cfg(feature = "migrations")]
+        #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
+        static #deserializer_ident: fn() = || {
+            ::namada_migrations::register_deserializer(#hash, |bytes| {
+                #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
+            });
+        };
+        #[cfg(feature = "migrations")]
+        impl ::namada_migrations::TypeHash for #wrapper_ident {
+            const HASH: [u8; 32] = #hash;
+        }
+    )
+}
+
+#[inline]
+fn derive_typehash_inner(type_def: &syn::Type) -> ([u8;32], syn::ExprArray) {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(type_def.to_token_stream().to_string().as_bytes());
+    let type_hash: [u8; 32] = hasher.finalize().into();
+    (type_hash, syn::ExprArray {
+        attrs: vec![],
+        bracket_token: Default::default(),
+        elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
+            syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Byte(LitByte::new(
+                    b,
+                    Span::call_site(),
+                )),
+            })
+        })),
+    })
 }
 
 #[cfg(test)]
