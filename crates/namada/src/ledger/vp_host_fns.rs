@@ -112,21 +112,21 @@ where
     let (log_val, gas) = state.write_log().read_persistent(key);
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
-        Some(write_log::StorageModification::Write { ref value }) => {
+        Some(write_log::PersistentStorageModification::Write { value }) => {
             Ok(Some(value.clone()))
         }
-        Some(&write_log::StorageModification::Delete) => {
+        Some(write_log::PersistentStorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(write_log::StorageModification::InitAccount {
-            ref vp_code_hash,
+        Some(write_log::PersistentStorageModification::InitAccount {
+            vp_code_hash,
         }) => {
             // Read the VP code hash of a new account
             Ok(Some(vp_code_hash.to_vec()))
         }
-        Some(&write_log::StorageModification::Temp { .. }) | None => {
-            // When not found in write log or only found a temporary value, try
+        None => {
+            // When not found in write log, try
             // to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
@@ -204,14 +204,18 @@ where
     let (log_val, gas) = state.write_log().read_persistent(key);
     add_gas(gas_meter, gas, sentinel)?;
     match log_val {
-        Some(&write_log::StorageModification::Write { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Delete) => {
+        Some(write_log::PersistentStorageModification::Write { .. }) => {
+            Ok(true)
+        }
+        Some(write_log::PersistentStorageModification::Delete) => {
             // The given key has been deleted
             Ok(false)
         }
-        Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) | None => {
-            // When not found in write log or only found a temporary value, try
+        Some(write_log::PersistentStorageModification::InitAccount {
+            ..
+        }) => Ok(true),
+        None => {
+            // When not found in write log, try
             // to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;

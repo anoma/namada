@@ -35,6 +35,10 @@ pub enum Error {
     WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
+    #[error(
+        "Trying to cast a temporary write to a persistent storage modification"
+    )]
+    TempToPersistentModificationCast,
 }
 
 /// Result for functions that may fail
@@ -63,6 +67,51 @@ pub enum StorageModification {
         /// Value bytes
         value: Vec<u8>,
     },
+}
+
+/// A persistent storage modification. Associated data is present as a reference
+/// to the corresponding [`StorageModification`] present in the write log
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PersistentStorageModification<'wl> {
+    /// Write a new value
+    Write {
+        /// Value bytes
+        value: &'wl Vec<u8>,
+    },
+    /// Delete an existing key-value
+    Delete,
+    /// Initialize a new account with established address and a given validity
+    /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
+    /// point to its validity predicate.
+    InitAccount {
+        /// Validity predicate hash bytes
+        vp_code_hash: &'wl Hash,
+    },
+}
+
+impl<'wl> TryFrom<&'wl StorageModification>
+    for PersistentStorageModification<'wl>
+{
+    type Error = Error;
+
+    fn try_from(
+        value: &'wl StorageModification,
+    ) -> std::prelude::v1::Result<Self, Self::Error> {
+        match value {
+            StorageModification::Write { value } => {
+                Ok(PersistentStorageModification::Write { value })
+            }
+            StorageModification::Delete => {
+                Ok(PersistentStorageModification::Delete)
+            }
+            StorageModification::InitAccount { vp_code_hash } => {
+                Ok(PersistentStorageModification::InitAccount { vp_code_hash })
+            }
+            StorageModification::Temp { value: _ } => {
+                Err(Error::TempToPersistentModificationCast)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,7 +225,7 @@ impl WriteLog {
     pub fn read_persistent(
         &self,
         key: &storage::Key,
-    ) -> (Option<&StorageModification>, u64) {
+    ) -> (Option<PersistentStorageModification>, u64) {
         for bucket in [
             &self.tx_write_log,
             &self.tx_precommit_write_log,
@@ -194,7 +243,9 @@ impl WriteLog {
                     StorageModification::Temp { .. } => continue,
                 };
                 return (
-                    Some(modification),
+                    Some(modification.try_into().expect(
+                        "Temporary value should have been filtered out",
+                    )),
                     gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
                 );
             }

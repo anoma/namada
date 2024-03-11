@@ -200,15 +200,15 @@ macro_rules! impl_storage_read {
                 let (log_val, gas) = self.write_log().read_persistent(key);
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
-                    Some(write_log::StorageModification::Write { ref value }) => {
+                    Some(write_log::PersistentStorageModification::Write { value }) => {
                         Ok(Some(value.clone()))
                     }
-                    Some(write_log::StorageModification::Delete) => Ok(None),
-                    Some(write_log::StorageModification::InitAccount {
+                    Some(write_log::PersistentStorageModification::Delete) => Ok(None),
+                    Some(write_log::PersistentStorageModification::InitAccount {
                         ref vp_code_hash,
                     }) => Ok(Some(vp_code_hash.to_vec())),
-                    Some(write_log::StorageModification::Temp { .. }) | None => {
-                        // when not found in write log or only found a temporary value, try to read from the storage
+                    None => {
+                        // when not found in write log try to read from the storage
                         let (value, gas) = self.db_read(key).into_storage_result()?;
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(value)
