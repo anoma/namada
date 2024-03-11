@@ -13,9 +13,7 @@ use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
-use namada_tx::data::{
-    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
-};
+use namada_tx::data::{GasLimit, TxResult, TxType, VpsResult, WrapperTx};
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -50,6 +48,8 @@ pub enum Error {
     StateError(namada_state::Error),
     #[error("Storage error: {0}")]
     StorageError(namada_state::StorageError),
+    #[error("Wrapper tx runner error: {0}")]
+    WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -174,8 +174,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     match tx.header().tx_type {
-        TxType::Raw => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted) => apply_wasm_tx(
+        TxType::Raw => apply_wasm_tx(
             tx,
             &tx_index,
             ShellParams {
@@ -192,7 +191,7 @@ where
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
             let changed_keys = apply_wrapper_tx(
-                tx,
+                tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
                 tx_bytes,
@@ -203,18 +202,21 @@ where
                     tx_wasm_cache,
                 },
                 wrapper_args,
+            )
+            .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+            let mut inner_res = apply_wasm_tx(
+                tx,
+                &tx_index,
+                ShellParams {
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
             )?;
-            Ok(TxResult {
-                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                changed_keys,
-                vps_result: VpsResult::default(),
-                initialized_accounts: vec![],
-                ibc_events: BTreeSet::default(),
-                eth_bridge_events: BTreeSet::default(),
-            })
-        }
-        TxType::Decrypted(DecryptedTx::Undecryptable) => {
-            Ok(TxResult::default())
+
+            inner_res.wrapper_changed_keys = changed_keys;
+            Ok(inner_res)
         }
     }
 }
@@ -618,6 +620,7 @@ where
 
     Ok(TxResult {
         gas_used,
+        wrapper_changed_keys: Default::default(),
         changed_keys,
         vps_result,
         initialized_accounts,
@@ -633,7 +636,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    if let TxType::Decrypted(DecryptedTx::Decrypted) = tx.header().tx_type {
+    if let TxType::Wrapper(_) = tx.header().tx_type {
         if let Some(code_sec) = tx
             .get_section(tx.code_sechash())
             .and_then(|x| Section::code_sec(&x))
@@ -1036,11 +1039,13 @@ mod tests {
 
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::chain::ChainId;
+    use namada_core::address::testing::nam;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_core::keccak::keccak_hash;
-    use namada_core::storage::BlockHeight;
+    use namada_core::key::RefTo;
+    use namada_core::storage::{BlockHeight, Epoch};
+    use namada_core::token::DenominatedAmount;
     use namada_core::voting_power::FractionalVotingPower;
     use namada_core::{address, key};
     use namada_ethereum_bridge::protocol::transactions::votes::{
@@ -1050,6 +1055,7 @@ mod tests {
     use namada_ethereum_bridge::storage::proof::EthereumProof;
     use namada_ethereum_bridge::storage::{vote_tallies, vp};
     use namada_ethereum_bridge::test_utils;
+    use namada_tx::data::Fee;
     use namada_tx::{SignableEthMessage, Signed};
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;
@@ -1191,9 +1197,20 @@ mod tests {
     #[test]
     fn test_apply_wasm_tx_allowlist() {
         let (mut state, _validators) = test_utils::setup_default_storage();
-
-        let mut tx = Tx::new(ChainId::default(), None);
-        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
+        let keypair = key::testing::keypair_1();
+        let wrapper_tx = WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::from_uint(10, 0).expect("Test failed"),
+                ),
+                token: nam(),
+            },
+            keypair.ref_to(),
+            Epoch(0),
+            Default::default(),
+            None,
+        );
+        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper_tx)));
         // pseudo-random code hash
         let code = vec![1_u8, 2, 3];
         let tx_hash = Hash::sha256(&code);

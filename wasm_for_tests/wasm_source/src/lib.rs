@@ -158,6 +158,21 @@ pub mod main {
     }
 }
 
+#[cfg(feature = "tx_invalid_data")]
+pub mod main {
+    use namada_tx_prelude::*;
+
+    #[transaction(gas = 1000)]
+    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+        let signed = tx_data;
+        let _data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+            ctx.set_commitment_sentinel();
+            err
+        })?;
+        Ok(())
+    }
+}
+
 /// A VP that always returns `true`.
 #[cfg(feature = "vp_always_true")]
 pub mod main {

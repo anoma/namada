@@ -143,7 +143,7 @@ impl AbcippShim {
                          proposer from tendermint raw hash",
                     );
 
-                    let (processing_results, _) = self.service.process_txs(
+                    let processing_results = self.service.process_txs(
                         &self.delivered_txs,
                         block_time,
                         &block_proposer,

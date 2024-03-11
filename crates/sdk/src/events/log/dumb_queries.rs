@@ -41,16 +41,6 @@ impl QueryMatcher {
         })
     }
 
-    /// Returns a query matching the given accepted transaction hash.
-    pub fn accepted(tx_hash: Hash) -> Self {
-        let mut attributes = HashMap::new();
-        attributes.insert("hash".to_string(), tx_hash.to_string());
-        Self {
-            event_type: EventType::Accepted,
-            attributes,
-        }
-    }
-
     /// Returns a query matching the given applied transaction hash.
     pub fn applied(tx_hash: Hash) -> Self {
         let mut attributes = HashMap::new();
@@ -132,13 +122,13 @@ mod tests {
         let mut attributes = HashMap::new();
         attributes.insert("hash".to_string(), HASH.to_string());
         let matcher = QueryMatcher {
-            event_type: EventType::Accepted,
+            event_type: EventType::Proposal,
             attributes,
         };
 
         let tests = {
             let event_1 = Event {
-                event_type: EventType::Accepted,
+                event_type: EventType::Proposal,
                 level: EventLevel::Block,
                 attributes: {
                     let mut attrs = std::collections::HashMap::new();
