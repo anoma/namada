@@ -60,8 +60,8 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, get_validator_stake, query_epoch, query_wasm_code_hash,
-    validate_amount, InnerTxResult, TxBroadcastData, TxResponse,
+    self, get_validator_stake, query_wasm_code_hash, validate_amount,
+    InnerTxResult, TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, validate_fee_and_gen_unshield, SigningTxData};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -2005,9 +2005,7 @@ pub async fn build_vote_proposal(
     }
 
     let delegations = if is_validator {
-        let current_epoch = query_epoch(context.client()).await?;
-        let stake =
-            get_validator_stake(context.client(), current_epoch, voter).await?;
+        let stake = get_validator_stake(context.client(), epoch, voter).await?;
 
         if stake.is_zero() {
             eprintln!(
