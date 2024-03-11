@@ -10,7 +10,7 @@ use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
-use crate::address::{Address, InternalAddress};
+use crate::address::{Address, InternalAddress, GOV, POS};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::storage::{Key, KeySeg};
 use crate::token::storage_key::{
@@ -53,12 +53,29 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
+        let native_token = self.ctx.pre().ctx.get_native_token()?;
+        let is_native_token_transferable =
+            is_native_token_transferable(&self.ctx.pre())?;
+        // Native token can be transferred to `PoS` or `Gov` even if
+        // `is_native_token_transferable` is false
+        let is_allowed_inc = |token: &Address, target: &Address| -> bool {
+            *token != native_token
+                || is_native_token_transferable
+                || *target == POS
+                || *target == GOV
+        };
+        let is_allowed_dec = |token: &Address, target: &Address| -> bool {
+            *token != native_token
+                || is_native_token_transferable
+                || (*target != POS && *target != GOV)
+        };
+
         let mut inc_changes: HashMap<Address, Amount> = HashMap::new();
         let mut dec_changes: HashMap<Address, Amount> = HashMap::new();
         let mut inc_mints: HashMap<Address, Amount> = HashMap::new();
         let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
-            if let Some([token, _]) = is_any_token_balance_key(key) {
+            if let Some([token, owner]) = is_any_token_balance_key(key) {
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
@@ -73,6 +90,10 @@ where
                                     ),
                                 )
                             })?;
+                        if !is_allowed_inc(token, owner) {
+                            // native token deposit isn't allowed
+                            return Ok(false);
+                        }
                     }
                     None => {
                         let diff = pre
@@ -88,9 +109,18 @@ where
                                     ),
                                 )
                             })?;
+                        if !is_allowed_dec(token, owner) {
+                            // native token withdraw isn't allowed
+                            return Ok(false);
+                        }
                     }
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
+                if *token == native_token && !is_native_token_transferable {
+                    // Minting/Burning native token isn't allowed
+                    return Ok(false);
+                }
+
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
@@ -145,34 +175,24 @@ where
         all_tokens.extend(inc_mints.keys().cloned());
         all_tokens.extend(dec_mints.keys().cloned());
 
-        let native_token = self.ctx.pre().ctx.get_native_token()?;
-        let is_native_token_transferable =
-            is_native_token_transferable(&self.ctx.pre())?;
         Ok(all_tokens.iter().all(|token| {
-            if *token == native_token && !is_native_token_transferable {
-                // Native token transfer is disabled
+            let inc_change =
+                inc_changes.get(token).cloned().unwrap_or_default();
+            let dec_change =
+                dec_changes.get(token).cloned().unwrap_or_default();
+            let inc_mint = inc_mints.get(token).cloned().unwrap_or_default();
+            let dec_mint = dec_mints.get(token).cloned().unwrap_or_default();
+
+            if inc_change >= dec_change && inc_mint >= dec_mint {
+                inc_change.checked_sub(dec_change)
+                    == inc_mint.checked_sub(dec_mint)
+            } else if (inc_change < dec_change && inc_mint >= dec_mint)
+                || (inc_change >= dec_change && inc_mint < dec_mint)
+            {
                 false
             } else {
-                let inc_change =
-                    inc_changes.get(token).cloned().unwrap_or_default();
-                let dec_change =
-                    dec_changes.get(token).cloned().unwrap_or_default();
-                let inc_mint =
-                    inc_mints.get(token).cloned().unwrap_or_default();
-                let dec_mint =
-                    dec_mints.get(token).cloned().unwrap_or_default();
-
-                if inc_change >= dec_change && inc_mint >= dec_mint {
-                    inc_change.checked_sub(dec_change)
-                        == inc_mint.checked_sub(dec_mint)
-                } else if (inc_change < dec_change && inc_mint >= dec_mint)
-                    || (inc_change >= dec_change && inc_mint < dec_mint)
-                {
-                    false
-                } else {
-                    dec_change.checked_sub(inc_change)
-                        == dec_mint.checked_sub(inc_mint)
-                }
+                dec_change.checked_sub(inc_change)
+                    == dec_mint.checked_sub(inc_mint)
             }
         }))
     }
@@ -268,33 +288,44 @@ mod tests {
         tx
     }
 
-    #[test]
-    fn test_valid_transfer() {
-        let mut state = init_state();
+    fn transfer(
+        state: &mut TestState,
+        src: &Address,
+        dest: &Address,
+    ) -> BTreeSet<Key> {
         let mut keys_changed = BTreeSet::new();
 
-        let sender = established_address_1();
-        let sender_key = balance_key(&nam(), &sender);
+        let src_key = balance_key(&nam(), src);
         let amount = Amount::native_whole(100);
         state
-            .db_write(&sender_key, amount.serialize_to_vec())
+            .db_write(&src_key, amount.serialize_to_vec())
             .expect("write failed");
 
         // transfer 10
         let amount = Amount::native_whole(90);
         state
             .write_log_mut()
-            .write(&sender_key, amount.serialize_to_vec())
+            .write(&src_key, amount.serialize_to_vec())
             .expect("write failed");
-        keys_changed.insert(sender_key);
-        let receiver = established_address_2();
-        let receiver_key = balance_key(&nam(), &receiver);
+        keys_changed.insert(src_key);
+
+        let dest_key = balance_key(&nam(), dest);
         let amount = Amount::native_whole(10);
         state
             .write_log_mut()
-            .write(&receiver_key, amount.serialize_to_vec())
+            .write(&dest_key, amount.serialize_to_vec())
             .expect("write failed");
-        keys_changed.insert(receiver_key);
+        keys_changed.insert(dest_key);
+
+        keys_changed
+    }
+
+    #[test]
+    fn test_valid_transfer() {
+        let mut state = init_state();
+        let src = established_address_1();
+        let dest = established_address_2();
+        let keys_changed = transfer(&mut state, &src, &dest);
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&state);
@@ -303,7 +334,7 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
-        verifiers.insert(sender);
+        verifiers.insert(src);
         let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
@@ -327,31 +358,17 @@ mod tests {
     #[test]
     fn test_invalid_transfer() {
         let mut state = init_state();
-        let mut keys_changed = BTreeSet::new();
+        let src = established_address_1();
+        let dest = established_address_2();
+        let keys_changed = transfer(&mut state, &src, &dest);
 
-        let sender = established_address_1();
-        let sender_key = balance_key(&nam(), &sender);
-        let amount = Amount::native_whole(100);
-        state
-            .db_write(&sender_key, amount.serialize_to_vec())
-            .expect("write failed");
-
-        // transfer 10
-        let amount = Amount::native_whole(90);
-        state
-            .write_log_mut()
-            .write(&sender_key, amount.serialize_to_vec())
-            .expect("write failed");
-        keys_changed.insert(sender_key);
-        let receiver = established_address_2();
-        let receiver_key = balance_key(&nam(), &receiver);
         // receive more than 10
+        let dest_key = balance_key(&nam(), &dest);
         let amount = Amount::native_whole(100);
         state
             .write_log_mut()
-            .write(&receiver_key, amount.serialize_to_vec())
+            .write(&dest_key, amount.serialize_to_vec())
             .expect("write failed");
-        keys_changed.insert(receiver_key);
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&state);
@@ -711,34 +728,13 @@ mod tests {
     #[test]
     fn test_native_token_not_transferable() {
         let mut state = init_state();
-        let mut keys_changed = BTreeSet::new();
+        let src = established_address_1();
+        let dest = established_address_2();
+        let keys_changed = transfer(&mut state, &src, &dest);
 
         // disable native token transfer
         let key = get_native_token_transferable_key();
         state.write(&key, false).unwrap();
-
-        let sender = established_address_1();
-        let sender_key = balance_key(&nam(), &sender);
-        let amount = Amount::native_whole(100);
-        state
-            .db_write(&sender_key, amount.serialize_to_vec())
-            .expect("write failed");
-
-        // transfer 10
-        let amount = Amount::native_whole(90);
-        state
-            .write_log_mut()
-            .write(&sender_key, amount.serialize_to_vec())
-            .expect("write failed");
-        keys_changed.insert(sender_key);
-        let receiver = established_address_2();
-        let receiver_key = balance_key(&nam(), &receiver);
-        let amount = Amount::native_whole(10);
-        state
-            .write_log_mut()
-            .write(&receiver_key, amount.serialize_to_vec())
-            .expect("write failed");
-        keys_changed.insert(receiver_key);
 
         let tx_index = TxIndex::default();
         let tx = dummy_tx(&state);
@@ -747,7 +743,85 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
-        verifiers.insert(sender);
+        verifiers.insert(src);
+        let sentinel = RefCell::new(VpSentinel::default());
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert!(
+            !vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_native_token_transferable_to_pos() {
+        let mut state = init_state();
+        let src = established_address_1();
+        let dest = POS;
+        let keys_changed = transfer(&mut state, &src, &dest);
+
+        // disable native token transfer
+        let key = get_native_token_transferable_key();
+        state.write(&key, false).unwrap();
+
+        let tx_index = TxIndex::default();
+        let tx = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        verifiers.insert(src);
+        let sentinel = RefCell::new(VpSentinel::default());
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert!(
+            vp.validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_native_token_transferable_from_gov() {
+        let mut state = init_state();
+        let src = GOV;
+        let dest = POS;
+        let keys_changed = transfer(&mut state, &src, &dest);
+
+        // disable native token transfer
+        let key = get_native_token_transferable_key();
+        state.write(&key, false).unwrap();
+
+        let tx_index = TxIndex::default();
+        let tx = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        verifiers.insert(src);
         let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
