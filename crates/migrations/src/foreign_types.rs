@@ -5,6 +5,7 @@
 //! 2. We derive the deserialization function in `crates::sdk::migrations.rs`
 
 use namada_macros::derive_typehash;
+
 use crate::TypeHash;
 
 derive_typehash!(Vec::<u8>);

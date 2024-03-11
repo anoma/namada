@@ -9,15 +9,14 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use namada_core::storage::Key;
-#[cfg(feature = "migrations")]
-use namada_migrations::*;
+use namada_macros::derive_borshdeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::TypeHash;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use namada_macros::derive_borshdeserializer;
-
 
 pub trait DBUpdateVisitor {
     fn read(&self, key: &Key) -> Option<Vec<u8>>;
@@ -312,12 +311,10 @@ impl Display for DbUpdateType {
                         ));
                     };
                     value
+                } else if value.bytes.len() > 100 {
+                    format!("{:?}...", &value.bytes[..100])
                 } else {
-                    if value.bytes.len() > 100 {
-                        format!("{:?}...", &value.bytes[..100])
-                    } else {
-                        format!("{:?}", value.bytes)
-                    }
+                    format!("{:?}", value.bytes)
                 };
 
                 f.write_str(&format!(
@@ -393,7 +390,6 @@ impl Display for UpdateStatus {
         Ok(())
     }
 }
-
 
 #[cfg(feature = "migrations")]
 derive_borshdeserializer!(Vec::<u8>);

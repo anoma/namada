@@ -363,7 +363,8 @@ pub fn derive_typehash(type_def: TokenStream) -> TokenStream {
         impl TypeHash for #type_def {
             const HASH: [u8; 32] = #hash;
         }
-    ).into()
+    )
+    .into()
 }
 
 #[inline]
@@ -396,10 +397,7 @@ fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
         elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
             syn::Expr::Lit(syn::ExprLit {
                 attrs: vec![],
-                lit: syn::Lit::Byte(LitByte::new(
-                    b,
-                    Span::call_site(),
-                )),
+                lit: syn::Lit::Byte(LitByte::new(b, Span::call_site())),
             })
         })),
     };
@@ -436,7 +434,8 @@ fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
     }
     let (type_hash, hash) = derive_typehash_inner(&type_def);
     let hex = data_encoding::HEXUPPER.encode(&type_hash);
-    let wrapper_ident = syn::Ident::new(&format!("Wrapper_{}", hex), Span::call_site());
+    let wrapper_ident =
+        syn::Ident::new(&format!("Wrapper_{}", hex), Span::call_site());
     let deserializer_ident =
         syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
 
@@ -460,23 +459,25 @@ fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
 }
 
 #[inline]
-fn derive_typehash_inner(type_def: &syn::Type) -> ([u8;32], syn::ExprArray) {
+fn derive_typehash_inner(type_def: &syn::Type) -> ([u8; 32], syn::ExprArray) {
     let mut hasher = sha2::Sha256::new();
     hasher.update(type_def.to_token_stream().to_string().as_bytes());
     let type_hash: [u8; 32] = hasher.finalize().into();
-    (type_hash, syn::ExprArray {
-        attrs: vec![],
-        bracket_token: Default::default(),
-        elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
-            syn::Expr::Lit(syn::ExprLit {
-                attrs: vec![],
-                lit: syn::Lit::Byte(LitByte::new(
-                    b,
-                    Span::call_site(),
-                )),
-            })
-        })),
-    })
+    (
+        type_hash,
+        syn::ExprArray {
+            attrs: vec![],
+            bracket_token: Default::default(),
+            elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(
+                |b| {
+                    syn::Expr::Lit(syn::ExprLit {
+                        attrs: vec![],
+                        lit: syn::Lit::Byte(LitByte::new(b, Span::call_site())),
+                    })
+                },
+            )),
+        },
+    )
 }
 
 #[cfg(test)]

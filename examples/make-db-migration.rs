@@ -47,8 +47,6 @@ fn main() {
 // TODO: put in the correct hash
 const REMOVED_HASH: &str = "000000000000000000000000000000000000000";
 fn se_migration() {
-
-
     // Get VP
     let wasm_path = "wasm";
     let bytes = read_wasm(wasm_path, "vp_user.wasm").expect("bingbong");
@@ -107,7 +105,10 @@ fn se_migration() {
     };
 
     // remove keys associated with old wasm
-    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(format!("/wasm/[a-z]+/{}", REMOVED_HASH));
+    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(format!(
+        "/wasm/[a-z]+/{}",
+        REMOVED_HASH
+    ));
 
     let updates = [
         accounts_update,
@@ -125,4 +126,3 @@ fn se_migration() {
     std::fs::write("migrations.json", serde_json::to_string(&changes).unwrap())
         .unwrap();
 }
-
