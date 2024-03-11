@@ -5,6 +5,7 @@ members = [
   "crates/account",
   "crates/apps",
   "crates/benches",
+  "crates/controller",
   "crates/core",
   "crates/encoding_spec",
   "crates/ethereum_bridge",

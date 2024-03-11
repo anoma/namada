@@ -19,6 +19,7 @@ testing = ["proptest"]
 
 [dependencies]
 namada_account = { path = "../account" }
+namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_governance = { path = "../governance" }
 namada_storage = { path = "../storage" }
