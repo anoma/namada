@@ -285,7 +285,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             })
             .ok_or_else(|| {
                 ContextError::from(ClientError::Other {
-                    description: "No host header".to_string(),
+                    description: "No host block header".to_string(),
                 })
             })?;
         let time = TmTime::try_from(header.time).map_err(|_| {
