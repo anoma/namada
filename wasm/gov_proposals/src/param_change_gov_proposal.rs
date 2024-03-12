@@ -11,25 +11,25 @@ const OSMO_DENOM: u8 = 6;
 #[transaction(gas = 10000)]
 fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     // PoS
-    let mut pos_params = read_pos_params(ctx)?.owned;
-    pos_params.max_inflation_rate = Dec::from_str("0.1").unwrap();
-    pos_params.target_staked_ratio = Dec::from_str("0.6667").unwrap();
-    pos_params.rewards_gain_p = Dec::from_str("0.25").unwrap();
-    pos_params.rewards_gain_d = Dec::from_str("0.25").unwrap();
+    // let mut pos_params = read_pos_params(ctx)?.owned;
+    // pos_params.max_inflation_rate = Dec::from_str("0.1").unwrap();
+    // pos_params.target_staked_ratio = Dec::from_str("0.6667").unwrap();
+    // pos_params.rewards_gain_p = Dec::from_str("0.25").unwrap();
+    // pos_params.rewards_gain_d = Dec::from_str("0.25").unwrap();
     // Write to storage
-    write_pos_params(ctx, &pos_params)?;
+    // write_pos_params(ctx, &pos_params)?;
 
     // PGF
-    let pgf_inflation_key =
-        governance::pgf::storage::keys::get_pgf_inflation_rate_key();
-    let pgf_inflation_rate = Dec::from_str("0.025").unwrap();
-    ctx.write(&pgf_inflation_key, pgf_inflation_rate)?;
+    // let pgf_inflation_key =
+    //     governance::pgf::storage::keys::get_pgf_inflation_rate_key();
+    // let pgf_inflation_rate = Dec::from_str("0.025").unwrap();
+    // ctx.write(&pgf_inflation_key, pgf_inflation_rate)?;
 
     // Stewards
-    let steward_inflation_key =
-        governance::pgf::storage::keys::get_steward_inflation_rate_key();
-    let steward_inflation_rate = Dec::from_str("0.001").unwrap();
-    ctx.write(&steward_inflation_key, steward_inflation_rate)?;
+    // let steward_inflation_key =
+    //     governance::pgf::storage::keys::get_steward_inflation_rate_key();
+    // let steward_inflation_rate = Dec::from_str("0.001").unwrap();
+    // ctx.write(&steward_inflation_key, steward_inflation_rate)?;
 
     // Shielded NAAN
     let native_token = ctx.get_native_token()?;
@@ -56,7 +56,7 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
 
     // Shielded ATOM
     let atom_token: Address =
-        Address::decode("<insert_atom_ibc_token_address_here>").unwrap();
+        Address::decode("tnam1p5dp5qlqmm8vdkhmljpfn3h58mrs5jan2u6nl39w").unwrap();
     let shielded_atom_max_rewards_key =
         token::storage_key::masp_max_reward_rate_key(&atom_token);
     let shielded_atom_target_locked_amount_key =
@@ -80,7 +80,7 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
 
     // Shielded USDC (NOBLE)
     let noble_token: Address =
-        Address::decode("<insert_noble_ibc_token_address_here>").unwrap();
+        Address::decode("tnam1p50kvf26p3zjk72vjsullh59clxu50v8rg36gu3j").unwrap();
     let shielded_noble_max_rewards_key =
         token::storage_key::masp_max_reward_rate_key(&noble_token);
     let shielded_noble_target_locked_amount_key =
@@ -104,7 +104,7 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
 
     // Shielded OSMO
     let osmo_token: Address =
-        Address::decode("<insert_osmo_ibc_token_address_here>").unwrap();
+        Address::decode("tnam1p5mycp7z2xpfevfvdxkml95wxdf3jsg8ggms7ssd").unwrap();
     let shielded_osmo_max_rewards_key =
         token::storage_key::masp_max_reward_rate_key(&osmo_token);
     let shielded_osmo_target_locked_amount_key =
