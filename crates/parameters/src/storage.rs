@@ -45,6 +45,7 @@ struct Keys {
     fee_unshielding_gas_limit: &'static str,
     fee_unshielding_descriptions_limit: &'static str,
     max_signatures_per_transaction: &'static str,
+    native_token_transferable: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -198,6 +199,23 @@ pub fn get_max_block_gas(
     storage.read(&get_max_block_gas_key())?.ok_or(
         namada_storage::Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
+        ),
+    )
+}
+
+/// Storage key used for the flag to enable the native token transfer
+pub fn get_native_token_transferable_key() -> Key {
+    get_native_token_transferable_key_at_addr(ADDRESS)
+}
+
+/// Helper function to retrieve the `is_native_token_transferable` protocol
+/// parameter from storage
+pub fn is_native_token_transferable(
+    storage: &impl StorageRead,
+) -> std::result::Result<bool, namada_storage::Error> {
+    storage.read(&get_native_token_transferable_key())?.ok_or(
+        namada_storage::Error::SimpleMessage(
+            "Missing is_native_token_transferable parameter from storage",
         ),
     )
 }

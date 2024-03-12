@@ -64,6 +64,7 @@ where
         minimum_gas_price,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,
+        is_native_token_transferable,
     } = parameters;
 
     // write max tx bytes parameter
@@ -146,6 +147,11 @@ where
 
     let gas_cost_key = storage::get_gas_cost_key();
     storage.write(&gas_cost_key, minimum_gas_price)?;
+
+    let native_token_transferable_key =
+        storage::get_native_token_transferable_key();
+    storage
+        .write(&native_token_transferable_key, is_native_token_transferable)?;
 
     Ok(())
 }
@@ -437,6 +443,13 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    let native_token_transferable_key =
+        storage::get_native_token_transferable_key();
+    let value = storage.read(&native_token_transferable_key)?;
+    let is_native_token_transferable = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     Ok(Parameters {
         max_tx_bytes,
         epoch_duration,
@@ -453,6 +466,7 @@ where
         minimum_gas_price,
         fee_unshielding_gas_limit,
         fee_unshielding_descriptions_limit,
+        is_native_token_transferable,
     })
 }
 
@@ -473,4 +487,34 @@ where
 /// Storage key for the Ethereum address of wNam.
 pub fn native_erc20_key() -> Key {
     storage::get_native_erc20_key_at_addr(ADDRESS)
+}
+
+/// Initialize parameters to the storage for testing
+#[cfg(any(test, feature = "testing"))]
+pub fn init_test_storage<S>(storage: &mut S) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let params = Parameters {
+        max_tx_bytes: 1024 * 1024,
+        epoch_duration: EpochDuration {
+            min_num_of_blocks: 1,
+            min_duration: DurationSecs(3600),
+        },
+        max_expected_time_per_block: DurationSecs(3600),
+        max_proposal_bytes: Default::default(),
+        max_block_gas: 100,
+        vp_allowlist: vec![],
+        tx_allowlist: vec![],
+        implicit_vp_code_hash: Default::default(),
+        epochs_per_year: 365,
+        max_signatures_per_transaction: 10,
+        staked_ratio: Default::default(),
+        pos_inflation_amount: Default::default(),
+        fee_unshielding_gas_limit: 0,
+        fee_unshielding_descriptions_limit: 0,
+        minimum_gas_price: Default::default(),
+        is_native_token_transferable: true,
+    };
+    init_storage(&params, storage)
 }

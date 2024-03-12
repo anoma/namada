@@ -1,6 +1,7 @@
 # General protocol parameters.
 [parameters]
 native_token = "NAM"
+is_native_token_transferable = true
 # Minimum number of blocks in an epoch.
 min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).

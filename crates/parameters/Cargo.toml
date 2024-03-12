@@ -12,6 +12,13 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+default = []
+testing = [
+    "namada_core/testing",
+    "namada_storage/testing",
+]
+
 [dependencies]
 namada_core = { path = "../core" }
 namada_macros = { path = "../macros" }

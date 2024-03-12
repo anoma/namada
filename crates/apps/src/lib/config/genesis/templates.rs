@@ -248,6 +248,8 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Name of the native token - this must one of the tokens from
     /// `tokens.toml` file
     pub native_token: Alias,
+    /// Enable the native token transfer if it is true
+    pub is_native_token_transferable: bool,
     /// Minimum number of blocks per epoch.
     // TODO: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
@@ -299,6 +301,7 @@ impl ChainParams<Unvalidated> {
         let ChainParams {
             max_tx_bytes,
             native_token,
+            is_native_token_transferable,
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
@@ -344,6 +347,7 @@ impl ChainParams<Unvalidated> {
         Ok(ChainParams {
             max_tx_bytes,
             native_token,
+            is_native_token_transferable,
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
