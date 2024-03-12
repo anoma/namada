@@ -3,8 +3,9 @@ use std::collections::BTreeMap;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::hash::Hash;
 use namada_core::time::DateTimeUtc;
-use namada_core::{encode, ethereum_structs, hash::Hash};
+use namada_core::{encode, ethereum_structs};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
 use namada_parameters::{EpochDuration, Parameters};
@@ -70,7 +71,7 @@ where
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
     /// The map from tx hash to gas
-    pub tx_gas: BTreeMap<Hash, u64>
+    pub tx_gas: BTreeMap<Hash, u64>,
 }
 
 /// Last committed block
@@ -146,7 +147,7 @@ where
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
-            tx_gas: BTreeMap::default()
+            tx_gas: BTreeMap::default(),
         }
     }
 

@@ -55,13 +55,13 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::{gas, replay_protection};
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
 };
 use namada::token::ConversionState;
+use namada::{gas, replay_protection};
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
@@ -907,7 +907,7 @@ impl DB for RocksDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
-            tx_gas
+            tx_gas,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -967,19 +967,22 @@ impl DB for RocksDB {
 
         // Remove all pred gas entries
         let gas_pred_prefix = gas::storage::pred_prefix();
-        for (key, _, _) in iter_prefix(self, state_cf, None, Some(gas_pred_prefix).as_ref()) {
+        for (key, _, _) in
+            iter_prefix(self, state_cf, None, Some(gas_pred_prefix).as_ref())
+        {
             batch.0.delete_cf(state_cf, key);
         }
 
         // Write current gas entry as pred and then delete them
         let stripped_gas_prefix = gas::storage::gas_prefix();
-        for (key, value, _) in iter_prefix(self, state_cf, Some(&stripped_gas_prefix), None) {
-            batch.0.put_cf(
+        for (key, value, _) in
+            iter_prefix(self, state_cf, Some(&stripped_gas_prefix), None)
+        {
+            batch.0.put_cf(state_cf, format!("pred/gas/{}", key), value);
+            batch.0.delete_cf(
                 state_cf,
-                format!("pred/gas/{}", key),
-                value
+                format!("{}/{}", stripped_gas_prefix, key),
             );
-            batch.0.delete_cf(state_cf, format!("{}/{}", stripped_gas_prefix.to_string(), key));
         }
 
         // Write new gas entries
@@ -987,7 +990,7 @@ impl DB for RocksDB {
             batch.0.put_cf(
                 state_cf,
                 format!("pred/gas/last/{}", tx_hash),
-                encode(&gas_consumed)
+                encode(&gas_consumed),
             );
         }
 
@@ -2279,7 +2282,7 @@ mod test {
             address_gen: &address_gen,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
-            tx_gas: &tx_gas
+            tx_gas: &tx_gas,
         };
 
         db.add_block_to_batch(block, batch, true)

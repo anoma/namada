@@ -110,7 +110,7 @@ pub struct BlockStateWrite<'a> {
     /// The queue of Ethereum events to be processed in order.
     pub eth_events_queue: &'a EthEventsQueue,
     /// The map holding tx hash to gas values
-    pub tx_gas: &'a BTreeMap<Hash, u64>
+    pub tx_gas: &'a BTreeMap<Hash, u64>,
 }
 
 /// A database backend.

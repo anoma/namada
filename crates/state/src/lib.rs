@@ -639,7 +639,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
-                tx_gas: BTreeMap::default()
+                tx_gas: BTreeMap::default(),
             }
         }
     }

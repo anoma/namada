@@ -554,7 +554,7 @@ where
             conversion_state: &self.in_mem.conversion_state,
             ethereum_height: self.in_mem.ethereum_height.as_ref(),
             eth_events_queue: &self.in_mem.eth_events_queue,
-            tx_gas: &self.in_mem.tx_gas
+            tx_gas: &self.in_mem.tx_gas,
         };
         self.db
             .add_block_to_batch(state, &mut batch, is_full_commit)?;

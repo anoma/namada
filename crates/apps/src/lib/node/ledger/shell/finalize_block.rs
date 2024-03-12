@@ -308,7 +308,7 @@ where
             let tx_result = protocol::check_tx_allowed(&tx, &self.state)
                 .and_then(|()| {
                     protocol::dispatch_tx(
-                        tx,
+                        tx.clone(),
                         processed_tx.tx.as_ref(),
                         TxIndex(
                             tx_index
@@ -324,6 +324,14 @@ where
                 })
                 .map_err(Error::TxApply);
             let tx_gas_meter = tx_gas_meter.into_inner();
+
+            // save the gas cost
+            let tx_hash = tx.header_hash();
+            self.update_tx_gas(
+                tx_hash,
+                tx_gas_meter.get_tx_consumed_gas().into(),
+            );
+
             match tx_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -561,6 +569,10 @@ where
             .update_epoch(height, header_time)
             .expect("Must be able to update epoch");
         (height, new_epoch)
+    }
+
+    fn update_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
+        self.state.in_mem_mut().tx_gas.insert(tx_hash, gas);
     }
 
     /// If a new epoch begins, we update the response to include
