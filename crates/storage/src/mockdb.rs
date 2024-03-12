@@ -241,7 +241,7 @@ impl DB for MockDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
-            tx_gas: _
+            tx_gas: _,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
