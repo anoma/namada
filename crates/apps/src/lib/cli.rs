@@ -3160,6 +3160,7 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
+    pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -5249,6 +5250,7 @@ pub mod args {
                 owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
                 token: self.token.map(|x| chain_ctx.get(&x)),
                 no_conversions: self.no_conversions,
+                show_ibc_tokens: self.show_ibc_tokens,
             }
         }
     }
@@ -5259,11 +5261,13 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
+            let show_ibc_tokens = SHOW_IBC_TOKENS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
+                show_ibc_tokens,
             }
         }
 
@@ -5284,6 +5288,10 @@ pub mod args {
                         "Whether not to automatically perform conversions.",
                     ),
                 )
+                .arg(SHOW_IBC_TOKENS.def().help(
+                    "Show IBC tokens. When the given token is an IBC denom, \
+                     IBC tokens will be shown even if this flag is false.",
+                ))
         }
     }
 
