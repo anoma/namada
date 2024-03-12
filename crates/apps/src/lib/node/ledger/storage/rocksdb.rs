@@ -11,10 +11,11 @@
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
-//!   - `replay_protection`: hashes of the processed transactions
+//!   - gas/${tx hash}
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!     - `gas/{tx hash}`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
@@ -54,7 +55,7 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::replay_protection;
+use namada::{gas, replay_protection};
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
@@ -906,6 +907,7 @@ impl DB for RocksDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
+            tx_gas
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -962,6 +964,32 @@ impl DB for RocksDB {
             "update_epoch_blocks_delay",
             encode(&update_epoch_blocks_delay),
         );
+
+        // Remove all pred gas entries
+        let gas_pred_prefix = gas::storage::pred_prefix();
+        for (key, _, _) in iter_prefix(self, state_cf, None, Some(gas_pred_prefix).as_ref()) {
+            batch.0.delete_cf(state_cf, key);
+        }
+
+        // Write current gas entry as pred and then delete them
+        let stripped_gas_prefix = gas::storage::gas_prefix();
+        for (key, value, _) in iter_prefix(self, state_cf, Some(&stripped_gas_prefix), None) {
+            batch.0.put_cf(
+                state_cf,
+                format!("pred/gas/{}", key),
+                value
+            );
+            batch.0.delete_cf(state_cf, format!("{}/{}", stripped_gas_prefix.to_string(), key));
+        }
+
+        // Write new gas entries
+        for (tx_hash, gas_consumed) in tx_gas {
+            batch.0.put_cf(
+                state_cf,
+                format!("pred/gas/last/{}", tx_hash),
+                encode(&gas_consumed)
+            );
+        }
 
         // Save the conversion state when the epoch is updated
         if is_full_commit {
@@ -1756,6 +1784,8 @@ mod imp {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeMap;
+
     use namada::core::address::{
         gen_established_address, EstablishedAddressGen,
     };
@@ -2232,6 +2262,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
+        let tx_gas = BTreeMap::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -2248,6 +2279,7 @@ mod test {
             address_gen: &address_gen,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
+            tx_gas: &tx_gas
         };
 
         db.add_block_to_batch(block, batch, true)
