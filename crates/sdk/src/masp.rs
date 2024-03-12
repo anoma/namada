@@ -765,8 +765,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
 
         let start_idx = match start_block {
-            Some(block) => Some(block),
-            None => temp_start_idx,
+            Some(block) => block,
+            None => temp_start_idx.unwrap(),
+        };
+
+        let end_idx = match last_query_height {
+            Some(block) => block,
+            None => last_query_height.unwrap(),
         };
         // get the bounds on the block heights to fetch
         
@@ -776,13 +781,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             self.fetch_shielded_transfers(
                 client,
                 logger,
-                start_idx,
-                last_query_height,
+                Some(start_idx),
+                Some(end_idx),
             )
             .await?,
         );
         // persist the cache in case of interruptions.
-        let _ = self.save().await;
+        let _ = self.save_temp(start_idx.0,end_idx.0).await;
 
         let txs = logger.scan(self.unscanned.clone());
         for (indexed_tx, (epoch, tx, stx)) in txs {
@@ -808,7 +813,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // possibly remove unneeded elements from the cache.
             self.unscanned.scanned(&indexed_tx);
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            let _ = self.save().await;
+            let _ = self.save_temp(start_idx.0,end_idx.0).await;
         }
 
         Ok(())
