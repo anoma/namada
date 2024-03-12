@@ -317,6 +317,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub timeout_height: Option<u64>,
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
+    /// Refund target address when the shielded transfer failure
+    pub refund_target: Option<C::TransferTarget>,
     /// Memo
     pub memo: Option<String>,
     /// Path to the TX WASM code file
@@ -378,6 +380,14 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     pub fn timeout_sec_offset(self, timeout_sec_offset: u64) -> Self {
         Self {
             timeout_sec_offset: Some(timeout_sec_offset),
+            ..self
+        }
+    }
+
+    /// Refund target address
+    pub fn refund_target(self, refund_target: C::TransferTarget) -> Self {
+        Self {
+            refund_target: Some(refund_target),
             ..self
         }
     }
@@ -1281,6 +1291,19 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
+    /// Show IBC tokens
+    pub show_ibc_tokens: bool,
+}
+
+/// Query IBC token(s)
+#[derive(Clone, Debug)]
+pub struct QueryIbcToken<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// The token address which could be a non-namada address
+    pub token: Option<String>,
+    /// Address of an owner
+    pub owner: Option<C::BalanceOwner>,
 }
 
 /// Query historical transfer(s)
@@ -2500,4 +2523,6 @@ pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub port_id: PortId,
     /// Channel ID via which the token is received
     pub channel_id: ChannelId,
+    /// Generate the shielded transfer for refunding
+    pub refund: bool,
 }

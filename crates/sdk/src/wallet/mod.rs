@@ -13,6 +13,7 @@ use alias::Alias;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::ibc::is_ibc_denom;
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
@@ -377,6 +378,34 @@ impl<U> Wallet<U> {
             Some(alias) => format!("{}", alias),
             None => format!("{}", addr),
         }
+    }
+
+    /// Try to find an alias of the base token in the given IBC denomination
+    /// from the wallet. If not found, formats the IBC denomination into a
+    /// string.
+    pub fn lookup_ibc_token_alias(&self, ibc_denom: impl AsRef<str>) -> String {
+        // Convert only an IBC denom or a Namada address since an NFT trace
+        // doesn't have the alias
+        is_ibc_denom(&ibc_denom)
+            .map(|(trace_path, base_token)| {
+                let base_token_alias = match Address::decode(&base_token) {
+                    Ok(base_token) => self.lookup_alias(&base_token),
+                    Err(_) => base_token,
+                };
+                if trace_path.is_empty() {
+                    base_token_alias
+                } else {
+                    format!("{}/{}", trace_path, base_token_alias)
+                }
+            })
+            .or_else(|| {
+                // It's not an IBC denom, but could be a raw Namada address
+                match Address::decode(&ibc_denom) {
+                    Ok(addr) => Some(self.lookup_alias(&addr)),
+                    Err(_) => None,
+                }
+            })
+            .unwrap_or(ibc_denom.as_ref().to_string())
     }
 
     /// Find the viewing key with the given alias in the wallet and return it

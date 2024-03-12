@@ -251,6 +251,7 @@ pub mod cmds {
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
+                .subcommand(QueryIbcToken::def().display_order(5))
                 .subcommand(QueryBonds::def().display_order(5))
                 .subcommand(QueryBondedStake::def().display_order(5))
                 .subcommand(QuerySlashes::def().display_order(5))
@@ -325,6 +326,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryMaspRewardTokens);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
+            let query_ibc_token = Self::parse_with_ctx(matches, QueryIbcToken);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
@@ -388,6 +390,7 @@ pub mod cmds {
                 .or(query_masp_reward_tokens)
                 .or(query_block)
                 .or(query_balance)
+                .or(query_ibc_token)
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
@@ -479,6 +482,7 @@ pub mod cmds {
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
+        QueryIbcToken(QueryIbcToken),
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
@@ -1667,6 +1671,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query balance(s) of tokens.")
                 .add_args::<args::QueryBalance<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryIbcToken(pub args::QueryIbcToken<args::CliTypes>);
+
+    impl SubCmd for QueryIbcToken {
+        const CMD: &'static str = "ibc-token";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryIbcToken(args::QueryIbcToken::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query IBC token(s).")
+                .add_args::<args::QueryIbcToken<args::CliTypes>>()
         }
     }
 
@@ -3154,6 +3177,9 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const REFUND: ArgFlag = flag("refund");
+    pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
+        arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -3162,6 +3188,7 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
+    pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -3179,6 +3206,7 @@ pub mod args {
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
+    pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
@@ -4064,6 +4092,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4081,6 +4110,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let refund_target = REFUND_TARGET.parse(matches);
             let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
@@ -4096,6 +4126,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                refund_target,
                 memo,
                 tx_code_path,
             }
@@ -4120,6 +4151,10 @@ pub mod args {
                         .help("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
+                .arg(REFUND_TARGET.def().help(
+                    "The refund target address when IBC shielded transfer \
+                     failure.",
+                ))
                 .arg(
                     IBC_TRANSFER_MEMO_PATH
                         .def()
@@ -5243,6 +5278,7 @@ pub mod args {
                 owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
                 token: self.token.map(|x| chain_ctx.get(&x)),
                 no_conversions: self.no_conversions,
+                show_ibc_tokens: self.show_ibc_tokens,
             }
         }
     }
@@ -5253,11 +5289,13 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
+            let show_ibc_tokens = SHOW_IBC_TOKENS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
+                show_ibc_tokens,
             }
         }
 
@@ -5277,6 +5315,45 @@ pub mod args {
                     NO_CONVERSIONS.def().help(
                         "Whether not to automatically perform conversions.",
                     ),
+                )
+                .arg(SHOW_IBC_TOKENS.def().help(
+                    "Show IBC tokens. When the given token is an IBC denom, \
+                     IBC tokens will be shown even if this flag is false.",
+                ))
+        }
+    }
+
+    impl CliToSdk<QueryIbcToken<SdkTypes>> for QueryIbcToken<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryIbcToken<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            QueryIbcToken::<SdkTypes> {
+                query,
+                token: self.token,
+                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
+            }
+        }
+    }
+
+    impl Args for QueryIbcToken<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN_STR_OPT.parse(matches);
+            let owner = BALANCE_OWNER.parse(matches);
+            Self {
+                query,
+                owner,
+                token,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(TOKEN_STR_OPT.def().help("The base token to query."))
+                .arg(
+                    BALANCE_OWNER
+                        .def()
+                        .help("The account address whose token to query."),
                 )
         }
     }
@@ -5789,6 +5866,7 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
+                refund: self.refund,
             }
         }
     }
@@ -5802,6 +5880,7 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -5810,6 +5889,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
+                refund,
             }
         }
 
@@ -5830,6 +5910,11 @@ pub mod args {
                     CHANNEL_ID.def().help(
                         "The channel ID via which the token is received.",
                     ),
+                )
+                .arg(
+                    REFUND
+                        .def()
+                        .help("Generate the shielded transfer for refunding."),
                 )
         }
     }

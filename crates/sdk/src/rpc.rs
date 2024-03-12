@@ -12,6 +12,7 @@ use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
@@ -28,7 +29,7 @@ use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
 use namada_ibc::storage::{
-    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
@@ -384,9 +385,7 @@ where
             .await,
     )?;
     if response.data.is_empty() {
-        return Err(Error::from(QueryError::General(format!(
-            "No data found in {key}"
-        ))));
+        return Err(Error::from(QueryError::NoSuchKey(key.to_string())));
     }
     T::try_from_slice(&response.data[..])
         .map_err(|err| Error::from(EncodingError::Decoding(err.to_string())))
@@ -1360,6 +1359,48 @@ pub async fn format_denominated_amount(
         .to_string()
 }
 
+/// Look up IBC tokens. The given base token can be non-Namada token.
+pub async fn query_ibc_tokens<N: Namada>(
+    context: &N,
+    base_token: Option<String>,
+    owner: Option<&Address>,
+) -> Result<BTreeMap<String, Address>, Error> {
+    // Check the base token
+    let prefixes = match (base_token, owner) {
+        (Some(base_token), Some(owner)) => vec![
+            ibc_trace_key_prefix(Some(base_token)),
+            ibc_trace_key_prefix(Some(owner.to_string())),
+        ],
+        (Some(base_token), None) => {
+            vec![ibc_trace_key_prefix(Some(base_token))]
+        }
+        _ => {
+            // Check all IBC denoms because the owner might not know IBC token
+            // transfers in the same chain
+            vec![ibc_trace_key_prefix(None)]
+        }
+    };
+
+    let mut tokens = BTreeMap::new();
+    for prefix in prefixes {
+        let ibc_traces =
+            query_storage_prefix::<_, String>(context, &prefix).await?;
+        if let Some(ibc_traces) = ibc_traces {
+            for (key, ibc_trace) in ibc_traces {
+                if let Some((_, hash)) = is_ibc_trace_key(&key) {
+                    let hash: IbcTokenHash = hash.parse().expect(
+                        "Parsing an IBC token hash from storage shouldn't fail",
+                    );
+                    let ibc_token =
+                        Address::Internal(InternalAddress::IbcToken(hash));
+                    tokens.insert(ibc_trace, ibc_token);
+                }
+            }
+        }
+    }
+    Ok(tokens)
+}
+
 /// Look up the IBC denomination from a IbcToken.
 pub async fn query_ibc_denom<N: Namada>(
     context: &N,
@@ -1374,9 +1415,9 @@ pub async fn query_ibc_denom<N: Namada>(
     };
 
     if let Some(owner) = owner {
-        let ibc_denom_key = ibc_denom_key(owner.to_string(), &hash);
+        let ibc_trace_key = ibc_trace_key(owner.to_string(), &hash);
         if let Ok(ibc_denom) =
-            query_storage_value::<_, String>(context.client(), &ibc_denom_key)
+            query_storage_value::<_, String>(context.client(), &ibc_trace_key)
                 .await
         {
             return ibc_denom;
@@ -1384,12 +1425,12 @@ pub async fn query_ibc_denom<N: Namada>(
     }
 
     // No owner is specified or the owner doesn't have the token
-    let ibc_denom_prefix = ibc_denom_key_prefix(None);
+    let ibc_denom_prefix = ibc_trace_key_prefix(None);
     if let Ok(Some(ibc_denoms)) =
         query_storage_prefix::<_, String>(context, &ibc_denom_prefix).await
     {
         for (key, ibc_denom) in ibc_denoms {
-            if let Some((_, token_hash)) = is_ibc_denom_key(&key) {
+            if let Some((_, token_hash)) = is_ibc_trace_key(&key) {
                 if token_hash == hash {
                     return ibc_denom;
                 }
