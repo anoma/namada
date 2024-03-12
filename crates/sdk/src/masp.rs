@@ -454,10 +454,25 @@ pub trait ShieldedUtils:
         force_confirmed: bool,
     ) -> std::io::Result<()>;
 
+    async fn load_temp<U: ShieldedUtils + MaybeSend>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
+        start_block:u64,
+        end_block:u64
+    ) -> std::io::Result<()>;
+
     /// Save the given ShieldedContext for future loads
     async fn save<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()>;
+
+    async fn save_temp<U: ShieldedUtils + MaybeSync>(
+        &self,
+        ctx: &ShieldedContext<U>,
+        start_block:u64,
+        end_block:u64
     ) -> std::io::Result<()>;
 }
 
