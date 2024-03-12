@@ -3459,13 +3459,15 @@ pub mod args {
     pub struct LedgerUpdateDb {
         pub updates: PathBuf,
         pub dry_run: bool,
+        pub last_height: BlockHeight,
     }
 
     impl Args for LedgerUpdateDb {
         fn parse(matches: &ArgMatches) -> Self {
             let updates = PATH.parse(matches);
             let dry_run = DRY_RUN_TX.parse(matches);
-            Self { updates, dry_run }
+            let last_height = BLOCK_HEIGHT.parse(matches);
+            Self { updates, dry_run , last_height}
         }
 
         fn def(app: App) -> App {
@@ -3475,6 +3477,9 @@ pub mod args {
             .arg(DRY_RUN_TX.def().help(
                 "If set, applies the updates but does not persist them. Using \
                  for testing and debugging.",
+            ))
+            .arg(BLOCK_HEIGHT.def().help(
+                "The height at which the hard fork is happening."
             ))
         }
     }
