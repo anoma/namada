@@ -80,6 +80,10 @@ where
                 let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
                     Some(diff) => {
+                        if !is_allowed_inc(token, owner) {
+                            // native token deposit isn't allowed
+                            return Ok(false);
+                        }
                         let change =
                             inc_changes.entry(token.clone()).or_default();
                         *change =
@@ -90,12 +94,12 @@ where
                                     ),
                                 )
                             })?;
-                        if !is_allowed_inc(token, owner) {
-                            // native token deposit isn't allowed
-                            return Ok(false);
-                        }
                     }
                     None => {
+                        if !is_allowed_dec(token, owner) {
+                            // native token withdraw isn't allowed
+                            return Ok(false);
+                        }
                         let diff = pre
                             .checked_sub(post)
                             .expect("Underflow shouldn't happen here");
@@ -109,10 +113,6 @@ where
                                     ),
                                 )
                             })?;
-                        if !is_allowed_dec(token, owner) {
-                            // native token withdraw isn't allowed
-                            return Ok(false);
-                        }
                     }
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
