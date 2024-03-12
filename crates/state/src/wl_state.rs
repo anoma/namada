@@ -269,7 +269,7 @@ where
                             &namada_gas::storage::last_key(&hash),
                         )?;
                     } else {
-                        // what should we do here?
+                        // TODO: what should we do here?
                     }
                 }
             }
