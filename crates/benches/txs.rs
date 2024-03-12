@@ -706,7 +706,7 @@ fn change_consensus_key(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -736,7 +736,7 @@ fn change_validator_metadata(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -1007,7 +1007,7 @@ fn deactivate_validator(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -1047,7 +1047,7 @@ fn reactivate_validator(c: &mut Criterion) {
                 shell
             },
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -1100,7 +1100,7 @@ fn claim_rewards(c: &mut Criterion) {
                     shell
                 },
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }
