@@ -81,7 +81,9 @@ where
                 match post.checked_sub(pre) {
                     Some(diff) => {
                         if !is_allowed_inc(token, owner) {
-                            // native token deposit isn't allowed
+                            tracing::debug!(
+                                "Native token deposit isn't allowed"
+                            );
                             return Ok(false);
                         }
                         let change =
@@ -97,7 +99,9 @@ where
                     }
                     None => {
                         if !is_allowed_dec(token, owner) {
-                            // native token withdraw isn't allowed
+                            tracing::debug!(
+                                "Native token withdraw isn't allowed"
+                            );
                             return Ok(false);
                         }
                         let diff = pre
@@ -117,7 +121,9 @@ where
                 }
             } else if let Some(token) = is_any_minted_balance_key(key) {
                 if *token == native_token && !is_native_token_transferable {
-                    // Minting/Burning native token isn't allowed
+                    tracing::debug!(
+                        "Minting/Burning native token isn't allowed"
+                    );
                     return Ok(false);
                 }
 
