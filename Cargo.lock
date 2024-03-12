@@ -4438,6 +4438,7 @@ dependencies = [
  "namada_migrations",
  "namada_parameters",
  "namada_sdk",
+ "namada_shielded_token",
  "namada_trans_token",
  "proptest",
  "serde_json",

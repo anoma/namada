@@ -30,31 +30,31 @@ pub trait DBUpdateVisitor {
     fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)>;
 }
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
- enum UpdateBytes {
+enum UpdateBytes {
     Raw {
         to_write: Vec<u8>,
         serialized: Vec<u8>,
     },
     Serialized {
-        bytes: Vec<u8>
-    }
+        bytes: Vec<u8>,
+    },
 }
-
 
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
 /// A value to be added to the database that can be
 /// validated.
-pub struct UpdateValue{
+pub struct UpdateValue {
     type_hash: [u8; 32],
-    bytes: UpdateBytes
+    bytes: UpdateBytes,
 }
 
 #[cfg(feature = "migrations")]
 impl UpdateValue {
-
+    /// Using a type that is a thin wrapper around bytes but with a custom
+    /// serialization when we don't want to use Borsh necessarily
     pub fn raw<T>(value: T) -> Self
     where
-        T: TypeHash + AsRef<[u8]> + BorshSerialize + BorshDeserialize
+        T: TypeHash + AsRef<[u8]> + BorshSerialize + BorshDeserialize,
     {
         Self {
             type_hash: T::HASH,
@@ -65,21 +65,35 @@ impl UpdateValue {
         }
     }
 
+    /// Using a type that is Borsh-serializable but we don't have an
+    /// implementation for conversion yet. Must provide `force: true`
+    pub fn force_borsh<T>(value: T) -> Self
+    where
+        T: BorshSerialize + BorshDeserialize,
+    {
+        Self {
+            type_hash: Default::default(),
+            bytes: UpdateBytes::Serialized {
+                bytes: value.serialize_to_vec(),
+            },
+        }
+    }
+
     pub fn is_raw(&self) -> bool {
-        matches!(self.bytes, UpdateBytes::Raw{..})
+        matches!(self.bytes, UpdateBytes::Raw { .. })
     }
 
     fn bytes(&self) -> &[u8] {
         match &self.bytes {
             UpdateBytes::Raw { serialized, .. } => serialized,
-            UpdateBytes::Serialized {bytes } => bytes,
+            UpdateBytes::Serialized { bytes } => bytes,
         }
     }
 
     /// The value to write to storage
     fn to_write(&self) -> Vec<u8> {
         match &self.bytes {
-            UpdateBytes::Raw {to_write, .. } => to_write.clone(),
+            UpdateBytes::Raw { to_write, .. } => to_write.clone(),
             UpdateBytes::Serialized { bytes } => bytes.clone(),
         }
     }
@@ -90,7 +104,9 @@ impl<T: TypeHash + BorshSerialize + BorshDeserialize> From<T> for UpdateValue {
     fn from(value: T) -> Self {
         Self {
             type_hash: T::HASH,
-            bytes: UpdateBytes::Serialized {bytes: value.serialize_to_vec()},
+            bytes: UpdateBytes::Serialized {
+                bytes: value.serialize_to_vec(),
+            },
         }
     }
 }
@@ -157,8 +173,7 @@ pub enum DbUpdateType {
 }
 
 #[cfg(feature = "migrations")]
-impl DbUpdateType
-{
+impl DbUpdateType {
     /// Get the key or pattern being modified as string
     pub fn pattern(&self) -> String {
         match self {
@@ -170,21 +185,23 @@ impl DbUpdateType
     }
 
     fn is_force(&self) -> bool {
-        match self{
-            DbUpdateType::Add{force, ..} => *force,
-            DbUpdateType::RepeatAdd {force, ..} => *force,
+        match self {
+            DbUpdateType::Add { force, .. } => *force,
+            DbUpdateType::RepeatAdd { force, .. } => *force,
             _ => false,
         }
     }
+
     fn formatted_bytes(&self) -> String {
         match self {
-            DbUpdateType::Add {value, ..} | DbUpdateType::RepeatAdd {value, ..} => {
+            DbUpdateType::Add { value, .. }
+            | DbUpdateType::RepeatAdd { value, .. } => {
                 if value.to_write().len() > PRINTLN_CUTOFF {
                     format!("{:?} ...", &value.bytes()[..PRINTLN_CUTOFF])
                 } else {
                     format!("{:?}", value.bytes())
                 }
-            },
+            }
             _ => String::default(),
         }
     }
@@ -192,7 +209,9 @@ impl DbUpdateType
     /// Validate that the contained value deserializes correctly given its data
     /// hash and the value is not "raw". Return the string formatted value and,
     /// if the value is not "raw", the deserializer function.
-    pub fn validate(&self) -> eyre::Result<(String, Option<CbFromByteArrayToTypeName>)> {
+    pub fn validate(
+        &self,
+    ) -> eyre::Result<(String, Option<CbFromByteArrayToTypeName>)> {
         // skip all checks if force == true
         if self.is_force() {
             return Ok((self.formatted_bytes(), None));
@@ -210,21 +229,34 @@ impl DbUpdateType
                                 value.type_hash
                             )
                         })?;
-                let deserialized = deserializer(value.bytes().to_vec()).ok_or_else(|| {
+                let deserialized = deserializer(value.bytes().to_vec())
+                    .ok_or_else(|| {
                         eyre::eyre!(
-                        "The value {:?} for key/pattern {} could not be successfully deserialized",
-                        value.bytes(),
-                        key_or_pattern,
-                    )
+                            "The value {:?} for key/pattern {} could not be \
+                             successfully deserialized",
+                            value.bytes(),
+                            key_or_pattern,
+                        )
                     })?;
                 let deserializer = value.is_raw().then_some(deserializer);
                 if deserialized.len() > PRINTLN_CUTOFF {
-                    Ok((format!("{} ...", deserialized.chars().take(PRINTLN_CUTOFF).collect::<String>()), deserializer))
+                    Ok((
+                        format!(
+                            "{} ...",
+                            deserialized
+                                .chars()
+                                .take(PRINTLN_CUTOFF)
+                                .collect::<String>()
+                        ),
+                        deserializer,
+                    ))
                 } else {
                     Ok((deserialized, deserializer))
                 }
             }
-            DbUpdateType::Delete(_) | DbUpdateType::RepeatDelete(_) => Ok((String::default(), None)),
+            DbUpdateType::Delete(_) | DbUpdateType::RepeatDelete(_) => {
+                Ok((String::default(), None))
+            }
         }
     }
 
@@ -241,9 +273,8 @@ impl DbUpdateType
                 if let (Some(prev), Some(des)) = (db.read(key), deserializer) {
                     des(prev).ok_or_else(|| {
                         eyre::eyre!(
-                            "The previous value under the key {} did not \
-                             have the same type as that provided: Input \
-                             was {}",
+                            "The previous value under the key {} did not have \
+                             the same type as that provided: Input was {}",
                             key,
                             deserialized
                         )
@@ -256,17 +287,12 @@ impl DbUpdateType
                 db.delete(key);
                 Ok(UpdateStatus::Deleted(vec![key.to_string()]))
             }
-            DbUpdateType::RepeatAdd {
-                pattern,
-                value,
-                ..
-            } => {
+            DbUpdateType::RepeatAdd { pattern, value, .. } => {
                 let pattern = Regex::new(pattern).unwrap();
                 let mut pairs = vec![];
                 let (deserialized, deserializer) = self.validate()?;
                 for (key, prev) in db.get_pattern(pattern.clone()) {
-                    if let Some(des) = deserializer
-                    {
+                    if let Some(des) = deserializer {
                         des(prev).ok_or_else(|| {
                             eyre::eyre!(
                                 "The previous value under the key {} did not \
@@ -278,10 +304,7 @@ impl DbUpdateType
                         })?;
                         pairs.push((key.to_string(), deserialized.clone()));
                     } else {
-                        pairs.push((
-                            key.to_string(),
-                            deserialized.clone(),
-                        ));
+                        pairs.push((key.to_string(), deserialized.clone()));
                     }
                     db.write(&Key::from_str(&key).unwrap(), value.to_write());
                 }
@@ -315,27 +338,23 @@ impl Display for DbUpdateType {
             DbUpdateType::Add { key, value, .. } => {
                 let (formatted, _) = match self.validate() {
                     Ok(f) => f,
-                    Err(e) => return f.write_str(&e.to_string())
+                    Err(e) => return f.write_str(&e.to_string()),
                 };
 
                 f.write_str(&format!(
                     "Write to key: <{}> with {}value: {}",
                     key,
-                    value.is_raw().then_some("raw " ).unwrap_or_default(),
+                    value.is_raw().then_some("raw ").unwrap_or_default(),
                     formatted
                 ))
             }
             DbUpdateType::Delete(key) => {
                 f.write_str(&format!("Delete key: <{}>", key))
             }
-            DbUpdateType::RepeatAdd {
-                pattern,
-                value,
-                ..
-            } => {
+            DbUpdateType::RepeatAdd { pattern, value, .. } => {
                 let (formatted, _) = match self.validate() {
                     Ok(f) => f,
-                    Err(e) => return f.write_str(&e.to_string())
+                    Err(e) => return f.write_str(&e.to_string()),
                 };
                 f.write_str(&format!(
                     "Write to pattern: <{}> with {}value: {}",
