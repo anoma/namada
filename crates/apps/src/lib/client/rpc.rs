@@ -367,8 +367,6 @@ pub async fn query_balance(context: &impl Namada, args: args::QueryBalance) {
             query_pinned_balance(context, args.clone()).await;
             // Print shielded balance
             query_shielded_balance(context, args.clone()).await;
-            // Then print transparent balance
-            query_transparent_balance(context, args).await;
         }
     };
 }
