@@ -385,9 +385,7 @@ where
             .await,
     )?;
     if response.data.is_empty() {
-        return Err(Error::from(QueryError::General(format!(
-            "No data found in {key}"
-        ))));
+        return Err(Error::from(QueryError::NoSuchKey(key.to_string())));
     }
     T::try_from_slice(&response.data[..])
         .map_err(|err| Error::from(EncodingError::Decoding(err.to_string())))

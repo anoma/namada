@@ -1291,6 +1291,8 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
+    /// Show IBC tokens
+    pub show_ibc_tokens: bool,
 }
 
 /// Query IBC token(s)
