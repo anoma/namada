@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-N_OF_MACHINES = 4
+N_OF_MACHINES = 6
 
 NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
 
