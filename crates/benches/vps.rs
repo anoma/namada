@@ -177,7 +177,7 @@ fn vp_user(c: &mut Criterion) {
     let vp_code_hash: Hash = shell
         .read_storage_key(&Key::wasm_hash(VP_USER_WASM))
         .unwrap();
-    let mut group = c.benchmark_group("vp_validator");
+    let mut group = c.benchmark_group("vp_user");
 
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::validator_account_keypair());
@@ -326,5 +326,5 @@ fn vp_user(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(allowed_vps, vp_user, vp_implicit,);
+criterion_group!(allowed_vps, vp_user, vp_implicit);
 criterion_main!(allowed_vps);
