@@ -365,8 +365,6 @@ pub async fn query_balance(context: &impl Namada, args: args::QueryBalance) {
         None => {
             // Print pinned balance
             query_pinned_balance(context, args.clone()).await;
-            // Print shielded balance
-            query_shielded_balance(context, args.clone()).await;
         }
     };
 }
