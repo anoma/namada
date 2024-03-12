@@ -287,7 +287,7 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
             e => {
                 tracing::error!(
                     "Attempt to write to key/pattern <{}> failed.",
-                    change.key()
+                    change.pattern()
                 );
                 e.unwrap();
             }

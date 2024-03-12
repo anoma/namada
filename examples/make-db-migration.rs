@@ -56,8 +56,8 @@ fn se_migration() {
     let account_vp_str = "#tnam[a-z,0-9]*\\/\\?".to_string();
     let accounts_update = migrations::DbUpdateType::RepeatAdd {
         pattern: account_vp_str,
-        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
-        force: true,
+        value: migrations::UpdateValue::raw(vp_hash),
+        force: false,
     };
 
     // wasm/hash and wasm/name
@@ -65,13 +65,13 @@ fn se_migration() {
     let wasm_hash_key = Key::wasm_hash("vp_user.wasm");
     let wasm_name_update = migrations::DbUpdateType::Add {
         key: wasm_name_key,
-        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
-        force: true,
+        value: migrations::UpdateValue::raw(vp_hash),
+        force: false,
     };
     let wasm_hash_update = migrations::DbUpdateType::Add {
         key: wasm_hash_key,
-        value: migrations::UpdateValue::raw(vp_hash.0.to_vec()),
-        force: true,
+        value: migrations::UpdateValue::raw(vp_hash),
+        force: false,
     };
 
     // wasm/code/<uc hash>
@@ -79,7 +79,7 @@ fn se_migration() {
     let code_update = migrations::DbUpdateType::Add {
         key: code_key,
         value: migrations::UpdateValue::raw(bytes.clone()),
-        force: true,
+        force: false,
     };
 
     // wasm/len/<code len>
