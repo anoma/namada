@@ -62,9 +62,14 @@ pub fn main() -> Result<()> {
                             height: args.last_height + 2,
                             action: Action::Halt,
                         });
-                    std::env::set_var("NAMADA_INITIAL_HEIGHT", args.last_height.to_string());
+                    std::env::set_var(
+                        "NAMADA_INITIAL_HEIGHT",
+                        args.last_height.to_string(),
+                    );
                     // don't stop on panics
-                    let handle = std::thread::spawn(|| ledger::run(chain_ctx.config.ledger, wasm_dir));
+                    let handle = std::thread::spawn(|| {
+                        ledger::run(chain_ctx.config.ledger, wasm_dir)
+                    });
                     _ = handle.join();
                     std::env::remove_var("NAMADA_INITIAL_HEIGHT");
                 }

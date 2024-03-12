@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use data_encoding::HEXLOWER;
 use namada_apps::wasm_loader::read_wasm;
 use namada_parameters::storage;
@@ -7,6 +9,7 @@ use namada_sdk::migrations;
 use namada_sdk::storage::Key;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
+use namada_shielded_token::storage_key::masp_token_map_key;
 
 #[allow(dead_code)]
 fn example() {
@@ -110,6 +113,15 @@ fn se_migration() {
         REMOVED_HASH
     ));
 
+    // Conversion state token map
+    let conversion_token_map: BTreeMap<String, Address> = BTreeMap::new();
+    let conversion_token_map_key = masp_token_map_key();
+    let conversion_state_token_map_update = migrations::DbUpdateType::Add {
+        key: conversion_token_map_key,
+        value: migrations::UpdateValue::force_borsh(conversion_token_map),
+        force: true,
+    };
+
     let updates = [
         accounts_update,
         wasm_name_update,
@@ -118,6 +130,7 @@ fn se_migration() {
         allowlist_update,
         code_len_update,
         remove_old_wasm,
+        conversion_state_token_map_update,
     ];
 
     let changes = migrations::DbChanges {

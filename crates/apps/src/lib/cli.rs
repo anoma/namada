@@ -3467,7 +3467,11 @@ pub mod args {
             let updates = PATH.parse(matches);
             let dry_run = DRY_RUN_TX.parse(matches);
             let last_height = BLOCK_HEIGHT.parse(matches);
-            Self { updates, dry_run , last_height}
+            Self {
+                updates,
+                dry_run,
+                last_height,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3478,9 +3482,11 @@ pub mod args {
                 "If set, applies the updates but does not persist them. Using \
                  for testing and debugging.",
             ))
-            .arg(BLOCK_HEIGHT.def().help(
-                "The height at which the hard fork is happening."
-            ))
+            .arg(
+                BLOCK_HEIGHT
+                    .def()
+                    .help("The height at which the hard fork is happening."),
+            )
         }
     }
 
