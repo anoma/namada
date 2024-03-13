@@ -118,30 +118,31 @@ where
     ) -> Result<Transaction, namada_storage::Error> {
         let signed = tx_data;
         let data = signed.data().ok_or_err_msg("No transaction data")?;
-        if let Ok(transfer) = Transfer::try_from_slice(&data) {
-            let shielded_hash = transfer
-                .shielded
-                .ok_or_err_msg("unable to find shielded hash")?;
-            let masp_tx = signed
-                .get_section(&shielded_hash)
-                .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg("unable to find shielded section")?;
-            return Ok(masp_tx);
-        }
-
-        let shielded_transfer = match decode_message(&data).map_err(|_| {
-            namada_storage::Error::new_const("Unknown IBC message")
-        })? {
-            IbcMessage::Transfer(msg) => msg.shielded_transfer,
-            IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
-            IbcMessage::RecvPacket(msg) => msg.shielded_transfer,
-            IbcMessage::AckPacket(msg) => msg.shielded_transfer,
-            IbcMessage::Timeout(msg) => msg.shielded_transfer,
-            IbcMessage::Envelope(_) => None,
+        let transfer = match Transfer::try_from_slice(&data) {
+            Ok(transfer) => Some(transfer),
+            Err(_) => {
+                match decode_message(&data).map_err(|_| {
+                    namada_storage::Error::new_const("Unknown IBC message")
+                })? {
+                    IbcMessage::Transfer(msg) => msg.transfer,
+                    IbcMessage::NftTransfer(msg) => msg.transfer,
+                    IbcMessage::RecvPacket(msg) => msg.transfer,
+                    IbcMessage::AckPacket(msg) => msg.transfer,
+                    IbcMessage::Timeout(msg) => msg.transfer,
+                    IbcMessage::Envelope(_) => None,
+                }
+            }
         };
-        shielded_transfer
-            .map(|st| st.masp_tx)
-            .ok_or_err_msg("No shielded transfer in the IBC message")
+
+        let shielded_hash = transfer
+            .ok_or_err_msg("Missing transfer")?
+            .shielded
+            .ok_or_err_msg("unable to find shielded hash")?;
+        let masp_tx = signed
+            .get_section(&shielded_hash)
+            .and_then(|x| x.as_ref().masp_tx())
+            .ok_or_err_msg("unable to find shielded section")?;
+        Ok(masp_tx)
     }
 
     /// Charge the provided gas for the current vp

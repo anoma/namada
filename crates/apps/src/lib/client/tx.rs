@@ -1616,10 +1616,10 @@ pub async fn gen_ibc_shielded_transfer(
     context: &impl Namada,
     args: args::GenIbcShieldedTransfer,
 ) -> Result<(), error::Error> {
-    if let Some(shielded_transfer) =
+    if let Some((shielded_transfer, masp_tx)) =
         tx::gen_ibc_shielded_transfer(context, args.clone()).await?
     {
-        let tx_id = shielded_transfer.masp_tx.txid().to_string();
+        let tx_id = masp_tx.txid().to_string();
         let filename = format!("ibc_shielded_transfer_{}.memo", tx_id);
         let output_path = match &args.output_folder {
             Some(path) => path.join(filename),

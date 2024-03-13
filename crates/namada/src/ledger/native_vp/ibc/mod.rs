@@ -2168,7 +2168,7 @@ mod tests {
         let tx_code = vec![];
         let tx_data = MsgTransfer {
             message: msg,
-            shielded_transfer: None,
+            transfer: None,
         }
         .serialize_to_vec();
 
@@ -2980,7 +2980,7 @@ mod tests {
         let tx_code = vec![];
         let tx_data = MsgNftTransfer {
             message: msg,
-            shielded_transfer: None,
+            transfer: None,
         }
         .serialize_to_vec();
 

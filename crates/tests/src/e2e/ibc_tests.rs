@@ -60,7 +60,7 @@ use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, Timestamp, ToProto};
-use namada::ibc::{IbcShieldedTransfer, MsgRecvPacket, MsgTimeout};
+use namada::ibc::{MsgRecvPacket, MsgTimeout};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -83,6 +83,7 @@ use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::token::Transfer;
 use prost::Message;
 use setup::constants::*;
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
@@ -1535,14 +1536,14 @@ fn shielded_transfer(
         proof_height_on_a: height_a,
         signer: signer(),
     };
-    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+    let transfer = Transfer::try_from_slice(
         &std::fs::read(file_path)
             .expect("Reading a shielded transfer file failed"),
     )
-    .expect("Decoding IbcShieldedTransfer failed");
+    .expect("Decoding Transfer failed");
     let data = MsgRecvPacket {
         message,
-        shielded_transfer: Some(shielded_transfer),
+        transfer: Some(transfer),
     }
     .serialize_to_vec();
     // Update the client state of Chain A on Chain B
@@ -1650,14 +1651,14 @@ fn shielded_transfer_back(
         proof_height_on_a: height_b,
         signer: signer(),
     };
-    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+    let transfer = Transfer::try_from_slice(
         &std::fs::read(file_path)
             .expect("Reading a shielded transfer file failed"),
     )
-    .expect("Decoding IbcShieldedTransfer failed");
+    .expect("Decoding Transfer failed");
     let data = MsgRecvPacket {
         message,
-        shielded_transfer: Some(shielded_transfer),
+        transfer: Some(transfer),
     }
     .serialize_to_vec();
     // Update the client state of Chain B on Chain A
@@ -1762,14 +1763,14 @@ fn shielded_transfer_timeout(
         proof_height_on_b: height_b,
         signer: signer(),
     };
-    let shielded_transfer = IbcShieldedTransfer::try_from_slice(
+    let transfer = Transfer::try_from_slice(
         &std::fs::read(file_path)
             .expect("Reading a shielded transfer file failed"),
     )
-    .expect("Decoding IbcShieldedTransfer failed");
+    .expect("Decoding Transfer failed");
     let data = MsgTimeout {
         message,
-        shielded_transfer: Some(shielded_transfer),
+        transfer: Some(transfer),
     }
     .serialize_to_vec();
 

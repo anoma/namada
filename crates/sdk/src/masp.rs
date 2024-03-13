@@ -944,66 +944,66 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let tx_data = tx.data().ok_or_else(|| {
                 Error::Other("Missing data section".to_string())
             })?;
-            match Transfer::try_from_slice(&tx_data) {
-                Ok(transfer) => {
-                    let masp_transaction = tx
-                        .get_section(&transfer.shielded.ok_or_else(|| {
-                            Error::Other(
-                                "Missing masp section hash".to_string(),
-                            )
-                        })?)
-                        .ok_or_else(|| {
-                            Error::Other(
-                                "Missing masp section in transaction"
-                                    .to_string(),
-                            )
-                        })?
-                        .masp_tx()
-                        .ok_or_else(|| {
-                            Error::Other("Missing masp transaction".to_string())
-                        })?;
-
-                    // We use the changed keys instead of the Transfer object
-                    // because those are what the masp validity predicate works
-                    // on
-                    let changed_keys =
-                        if let ExtractShieldedActionArg::Event(tx_event) =
-                            action_arg
-                        {
-                            let tx_result_str = tx_event
-                                .attributes
-                                .iter()
-                                .find_map(|attr| {
-                                    if attr.key == "inner_tx" {
-                                        Some(&attr.value)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .ok_or_else(|| {
-                                    Error::Other(
-                                        "Missing required tx result in event"
-                                            .to_string(),
-                                    )
-                                })?;
-                            TxResult::from_str(tx_result_str)
-                                .map_err(|e| Error::Other(e.to_string()))?
-                                .changed_keys
-                        } else {
-                            BTreeSet::default()
-                        };
-                    (changed_keys, masp_transaction)
-                }
-                Err(_) => {
-                    // This should be a MASP over IBC transaction, it
-                    // could be a ShieldedTransfer or an Envelope
-                    // message, need to try both
-                    extract_payload_from_shielded_action::<C>(
-                        &tx_data, action_arg,
+            let (changed_key, transfer) =
+                match Transfer::try_from_slice(&tx_data) {
+                    Ok(transfer) => {
+                        // We use the changed keys instead of the Transfer
+                        // object because those are what
+                        // the masp validity predicate works
+                        // on
+                        let changed_keys =
+                            if let ExtractShieldedActionArg::Event(tx_event) =
+                                action_arg
+                            {
+                                let tx_result_str = tx_event
+                                    .attributes
+                                    .iter()
+                                    .find_map(|attr| {
+                                        if attr.key == "inner_tx" {
+                                            Some(&attr.value)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .ok_or_else(|| {
+                                        Error::Other(
+                                            "Missing required tx result in \
+                                             event"
+                                                .to_string(),
+                                        )
+                                    })?;
+                                TxResult::from_str(tx_result_str)
+                                    .map_err(|e| Error::Other(e.to_string()))?
+                                    .changed_keys
+                            } else {
+                                BTreeSet::default()
+                            };
+                        (changed_keys, transfer)
+                    }
+                    Err(_) => {
+                        // This should be a MASP over IBC transaction, it
+                        // could be a ShieldedTransfer or an Envelope
+                        // message, need to try both
+                        extract_payload_from_shielded_action::<C>(
+                            &tx_data, action_arg,
+                        )
+                        .await?
+                    }
+                };
+            let masp_transaction = tx
+                .get_section(&transfer.shielded.ok_or_else(|| {
+                    Error::Other("Missing masp section hash".to_string())
+                })?)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing masp section in transaction".to_string(),
                     )
-                    .await?
-                }
-            }
+                })?
+                .masp_tx()
+                .ok_or_else(|| {
+                    Error::Other("Missing masp transaction".to_string())
+                })?;
+            (changed_key, masp_transaction)
         };
         Ok(result)
     }
@@ -2618,11 +2618,11 @@ enum ExtractShieldedActionArg<'args, C: Client + Sync> {
     Request((&'args C, BlockHeight, Option<TxIndex>)),
 }
 
-// Extract the changed keys and Transaction objects from a masp over ibc message
+// Extract the changed keys and Transaction hash from a masp over ibc message
 async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     tx_data: &[u8],
     args: ExtractShieldedActionArg<'args, C>,
-) -> Result<(BTreeSet<namada_core::storage::Key>, Transaction), Error> {
+) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
@@ -2630,49 +2630,49 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
         IbcMessage::Transfer(msg) => {
             let tx_result = get_sending_result(args)?;
 
-            let shielded_transfer = msg.shielded_transfer.ok_or_else(|| {
+            let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
             })?;
 
-            (tx_result.changed_keys, shielded_transfer.masp_tx)
+            (tx_result.changed_keys, transfer)
         }
         IbcMessage::NftTransfer(msg) => {
             let tx_result = get_sending_result(args)?;
 
-            let shielded_transfer = msg.shielded_transfer.ok_or_else(|| {
+            let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
             })?;
 
-            (tx_result.changed_keys, shielded_transfer.masp_tx)
+            (tx_result.changed_keys, transfer)
         }
         IbcMessage::RecvPacket(msg) => {
             let tx_result = get_receiving_result(args).await?;
 
-            let shielded_transfer = msg.shielded_transfer.ok_or_else(|| {
+            let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
             })?;
 
-            (tx_result.changed_keys, shielded_transfer.masp_tx)
+            (tx_result.changed_keys, transfer)
         }
         IbcMessage::AckPacket(msg) => {
             // Refund tokens by the ack message
             let tx_result = get_receiving_result(args).await?;
 
-            let shielded_transfer = msg.shielded_transfer.ok_or_else(|| {
+            let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
             })?;
 
-            (tx_result.changed_keys, shielded_transfer.masp_tx)
+            (tx_result.changed_keys, transfer)
         }
         IbcMessage::Timeout(msg) => {
             // Refund tokens by the timeout message
             let tx_result = get_receiving_result(args).await?;
 
-            let shielded_transfer = msg.shielded_transfer.ok_or_else(|| {
+            let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
             })?;
 
-            (tx_result.changed_keys, shielded_transfer.masp_tx)
+            (tx_result.changed_keys, transfer)
         }
         IbcMessage::Envelope(_) => {
             return Err(Error::Other(

@@ -479,11 +479,13 @@ where
     };
     let data = MsgTransfer {
         message,
-        shielded_transfer: None,
+        transfer: None,
     }
     .serialize_to_vec();
 
     let ctx = IbcProtocolContext { state };
     let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)));
-    actions.execute(&data).into_storage_result()
+    actions.execute(&data).into_storage_result()?;
+
+    Ok(())
 }

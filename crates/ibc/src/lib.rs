@@ -53,6 +53,7 @@ use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
+use namada_token::Transfer;
 use prost::Message;
 use thiserror::Error;
 
@@ -110,7 +111,10 @@ where
     }
 
     /// Execute according to the message in an IBC transaction or VP
-    pub fn execute(&mut self, tx_data: &[u8]) -> Result<(), Error> {
+    pub fn execute(
+        &mut self,
+        tx_data: &[u8],
+    ) -> Result<Option<Transfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -122,12 +126,7 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::TokenTransfer)?;
-                match &msg.shielded_transfer {
-                    Some(shielded_transfer) => {
-                        self.handle_masp_tx(shielded_transfer)
-                    }
-                    None => Ok(()),
-                }
+                Ok(msg.transfer.clone())
             }
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
@@ -138,41 +137,37 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::NftTransfer)?;
-                match &msg.shielded_transfer {
-                    Some(shielded_transfer) => {
-                        self.handle_masp_tx(shielded_transfer)
-                    }
-                    None => Ok(()),
-                }
+                Ok(msg.transfer.clone())
             }
             IbcMessage::RecvPacket(msg) => {
                 let envelope =
                     MsgEnvelope::Packet(PacketMsg::Recv(msg.message.clone()));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                if self.is_receiving_success()? {
+                let transfer = if self.is_receiving_success()? {
                     // the current ibc-rs execution doesn't store the denom
                     // for the token hash when transfer with MsgRecvPacket
                     self.store_trace(&msg.message)?;
                     // For receiving the token to a shielded address
-                    if let Some(shielded_transfer) = &msg.shielded_transfer {
-                        self.handle_masp_tx(shielded_transfer)?;
-                    }
-                }
-                Ok(())
+                    msg.transfer.clone()
+                } else {
+                    None
+                };
+                Ok(transfer)
             }
             IbcMessage::AckPacket(msg) => {
                 let envelope =
                     MsgEnvelope::Packet(PacketMsg::Ack(msg.message.clone()));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                if !is_ack_successful(&msg.message.acknowledgement)? {
-                    // For refunding the token to a shielded address
-                    if let Some(shielded_transfer) = &msg.shielded_transfer {
-                        self.handle_masp_tx(shielded_transfer)?;
-                    }
-                }
-                Ok(())
+                let transfer =
+                    if !is_ack_successful(&msg.message.acknowledgement)? {
+                        // For refunding the token to a shielded address
+                        msg.transfer.clone()
+                    } else {
+                        None
+                    };
+                Ok(transfer)
             }
             IbcMessage::Timeout(msg) => {
                 let envelope = MsgEnvelope::Packet(PacketMsg::Timeout(
@@ -180,11 +175,7 @@ where
                 ));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                // For refunding the token to a shielded address
-                if let Some(shielded_transfer) = &msg.shielded_transfer {
-                    self.handle_masp_tx(shielded_transfer)?;
-                }
-                Ok(())
+                Ok(msg.transfer.clone())
             }
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
@@ -196,7 +187,7 @@ where
                         self.store_trace(msg)?;
                     }
                 }
-                Ok(())
+                Ok(None)
             }
         }
     }
@@ -371,23 +362,6 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))
             }
         }
-    }
-
-    /// Handle the MASP transaction if needed
-    fn handle_masp_tx(
-        &mut self,
-        shielded_transfer: &IbcShieldedTransfer,
-    ) -> Result<(), Error> {
-        self.ctx
-            .inner
-            .borrow_mut()
-            .handle_masp_tx(
-                &shielded_transfer.masp_tx,
-                shielded_transfer.transfer.key.as_deref(),
-            )
-            .map_err(|_| {
-                Error::MaspTx("Writing MASP components failed".to_string())
-            })
     }
 }
 

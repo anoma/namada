@@ -9,7 +9,6 @@ use std::time::Duration;
 use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
@@ -18,6 +17,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
@@ -33,9 +33,7 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
-use namada_core::ibc::{
-    is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
-};
+use namada_core::ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
 use namada_core::key::*;
 use namada_core::masp::{
     AssetData, PaymentAddress, TransferSource, TransferTarget,
@@ -2258,33 +2256,29 @@ pub async fn build_ibc_transfer(
         tx.add_memo(memo);
     }
 
-    let shielded_transfer =
-        shielded_parts.map(|(shielded_transfer, asset_types)| {
-            let masp_tx_hash =
-                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-            let transfer = token::Transfer {
-                source: source.clone(),
-                // The token will be escrowed to IBC address
-                target: Address::Internal(InternalAddress::Ibc),
-                token: args.token.clone(),
-                amount: validated_amount,
-                // The address could be a payment address, but the address isn't
-                // that of this chain.
-                key: None,
-                // Link the Transfer to the MASP Transaction by hash code
-                shielded: Some(masp_tx_hash),
-            };
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                metadata: shielded_transfer.metadata,
-                builder: shielded_transfer.builder,
-                target: masp_tx_hash,
-            });
-            IbcShieldedTransfer {
-                transfer,
-                masp_tx: shielded_transfer.masp_tx,
-            }
+    let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
+        let masp_tx_hash =
+            tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+        let transfer = token::Transfer {
+            source: source.clone(),
+            // The token will be escrowed to IBC address
+            target: Address::Internal(InternalAddress::Ibc),
+            token: args.token.clone(),
+            amount: validated_amount,
+            // The address could be a payment address, but the address isn't
+            // that of this chain.
+            key: None,
+            // Link the Transfer to the MASP Transaction by hash code
+            shielded: Some(masp_tx_hash),
+        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            metadata: shielded_transfer.metadata,
+            builder: shielded_transfer.builder,
+            target: masp_tx_hash,
         });
+        transfer
+    });
 
     // Check the token and make the tx data
     let ibc_denom =
@@ -2325,11 +2319,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgTransfer {
-            message,
-            shielded_transfer,
-        }
-        .serialize_to_vec()
+        MsgTransfer { message, transfer }.serialize_to_vec()
     } else if let Some((trace_path, base_class_id, token_id)) =
         is_nft_trace(&ibc_denom)
     {
@@ -2360,11 +2350,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgNftTransfer {
-            message,
-            shielded_transfer,
-        }
-        .serialize_to_vec()
+        MsgNftTransfer { message, transfer }.serialize_to_vec()
     } else {
         return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
@@ -2922,7 +2908,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
-) -> Result<Option<IbcShieldedTransfer>> {
+) -> Result<Option<(token::Transfer, MaspTransaction)>> {
     let key = match args.target.payment_address() {
         Some(pa) if pa.is_pinned() => Some(pa.hash()),
         Some(_) => None,
@@ -2980,20 +2966,17 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     if let Some(shielded_transfer) = shielded_transfer {
+        let masp_tx_hash =
+            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
         let transfer = token::Transfer {
             source: source.clone(),
             target: MASP,
             token: token.clone(),
             amount: validated_amount,
             key,
-            shielded: Some(
-                Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash(),
-            ),
+            shielded: Some(masp_tx_hash),
         };
-        Ok(Some(IbcShieldedTransfer {
-            transfer,
-            masp_tx: shielded_transfer.masp_tx,
-        }))
+        Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)
     }
