@@ -367,6 +367,22 @@ pub fn derive_typehash(type_def: TokenStream) -> TokenStream {
     .into()
 }
 
+#[proc_macro]
+pub fn typehash(type_def: TokenStream) -> TokenStream {
+    let type_def = syn::parse2::<syn::Type>(type_def.into()).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (_, hash) = derive_typehash_inner(&type_def);
+    quote!(#hash).into()
+}
+
 #[inline]
 fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
     let mut hasher = sha2::Sha256::new();
@@ -434,16 +450,10 @@ fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
     }
     let (type_hash, hash) = derive_typehash_inner(&type_def);
     let hex = data_encoding::HEXUPPER.encode(&type_hash);
-    let wrapper_ident =
-        syn::Ident::new(&format!("Wrapper_{}", hex), Span::call_site());
     let deserializer_ident =
         syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
 
     quote!(
-        #[derive(BorshSerialize)]
-        #[repr(transparent)]
-        pub struct #wrapper_ident(#type_def);
-
         #[cfg(feature = "migrations")]
         #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
         static #deserializer_ident: fn() = || {
@@ -451,10 +461,6 @@ fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
                 #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
             });
         };
-        #[cfg(feature = "migrations")]
-        impl ::namada_migrations::TypeHash for #wrapper_ident {
-            const HASH: [u8; 32] = #hash;
-        }
     )
 }
 

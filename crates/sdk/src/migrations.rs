@@ -12,6 +12,8 @@ use namada_core::storage::Key;
 #[cfg(feature = "migrations")]
 use namada_macros::derive_borshdeserializer;
 #[cfg(feature = "migrations")]
+use namada_macros::typehash;
+#[cfg(feature = "migrations")]
 use namada_migrations::TypeHash;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -63,6 +65,16 @@ impl UpdateValue {
                 serialized: value.serialize_to_vec(),
             },
         }
+    }
+
+    /// Using a type that is Borsh-serializable but we don't have an
+    /// implementation for conversion yet. Must provide `force: true`
+    pub fn wrapped<T>(value: T) -> Self
+    where
+        T: BorshSerialize + BorshDeserialize,
+        SerializeWrapper<T>: TypeHash,
+    {
+        SerializeWrapper(value).into()
     }
 
     /// Using a type that is Borsh-serializable but we don't have an
@@ -403,3 +415,33 @@ derive_borshdeserializer!(Vec::<u8>);
 derive_borshdeserializer!(Vec::<String>);
 #[cfg(feature = "migrations")]
 derive_borshdeserializer!(u64);
+
+#[derive(BorshSerialize, BorshDeserialize)]
+#[repr(transparent)]
+pub struct SerializeWrapper<T: BorshSerialize + BorshDeserialize>(T);
+
+#[cfg(feature = "migrations")]
+impl TypeHash
+    for SerializeWrapper<
+        std::collections::BTreeMap<String, namada_core::address::Address>,
+    >
+{
+    const HASH: [u8; 32] =
+        typehash!(SerializeWrapper<BTreeMap<String, Address>>);
+}
+
+#[cfg(feature = "migrations")]
+#[distributed_slice(REGISTER_DESERIALIZERS)]
+static BTREEMAP_STRING_ADDRESS: fn() = || {
+    use std::collections::BTreeMap;
+
+    use namada_core::address::Address;
+    register_deserializer(
+        SerializeWrapper::<BTreeMap<String, Address>>::HASH,
+        |bytes| {
+            BTreeMap::<String, Address>::try_from_slice(&bytes)
+                .map(|val| format!("{:?}", val))
+                .ok()
+        },
+    );
+};

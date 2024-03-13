@@ -7,9 +7,9 @@ use namada_sdk::address::Address;
 use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::migrations;
 use namada_sdk::storage::Key;
+use namada_shielded_token::storage_key::masp_token_map_key;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
-use namada_shielded_token::storage_key::masp_token_map_key;
 
 #[allow(dead_code)]
 fn example() {
@@ -118,8 +118,8 @@ fn se_migration() {
     let conversion_token_map_key = masp_token_map_key();
     let conversion_state_token_map_update = migrations::DbUpdateType::Add {
         key: conversion_token_map_key,
-        value: migrations::UpdateValue::force_borsh(conversion_token_map),
-        force: true,
+        value: migrations::UpdateValue::wrapped(conversion_token_map),
+        force: false,
     };
 
     let updates = [
