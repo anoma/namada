@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
@@ -11,6 +9,7 @@ use namada_merkle_tree::{MerkleRoot, MerkleTree};
 use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
+use namada_storage::types::CommitOnlyData;
 use namada_storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, StorageHasher, TxIndex, BLOCK_HASH_LENGTH,
@@ -70,8 +69,8 @@ where
     pub eth_events_queue: EthEventsQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
-    /// The map from tx hash to gas
-    pub tx_gas: BTreeMap<Hash, u64>,
+    /// Data that needs to be committed to the merkle tree
+    pub commit_only_data: CommitOnlyData,
 }
 
 /// Last committed block
@@ -147,7 +146,7 @@ where
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
-            tx_gas: BTreeMap::default(),
+            commit_only_data: CommitOnlyData::default(),
         }
     }
 
@@ -184,6 +183,10 @@ where
         self.block.hash = hash;
         self.block.height = height;
         Ok(())
+    }
+
+    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
+        self.commit_only_data.tx_gas.insert(tx_hash, gas);
     }
 
     /// Get the chain ID as a raw string

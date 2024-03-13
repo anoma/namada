@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use namada_core::address::EstablishedAddressGen;
@@ -16,6 +15,7 @@ use namada_merkle_tree::{
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
+use crate::types::CommitOnlyData;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -109,8 +109,8 @@ pub struct BlockStateWrite<'a> {
     pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,
     /// The queue of Ethereum events to be processed in order.
     pub eth_events_queue: &'a EthEventsQueue,
-    /// The map holding tx hash to gas values
-    pub tx_gas: &'a BTreeMap<Hash, u64>,
+    /// Structure holding data that needs to be added to the merkle tree
+    pub commit_only_data: &'a CommitOnlyData,
 }
 
 /// A database backend.

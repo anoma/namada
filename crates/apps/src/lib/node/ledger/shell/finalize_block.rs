@@ -572,7 +572,7 @@ where
     }
 
     fn update_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
-        self.state.in_mem_mut().tx_gas.insert(tx_hash, gas);
+        self.state.in_mem_mut().add_tx_gas(tx_hash, gas);
     }
 
     /// If a new epoch begins, we update the response to include

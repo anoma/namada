@@ -11,11 +11,11 @@
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
-//!   - gas/${tx hash}
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
-//!     - `gas/{tx hash}`
+//!     - `commit_only_data_commitment`
+//!     - `update_epoch_blocks_delay`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
@@ -45,7 +45,7 @@ use std::sync::Mutex;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use data_encoding::HEXLOWER;
+use data_encoding::{HEXLOWER, HEXUPPER};
 use itertools::Either;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
@@ -55,13 +55,13 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
+use namada::replay_protection;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
 };
 use namada::token::ConversionState;
-use namada::{gas, replay_protection};
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
@@ -510,9 +510,12 @@ impl RocksDB {
         // restarting the chain
         tracing::info!("Reverting non-height-prepended metadata keys");
         batch.put_cf(state_cf, "height", encode(&previous_height));
-        for metadata_key in
-            ["next_epoch_min_start_height", "next_epoch_min_start_time"]
-        {
+        for metadata_key in [
+            "next_epoch_min_start_height",
+            "next_epoch_min_start_time",
+            "commit_only_data_commitment",
+            "update_epoch_blocks_delay",
+        ] {
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
                 .0
@@ -907,7 +910,7 @@ impl DB for RocksDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
-            tx_gas,
+            commit_only_data,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -965,34 +968,24 @@ impl DB for RocksDB {
             encode(&update_epoch_blocks_delay),
         );
 
-        // Remove all pred gas entries
-        let gas_pred_prefix = gas::storage::pred_prefix();
-        for (key, _, _) in
-            iter_prefix(self, state_cf, None, Some(gas_pred_prefix).as_ref())
+        // Commitment to the only data commit
+        if let Some(current_value) = self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
         {
-            batch.0.delete_cf(state_cf, key);
-        }
-
-        // Write current gas entry as pred and then delete them
-        let stripped_gas_prefix = gas::storage::gas_prefix();
-        for (key, value, _) in
-            iter_prefix(self, state_cf, Some(&stripped_gas_prefix), None)
-        {
-            batch.0.put_cf(state_cf, format!("pred/gas/{}", key), value);
-            batch.0.delete_cf(
-                state_cf,
-                format!("{}/{}", stripped_gas_prefix, key),
-            );
-        }
-
-        // Write new gas entries
-        for (tx_hash, gas_consumed) in tx_gas {
+            // Write the predecessor value for rollback
             batch.0.put_cf(
                 state_cf,
-                format!("pred/gas/last/{}", tx_hash),
-                encode(&gas_consumed),
+                "pred/commit_only_data_commitment",
+                current_value,
             );
         }
+        batch.0.put_cf(
+            state_cf,
+            "commit_only_data_commitment",
+            commit_only_data.serialize(),
+        );
 
         // Save the conversion state when the epoch is updated
         if is_full_commit {
@@ -1023,7 +1016,6 @@ impl DB for RocksDB {
             .put_cf(state_cf, "eth_events_queue", encode(&eth_events_queue));
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
             for st in StoreType::iter() {
@@ -1035,6 +1027,7 @@ impl DB for RocksDB {
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
+                    println!("{}, {}", st, HEXUPPER.encode(merkle_tree_stores.root(st).as_ref()));
                     batch.0.put_cf(
                         block_cf,
                         root_key.to_string(),
@@ -1049,7 +1042,9 @@ impl DB for RocksDB {
                 }
             }
         }
+
         // Block header
+        let prefix_key = Key::from(height.to_db_key());
         {
             if let Some(h) = header {
                 let key = prefix_key
@@ -1787,13 +1782,13 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use std::collections::BTreeMap;
 
     use namada::core::address::{
         gen_established_address, EstablishedAddressGen,
     };
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
+    use namada_sdk::storage::types::CommitOnlyData;
     use tempfile::tempdir;
     use test_log::test;
 
@@ -2265,7 +2260,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
-        let tx_gas = BTreeMap::default();
+        let commit_only_data = CommitOnlyData::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -2282,7 +2277,7 @@ mod test {
             address_gen: &address_gen,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
-            tx_gas: &tx_gas,
+            commit_only_data: &commit_only_data,
         };
 
         db.add_block_to_batch(block, batch, true)

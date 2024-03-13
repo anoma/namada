@@ -507,6 +507,15 @@ where
         }
     }
 
+    pub fn commit_only_data(&mut self) -> Result<()> {
+        let data = self.in_mem().commit_only_data.serialize();
+        self.in_mem_mut()
+            .block
+            .tree
+            .update_commit_data(data)
+            .map_err(Error::MerkleTreeError)
+    }
+
     /// Persist the block's state from batch writes to the database.
     /// Note that unlike `commit_block` this method doesn't commit the write
     /// log.
@@ -531,6 +540,8 @@ where
             }
         }
 
+        self.commit_only_data()?;
+
         let state = BlockStateWrite {
             merkle_tree_stores: self.in_mem.block.tree.stores(),
             header: self.in_mem.header.as_ref(),
@@ -554,7 +565,7 @@ where
             conversion_state: &self.in_mem.conversion_state,
             ethereum_height: self.in_mem.ethereum_height.as_ref(),
             eth_events_queue: &self.in_mem.eth_events_queue,
-            tx_gas: &self.in_mem.tx_gas,
+            commit_only_data: &self.in_mem.commit_only_data,
         };
         self.db
             .add_block_to_batch(state, &mut batch, is_full_commit)?;
@@ -688,6 +699,7 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
+    #[cfg(any(test, feature = "testing"))]
     pub fn db_write(
         &mut self,
         key: &Key,
@@ -724,6 +736,7 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
+    #[cfg(any(test, feature = "testing"))]
     pub fn db_delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting

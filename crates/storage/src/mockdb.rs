@@ -241,7 +241,7 @@ impl DB for MockDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
-            tx_gas: _,
+            commit_only_data,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -266,6 +266,10 @@ impl DB for MockDB {
         self.0
             .borrow_mut()
             .insert("conversion_state".into(), encode(conversion_state));
+        self.0.borrow_mut().insert(
+            "commit_only_data_commitment".into(),
+            commit_only_data.serialize(),
+        );
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree

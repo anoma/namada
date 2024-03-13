@@ -581,13 +581,13 @@ where
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::collections::BTreeMap;
 
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
     use namada_storage::tx_queue::ExpiredTxsQueue;
+    use storage::types::CommitOnlyData;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -639,7 +639,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
-                tx_gas: BTreeMap::default(),
+                commit_only_data: CommitOnlyData::default(),
             }
         }
     }
