@@ -4141,3 +4141,72 @@ where
 
     Ok(result)
 }
+
+#[test]
+fn rollback() -> Result<()> {
+    let test = setup::single_node_net()?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let mut ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
+
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    ledger.exp_regex("Committed block hash: .*,")?;
+
+    let ledger = ledger.background();
+
+    let txs_args = vec![
+        // 2. Submit a token transfer tx (from an established account)
+        vec![
+            "transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "10.1",
+            "--signing-keys",
+            BERTHA_KEY,
+            "--node",
+            &validator_one_rpc,
+        ],
+    ];
+
+    for tx_args in &txs_args {
+        let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+        client.assert_success();
+    }
+
+    let mut ledger = ledger.foreground();
+    ledger.exp_regex("Committed block hash: ")?;
+    ledger.interrupt()?;
+    drop(ledger);
+
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
+    let (_, matched_one) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+
+    ledger.exp_regex("Committed block hash: .*,")?;
+    ledger.interrupt()?;
+    drop(ledger);
+
+    let mut rollback = run_as!(test, Who::Validator(0), Bin::Node, &["ledger", "rollback"], Some(40))?;
+    rollback.assert_success();
+
+    let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
+    let (_, matched_two) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+
+    assert_eq!(matched_one, matched_two);
+    
+    Ok(())
+}
