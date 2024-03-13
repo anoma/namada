@@ -4194,19 +4194,27 @@ fn rollback() -> Result<()> {
     drop(ledger);
 
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
-    let (_, matched_one) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+    let (_, matched_one) =
+        ledger.exp_regex("Last state root hash: .*, height: .*")?;
 
     ledger.exp_regex("Committed block hash: .*,")?;
     ledger.interrupt()?;
     drop(ledger);
 
-    let mut rollback = run_as!(test, Who::Validator(0), Bin::Node, &["ledger", "rollback"], Some(40))?;
+    let mut rollback = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "rollback"],
+        Some(40)
+    )?;
     rollback.assert_success();
 
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
-    let (_, matched_two) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+    let (_, matched_two) =
+        ledger.exp_regex("Last state root hash: .*, height: .*")?;
 
     assert_eq!(matched_one, matched_two);
-    
+
     Ok(())
 }
