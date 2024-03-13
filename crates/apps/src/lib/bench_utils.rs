@@ -640,6 +640,35 @@ impl ShieldedUtils for BenchShieldedUtils {
         }
     }
 
+    async fn load_temp<U: ShieldedUtils>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
+        start_block:u64,
+        end_block:u64
+    ) -> std::io::Result<()> {
+        // Try to load shielded context from file
+        let file_name = if force_confirmed {
+            FILE_NAME
+        } else {
+            match ctx.sync_status {
+                ContextSyncStatus::Confirmed => FILE_NAME,
+                ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
+            }
+        };
+        let mut ctx_file = File::open(
+            self.context_dir.0.path().to_path_buf().join(file_name),
+        )?;
+        let mut bytes = Vec::new();
+        ctx_file.read_to_end(&mut bytes)?;
+        // Fill the supplied context with the deserialized object
+        *ctx = ShieldedContext {
+            utils: ctx.utils.clone(),
+            ..ShieldedContext::deserialize(&mut &bytes[..])?
+        };
+        Ok(())
+    }
+
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     async fn load<U: ShieldedUtils>(
@@ -666,6 +695,57 @@ impl ShieldedUtils for BenchShieldedUtils {
             utils: ctx.utils.clone(),
             ..ShieldedContext::deserialize(&mut &bytes[..])?
         };
+        Ok(())
+    }
+
+    async fn save_temp<U: ShieldedUtils>(
+        &self,
+        ctx: &ShieldedContext<U>,
+        start_block:u64,
+        end_block:u64
+    ) -> std::io::Result<()> {
+        let (tmp_file_name, file_name) = match ctx.sync_status {
+            ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+            ContextSyncStatus::Speculative => {
+                (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+            }
+        };
+        let tmp_path =
+            self.context_dir.0.path().to_path_buf().join(tmp_file_name);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write is in
+            // progress. In this case, immediately fail. This is unproblematic
+            // because the data intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            ctx.serialize(&mut bytes)
+                .expect("cannot serialize shielded context");
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from reading
+        // corrupt data.
+        std::fs::rename(
+            tmp_path,
+            self.context_dir.0.path().to_path_buf().join(file_name),
+        )?;
+
+        // Remove the speculative file if present since it's state is
+        // overwritten by the confirmed one we just saved
+        if let ContextSyncStatus::Confirmed = ctx.sync_status {
+            let _ = std::fs::remove_file(
+                self.context_dir
+                    .0
+                    .path()
+                    .to_path_buf()
+                    .join(SPECULATIVE_FILE_NAME),
+            );
+        }
         Ok(())
     }
 

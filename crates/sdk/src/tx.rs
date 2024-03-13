@@ -2144,7 +2144,7 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
-    let source = args.source.effective_address();
+        let source = args.source.effective_address();
     let signing_data = signing::aux_signing_data(
         context,
         &args.tx,

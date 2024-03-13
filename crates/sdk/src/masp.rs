@@ -454,10 +454,25 @@ pub trait ShieldedUtils:
         force_confirmed: bool,
     ) -> std::io::Result<()>;
 
+    async fn load_temp<U: ShieldedUtils + MaybeSend>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+        force_confirmed: bool,
+        start_block:u64,
+        end_block:u64
+    ) -> std::io::Result<()>;
+
     /// Save the given ShieldedContext for future loads
     async fn save<U: ShieldedUtils + MaybeSync>(
         &self,
         ctx: &ShieldedContext<U>,
+    ) -> std::io::Result<()>;
+
+    async fn save_temp<U: ShieldedUtils + MaybeSync>(
+        &self,
+        ctx: &ShieldedContext<U>,
+        start_block:u64,
+        end_block:u64
     ) -> std::io::Result<()>;
 }
 
@@ -661,6 +676,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         self.utils.save(self).await
     }
 
+    pub async fn load_temp(&mut self,start_block:u64,end_block:u64) -> std::io::Result<()> {
+        self.utils.clone().load_temp(self, false,start_block,end_block).await
+    }
+
+    pub async fn save_temp(&self,start_block:u64,end_block:u64) -> std::io::Result<()> {
+        self.utils.save_temp(self,start_block,end_block).await
+    }
+
     /// Update the merkle tree of witnesses the first time we
     /// scan a new MASP transaction.
     fn update_witness_map(
@@ -705,6 +728,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
+        start_block: Option<BlockHeight>,
     ) -> Result<(), Error> {
         // add new viewing keys
         // Reload the state from file to get the last confirmed state and
@@ -736,22 +760,34 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             return Ok(());
         };
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
-        // get the bounds on the block heights to fetch
-        let start_idx =
+
+        let temp_start_idx =
             std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
+
+        let start_idx = match start_block {
+            Some(block) => block,
+            None => temp_start_idx.unwrap(),
+        };
+
+        let end_idx = match last_query_height {
+            Some(block) => block,
+            None => last_query_height.unwrap(),
+        };
+        // get the bounds on the block heights to fetch
+        
         // Load all transactions accepted until this point
         // N.B. the cache is a hash map
         self.unscanned.extend(
             self.fetch_shielded_transfers(
                 client,
                 logger,
-                start_idx,
-                last_query_height,
+                Some(start_idx),
+                Some(end_idx),
             )
             .await?,
         );
         // persist the cache in case of interruptions.
-        let _ = self.save().await;
+        let _ = self.save_temp(start_idx.0,end_idx.0).await;
 
         let txs = logger.scan(self.unscanned.clone());
         for (indexed_tx, (epoch, tx, stx)) in txs {
@@ -777,7 +813,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // possibly remove unneeded elements from the cache.
             self.unscanned.scanned(&indexed_tx);
             std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-            let _ = self.save().await;
+            let _ = self.save_temp(start_idx.0,end_idx.0).await;
         }
 
         Ok(())
@@ -2396,7 +2432,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks)
+        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks,None)
             .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
@@ -3826,11 +3862,84 @@ pub mod fs {
             Ok(())
         }
 
+        async fn load_temp<U: ShieldedUtils + MaybeSend>(
+            &self,
+            ctx: &mut ShieldedContext<U>,
+            force_confirmed: bool,
+            start_block: u64,
+            end_block: u64
+        ) -> std::io::Result<()> {
+            // Try to load shielded context from file
+            let file_name = if force_confirmed {
+                FILE_NAME
+            } else {
+                match ctx.sync_status {
+                    ContextSyncStatus::Confirmed => FILE_NAME,
+                    ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
+                }
+            };
+            let mut ctx_file = File::open(self.context_dir.join(file_name))?;
+            let mut bytes = Vec::new();
+            ctx_file.read_to_end(&mut bytes)?;
+            // Fill the supplied context with the deserialized object
+            *ctx = ShieldedContext {
+                utils: ctx.utils.clone(),
+                ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
+            };
+            Ok(())
+        }
+
         /// Save this confirmed shielded context into its associated context
         /// directory. At the same time, delete the speculative file if present
         async fn save<U: ShieldedUtils + MaybeSync>(
             &self,
             ctx: &ShieldedContext<U>,
+        ) -> std::io::Result<()> {
+            // TODO: use mktemp crate?
+            let (tmp_file_name, file_name) = match ctx.sync_status {
+                ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+                ContextSyncStatus::Speculative => {
+                    (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+                }
+            };
+            let tmp_path = self.context_dir.join(tmp_file_name);
+            {
+                // First serialize the shielded context into a temporary file.
+                // Inability to create this file implies a simultaneuous write
+                // is in progress. In this case, immediately
+                // fail. This is unproblematic because the data
+                // intended to be stored can always be re-fetched
+                // from the blockchain.
+                let mut ctx_file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(tmp_path.clone())?;
+                let mut bytes = Vec::new();
+                ctx.serialize(&mut bytes)
+                    .expect("cannot serialize shielded context");
+                ctx_file.write_all(&bytes[..])?;
+            }
+            // Atomically update the old shielded context file with new data.
+            // Atomicity is required to prevent other client instances from
+            // reading corrupt data.
+            std::fs::rename(tmp_path, self.context_dir.join(file_name))?;
+
+            // Remove the speculative file if present since it's state is
+            // overruled by the confirmed one we just saved
+            if let ContextSyncStatus::Confirmed = ctx.sync_status {
+                let _ = std::fs::remove_file(
+                    self.context_dir.join(SPECULATIVE_FILE_NAME),
+                );
+            }
+
+            Ok(())
+        }
+
+        async fn save_temp<U: ShieldedUtils + MaybeSync>(
+            &self,
+            ctx: &ShieldedContext<U>,
+            start_block: u64,
+            end_block: u64
         ) -> std::io::Result<()> {
             // TODO: use mktemp crate?
             let (tmp_file_name, file_name) = match ctx.sync_status {
