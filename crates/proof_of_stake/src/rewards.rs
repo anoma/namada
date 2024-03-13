@@ -360,6 +360,7 @@ where
         num_blocks_in_last_epoch,
         inflation,
         &staking_token,
+        total_tokens,
     )?;
 
     // Write new rewards parameters that will be used for the inflation of
@@ -388,6 +389,7 @@ pub fn update_rewards_products_and_mint_inflation<S>(
     num_blocks_in_last_epoch: u64,
     inflation: token::Amount,
     staking_token: &Address,
+    total_native_tokens: token::Amount,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -455,11 +457,12 @@ where
     let pos_reward_tokens = inflation - reward_tokens_remaining;
     tracing::info!(
         "Minting tokens for PoS rewards distribution into the PoS account. \
-         Amount: {}. Total inflation: {}, number of blocks in the last epoch: \
-         {num_blocks_in_last_epoch}, reward accumulators sum: \
-         {accumulators_sum}.",
+         Amount: {}. Total inflation: {}. Total native supply: {}. Number of \
+         blocks in the last epoch: {num_blocks_in_last_epoch}. Reward \
+         accumulators sum: {accumulators_sum}.",
         pos_reward_tokens.to_string_native(),
         inflation.to_string_native(),
+        total_native_tokens.to_string_native(),
     );
     credit_tokens(storage, staking_token, &address::POS, pos_reward_tokens)?;
 
