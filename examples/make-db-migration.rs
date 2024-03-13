@@ -6,7 +6,7 @@ use namada_parameters::storage;
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::migrations;
-use namada_sdk::storage::Key;
+use namada_sdk::storage::{DbColFam, Key};
 use namada_shielded_token::storage_key::masp_token_map_key;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
@@ -26,15 +26,17 @@ fn example() {
     let updates = [
         migrations::DbUpdateType::Add {
             key: balance_key(&nam, &person),
+            cf: DbColFam::SUBSPACE,
             value: amount.into(),
             force: false,
         },
         migrations::DbUpdateType::Add {
             key: minted_key,
+            cf: DbColFam::SUBSPACE,
             value: minted_value.into(),
             force: false,
         },
-        migrations::DbUpdateType::RepeatDelete(apfel),
+        migrations::DbUpdateType::RepeatDelete(apfel, DbColFam::SUBSPACE),
     ];
     let changes = migrations::DbChanges {
         changes: updates.into_iter().collect(),
@@ -59,6 +61,7 @@ fn se_migration() {
     let account_vp_str = "#tnam[a-z,0-9]*\\/\\?".to_string();
     let accounts_update = migrations::DbUpdateType::RepeatAdd {
         pattern: account_vp_str,
+        cf: DbColFam::SUBSPACE,
         value: migrations::UpdateValue::raw(vp_hash),
         force: false,
     };
@@ -68,11 +71,13 @@ fn se_migration() {
     let wasm_hash_key = Key::wasm_hash("vp_user.wasm");
     let wasm_name_update = migrations::DbUpdateType::Add {
         key: wasm_name_key,
+        cf: DbColFam::SUBSPACE,
         value: migrations::UpdateValue::raw(vp_hash),
         force: false,
     };
     let wasm_hash_update = migrations::DbUpdateType::Add {
         key: wasm_hash_key,
+        cf: DbColFam::SUBSPACE,
         value: migrations::UpdateValue::raw(vp_hash),
         force: false,
     };
@@ -81,6 +86,7 @@ fn se_migration() {
     let code_key = Key::wasm_code(&vp_hash);
     let code_update = migrations::DbUpdateType::Add {
         key: code_key,
+        cf: DbColFam::SUBSPACE,
         value: migrations::UpdateValue::raw(bytes.clone()),
         force: false,
     };
@@ -89,6 +95,7 @@ fn se_migration() {
     let len_key = Key::wasm_code_len(&vp_hash);
     let code_len_update = migrations::DbUpdateType::Add {
         key: len_key,
+        cf: DbColFam::SUBSPACE,
         value: (bytes.len() as u64).into(),
         force: false,
     };
@@ -103,21 +110,23 @@ fn se_migration() {
     ];
     let allowlist_update = migrations::DbUpdateType::Add {
         key: vp_allowlist_key,
+        cf: DbColFam::SUBSPACE,
         value: new_vp_allowlist.into(),
         force: false,
     };
 
     // remove keys associated with old wasm
-    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(format!(
-        "/wasm/[a-z]+/{}",
-        REMOVED_HASH
-    ));
+    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(
+        format!("/wasm/[a-z]+/{}", REMOVED_HASH),
+        DbColFam::SUBSPACE,
+    );
 
     // Conversion state token map
     let conversion_token_map: BTreeMap<String, Address> = BTreeMap::new();
     let conversion_token_map_key = masp_token_map_key();
     let conversion_state_token_map_update = migrations::DbUpdateType::Add {
         key: conversion_token_map_key,
+        cf: DbColFam::SUBSPACE,
         value: migrations::UpdateValue::wrapped(conversion_token_map),
         force: false,
     };

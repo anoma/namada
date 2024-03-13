@@ -79,6 +79,45 @@ pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+/// Storage column families
+pub enum DbColFam {
+    /// Subspace
+    SUBSPACE,
+    /// Block
+    BLOCK,
+    /// State
+    STATE,
+    /// Diffs
+    DIFFS,
+    /// Replay protection
+    REPLAYPROT,
+}
+
+/// Subspace column family name
+pub const SUBSPACE_CF: &str = "subspace";
+/// Diffs column family name
+pub const DIFFS_CF: &str = "diffs";
+/// State column family name
+pub const STATE_CF: &str = "state";
+/// Block column family name
+pub const BLOCK_CF: &str = "block";
+/// Replay protection column family name
+pub const REPLAY_PROTECTION_CF: &str = "replay_protection";
+
+impl DbColFam {
+    /// Get the name of the column family
+    pub fn to_str(&self) -> &str {
+        match self {
+            DbColFam::SUBSPACE => SUBSPACE_CF,
+            DbColFam::BLOCK => BLOCK_CF,
+            DbColFam::STATE => STATE_CF,
+            DbColFam::DIFFS => DIFFS_CF,
+            DbColFam::REPLAYPROT => REPLAY_PROTECTION_CF,
+        }
+    }
+}
+
 /// Transaction index within block.
 #[derive(
     Default,

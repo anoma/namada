@@ -4745,6 +4745,7 @@ dependencies = [
  "namada_replay_protection",
  "namada_tx",
  "regex",
+ "serde 1.0.193",
  "thiserror",
  "tracing",
 ]

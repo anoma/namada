@@ -17,6 +17,7 @@ use namada_macros::typehash;
 use namada_migrations::TypeHash;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_storage::DbColFam;
 use regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -26,11 +27,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 const PRINTLN_CUTOFF: usize = 300;
 
 pub trait DBUpdateVisitor {
-    fn read(&self, key: &Key) -> Option<Vec<u8>>;
-    fn write(&mut self, key: &Key, value: impl AsRef<[u8]>);
-    fn delete(&mut self, key: &Key);
+    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>>;
+    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>);
+    fn delete(&mut self, key: &Key, cf: &DbColFam);
     fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)>;
 }
+
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
     Raw {
@@ -172,16 +174,18 @@ impl<'de> Deserialize<'de> for UpdateValue {
 pub enum DbUpdateType {
     Add {
         key: Key,
+        cf: DbColFam,
         value: UpdateValue,
         force: bool,
     },
-    Delete(Key),
+    Delete(Key, DbColFam),
     RepeatAdd {
         pattern: String,
+        cf: DbColFam,
         value: UpdateValue,
         force: bool,
     },
-    RepeatDelete(String),
+    RepeatDelete(String, DbColFam),
 }
 
 #[cfg(feature = "migrations")]
@@ -190,9 +194,9 @@ impl DbUpdateType {
     pub fn pattern(&self) -> String {
         match self {
             DbUpdateType::Add { key, .. } => key.to_string(),
-            DbUpdateType::Delete(key) => key.to_string(),
+            DbUpdateType::Delete(key, ..) => key.to_string(),
             DbUpdateType::RepeatAdd { pattern, .. } => pattern.to_string(),
-            DbUpdateType::RepeatDelete(pattern) => pattern.to_string(),
+            DbUpdateType::RepeatDelete(pattern, ..) => pattern.to_string(),
         }
     }
 
@@ -266,7 +270,7 @@ impl DbUpdateType {
                     Ok((deserialized, deserializer))
                 }
             }
-            DbUpdateType::Delete(_) | DbUpdateType::RepeatDelete(_) => {
+            DbUpdateType::Delete(_, _) | DbUpdateType::RepeatDelete(_, _) => {
                 Ok((String::default(), None))
             }
         }
@@ -280,9 +284,11 @@ impl DbUpdateType {
         db: &mut DB,
     ) -> eyre::Result<UpdateStatus> {
         match self {
-            Self::Add { key, value, .. } => {
+            Self::Add { key, cf, value, .. } => {
                 let (deserialized, deserializer) = self.validate()?;
-                if let (Some(prev), Some(des)) = (db.read(key), deserializer) {
+                if let (Some(prev), Some(des)) =
+                    (db.read(key, cf), deserializer)
+                {
                     des(prev).ok_or_else(|| {
                         eyre::eyre!(
                             "The previous value under the key {} did not have \
@@ -292,14 +298,16 @@ impl DbUpdateType {
                         )
                     })?;
                 }
-                db.write(key, &value.to_write());
+                db.write(key, cf, &value.to_write());
                 Ok(UpdateStatus::Add(vec![(key.to_string(), deserialized)]))
             }
-            Self::Delete(key) => {
-                db.delete(key);
+            Self::Delete(key, cf) => {
+                db.delete(key, cf);
                 Ok(UpdateStatus::Deleted(vec![key.to_string()]))
             }
-            DbUpdateType::RepeatAdd { pattern, value, .. } => {
+            DbUpdateType::RepeatAdd {
+                pattern, cf, value, ..
+            } => {
                 let pattern = Regex::new(pattern).unwrap();
                 let mut pairs = vec![];
                 let (deserialized, deserializer) = self.validate()?;
@@ -318,17 +326,21 @@ impl DbUpdateType {
                     } else {
                         pairs.push((key.to_string(), deserialized.clone()));
                     }
-                    db.write(&Key::from_str(&key).unwrap(), value.to_write());
+                    db.write(
+                        &Key::from_str(&key).unwrap(),
+                        cf,
+                        value.to_write(),
+                    );
                 }
                 Ok(UpdateStatus::Add(pairs))
             }
-            DbUpdateType::RepeatDelete(pattern) => {
+            DbUpdateType::RepeatDelete(pattern, cf) => {
                 let pattern = Regex::new(pattern).unwrap();
                 Ok(UpdateStatus::Deleted(
                     db.get_pattern(pattern.clone())
                         .into_iter()
                         .map(|(key, _)| {
-                            db.delete(&Key::from_str(&key).unwrap());
+                            db.delete(&Key::from_str(&key).unwrap(), cf);
                             key
                         })
                         .collect(),
@@ -347,37 +359,45 @@ pub struct DbChanges {
 impl Display for DbUpdateType {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            DbUpdateType::Add { key, value, .. } => {
+            DbUpdateType::Add { key, cf, value, .. } => {
                 let (formatted, _) = match self.validate() {
                     Ok(f) => f,
                     Err(e) => return f.write_str(&e.to_string()),
                 };
 
                 f.write_str(&format!(
-                    "Write to key: <{}> with {}value: {}",
+                    "Write to key in {} CF: <{}> with {}value: {}",
+                    cf.to_str(),
                     key,
                     value.is_raw().then_some("raw ").unwrap_or_default(),
                     formatted
                 ))
             }
-            DbUpdateType::Delete(key) => {
-                f.write_str(&format!("Delete key: <{}>", key))
-            }
-            DbUpdateType::RepeatAdd { pattern, value, .. } => {
+            DbUpdateType::Delete(key, cf) => f.write_str(&format!(
+                "Delete key in {} CF: <{}>",
+                cf.to_str(),
+                key
+            )),
+            DbUpdateType::RepeatAdd {
+                pattern, cf, value, ..
+            } => {
                 let (formatted, _) = match self.validate() {
                     Ok(f) => f,
                     Err(e) => return f.write_str(&e.to_string()),
                 };
                 f.write_str(&format!(
-                    "Write to pattern: <{}> with {}value: {}",
+                    "Write to pattern in {} CF: <{}> with {}value: {}",
+                    cf.to_str(),
                     pattern,
                     value.is_raw().then_some("raw ").unwrap_or_default(),
                     formatted,
                 ))
             }
-            DbUpdateType::RepeatDelete(pattern) => {
-                f.write_str(&format!("Delete pattern: <{}>", pattern))
-            }
+            DbUpdateType::RepeatDelete(pattern, cf) => f.write_str(&format!(
+                "Delete pattern in {} CF: <{}>",
+                cf.to_str(),
+                pattern
+            )),
         }
     }
 }

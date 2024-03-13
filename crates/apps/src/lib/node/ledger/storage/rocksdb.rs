@@ -64,6 +64,9 @@ use namada::state::{
     DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
     StoreType, DB,
 };
+use namada::storage::{
+    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, STATE_CF, SUBSPACE_CF,
+};
 use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
 use rayon::prelude::*;
@@ -81,13 +84,6 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
-
-/// Column family names
-const SUBSPACE_CF: &str = "subspace";
-const DIFFS_CF: &str = "diffs";
-const STATE_CF: &str = "state";
-const BLOCK_CF: &str = "block";
-const REPLAY_PROTECTION_CF: &str = "replay_protection";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -1542,6 +1538,7 @@ impl DB for RocksDB {
         &self,
         batch: &mut Self::WriteBatch,
         height: Option<BlockHeight>,
+        cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
@@ -1573,20 +1570,20 @@ impl DB for RocksDB {
 
         let val = new_value.as_ref();
 
-        // update subspace value
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-        let subspace_key = key.to_string();
+        // Write the new key-val in the Db column family
+        let cf_name = self.get_column_family(cf.to_str())?;
+        batch.0.put_cf(cf_name, key.to_string(), val);
 
-        batch.0.put_cf(subspace_cf, subspace_key, val);
+        // If the CF is subspace, additionally update the diffs
+        if cf == &DbColFam::SUBSPACE {
+            let diffs_cf = self.get_column_family(DIFFS_CF)?;
+            let diffs_key = Key::from(last_height.to_db_key())
+                .with_segment("new".to_owned())
+                .join(key)
+                .to_string();
 
-        // update value stored in diffs
-        let diffs_cf = self.get_column_family(DIFFS_CF)?;
-        let diffs_key = Key::from(last_height.to_db_key())
-            .with_segment("new".to_owned())
-            .join(key)
-            .to_string();
-
-        batch.0.put_cf(diffs_cf, diffs_key, val);
+            batch.0.put_cf(diffs_cf, diffs_key, val);
+        }
 
         Ok(())
     }
@@ -1613,19 +1610,27 @@ impl<'db> RocksDBUpdateVisitor<'db> {
 }
 
 impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
-    fn read(&self, key: &Key) -> Option<Vec<u8>> {
-        self.db
-            .read_subspace_val(key)
-            .expect("Failed to read from storage")
+    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>> {
+        match cf {
+            DbColFam::SUBSPACE => self
+                .db
+                .read_subspace_val(key)
+                .expect("Failed to read from storage"),
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self.db.get_column_family(cf_str).expect("Failed to delete key from storage");
+                self.db.0.get_cf(cf, key.to_string()).expect("Failed to get key from storage")
+            }
+        }
     }
 
-    fn write(&mut self, key: &Key, value: impl AsRef<[u8]>) {
+    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
         self.db
-            .overwrite_entry(&mut self.batch, None, key, value)
+            .overwrite_entry(&mut self.batch, None, cf, key, value)
             .expect("Failed to overwrite a key in storage")
     }
 
-    fn delete(&mut self, key: &Key) {
+    fn delete(&mut self, key: &Key, cf: &DbColFam) {
         let last_height: BlockHeight = {
             let state_cf = self.db.get_column_family(STATE_CF).unwrap();
 
@@ -1645,9 +1650,23 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
             })
             .unwrap()
         };
-        self.db
-            .batch_delete_subspace_val(&mut self.batch, last_height, key, true)
-            .expect("Failed to delete key from storage");
+        match cf {
+            DbColFam::SUBSPACE => {
+                self.db
+                    .batch_delete_subspace_val(
+                        &mut self.batch,
+                        last_height,
+                        key,
+                        true,
+                    )
+                    .expect("Failed to delete key from storage");
+            }
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self.db.get_column_family(cf_str).expect("Failed to get valid column family from name");
+                self.batch.0.delete_cf(cf, key.to_string());
+            }
+        };
     }
 
     fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
