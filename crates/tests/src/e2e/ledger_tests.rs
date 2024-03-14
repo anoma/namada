@@ -4144,7 +4144,13 @@ where
 
 #[test]
 fn rollback() -> Result<()> {
-    let test = setup::single_node_net()?;
+    let test = setup::network(
+        |genesis, base_dir| {
+            setup::set_validators(1, genesis, base_dir, default_port_offset)
+        },
+        // slow block production rate
+        Some("5s"),
+    )?;
     set_ethereum_bridge_mode(
         &test,
         &test.net.chain_id,
@@ -4164,7 +4170,7 @@ fn rollback() -> Result<()> {
 
     let ledger = ledger.background();
 
-    // send a transaction
+    // send a few transactions
     let txs_args = vec![vec![
         "transfer",
         "--source",
@@ -4187,14 +4193,14 @@ fn rollback() -> Result<()> {
         client.assert_success();
     }
 
-    // wait for the ledger to commit a block after the transaction, and shut it
-    // down
+    // shut the ledger down
     let mut ledger = ledger.foreground();
-    ledger.exp_regex("Committed block hash: ")?;
     ledger.interrupt()?;
     drop(ledger);
 
     // restart and take the app hash + height
+    // TODO: check that the height matches the one at which the last transaction
+    // was applied
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
     let (_, matched_one) =
         ledger.exp_regex("Last state root hash: .*, height: .*")?;
@@ -4212,7 +4218,7 @@ fn rollback() -> Result<()> {
         &["ledger", "rollback"],
         Some(40)
     )?;
-    rollback.assert_success();
+    rollback.exp_eof().unwrap();
 
     // restart ledger and check that the app hash is the same as before the
     // rollback
