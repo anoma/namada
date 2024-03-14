@@ -4165,23 +4165,21 @@ fn rollback() -> Result<()> {
     let ledger = ledger.background();
 
     // send a transaction
-    let txs_args = vec![
-        vec![
-            "transfer",
-            "--source",
-            BERTHA,
-            "--target",
-            ALBERT,
-            "--token",
-            NAM,
-            "--amount",
-            "10.1",
-            "--signing-keys",
-            BERTHA_KEY,
-            "--node",
-            &validator_one_rpc,
-        ],
-    ];
+    let txs_args = vec![vec![
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10.1",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ]];
 
     for tx_args in &txs_args {
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -4189,12 +4187,13 @@ fn rollback() -> Result<()> {
         client.assert_success();
     }
 
-    // wait for the ledger to commit a block after the transaction, and shut it down
+    // wait for the ledger to commit a block after the transaction, and shut it
+    // down
     let mut ledger = ledger.foreground();
     ledger.exp_regex("Committed block hash: ")?;
     ledger.interrupt()?;
     drop(ledger);
-     
+
     // restart and take the app hash + height
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
     let (_, matched_one) =
@@ -4215,7 +4214,8 @@ fn rollback() -> Result<()> {
     )?;
     rollback.assert_success();
 
-    // restart ledger and check that the app hash is the same as before the rollback
+    // restart ledger and check that the app hash is the same as before the
+    // rollback
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
     let (_, matched_two) =
         ledger.exp_regex("Last state root hash: .*, height: .*")?;
