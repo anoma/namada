@@ -1618,8 +1618,14 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
                 .expect("Failed to read from storage"),
             _ => {
                 let cf_str = cf.to_str();
-                let cf = self.db.get_column_family(cf_str).expect("Failed to delete key from storage");
-                self.db.0.get_cf(cf, key.to_string()).expect("Failed to get key from storage")
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to read column family from storage");
+                self.db
+                    .0
+                    .get_cf(cf, key.to_string())
+                    .expect("Failed to get key from storage")
             }
         }
     }
@@ -1663,7 +1669,10 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
             }
             _ => {
                 let cf_str = cf.to_str();
-                let cf = self.db.get_column_family(cf_str).expect("Failed to get valid column family from name");
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to get read column family from storage");
                 self.batch.0.delete_cf(cf, key.to_string());
             }
         };

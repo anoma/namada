@@ -44,8 +44,13 @@ pub enum Error {
     ParseBlockHash(String),
     #[error("The key is empty")]
     EmptyKey,
-    #[error("They key is missing sub-key segments: {0}")]
+    #[error("The key is missing sub-key segments: {0}")]
     MissingSegments(String),
+    #[error(
+        "The following input could not be interpreted as a DB column family: \
+         {0}"
+    )]
+    DbColFamily(String),
 }
 
 /// Result for functions that may fail
@@ -79,7 +84,7 @@ pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 /// Storage column families
 pub enum DbColFam {
     /// Subspace
@@ -118,6 +123,20 @@ impl DbColFam {
     }
 }
 
+impl FromStr for DbColFam {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            SUBSPACE_CF => Ok(Self::SUBSPACE),
+            DIFFS_CF => Ok(Self::DIFFS),
+            STATE_CF => Ok(Self::STATE),
+            REPLAY_PROTECTION_CF => Ok(Self::REPLAYPROT),
+            BLOCK_CF => Ok(Self::BLOCK),
+            _ => Err(Error::DbColFamily(s.to_string())),
+        }
+    }
+}
 /// Transaction index within block.
 #[derive(
     Default,

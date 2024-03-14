@@ -84,7 +84,12 @@ pub fn main() -> Result<()> {
                 }
                 let chain_ctx = ctx.take_chain_or_exit();
                 #[cfg(feature = "migrations")]
-                ledger::query_db(chain_ctx.config.ledger, &args.key_hash_pairs);
+                ledger::query_db(
+                    chain_ctx.config.ledger,
+                    &args.key,
+                    &args.hash,
+                    &args.cf,
+                );
             }
         },
         cmds::NamadaNode::Config(sub) => match sub {
