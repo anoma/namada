@@ -4153,18 +4153,19 @@ fn rollback() -> Result<()> {
         None,
     );
 
-    // 1. Run the ledger node
+    // 1. Run the ledger node once
     let mut ledger =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
 
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
+    // wait for a commited block
     ledger.exp_regex("Committed block hash: .*,")?;
 
     let ledger = ledger.background();
 
+    // send a transaction
     let txs_args = vec![
-        // 2. Submit a token transfer tx (from an established account)
         vec![
             "transfer",
             "--source",
@@ -4188,19 +4189,23 @@ fn rollback() -> Result<()> {
         client.assert_success();
     }
 
+    // wait for the ledger to commit a block after the transaction, and shut it down
     let mut ledger = ledger.foreground();
     ledger.exp_regex("Committed block hash: ")?;
     ledger.interrupt()?;
     drop(ledger);
-
+     
+    // restart and take the app hash + height
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
     let (_, matched_one) =
         ledger.exp_regex("Last state root hash: .*, height: .*")?;
 
+    // wait for a block and stop the ledger
     ledger.exp_regex("Committed block hash: .*,")?;
     ledger.interrupt()?;
     drop(ledger);
 
+    // run rollback
     let mut rollback = run_as!(
         test,
         Who::Validator(0),
@@ -4210,6 +4215,7 @@ fn rollback() -> Result<()> {
     )?;
     rollback.assert_success();
 
+    // restart ledger and check that the app hash is the same as before the rollback
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
     let (_, matched_two) =
         ledger.exp_regex("Last state root hash: .*, height: .*")?;
