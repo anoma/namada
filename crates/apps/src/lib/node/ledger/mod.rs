@@ -13,12 +13,14 @@ use std::str::FromStr;
 use std::thread;
 
 use byte_unit::Byte;
+use data_encoding::HEXUPPER;
 use futures::future::TryFutureExt;
 use namada::core::storage::{BlockHeight, Key};
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::governance::storage::keys as governance_storage;
 use namada::state::DB;
+use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
 use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
@@ -231,30 +233,33 @@ pub fn dump_db(
 }
 
 #[cfg(feature = "migrations")]
-pub fn query_db(config: config::Ledger, keys: &[(Key, [u8; 32])]) {
+pub fn query_db(
+    config: config::Ledger,
+    key: &Key,
+    type_hash: &[u8; 32],
+    cf: &DbColFam,
+) {
+    use namada_sdk::migrations::DBUpdateVisitor;
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    for (key, type_hash) in keys {
-        let bytes = db.read_subspace_val(key).unwrap();
-        if let Some(bytes) = bytes {
-            let deserializer = namada_migrations::get_deserializer(type_hash)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Could not find a deserializer for the type provided \
-                         with key <{}>",
-                        key
-                    )
-                });
-            let value = deserializer(bytes).unwrap_or_else(|| {
-                panic!("Unable to deserialize the value under key <{}>", key)
-            });
-            tracing::info!("Key <{}>: {}", key, value);
-        } else {
-            tracing::info!("Key <{}> is not present in storage.", key);
-        }
-    }
+    let db_visitor = storage::RocksDBUpdateVisitor::new(&db);
+    let bytes = db_visitor.read(key, cf).unwrap();
+
+    let deserializer = namada_migrations::get_deserializer(type_hash)
+        .unwrap_or_else(|| {
+            panic!(
+                "Could not find a deserializer for the type provided with key \
+                 <{}>",
+                key
+            )
+        });
+    let hex_bytes = HEXUPPER.encode(&bytes);
+    let value = deserializer(bytes).unwrap_or_else(|| {
+        panic!("Unable to deserialize the value under key <{}>", key)
+    });
+    tracing::info!("Key <{}>: {}\nThe value in bytes is {}", key, value, hex_bytes);
 }
 
 /// Change the funds of an account in-place. Use with
@@ -287,7 +292,7 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
             e => {
                 tracing::error!(
                     "Attempt to write to key/pattern <{}> failed.",
-                    change.key()
+                    change.pattern()
                 );
                 e.unwrap();
             }

@@ -44,8 +44,13 @@ pub enum Error {
     ParseBlockHash(String),
     #[error("The key is empty")]
     EmptyKey,
-    #[error("They key is missing sub-key segments: {0}")]
+    #[error("The key is missing sub-key segments: {0}")]
     MissingSegments(String),
+    #[error(
+        "The following input could not be interpreted as a DB column family: \
+         {0}"
+    )]
+    DbColFamily(String),
 }
 
 /// Result for functions that may fail
@@ -79,6 +84,59 @@ pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+/// Storage column families
+pub enum DbColFam {
+    /// Subspace
+    SUBSPACE,
+    /// Block
+    BLOCK,
+    /// State
+    STATE,
+    /// Diffs
+    DIFFS,
+    /// Replay protection
+    REPLAYPROT,
+}
+
+/// Subspace column family name
+pub const SUBSPACE_CF: &str = "subspace";
+/// Diffs column family name
+pub const DIFFS_CF: &str = "diffs";
+/// State column family name
+pub const STATE_CF: &str = "state";
+/// Block column family name
+pub const BLOCK_CF: &str = "block";
+/// Replay protection column family name
+pub const REPLAY_PROTECTION_CF: &str = "replay_protection";
+
+impl DbColFam {
+    /// Get the name of the column family
+    pub fn to_str(&self) -> &str {
+        match self {
+            DbColFam::SUBSPACE => SUBSPACE_CF,
+            DbColFam::BLOCK => BLOCK_CF,
+            DbColFam::STATE => STATE_CF,
+            DbColFam::DIFFS => DIFFS_CF,
+            DbColFam::REPLAYPROT => REPLAY_PROTECTION_CF,
+        }
+    }
+}
+
+impl FromStr for DbColFam {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            SUBSPACE_CF => Ok(Self::SUBSPACE),
+            DIFFS_CF => Ok(Self::DIFFS),
+            STATE_CF => Ok(Self::STATE),
+            REPLAY_PROTECTION_CF => Ok(Self::REPLAYPROT),
+            BLOCK_CF => Ok(Self::BLOCK),
+            _ => Err(Error::DbColFamily(s.to_string())),
+        }
+    }
+}
 /// Transaction index within block.
 #[derive(
     Default,
