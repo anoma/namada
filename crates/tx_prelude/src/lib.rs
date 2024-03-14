@@ -373,8 +373,15 @@ impl TxEnv for Ctx {
 
 /// Execute IBC tx.
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-pub fn tx_ibc_execute() {
-    unsafe { namada_tx_ibc_execute() }
+pub fn tx_ibc_execute() -> Result<Option<token::Transfer>, Error> {
+    let result = unsafe { namada_tx_ibc_execute() };
+    match read_from_buffer(result, namada_tx_result_buffer) {
+        Some(value) => {
+            Ok(Option::<token::Transfer>::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"))
+        }
+        None => Ok(None),
+    }
 }
 
 /// Verify section signatures against the given list of keys

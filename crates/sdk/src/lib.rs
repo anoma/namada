@@ -261,6 +261,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             port_id: PortId::from_str("transfer").unwrap(),
             timeout_height: None,
             timeout_sec_offset: None,
+            refund_target: None,
             memo: None,
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_IBC_WASM),

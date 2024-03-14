@@ -21,9 +21,10 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
-use namada::ibc::{IbcActions, TransferModule};
+use namada::ibc::primitives::ToProto;
+use namada::ibc::{IbcActions, NftTransferModule, TransferModule};
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
@@ -313,13 +314,9 @@ fn ibc(c: &mut Criterion) {
     // NOTE: Ibc encompass a variety of different messages that can be executed,
     // here we only benchmark a few of those Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -327,7 +324,9 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -340,7 +339,9 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Ibc transfer
     let outgoing_transfer = shell.generate_ibc_transfer_tx();
@@ -1098,13 +1099,9 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -1112,7 +1109,9 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -1125,7 +1124,9 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Ibc transfer
     let outgoing_transfer = shell.generate_ibc_transfer_tx();
@@ -1181,8 +1182,10 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         let mut actions = IbcActions::new(ctx.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone());
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.validate(&tx_data).unwrap())
@@ -1198,13 +1201,9 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -1212,7 +1211,9 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -1225,7 +1226,9 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Ibc transfer
     let outgoing_transfer = shell.generate_ibc_transfer_tx();
@@ -1281,8 +1284,10 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let mut actions = IbcActions::new(ctx.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone());
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.execute(&tx_data).unwrap())

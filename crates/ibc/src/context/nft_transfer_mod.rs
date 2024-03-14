@@ -4,8 +4,8 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use namada_core::ibc::apps::transfer::context::TokenTransferValidationContext;
-use namada_core::ibc::apps::transfer::module::{
+use namada_core::ibc::apps::nft_transfer::context::NftTransferValidationContext;
+use namada_core::ibc::apps::nft_transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
     on_chan_close_init_execute, on_chan_close_init_validate,
@@ -16,8 +16,8 @@ use namada_core::ibc::apps::transfer::module::{
     on_recv_packet_execute, on_timeout_packet_execute,
     on_timeout_packet_validate,
 };
-use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::MODULE_ID_STR;
+use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
+use namada_core::ibc::apps::nft_transfer::types::MODULE_ID_STR;
 use namada_core::ibc::core::channel::types::acknowledgement::Acknowledgement;
 use namada_core::ibc::core::channel::types::channel::{Counterparty, Order};
 use namada_core::ibc::core::channel::types::error::{
@@ -33,46 +33,32 @@ use namada_core::ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use namada_core::ibc::primitives::Signer;
 
 use super::common::IbcCommonContext;
-use super::token_transfer::TokenTransferContext;
+use super::nft_transfer::NftTransferContext;
+use super::transfer_mod::ModuleWrapper;
 
-/// IBC module wrapper for getting the reference of the module
-pub trait ModuleWrapper: Module {
-    /// Reference of the module
-    fn as_module(&self) -> &dyn Module;
-
-    /// Mutable reference of the module
-    fn as_module_mut(&mut self) -> &mut dyn Module;
-
-    /// Get the module ID
-    fn module_id(&self) -> ModuleId;
-
-    /// Get the port ID
-    fn port_id(&self) -> PortId;
-}
-
-/// IBC module for token transfer
+/// IBC module for NFT transfer
 #[derive(Debug)]
-pub struct TransferModule<C>
+pub struct NftTransferModule<C>
 where
     C: IbcCommonContext,
 {
     /// IBC actions
-    pub ctx: TokenTransferContext<C>,
+    pub ctx: NftTransferContext<C>,
 }
 
-impl<C> TransferModule<C>
+impl<C> NftTransferModule<C>
 where
     C: IbcCommonContext,
 {
     /// Make a new module
     pub fn new(ctx: Rc<RefCell<C>>) -> Self {
         Self {
-            ctx: TokenTransferContext::new(ctx),
+            ctx: NftTransferContext::new(ctx),
         }
     }
 }
 
-impl<C> ModuleWrapper for TransferModule<C>
+impl<C> ModuleWrapper for NftTransferModule<C>
 where
     C: IbcCommonContext + Debug,
 {
@@ -93,7 +79,7 @@ where
     }
 }
 
-impl<C> Module for TransferModule<C>
+impl<C> Module for NftTransferModule<C>
 where
     C: IbcCommonContext + Debug,
 {
@@ -329,13 +315,13 @@ where
     }
 }
 
-fn into_channel_error(error: TokenTransferError) -> ChannelError {
+fn into_channel_error(error: NftTransferError) -> ChannelError {
     ChannelError::AppModule {
         description: error.to_string(),
     }
 }
 
-fn into_packet_error(error: TokenTransferError) -> PacketError {
+fn into_packet_error(error: NftTransferError) -> PacketError {
     PacketError::AppModule {
         description: error.to_string(),
     }
@@ -346,7 +332,7 @@ fn into_packet_error(error: TokenTransferError) -> PacketError {
 pub mod testing {
     use std::str::FromStr;
 
-    use namada_core::ibc::apps::transfer::types::{
+    use namada_core::ibc::apps::nft_transfer::types::{
         ack_success_b64, PORT_ID_STR,
     };
     use namada_core::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
@@ -355,9 +341,9 @@ pub mod testing {
 
     /// Dummy IBC module for token transfer
     #[derive(Debug)]
-    pub struct DummyTransferModule {}
+    pub struct DummyNftTransferModule {}
 
-    impl ModuleWrapper for DummyTransferModule {
+    impl ModuleWrapper for DummyNftTransferModule {
         fn as_module(&self) -> &dyn Module {
             self
         }
@@ -375,7 +361,7 @@ pub mod testing {
         }
     }
 
-    impl Module for DummyTransferModule {
+    impl Module for DummyNftTransferModule {
         #[allow(clippy::too_many_arguments)]
         fn on_chan_open_init_validate(
             &self,

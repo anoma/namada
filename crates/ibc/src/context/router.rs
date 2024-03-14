@@ -27,13 +27,11 @@ impl<'a> IbcRouter<'a> {
     }
 
     /// Add TokenTransfer route
-    pub fn add_transfer_module(
-        &mut self,
-        module_id: ModuleId,
-        module: impl ModuleWrapper + 'a,
-    ) {
+    pub fn add_transfer_module(&mut self, module: impl ModuleWrapper + 'a) {
+        let module_id = module.module_id();
+        let port_id = module.port_id();
         self.modules.insert(module_id.clone(), Rc::new(module));
-        self.ports.insert(PortId::transfer(), module_id);
+        self.ports.insert(port_id, module_id);
     }
 }
 
