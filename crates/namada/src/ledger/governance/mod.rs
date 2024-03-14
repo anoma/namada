@@ -424,8 +424,9 @@ where
                     && are_continuous_fundings_unique
                     && are_targets_unique)
             }
-            // default proposal condition are checked already for all other proposals
-            // default_with_wasm proposal need to check only for valid code
+            // Default proposal condition are checked already for all other
+            // proposals.
+            // default_with_wasm proposal needs to check only for valid code
             _ => Ok(true),
         }
     }
@@ -960,9 +961,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     fn initialize_account_balance<S>(
@@ -1035,8 +1038,8 @@ mod test {
     ) where
         S: State,
     {
-        let source_balance_key = balance_key(&nam(), &source);
-        let target_balance_key = balance_key(&nam(), &target);
+        let source_balance_key = balance_key(&nam(), source);
+        let target_balance_key = balance_key(&nam(), target);
         let amount = token::Amount::native_whole(amount);
 
         let mut current_source: token::Amount =
@@ -1204,9 +1207,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -1498,9 +1503,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1575,9 +1582,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1652,9 +1661,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1747,9 +1758,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1790,7 +1803,7 @@ mod test {
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
-        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+        let verifiers = BTreeSet::from([signer_address.clone()]);
 
         initialize_account_balance(
             &mut state,
@@ -1842,9 +1855,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -1919,9 +1934,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -1962,9 +1979,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2039,9 +2058,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -2082,9 +2103,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2159,9 +2182,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -2202,9 +2227,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2279,9 +2306,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -2339,9 +2368,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2416,9 +2447,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -2476,9 +2509,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 
     #[test]
@@ -2553,9 +2588,11 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
 
         state.write_log_mut().commit_tx();
         state.commit_block().unwrap();
@@ -2613,8 +2650,10 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(!governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed"));
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 }

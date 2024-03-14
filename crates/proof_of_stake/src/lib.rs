@@ -2485,7 +2485,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_core::{chain::ProposalBytes, hash::Hash, time::DurationSecs};
+    use namada_core::chain::ProposalBytes;
+    use namada_core::hash::Hash;
+    use namada_core::time::DurationSecs;
     use namada_parameters::{init_storage, EpochDuration};
     use namada_trans_token::credit_tokens;
 
