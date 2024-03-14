@@ -4432,15 +4432,18 @@ dependencies = [
 name = "namada_examples"
 version = "0.31.9"
 dependencies = [
+ "borsh",
  "data-encoding",
  "masp_proofs",
  "namada_apps",
+ "namada_macros",
  "namada_migrations",
  "namada_parameters",
  "namada_sdk",
  "namada_shielded_token",
  "namada_trans_token",
  "proptest",
+ "regex",
  "serde_json",
  "tokio",
 ]

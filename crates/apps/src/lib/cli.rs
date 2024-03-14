@@ -3106,7 +3106,7 @@ pub mod args {
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
-        "db_column_family",
+        "db-column-family",
         DefaultFn(|| storage::SUBSPACE_CF.to_string()),
     );
     pub const DECRYPT: ArgFlag = flag("decrypt");

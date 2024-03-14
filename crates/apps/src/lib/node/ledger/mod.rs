@@ -13,6 +13,7 @@ use std::str::FromStr;
 use std::thread;
 
 use byte_unit::Byte;
+use data_encoding::HEXUPPER;
 use futures::future::TryFutureExt;
 use namada::core::storage::{BlockHeight, Key};
 use namada::core::time::DateTimeUtc;
@@ -254,10 +255,11 @@ pub fn query_db(
                 key
             )
         });
+    let hex_bytes = HEXUPPER.encode(&bytes);
     let value = deserializer(bytes).unwrap_or_else(|| {
         panic!("Unable to deserialize the value under key <{}>", key)
     });
-    tracing::info!("Key <{}>: {}", key, value);
+    tracing::info!("Key <{}>: {}\nThe value in bytes is {}", key, value, hex_bytes);
 }
 
 /// Change the funds of an account in-place. Use with

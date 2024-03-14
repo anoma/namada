@@ -254,7 +254,7 @@ impl DbUpdateType {
                             key_or_pattern,
                         )
                     })?;
-                let deserializer = value.is_raw().then_some(deserializer);
+                let deserializer = (!value.is_raw()).then_some(deserializer);
                 if deserialized.len() > PRINTLN_CUTOFF {
                     Ok((
                         format!(

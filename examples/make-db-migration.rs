@@ -1,15 +1,57 @@
 use std::collections::BTreeMap;
 
-use data_encoding::HEXLOWER;
+use data_encoding::{HEXLOWER, HEXUPPER};
 use namada_apps::wasm_loader::read_wasm;
+use namada_macros::BorshDeserializer;
 use namada_parameters::storage;
 use namada_sdk::address::Address;
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_sdk::hash::Hash as CodeHash;
+use namada_sdk::masp_primitives::asset_type::AssetType;
+use namada_sdk::masp_primitives::convert::AllowedConversion;
+use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;
+use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
+use namada_sdk::proof_of_stake::Epoch;
 use namada_sdk::storage::{DbColFam, Key};
+use namada_sdk::token::{Denomination, MaspDigitPos};
+use namada_shielded_token::ConversionState;
 use namada_shielded_token::storage_key::masp_token_map_key;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
+
+pub const OLD_CONVERSION_STATE_TYPE_HASH: &str = "05E2FD0BEBD54A05AAE349BBDE61F90893F09A72850EFD4F69060821EC5DE65F";
+
+#[derive(
+    Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
+pub struct NewConversionState {
+    /// The last amount of the native token distributed
+    pub normed_inflation: Option<u128>,
+    /// The tree currently containing all the conversions
+    pub tree: FrozenCommitmentTree<sapling::Node>,
+    /// Map assets to their latest conversion and position in Merkle tree
+    #[allow(clippy::type_complexity)]
+    pub assets: BTreeMap<
+        AssetType,
+        (
+            (Address, Denomination, MaspDigitPos),
+            Epoch,
+            AllowedConversion,
+            usize,
+        ),
+    >,
+}
+
+impl From<ConversionState> for NewConversionState {
+    fn from(value: ConversionState) -> Self {
+        Self {
+            normed_inflation: value.normed_inflation,
+            tree: value.tree,
+            assets: value.assets,
+        }
+    }
+}
 
 #[allow(dead_code)]
 fn example() {
@@ -131,6 +173,19 @@ fn se_migration() {
         force: false,
     };
 
+    // Conversion state
+    let query_result = std::fs::read_to_string("conversion_state.txt").unwrap();
+    let hex_bytes = query_result.split("\n").nth(2).unwrap();
+    let bytes = HEXUPPER.decode(hex_bytes.strip_prefix("The value in bytes is ").unwrap().trim().as_bytes()).unwrap();
+    let old_conversion_state = ConversionState::try_from_slice(&bytes).unwrap();
+    let new_conversion_state: NewConversionState = old_conversion_state.into();
+    let conversion_state_update = migrations::DbUpdateType::Add {
+        key: Key::parse("conversion_state").unwrap(),
+        cf: DbColFam::STATE,
+        value: migrations::UpdateValue::force_borsh(new_conversion_state),
+        force: true,
+    };
+
     let updates = [
         accounts_update,
         wasm_name_update,
@@ -140,6 +195,7 @@ fn se_migration() {
         code_len_update,
         remove_old_wasm,
         conversion_state_token_map_update,
+        conversion_state_update,
     ];
 
     let changes = migrations::DbChanges {
@@ -148,3 +204,5 @@ fn se_migration() {
     std::fs::write("migrations.json", serde_json::to_string(&changes).unwrap())
         .unwrap();
 }
+
+
