@@ -16,6 +16,9 @@ version.workspace = true
 name = "generate-txs"
 path = "generate_txs.rs"
 
+[features]
+namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
+
 [dev-dependencies]
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
 namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing"] }

@@ -37,7 +37,11 @@ name = "host_env"
 harness = false
 path = "host_env.rs"
 
-[dependencies]
+[features]
+namada-eth-bridge = [
+  "namada/namada-eth-bridge",
+  "namada_apps/namada-eth-bridge",
+]
 
 [dev-dependencies]
 namada = { path = "../namada", features = ["rand", "testing"] }

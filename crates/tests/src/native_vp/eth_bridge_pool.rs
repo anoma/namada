@@ -125,7 +125,16 @@ mod test_bridge_pool_vp {
     }
 
     fn validate_tx(tx: Tx) {
-        assert!(run_vp(tx));
+        #[cfg(feature = "namada-eth-bridge")]
+        {
+            assert!(run_vp(tx));
+        }
+        #[cfg(not(feature = "namada-eth-bridge"))]
+        {
+            // NB: small hack to always check we reject txs
+            // if the bridge is disabled at compile time
+            invalidate_tx(tx)
+        }
     }
 
     fn invalidate_tx(tx: Tx) {

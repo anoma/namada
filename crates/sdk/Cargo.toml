@@ -34,6 +34,8 @@ async-client = ["async-trait"]
 
 async-send = []
 
+namada-eth-bridge = ["namada_ethereum_bridge/namada-eth-bridge"]
+
 # for integration tests and test utilities
 testing = [
   "masp_primitives/test-dependencies",

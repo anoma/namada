@@ -189,6 +189,14 @@ test-unit:
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
 		-Z unstable-options --report-time
 
+test-unit-with-eth-bridge:
+	$(cargo) +$(nightly) test \
+		--features namada-eth-bridge \
+		$(TEST_FILTER) \
+		$(jobs) \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
+		-Z unstable-options --report-time
+
 test-unit-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--features namada/testing \

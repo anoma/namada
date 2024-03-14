@@ -58,6 +58,7 @@ mod test_bp_vote_extensions {
     use namada::core::key::*;
     use namada::core::storage::BlockHeight;
     use namada::core::token;
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
     use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
     use namada::ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
@@ -175,6 +176,11 @@ mod test_bp_vote_extensions {
     /// payload passes validation.
     #[test]
     fn test_happy_flow() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _broadcaster, _, _oracle_control_recv) =
             setup_at_height(1u64);
         let address = shell
@@ -215,6 +221,11 @@ mod test_bp_vote_extensions {
     /// in a block proposal by validator address.
     #[test]
     fn test_vexts_are_de_duped() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _broadcaster, _, _oracle_control_recv) =
             setup_at_height(1u64);
         let address = shell
@@ -250,6 +261,11 @@ mod test_bp_vote_extensions {
     /// even if the vext is signed by a validator
     #[test]
     fn test_bp_roots_must_be_signed_by_validator() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _broadcaster, _, _oracle_control_recv) =
             setup_at_height(1u64);
         let signing_key = gen_keypair();
@@ -284,6 +300,11 @@ mod test_bp_vote_extensions {
     /// are from the same validator.
     #[test]
     fn test_bp_root_sigs_from_same_validator() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _broadcaster, _, _oracle_control_recv) =
             setup_at_height(3u64);
         let address = shell
@@ -343,6 +364,11 @@ mod test_bp_vote_extensions {
     /// block height as greater than the latest block height is rejected.
     #[test]
     fn test_block_height_too_high() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _, _, _) = setup_at_height(3u64);
         reject_incorrect_block_number(
             shell.state.in_mem().get_last_block_height() + 1,
@@ -354,6 +380,11 @@ mod test_bp_vote_extensions {
     /// issued at genesis.
     #[test]
     fn test_reject_genesis_vexts() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _, _, _) = setup();
         reject_incorrect_block_number(0.into(), &shell);
     }
@@ -362,6 +393,11 @@ mod test_bp_vote_extensions {
     /// if the nonce is incorrect.
     #[test]
     fn test_incorrect_nonce() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         let to_sign = get_bp_bytes_to_sign();
@@ -390,6 +426,11 @@ mod test_bp_vote_extensions {
     /// if the root is incorrect.
     #[test]
     fn test_incorrect_root() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _, _, _) = setup();
         let address = shell.mode.get_validator_address().unwrap().clone();
         let to_sign = get_bp_bytes_to_sign();
@@ -418,6 +459,11 @@ mod test_bp_vote_extensions {
     /// prior.
     #[test]
     fn test_vext_for_old_height() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(1u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.state.in_mem_mut().block.height = 2.into();
@@ -493,6 +539,11 @@ mod test_bp_vote_extensions {
     /// we reject.
     #[test]
     fn test_wrong_height_for_root() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _recv, _, _oracle_control_recv) = setup_at_height(1u64);
         let address = shell.mode.get_validator_address().unwrap().clone();
         shell.state.in_mem_mut().block.height = 2.into();

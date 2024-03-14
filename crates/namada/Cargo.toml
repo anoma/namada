@@ -65,6 +65,11 @@ namada-sdk = [
   "namada_sdk/rand",
 ]
 
+namada-eth-bridge = [
+  "namada_ethereum_bridge/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+]
+
 multicore = [
   "masp_proofs/multicore",
   "namada_sdk/multicore",

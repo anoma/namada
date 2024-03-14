@@ -6,7 +6,9 @@ use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_vote_ext::validator_set_update;
 
 use super::VoteExtensionError;
-use crate::storage::eth_bridge_queries::EthBridgeQueries;
+use crate::storage::eth_bridge_queries::{
+    is_bridge_comptime_enabled, EthBridgeQueries,
+};
 
 /// Validates a validator set update vote extension issued at the
 /// epoch provided as an argument.
@@ -35,13 +37,21 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    let signing_epoch = ext.data.signing_epoch;
+    if !is_bridge_comptime_enabled() {
+        tracing::debug!(
+            vext_epoch = ?signing_epoch,
+            "The Ethereum bridge was not enabled when the validator set \
+             update's vote extension was cast",
+        );
+        return Err(VoteExtensionError::EthereumBridgeInactive);
+    }
     if state.in_mem().last_block.is_none() {
         tracing::debug!(
             "Dropping validator set update vote extension issued at genesis"
         );
         return Err(VoteExtensionError::UnexpectedBlockHeight);
     }
-    let signing_epoch = ext.data.signing_epoch;
     if signing_epoch > last_epoch {
         tracing::debug!(
             vext_epoch = ?signing_epoch,
@@ -137,12 +147,19 @@ mod tests {
     use namada_vote_ext::validator_set_update::{EthAddrBook, VotingPowersMap};
 
     use super::*;
+    use crate::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use crate::test_utils;
 
     /// Test that we reject vote extensions containing a superset of the
     /// next validator set in storage.
     #[test]
     fn test_superset_valsetupd_rejected() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let (state, keys) = test_utils::setup_default_storage();
         let (validator, validator_stake) = test_utils::default_validator();
 

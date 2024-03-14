@@ -14,6 +14,7 @@ version.workspace = true
 
 [features]
 default = []
+namada-eth-bridge = ["namada/namada-eth-bridge"]
 
 [dependencies]
 namada = { path = "../namada", features = ["rand", "tendermint-rpc", "download-params"] }

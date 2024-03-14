@@ -1,14 +1,26 @@
 use color_eyre::eyre::Result;
 use namada::io::Io;
-use namada_sdk::eth_bridge::{bridge_pool, validator_set};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
-use crate::cli::args::{CliToSdk, CliToSdkCtxless};
-use crate::cli::cmds::*;
-use crate::cli::utils::get_eth_rpc_client;
 
 impl CliApi {
+    #[cfg(not(feature = "namada-eth-bridge"))]
+    pub async fn handle_relayer_command<C>(
+        _client: Option<C>,
+        _cmd: cli::NamadaRelayer,
+        io: impl Io,
+    ) -> Result<()>
+    where
+        C: CliClient,
+    {
+        use namada_sdk::display_line;
+
+        display_line!(&io, "The Namada Ethereum bridge is disabled");
+        Ok(())
+    }
+
+    #[cfg(feature = "namada-eth-bridge")]
     pub async fn handle_relayer_command<C>(
         client: Option<C>,
         cmd: cli::NamadaRelayer,
@@ -17,6 +29,12 @@ impl CliApi {
     where
         C: CliClient,
     {
+        use namada_sdk::eth_bridge::{bridge_pool, validator_set};
+
+        use crate::cli::args::{CliToSdk, CliToSdkCtxless};
+        use crate::cli::cmds::*;
+        use crate::cli::utils::get_eth_rpc_client;
+
         match cmd {
             cli::NamadaRelayer::EthBridgePoolWithCtx(boxed) => {
                 let (sub, mut ctx) = *boxed;

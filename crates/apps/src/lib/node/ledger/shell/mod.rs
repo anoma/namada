@@ -2068,6 +2068,7 @@ mod test_utils {
 #[cfg(test)]
 mod shell_tests {
     use namada::core::storage::Epoch;
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
@@ -2088,6 +2089,12 @@ mod shell_tests {
     /// because the bridge is disabled).
     #[tokio::test]
     async fn test_broadcast_valset_upd_inspite_oracle_off() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         // this height should result in a validator set
         // update being broadcasted
         let (mut shell, mut broadcaster_rx, _, _) =
@@ -2125,6 +2132,12 @@ mod shell_tests {
     /// as expected.
     #[test]
     fn test_commit_broadcasts_expired_eth_events() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let (mut shell, mut broadcaster_rx, _, _) =
             test_utils::setup_at_height(5);
 
@@ -2172,6 +2185,12 @@ mod shell_tests {
         use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell
@@ -2300,6 +2319,12 @@ mod shell_tests {
     #[test]
     fn test_mempool_eth_events_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
 
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
