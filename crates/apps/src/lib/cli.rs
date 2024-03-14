@@ -270,7 +270,6 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
-                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -353,8 +352,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
-            let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -407,7 +404,6 @@ pub mod cmds {
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
-                .or(gen_ibc_shielded)
                 .or(utils)
         }
     }
@@ -496,7 +492,6 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
-        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -2111,29 +2106,6 @@ pub mod cmds {
                      this account.",
                 )
                 .add_args::<args::RevealPk<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransfer(
-        pub args::GenIbcShieldedTransfer<args::CliTypes>,
-    );
-
-    impl SubCmd for GenIbcShieldedTransfer {
-        const CMD: &'static str = "ibc-gen-shielded";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
-                    matches,
-                ))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
         }
     }
 

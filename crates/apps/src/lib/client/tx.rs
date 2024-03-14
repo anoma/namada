@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
@@ -1610,31 +1609,4 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
-}
-
-pub async fn gen_ibc_shielded_transfer(
-    context: &impl Namada,
-    args: args::GenIbcShieldedTransfer,
-) -> Result<(), error::Error> {
-    if let Some((shielded_transfer, masp_tx)) =
-        tx::gen_ibc_shielded_transfer(context, args.clone()).await?
-    {
-        let tx_id = masp_tx.txid().to_string();
-        let filename = format!("ibc_shielded_transfer_{}.memo", tx_id);
-        let output_path = match &args.output_folder {
-            Some(path) => path.join(filename),
-            None => filename.into(),
-        };
-        let mut out = File::create(&output_path)
-            .expect("Should be able to create the out file.");
-        out.write_all(&shielded_transfer.serialize_to_vec())
-            .expect("IBC memo should be deserializable.");
-        println!(
-            "Output IBC shielded transfer for {tx_id} to {}",
-            output_path.to_string_lossy()
-        );
-    } else {
-        eprintln!("No shielded transfer for this IBC transfer.")
-    }
-    Ok(())
 }
