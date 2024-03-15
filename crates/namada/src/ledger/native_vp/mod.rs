@@ -547,6 +547,32 @@ pub trait StorageReader {
         &self,
         key: &Key,
     ) -> Result<Option<T>, state::StorageError>;
+
+    /// Calls `read_pre_value`, and returns an error on `Ok(None)`.
+    fn must_read_pre_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> Result<T, state::StorageError> {
+        match self.read_pre_value(key) {
+            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+                "Expected a value to be present in the key {key}"
+            ))),
+            result => result,
+        }
+    }
+
+    /// Calls `read_post_value`, and returns an error on `Ok(None)`.
+    fn must_read_post_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> Result<T, state::StorageError> {
+        match self.read_post_value(key) {
+            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+                "Expected a value to be present in the key {key}"
+            ))),
+            result => result,
+        }
+    }
 }
 
 impl<'a, S, CA> StorageReader for &Ctx<'a, S, CA>
