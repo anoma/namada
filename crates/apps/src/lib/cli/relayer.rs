@@ -42,7 +42,7 @@ impl CliApi {
                     EthBridgePoolWithCtx::RecommendBatch(RecommendBatch(
                         args,
                     )) => {
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let chain_ctx = ctx.borrow_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.query.ledger_address);
                         let client = client.unwrap_or_else(|| {

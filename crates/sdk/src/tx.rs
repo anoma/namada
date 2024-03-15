@@ -489,7 +489,7 @@ pub async fn save_initialized_accounts<N: Namada>(
         );
         // Store newly initialized account addresses in the wallet
         for (ix, address) in initialized_accounts.iter().enumerate() {
-            let encoded = address.encode();
+        let encoded = address.encode();
             let alias: Cow<str> = match &args.initialized_account_alias {
                 Some(initialized_account_alias) => {
                     if len == 1 {
@@ -3563,7 +3563,8 @@ async fn get_refund_target(
             let alias = format!("ibc-refund-target-{}", rng.next_u64());
             let mut wallet = context.wallet_mut().await;
             wallet
-                .insert_payment_addr(alias, payment_addr, false)
+                .insert_payment_addr_atomic(alias, payment_addr, false)
+                .expect("Failed to update the wallet storage.")
                 .ok_or_else(|| {
                     Error::Other(
                         "Adding a new payment address failed".to_string(),
