@@ -697,10 +697,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
+    #[allow(clippy::too_many_arguments)]
     pub async fn fetch<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         logger: &impl ProgressLogger<IO>,
+        start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         _batch_size: u64,
         sks: &[ExtendedSpendingKey],
@@ -739,6 +741,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // get the bounds on the block heights to fetch
         let start_idx =
             std::cmp::min(last_witnessed_tx, least_idx).map(|ix| ix.height);
+        let start_idx = start_query_height.or(start_idx);
         // Load all transactions accepted until this point
         // N.B. the cache is a hash map
         self.unscanned.extend(
@@ -2396,7 +2399,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .values()
             .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
             .collect();
-        self.fetch(client, &DefaultLogger::new(io), None, 1, &[], &fvks)
+        self.fetch(client, &DefaultLogger::new(io), None, None, 1, &[], &fvks)
             .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
