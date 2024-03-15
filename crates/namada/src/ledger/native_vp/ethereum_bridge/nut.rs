@@ -47,7 +47,7 @@ where
         _: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<(), Self::Error> {
         tracing::debug!(
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
@@ -57,8 +57,12 @@ where
         let is_multitoken =
             verifiers.contains(&Address::Internal(InternalAddress::Multitoken));
         if !is_multitoken {
-            tracing::debug!("Rejecting non-multitoken transfer tx");
-            return Ok(false);
+            let error = native_vp::Error::new_const(
+                "Rejecting non-multitoken transfer tx",
+            )
+            .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
 
         let nut_owners =
@@ -93,7 +97,12 @@ where
                             post_amount = ?post,
                             "Bridge pool balance should have increased"
                         );
-                        return Ok(false);
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Bridge pool balance should have increased. The \
+                             previous balance was {pre:?}, the post balance \
+                             is {post:?}.",
+                        ))
+                        .into());
                     }
                 }
                 // arbitrary addresses should have their balance decrease
@@ -105,13 +114,18 @@ where
                             post_amount = ?post,
                             "Balance should have decreased"
                         );
-                        return Ok(false);
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Balance should have decreased. The previous \
+                             balance was {pre:?}, the post balance is \
+                             {post:?}."
+                        ))
+                        .into());
                     }
                 }
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 }
 
@@ -120,7 +134,6 @@ mod test_nuts {
     use std::cell::RefCell;
     use std::env::temp_dir;
 
-    use assert_matches::assert_matches;
     use namada_core::address::testing::arb_non_internal_address;
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
@@ -138,7 +151,7 @@ mod test_nuts {
     use crate::vm::WasmCacheRwAccess;
 
     /// Run a VP check on a NUT transfer between the two provided addresses.
-    fn check_nut_transfer(src: Address, dst: Address) -> Option<bool> {
+    fn check_nut_transfer(src: Address, dst: Address) -> bool {
         let nut = wrapped_erc20s::nut(&DAI_ERC20_ETH_ADDRESS);
         let src_balance_key = balance_key(&nut, &src);
         let dst_balance_key = balance_key(&nut, &dst);
@@ -217,7 +230,8 @@ mod test_nuts {
             println!("{key}: PRE={pre:?} POST={post:?}");
         }
 
-        vp.validate_tx(&tx, &keys_changed, &verifiers).ok()
+        vp.validate_tx(&tx, &keys_changed, &verifiers)
+            .map_or_else(|_| false, |()| true)
     }
 
     proptest! {
@@ -227,19 +241,17 @@ mod test_nuts {
         fn test_nut_transfer_rejected(
             (src, dst) in (arb_non_internal_address(), arb_non_internal_address())
         ) {
-            let status = check_nut_transfer(src, dst);
-            assert_matches!(status, Some(false));
+            assert!(!check_nut_transfer(src, dst));
         }
 
         /// Test that transferring NUTs from an arbitrary address to the
         /// Bridge pool address passes.
         #[test]
         fn test_nut_transfer_passes(src in arb_non_internal_address()) {
-            let status = check_nut_transfer(
+            assert!(check_nut_transfer(
                 src,
                 Address::Internal(InternalAddress::EthBridgePool),
-            );
-            assert_matches!(status, Some(true));
+            ));
         }
     }
 }

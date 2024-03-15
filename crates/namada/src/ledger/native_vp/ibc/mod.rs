@@ -69,7 +69,7 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> VpResult<bool> {
+    ) -> VpResult<()> {
         let signed = tx_data;
         let tx_data = signed.data().ok_or(Error::NoTxData)?;
 
@@ -82,7 +82,7 @@ where
         // Validate the denom store if a denom key has been changed
         self.validate_denom(keys_changed)?;
 
-        Ok(true)
+        Ok(())
     }
 }
 
