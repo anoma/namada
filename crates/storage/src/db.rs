@@ -262,12 +262,6 @@ pub trait DB: Debug {
         key: &Key,
     ) -> Result<()>;
 
-    /// Delete the entire replay protection buffer
-    fn prune_replay_protection_buffer(
-        &mut self,
-        batch: &mut Self::WriteBatch,
-    ) -> Result<()>;
-
     /// Overwrite a new value in storage, taking into
     /// account values stored at a previous height
     fn overwrite_entry(
@@ -324,9 +318,6 @@ pub trait DBIter<'iter> {
 
     /// Read replay protection storage from the last block
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
-
-    /// Read replay protection storage from the the buffer
-    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.
