@@ -12,11 +12,13 @@
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
-//!   - `replay_protection`: hashes of the processed transactions
+//!   - `update_epoch_blocks_delay`: number of missing blocks before updating
+//!     PoS with CometBFT
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!     - `update_epoch_blocks_delay`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
@@ -518,6 +520,7 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
+            "update_epoch_blocks_delay",
             "tx_queue",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
@@ -531,7 +534,7 @@ impl RocksDB {
             // NOTE: we cannot restore the "pred/" keys themselves since we
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
-            // Tendermint.
+            // CometBFT.
         }
 
         // Revert conversion state if the epoch had been changed
