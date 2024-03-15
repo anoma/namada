@@ -541,7 +541,7 @@ where
         tx: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> Result<bool, Error> {
+    ) -> Result<(), Error> {
         tracing::debug!(
             keys_changed_len = keys_changed.len(),
             verifiers_len = _verifiers.len(),
@@ -562,32 +562,29 @@ where
         // check that transfer is not already in the pool
         match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
             Ok(Some(_)) => {
-                tracing::debug!(
+                let error = native_vp::Error::new_const(
                     "Rejecting transaction as the transfer is already in the \
-                     Ethereum bridge pool."
-                );
-                return Ok(false);
+                     Ethereum bridge pool.",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
-            Err(e) => {
-                return Err(native_vp::Error::AllocMessage(format!(
-                    "Could not read the storage key associated with the \
-                     transfer: {:?}",
-                    e
-                ))
-                .into());
-            }
+            // NOTE: make sure we don't erase storage errors returned by the
+            // ctx, as these may contain gas errors!
+            Err(e) => return Err(e.into()),
             _ => {}
         }
         for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
             if *key != pending_key {
-                tracing::debug!(
+                let error = native_vp::Error::new_alloc(format!(
                     "Rejecting transaction as it is attempting to change an \
-                     incorrect key in the Ethereum bridge pool: {}.\n \
-                     Expected key: {}",
-                    key,
-                    pending_key
-                );
-                return Ok(false);
+                     incorrect key in the Ethereum bridge pool: {key}.\n \
+                     Expected key: {pending_key}",
+                ))
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
         }
         let pending: PendingTransfer =
@@ -598,24 +595,27 @@ where
                 ))
             })?;
         if pending != transfer {
-            tracing::debug!(
+            let error = native_vp::Error::new_alloc(format!(
                 "An incorrect transfer was added to the Ethereum bridge pool: \
-                 {:?}.\n Expected: {:?}",
-                transfer,
-                pending
-            );
-            return Ok(false);
+                 {transfer:?}.\n Expected: {pending:?}",
+            ))
+            .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
         // The deltas in the escrowed amounts we must check.
-        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
+        let wnam_address =
+            read_native_erc20_address(&self.ctx.pre()).map_err(Error)?;
         let escrow_checks =
             self.determine_escrow_checks(&wnam_address, &transfer)?;
         if !escrow_checks.validate(keys_changed) {
-            tracing::debug!(
-                ?transfer,
-                "Missing storage modifications in the Bridge pool"
-            );
-            return Ok(false);
+            let error = native_vp::Error::new_const(
+                // TODO: specify which storage changes are missing
+                "Missing storage modifications in the Bridge pool",
+            )
+            .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
         // check that gas was correctly escrowed.
         if !self.check_gas_escrow(
@@ -623,7 +623,10 @@ where
             &transfer,
             escrow_checks.gas_check,
         )? {
-            return Ok(false);
+            return Err(native_vp::Error::new_const(
+                "Gas was not correctly escrowed into the Bridge pool storage",
+            )
+            .into());
         }
         // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
@@ -632,23 +635,43 @@ where
                 &transfer,
                 escrow_checks.token_check,
             )
+            .and_then(|ok| {
+                if ok {
+                    Ok(())
+                } else {
+                    Err(native_vp::Error::new_const(
+                        "The wrapped NAM tokens were not escrowed properly",
+                    )
+                    .into())
+                }
+            })
         } else {
             self.check_escrowed_toks(escrow_checks.token_check)
+                .and_then(|ok| {
+                    if ok {
+                        Ok(())
+                    } else {
+                        Err(native_vp::Error::new_alloc(format!(
+                            "The {} tokens were not escrowed properly",
+                            transfer.transfer.asset
+                        ))
+                        .into())
+                    }
+                })
         }
-        .map(|ok| {
-            if ok {
-                tracing::info!(
-                    "The Ethereum bridge pool VP accepted the transfer {:?}.",
-                    transfer
-                );
-            } else {
-                tracing::debug!(
-                    ?transfer,
-                    "The assets of the transfer were not properly escrowed \
-                     into the Ethereum bridge pool."
-                );
-            }
-            ok
+        .inspect(|_| {
+            tracing::info!(
+                "The Ethereum bridge pool VP accepted the transfer {:?}.",
+                transfer
+            );
+        })
+        .inspect_err(|err| {
+            tracing::debug!(
+                ?transfer,
+                reason = ?err,
+                "The assets of the transfer were not properly escrowed \
+                 into the Ethereum bridge pool."
+            );
         })
     }
 }
@@ -954,9 +977,8 @@ mod test_bridge_pool_vp {
     }
 
     enum Expect {
-        True,
-        False,
-        Error,
+        Accepted,
+        Rejected,
     }
 
     /// Helper function that tests various ways gas can be escrowed,
@@ -1036,10 +1058,15 @@ mod test_bridge_pool_vp {
         tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        match expect {
-            Expect::True => assert!(res.expect("Test failed")),
-            Expect::False => assert!(!res.expect("Test failed")),
-            Expect::Error => assert!(res.is_err()),
+        match (expect, res) {
+            (Expect::Accepted, Ok(())) => (),
+            (Expect::Accepted, Err(err)) => {
+                panic!("Expected VP success, but got: {err}")
+            }
+            (Expect::Rejected, Err(_)) => (),
+            (Expect::Rejected, Ok(())) => {
+                panic!("Expected VP failure, but the tx was accepted")
+            }
         }
     }
 
@@ -1059,7 +1086,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::True,
+            Expect::Accepted,
         );
     }
 
@@ -1080,7 +1107,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1101,7 +1128,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1122,7 +1149,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1144,7 +1171,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1165,7 +1192,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1186,7 +1213,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1207,7 +1234,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1221,7 +1248,7 @@ mod test_bridge_pool_vp {
             SignedAmount::Negative(TOKENS.into()),
             SignedAmount::Positive(TOKENS.into()),
             |transfer, _| BTreeSet::from([get_pending_key(transfer)]),
-            Expect::Error,
+            Expect::Rejected,
         );
     }
 
@@ -1253,7 +1280,7 @@ mod test_bridge_pool_vp {
                     .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1285,7 +1312,7 @@ mod test_bridge_pool_vp {
                     .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::Error,
+            Expect::Rejected,
         );
     }
 
@@ -1309,7 +1336,7 @@ mod test_bridge_pool_vp {
                     get_signed_root_key(),
                 ])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1376,7 +1403,7 @@ mod test_bridge_pool_vp {
         tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(!res.expect("Test failed"));
+        assert!(res.is_err());
     }
 
     /// Test that a transfer added to the pool with zero gas fees
@@ -1433,10 +1460,8 @@ mod test_bridge_pool_vp {
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let res = vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert!(!res);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        assert!(res.is_err());
     }
 
     /// Test that we can escrow Nam if we
@@ -1514,10 +1539,8 @@ mod test_bridge_pool_vp {
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let res = vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert!(res);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        assert!(res.is_ok());
     }
 
     /// Test that we can reject a transfer that
@@ -1590,10 +1613,8 @@ mod test_bridge_pool_vp {
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let res = vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert!(!res);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        assert!(res.is_err());
     }
 
     /// Test that we check escrowing Nam correctly when minting wNam
@@ -1683,10 +1704,8 @@ mod test_bridge_pool_vp {
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let res = vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert!(!res);
+        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        assert!(res.is_err());
     }
 
     /// Auxiliary function to test NUT functionality.
@@ -1763,10 +1782,15 @@ mod test_bridge_pool_vp {
         tx.add_data(transfer);
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        match expect {
-            Expect::True => assert!(res.expect("Test failed")),
-            Expect::False => assert!(!res.expect("Test failed")),
-            Expect::Error => assert!(res.is_err()),
+        match (expect, res) {
+            (Expect::Accepted, Ok(())) => (),
+            (Expect::Accepted, Err(err)) => {
+                panic!("Expected VP success, but got: {err}")
+            }
+            (Expect::Rejected, Err(_)) => (),
+            (Expect::Rejected, Ok(())) => {
+                panic!("Expected VP failure, but the tx was accepted")
+            }
         }
     }
 
@@ -1775,13 +1799,13 @@ mod test_bridge_pool_vp {
     /// asset, but not hold ERC20s.
     #[test]
     fn test_reject_no_erc20_balance_despite_nut_balance() {
-        test_nut_aux(TransferToEthereumKind::Erc20, Expect::False)
+        test_nut_aux(TransferToEthereumKind::Erc20, Expect::Rejected)
     }
 
     /// Test the happy flow of escrowing NUTs.
     #[test]
     fn test_escrowing_nuts_happy_flow() {
-        test_nut_aux(TransferToEthereumKind::Nut, Expect::True)
+        test_nut_aux(TransferToEthereumKind::Nut, Expect::Accepted)
     }
 
     /// Test that the Bridge pool VP rejects a wNAM NUT transfer.
@@ -1802,7 +1826,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::False,
+            Expect::Rejected,
         );
     }
 
@@ -1824,7 +1848,7 @@ mod test_bridge_pool_vp {
                 .unwrap();
                 BTreeSet::from([get_pending_key(transfer)])
             },
-            Expect::True,
+            Expect::Accepted,
         );
     }
 
