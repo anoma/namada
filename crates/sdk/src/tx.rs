@@ -1995,11 +1995,10 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await?;
-        if matches!(
-            state,
-            Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
-        ) {
+        .await?
+        .expect("Expected to find the state of the validator");
+
+        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
             return Err(Error::from(TxSubmitError::CannotVoteInGovernance(
                 voter_address.clone(),
                 current_epoch,
@@ -2046,12 +2045,12 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await
+        .await?
         .expect("Expected to find the state of the validator");
 
         if !matches!(
             val_state,
-            Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
+            ValidatorState::Jailed | ValidatorState::Inactive
         ) {
             vec![voter_address.clone()]
         } else {
