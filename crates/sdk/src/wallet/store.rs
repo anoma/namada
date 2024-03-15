@@ -659,7 +659,7 @@ impl Store {
         });
     }
 
-    /// get an address with the vp type
+    /// Get addresses with the vp type
     pub fn get_addresses_with_vp_type(
         &self,
         vp_type: AddressVpType,

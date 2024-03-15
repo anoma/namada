@@ -484,17 +484,20 @@ fn setup_storage_for_masp_verification(
 
     let albert_spending_key = shielded_ctx
         .wallet
-        .find_spending_key(ALBERT_SPENDING_KEY, None)
+        .find_spending_key_atomic(ALBERT_SPENDING_KEY, None)
+        .expect("Failed to read from the wallet storage.")
         .unwrap()
         .to_owned();
     let albert_payment_addr = shielded_ctx
         .wallet
-        .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+        .find_payment_addr_atomic(ALBERT_PAYMENT_ADDRESS)
+        .expect("Failed to read from the wallet storage.")
         .unwrap()
         .to_owned();
     let bertha_payment_addr = shielded_ctx
         .wallet
-        .find_payment_addr(BERTHA_PAYMENT_ADDRESS)
+        .find_payment_addr_atomic(BERTHA_PAYMENT_ADDRESS)
+        .expect("Failed to read from the wallet storage.")
         .unwrap()
         .to_owned();
 

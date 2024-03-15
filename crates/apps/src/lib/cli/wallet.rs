@@ -86,8 +86,12 @@ fn shielded_keys_list(
     unsafe_show_secret: bool,
     show_hint: bool,
 ) {
-    let known_view_keys = wallet.get_viewing_keys();
-    let known_spend_keys = wallet.get_spending_keys();
+    let known_view_keys = wallet
+        .get_viewing_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
+    let known_spend_keys = wallet
+        .get_spending_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_view_keys.is_empty() {
         if show_hint {
             display_line!(
@@ -163,7 +167,9 @@ fn payment_addresses_list(
     io: &impl Io,
     show_hint: bool,
 ) {
-    let known_addresses = wallet.get_payment_addrs();
+    let known_addresses = wallet
+        .get_payment_addrs_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_addresses.is_empty() {
         if show_hint {
             display_line!(
@@ -214,7 +220,7 @@ fn shielded_key_derive(
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_store_spending_key_from_mnemonic_code(
+            .derive_store_hd_spending_key_from_mnemonic_code(
                 alias,
                 alias_force,
                 derivation_path,
@@ -222,6 +228,7 @@ fn shielded_key_derive(
                 prompt_bip39_passphrase,
                 encryption_password,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 edisplay_line!(io, "Failed to derive a key.");
                 display_line!(io, "No changes are persisted. Exiting.");
@@ -262,7 +269,14 @@ fn shielded_key_gen(
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = if raw {
-        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
+        wallet
+            .gen_store_spending_key_atomic(
+                alias,
+                password,
+                alias_force,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.")
     } else {
         let derivation_path = decode_shielded_derivation_path(derivation_path)
             .unwrap_or_else(|err| {
@@ -282,13 +296,15 @@ fn shielded_key_gen(
             &mut OsRng,
             prompt_bip39_passphrase,
         );
-        wallet.derive_store_hd_spendind_key(
-            alias,
-            alias_force,
-            seed,
-            derivation_path,
-            password,
-        )
+        wallet
+            .derive_store_hd_spendind_key_atomic(
+                alias,
+                alias_force,
+                seed,
+                derivation_path,
+                password,
+            )
+            .expect("Failed to update the wallet storage.")
     }
     .map(|x| x.0)
     .unwrap_or_else(|| {
@@ -328,7 +344,8 @@ fn payment_address_gen(
         .expect("a PaymentAddress");
     let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
     let alias = wallet
-        .insert_payment_addr(alias, payment_addr, alias_force)
+        .insert_payment_addr_atomic(alias, payment_addr, alias_force)
+        .expect("Failed to update the wallet storage.")
         .unwrap_or_else(|| {
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
@@ -356,7 +373,8 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, alias_force)
+                .insert_viewing_key_atomic(alias, viewing_key, alias_force)
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);
@@ -367,13 +385,14 @@ fn shielded_key_address_add(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             let alias = wallet
-                .insert_spending_key(
+                .insert_spending_key_atomic(
                     alias,
                     alias_force,
                     spending_key,
                     password,
                     None,
                 )
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Spending key not added");
                     cli::safe_exit(1);
@@ -382,7 +401,8 @@ fn shielded_key_address_add(
         }
         MaspValue::PaymentAddress(payment_addr) => {
             let alias = wallet
-                .insert_payment_addr(alias, payment_addr, alias_force)
+                .insert_payment_addr_atomic(alias, payment_addr, alias_force)
+                .expect("Failed to update the wallet storage.")
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Payment address not added");
                     cli::safe_exit(1);
@@ -469,15 +489,16 @@ async fn transparent_key_and_address_derive(
         let encryption_password =
             read_and_confirm_encryption_password(unsafe_dont_encrypt);
         wallet
-            .derive_store_key_from_mnemonic_code(
+            .derive_store_hd_secret_key_from_mnemonic_code(
                 scheme,
-                Some(alias),
+                alias,
                 alias_force,
                 derivation_path,
                 None,
                 prompt_bip39_passphrase,
                 encryption_password,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 edisplay_line!(io, "Failed to derive a keypair.");
                 display_line!(io, "No changes are persisted. Exiting.");
@@ -514,18 +535,19 @@ async fn transparent_key_and_address_derive(
             });
 
         let pubkey = common::PublicKey::try_from_slice(&response.public_key)
-            .expect("unable to decode public key from hardware wallet");
+            .expect("Unable to decode public key from hardware wallet.");
         let address = Address::from_str(&response.address_str)
-            .expect("unable to decode address from hardware wallet");
+            .expect("Unable to decode address from hardware wallet.");
 
         wallet
-            .insert_public_key(
+            .insert_public_key_atomic(
                 alias,
                 pubkey,
                 Some(address),
                 Some(derivation_path),
                 alias_force,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 display_line!(io, "No changes are persisted. Exiting.");
                 cli::safe_exit(1)
@@ -563,13 +585,15 @@ fn transparent_key_and_address_gen(
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = if raw {
-        wallet.gen_store_secret_key(
-            scheme,
-            Some(alias),
-            alias_force,
-            encryption_password,
-            &mut OsRng,
-        )
+        wallet
+            .gen_store_secret_key_atomic(
+                scheme,
+                Some(alias),
+                alias_force,
+                encryption_password,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.")
     } else {
         let derivation_path =
             decode_transparent_derivation_path(scheme, derivation_path)
@@ -590,14 +614,16 @@ fn transparent_key_and_address_gen(
             &mut OsRng,
             prompt_bip39_passphrase,
         );
-        wallet.derive_store_hd_secret_key(
-            scheme,
-            Some(alias),
-            alias_force,
-            seed,
-            derivation_path,
-            encryption_password,
-        )
+        wallet
+            .derive_store_hd_secret_key_atomic(
+                scheme,
+                alias,
+                alias_force,
+                seed,
+                derivation_path,
+                encryption_password,
+            )
+            .expect("Failed to update the wallet storage.")
     }
     .map(|x| x.0)
     .unwrap_or_else(|| {
@@ -856,7 +882,9 @@ fn key_address_remove(
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    wallet.remove_all_by_alias(alias.clone());
+    wallet
+        .remove_all_by_alias_atomic(alias.clone())
+        .expect("Failed to update the wallet storage.");
     wallet
         .save()
         .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
@@ -874,7 +902,9 @@ fn transparent_key_find(
 ) {
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
-        Some(pk) => wallet.find_key_by_pk(&pk, None),
+        Some(pk) => wallet
+            .find_key_by_pk_atomic(&pk, None)
+            .expect("Failed to read from the wallet storage."),
         None => {
             let alias = alias.map(|a| a.to_lowercase()).or(public_key_hash);
             match alias {
@@ -886,7 +916,9 @@ fn transparent_key_find(
                     );
                     cli::safe_exit(1)
                 }
-                Some(alias) => wallet.find_secret_key(alias, None),
+                Some(alias) => wallet
+                    .find_secret_key_atomic(alias, None)
+                    .expect("Failed to read from the wallet storage."),
             }
         }
     };
@@ -920,7 +952,10 @@ fn transparent_address_or_alias_find(
         );
     } else if alias.is_some() {
         let alias = alias.unwrap().to_lowercase();
-        if let Some(address) = wallet.find_address(&alias) {
+        if let Some(address) = wallet
+            .find_address_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found address {}", address.to_pretty_string());
         } else {
             display_line!(
@@ -931,7 +966,10 @@ fn transparent_address_or_alias_find(
             );
         }
     } else if address.is_some() {
-        if let Some(alias) = wallet.find_alias(address.as_ref().unwrap()) {
+        if let Some(alias) = wallet
+            .find_alias_atomic(address.as_ref().unwrap())
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found alias {}", alias);
         } else {
             display_line!(
@@ -959,7 +997,10 @@ fn payment_address_or_alias_find(
         );
     } else if alias.is_some() {
         let alias = alias.unwrap().to_lowercase();
-        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+        if let Some(payment_addr) = wallet
+            .find_payment_addr_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             display_line!(io, "Found payment address {}", payment_addr);
         } else {
             display_line!(
@@ -971,8 +1012,11 @@ fn payment_address_or_alias_find(
             );
         }
     } else if payment_address.is_some() {
-        if let Some(alias) =
-            wallet.find_alias_by_payment_addr(payment_address.as_ref().unwrap())
+        if let Some(alias) = wallet
+            .find_alias_by_payment_addr_atomic(
+                payment_address.as_ref().unwrap(),
+            )
+            .expect("Failed to read from the wallet storage.")
         {
             display_line!(io, "Found alias {}", alias);
         } else {
@@ -1003,10 +1047,16 @@ fn transparent_key_address_find_by_alias(
     // Find transparent keys
     if !addresses_only {
         // Check if alias is a public key
-        if let Ok(public_key) = wallet.find_public_key(&alias) {
+        if let Ok(public_key) = wallet
+            .find_public_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found transparent keys:").unwrap();
-            let encrypted = match wallet.is_encrypted_secret_key(&alias) {
+            let encrypted = match wallet
+                .is_encrypted_secret_key_atomic(&alias)
+                .expect("Failed to read from the wallet storage.")
+            {
                 None => "external",
                 Some(res) if res => "encrypted",
                 _ => "not encrypted",
@@ -1030,7 +1080,10 @@ fn transparent_key_address_find_by_alias(
             if decrypt {
                 // Check if alias is also a secret key. Decrypt and print it if
                 // requested.
-                match wallet.find_secret_key(&alias, None) {
+                match wallet
+                    .find_secret_key_atomic(&alias, None)
+                    .expect("Failed to read from the wallet storage.")
+                {
                     Ok(keypair) => {
                         if unsafe_show_secret {
                             display_line!(io, &mut w_lock; "    Secret key: {}", keypair) .unwrap();
@@ -1054,7 +1107,10 @@ fn transparent_key_address_find_by_alias(
 
     // Find transparent address
     if !keys_only {
-        if let Some(address) = wallet.find_address(&alias) {
+        if let Some(address) = wallet
+            .find_address_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found transparent address:")
                 .unwrap();
@@ -1085,13 +1141,19 @@ fn shielded_key_address_find_by_alias(
 
     // Find shielded keys
     if !addresses_only {
-        let encrypted = match wallet.is_encrypted_spending_key(&alias) {
+        let encrypted = match wallet
+            .is_encrypted_spending_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             None => "external",
             Some(res) if res => "encrypted",
             _ => "not encrypted",
         };
         // Check if alias is a viewing key
-        if let Ok(viewing_key) = wallet.find_viewing_key(&alias) {
+        if let Ok(viewing_key) = wallet
+            .find_viewing_key_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found shielded keys:").unwrap();
             display_line!(io,
@@ -1105,7 +1167,10 @@ fn shielded_key_address_find_by_alias(
             if decrypt {
                 // Check if alias is also a spending key. Decrypt and print it
                 // if requested.
-                match wallet.find_spending_key(&alias, None) {
+                match wallet
+                    .find_spending_key_atomic(&alias, None)
+                    .expect("Failed to read from the wallet storage.")
+                {
                     Ok(spending_key) => {
                         if unsafe_show_secret {
                             display_line!(io, &mut w_lock; "    Spending key: {}", spending_key).unwrap();
@@ -1129,7 +1194,10 @@ fn shielded_key_address_find_by_alias(
 
     // Find payment addresses
     if !keys_only {
-        if let Some(payment_addr) = wallet.find_payment_addr(&alias) {
+        if let Some(payment_addr) = wallet
+            .find_payment_addr_atomic(&alias)
+            .expect("Failed to read from the wallet storage.")
+        {
             found = true;
             display_line!(io, &mut w_lock; "Found payment address:").unwrap();
             display_line!(io,
@@ -1151,7 +1219,9 @@ fn transparent_keys_list(
     unsafe_show_secret: bool,
     show_hint: bool,
 ) {
-    let known_public_keys = wallet.get_public_keys();
+    let known_public_keys = wallet
+        .get_public_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_public_keys.is_empty() {
         if show_hint {
             display_line!(
@@ -1163,7 +1233,9 @@ fn transparent_keys_list(
     } else {
         let mut w_lock = io::stdout().lock();
         display_line!(io, &mut w_lock; "Known transparent keys:").unwrap();
-        let known_secret_keys = wallet.get_secret_keys();
+        let known_secret_keys = wallet
+            .get_secret_keys_atomic()
+            .expect("Failed to read from the wallet storage.");
         for (alias, public_key) in known_public_keys {
             let stored_keypair = known_secret_keys.get(&alias);
             let encrypted = match stored_keypair {
@@ -1230,10 +1302,12 @@ fn key_export(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let key_to_export = wallet
-        .find_secret_key(&alias, None)
+        .find_secret_key_atomic(&alias, None)
+        .expect("Failed to read from the wallet storage.")
         .map(|sk| Box::new(sk) as Box<dyn BorshSerializeExt>)
         .or(wallet
-            .find_spending_key(&alias, None)
+            .find_spending_key_atomic(&alias, None)
+            .expect("Failed to read from the wallet storage.")
             .map(|spk| Box::new(spk) as Box<dyn BorshSerializeExt>));
     key_to_export
         .map(|key| {
@@ -1257,7 +1331,9 @@ fn key_convert(
 ) {
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
-    let sk = wallet.find_secret_key(&alias, None);
+    let sk = wallet
+        .find_secret_key_atomic(&alias, None)
+        .expect("Failed to read from the wallet storage.");
     let key: serde_json::Value = validator_key_to_json(&sk.unwrap()).unwrap();
     let file_name = format!("priv_validator_key_{}.json", alias);
     let file = File::create(&file_name).unwrap();
@@ -1318,7 +1394,9 @@ fn transparent_addresses_list(
     io: &impl Io,
     show_hint: bool,
 ) {
-    let known_addresses = wallet.get_addresses();
+    let known_addresses = wallet
+        .get_addresses_atomic()
+        .expect("Failed to read from the wallet storage.");
     if known_addresses.is_empty() {
         if show_hint {
             display_line!(
@@ -1353,7 +1431,15 @@ fn transparent_secret_key_add(
     let encryption_password =
         read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = wallet
-        .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
+        .insert_keypair_atomic(
+            alias,
+            alias_force,
+            sk,
+            encryption_password,
+            None,
+            None,
+        )
+        .expect("Failed to update the wallet storage.")
         .unwrap_or_else(|| {
             edisplay_line!(io, "Failed to add a keypair.");
             display_line!(io, "No changes are persisted. Exiting.");
@@ -1380,7 +1466,14 @@ fn transparent_public_key_add(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_public_key(alias.clone(), pubkey, None, None, alias_force)
+        .insert_public_key_atomic(
+            alias.clone(),
+            pubkey,
+            None,
+            None,
+            alias_force,
+        )
+        .expect("Failed to update the wallet storage.")
         .is_none()
     {
         edisplay_line!(io, "Public key not added");
@@ -1407,7 +1500,8 @@ fn transparent_address_add(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     if wallet
-        .insert_address(&alias, address, alias_force)
+        .insert_address_atomic(&alias, address, alias_force)
+        .expect("Failed to update the wallet storage.")
         .is_none()
     {
         edisplay_line!(io, "Address not added");

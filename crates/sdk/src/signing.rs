@@ -58,7 +58,7 @@ use crate::tx::{
     VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
-use crate::wallet::{Wallet, WalletIo};
+use crate::wallet::{Wallet, WalletIo, WalletStorage};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
 
 /// A structure holding the signing data to craft a transaction
@@ -101,7 +101,8 @@ pub async fn find_pk(
         Address::Implicit(ImplicitAddress(pkh)) => Ok(context
             .wallet_mut()
             .await
-            .find_public_key_by_pkh(pkh)
+            .find_public_key_by_pkh_atomic(pkh)
+            .expect("Failed to read from the wallet storage.")
             .map_err(|err| {
                 Error::Other(format!(
                     "Unable to load the keypair from the wallet for the \
@@ -120,13 +121,14 @@ pub async fn find_pk(
 /// Load the secret key corresponding to the given public key from the wallet.
 /// If the keypair is encrypted but a password is not supplied, then it is
 /// interactively prompted. Errors if the key cannot be found or loaded.
-pub fn find_key_by_pk<U: WalletIo>(
+pub fn find_key_by_pk<U: WalletIo + WalletStorage>(
     wallet: &mut Wallet<U>,
     args: &args::Tx,
     public_key: &common::PublicKey,
 ) -> Result<common::SecretKey, Error> {
     wallet
-        .find_key_by_pk(public_key, args.password.clone())
+        .find_key_by_pk_atomic(public_key, args.password.clone())
+        .expect("Failed to read from the wallet storage.")
         .map_err(|err| {
             Error::Other(format!(
                 "Unable to load the keypair from the wallet for public key \
@@ -206,7 +208,7 @@ pub async fn sign_tx<'a, D, F, U>(
 ) -> Result<(), Error>
 where
     D: Clone + MaybeSend,
-    U: WalletIo,
+    U: WalletIo + WalletStorage,
     F: std::future::Future<Output = Result<Tx, Error>>,
 {
     let mut used_pubkeys = HashSet::new();
@@ -342,7 +344,8 @@ pub async fn aux_signing_data(
         context
             .wallet_mut()
             .await
-            .gen_disposable_signing_key(&mut OsRng)
+            .gen_disposable_signing_key_atomic(&mut OsRng)
+            .expect("Failed to update the wallet store.")
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
@@ -382,7 +385,8 @@ pub async fn init_validator_signing_data(
         context
             .wallet_mut()
             .await
-            .gen_disposable_signing_key(&mut OsRng)
+            .gen_disposable_signing_key_atomic(&mut OsRng)
+            .expect("Failed to update the wallet store.")
             .to_public()
     } else {
         match &args.wrapper_fee_payer {
@@ -1069,12 +1073,13 @@ fn proposal_type_to_ledger_vector(
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
-    wallet: &Wallet<impl WalletIo>,
+    wallet: &Wallet<impl WalletIo + WalletStorage>,
     tx: &Tx,
 ) -> Result<LedgerVector, Error> {
     // To facilitate lookups of human-readable token names
     let tokens: HashMap<Address, String> = wallet
-        .get_addresses()
+        .get_addresses_atomic()
+        .expect("Failed to read from the wallet storage.")
         .into_iter()
         .map(|(alias, addr)| (addr, alias))
         .collect();

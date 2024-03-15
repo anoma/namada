@@ -25,7 +25,7 @@ use namada::tx::{CompressedSignature, Section, Signer, Tx};
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::signing::validate_fee_and_gen_unshield;
 use namada_sdk::wallet::alias::validator_consensus_key;
-use namada_sdk::wallet::{Wallet, WalletIo};
+use namada_sdk::wallet::{Wallet, WalletIo, WalletStorage};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
@@ -73,7 +73,7 @@ pub async fn aux_signing_data(
     Ok(signing_data)
 }
 
-pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
+pub async fn with_hardware_wallet<'a, U: WalletIo + WalletStorage + Clone>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
@@ -83,7 +83,8 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
     let path = wallet
         .read()
         .await
-        .find_path_by_pkh(&(&pubkey).into())
+        .find_path_by_pkh_atomic(&(&pubkey).into())
+        .expect("Failed to read from the wallet storage.")
         .map_err(|_| {
             error::Error::Other(
                 "Unable to find derivation path for key".to_string(),
@@ -211,7 +212,8 @@ pub async fn submit_reveal_aux(
         let public_key = context
             .wallet_mut()
             .await
-            .find_public_key_by_pkh(pkh)
+            .find_public_key_by_pkh_atomic(pkh)
+            .expect("Failed to read from the wallet storage")
             .map_err(|e| error::Error::Other(e.to_string()))?;
 
         if tx::is_reveal_pk_needed(context.client(), address, args.force)
@@ -339,14 +341,18 @@ pub async fn submit_change_consensus_key(
 
     // Determine the alias for the new key
     let mut wallet = namada.wallet_mut().await;
-    let alias = wallet.find_alias(&validator).cloned();
+    let alias = wallet
+        .find_alias_atomic(&validator)
+        .expect("Failed to read from the wallet storage.");
     let base_consensus_key_alias = alias
         .map(|al| validator_consensus_key(&al))
         .unwrap_or_else(|| {
             validator_consensus_key(&validator.to_string().into())
         });
     let mut consensus_key_alias = base_consensus_key_alias.to_string();
-    let all_keys = wallet.get_secret_keys();
+    let all_keys = wallet
+        .get_secret_keys_atomic()
+        .expect("Failed to read from the wallet storage.");
     let mut key_counter = 0;
     while all_keys.contains_key(&consensus_key_alias) {
         key_counter += 1;
@@ -371,7 +377,7 @@ pub async fn submit_change_consensus_key(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
@@ -379,6 +385,7 @@ pub async fn submit_change_consensus_key(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -599,7 +606,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone().into()),
@@ -607,6 +614,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -628,7 +636,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_cold_key_alias.clone()),
@@ -636,6 +644,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -657,7 +666,7 @@ pub async fn submit_become_validator(
             let password =
                 read_and_confirm_encryption_password(unsafe_dont_encrypt);
             wallet
-                .gen_store_secret_key(
+                .gen_store_secret_key_atomic(
                     // Note that ETH only allows secp256k1
                     SchemeType::Secp256k1,
                     Some(eth_hot_key_alias.clone()),
@@ -665,6 +674,7 @@ pub async fn submit_become_validator(
                     password,
                     &mut OsRng,
                 )
+                .expect("Failed to update the wallet storage.")
                 .expect("Key generation should not fail.")
                 .1
                 .ref_to()
@@ -693,7 +703,7 @@ pub async fn submit_become_validator(
     namada
         .wallet_mut()
         .await
-        .insert_keypair(
+        .insert_keypair_atomic(
             protocol_key_alias,
             tx_args.wallet_alias_force,
             protocol_sk.clone(),
@@ -701,6 +711,7 @@ pub async fn submit_become_validator(
             None,
             None,
         )
+        .expect("Failed to update the wallet storage.")
         .ok_or(error::Error::Other(String::from(
             "Failed to store the keypair.",
         )))?;
@@ -785,17 +796,25 @@ pub async fn submit_become_validator(
             if resp.is_applied_and_valid().is_some() {
                 // add validator address and keys to the wallet
                 let mut wallet = namada.wallet_mut().await;
-                wallet.add_validator_data(address.clone(), validator_keys);
-                wallet.save().unwrap_or_else(|err| {
-                    edisplay_line!(namada.io(), "{}", err)
-                });
+                // wallet.add_validator_data(address.clone(), validator_keys);
+                wallet
+                    .add_validator_data_atomic(address.clone(), validator_keys)
+                    .unwrap_or_else(|err| {
+                        edisplay_line!(namada.io(), "{}", err)
+                    });
+                // wallet.save().unwrap_or_else(|err| {
+                //     edisplay_line!(namada.io(), "{}", err)
+                // });
 
                 let tendermint_home = config.ledger.cometbft_dir();
                 tendermint_node::write_validator_key(
                     &tendermint_home,
-                    &wallet.find_key_by_pk(&consensus_key, None).expect(
-                        "unable to find consensus key pair in the wallet",
-                    ),
+                    &wallet
+                        .find_key_by_pk_atomic(&consensus_key, None)
+                        .expect("Failed to read from the wallet storage.")
+                        .expect(
+                            "Unable to find consensus key pair in the wallet.",
+                        ),
                 )
                 .unwrap();
                 // To avoid wallet deadlocks in following operations
@@ -1048,7 +1067,11 @@ where
             args.tx
                 .signing_keys
                 .iter()
-                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .map(|pk| {
+                    wallet
+                        .find_key_by_pk_atomic(pk, None)
+                        .expect("Failed to read from the wallet storage.")
+                })
                 .collect::<Result<_, _>>()
                 .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),
@@ -1207,7 +1230,11 @@ where
             args.tx
                 .signing_keys
                 .iter()
-                .map(|pk| wallet.find_key_by_pk(pk, None))
+                .map(|pk| {
+                    wallet
+                        .find_key_by_pk_atomic(pk, None)
+                        .expect("Failed to read from the wallet storage.")
+                })
                 .collect::<Result<_, _>>()
                 .expect("secret keys corresponding to public keys not found"),
             &signing_data.account_public_keys_map.unwrap(),

@@ -924,18 +924,24 @@ impl Default for BenchShieldedCtx {
         let mut chain_ctx = ctx.take_chain_or_exit();
 
         // Generate spending key for Albert and Bertha
-        chain_ctx.wallet.gen_store_spending_key(
-            ALBERT_SPENDING_KEY.to_string(),
-            None,
-            true,
-            &mut OsRng,
-        );
-        chain_ctx.wallet.gen_store_spending_key(
-            BERTHA_SPENDING_KEY.to_string(),
-            None,
-            true,
-            &mut OsRng,
-        );
+        chain_ctx
+            .wallet
+            .gen_store_spending_key_atomic(
+                ALBERT_SPENDING_KEY.to_string(),
+                None,
+                true,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.");
+        chain_ctx
+            .wallet
+            .gen_store_spending_key_atomic(
+                BERTHA_SPENDING_KEY.to_string(),
+                None,
+                true,
+                &mut OsRng,
+            )
+            .expect("Failed to update the wallet storage.");
         crate::wallet::save(&chain_ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha
@@ -948,7 +954,8 @@ impl Default for BenchShieldedCtx {
             let viewing_key: FromContext<ExtendedViewingKey> = FromContext::new(
                 chain_ctx
                     .wallet
-                    .find_viewing_key(viewing_alias)
+                    .find_viewing_key_atomic(viewing_alias)
+                    .expect("Failed to read from the wallet storage.")
                     .unwrap()
                     .to_string(),
             );
@@ -962,11 +969,12 @@ impl Default for BenchShieldedCtx {
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = chain_ctx
                 .wallet
-                .insert_payment_addr(
+                .insert_payment_addr_atomic(
                     alias,
                     PaymentAddress::from(payment_addr).pinned(false),
                     true,
                 )
+                .expect("Failed to update the wallet storage.")
                 .unwrap();
         }
 
@@ -991,7 +999,8 @@ impl BenchShieldedCtx {
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
             .wallet
-            .find_spending_key(ALBERT_SPENDING_KEY, None)
+            .find_spending_key_atomic(ALBERT_SPENDING_KEY, None)
+            .expect("Failed to read from the wallet storage.")
             .unwrap();
         self.shielded = async_runtime
             .block_on(crate::client::masp::syncing(

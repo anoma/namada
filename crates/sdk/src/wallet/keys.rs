@@ -18,7 +18,7 @@ const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
 
 /// A keypair stored in a wallet
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StoredKeypair<T: BorshSerialize + BorshDeserialize + Display + FromStr>
 where
     <T as FromStr>::Err: Display,
@@ -114,7 +114,7 @@ pub enum DeserializeStoredKeypairError {
 }
 
 /// An encrypted keypair stored in a wallet
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EncryptedKeypair<T: BorshSerialize + BorshDeserialize>(
     Vec<u8>,
     PhantomData<T>,

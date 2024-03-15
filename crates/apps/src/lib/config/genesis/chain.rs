@@ -129,18 +129,24 @@ impl Finalized {
     ) -> Wallet<CliWalletUtils> {
         let mut wallet = crate::wallet::load_or_new(base_dir);
         for (alias, config) in &self.tokens.token {
-            wallet.insert_address(
-                alias.normalize(),
-                config.address.clone(),
-                false,
-            );
-            wallet.add_vp_type_to_address(
-                AddressVpType::Token,
-                config.address.clone(),
-            );
+            wallet
+                .insert_address_atomic(
+                    alias.normalize(),
+                    config.address.clone(),
+                    false,
+                )
+                .expect("Failed to update the wallet storage.");
+            wallet
+                .add_vp_type_to_address_atomic(
+                    AddressVpType::Token,
+                    config.address.clone(),
+                )
+                .expect("Failed to update the wallet storage.");
         }
         if let Some(pre_genesis_wallet) = pre_genesis_wallet {
-            wallet.extend(pre_genesis_wallet);
+            wallet
+                .extend_atomic(pre_genesis_wallet)
+                .expect("Failed to apply pre-genesis wallet.");
         }
         if let Some((alias, validator_wallet)) = validator {
             let tendermint_pk = validator_wallet.tendermint_node_key.ref_to();
@@ -149,11 +155,13 @@ impl Finalized {
                 .find_validator(&tendermint_pk)
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
-            wallet.extend_from_pre_genesis_validator(
-                address,
-                alias,
-                validator_wallet,
-            )
+            wallet
+                .extend_from_pre_genesis_validator_atomic(
+                    address,
+                    alias,
+                    validator_wallet,
+                )
+                .expect("Failed to apply pre-genesis validator wallet.")
         }
 
         // Add some internal addresses to the wallet
@@ -166,11 +174,13 @@ impl Finalized {
             InternalAddress::Governance,
             InternalAddress::Pgf,
         ] {
-            wallet.insert_address(
-                int_add.to_string().to_lowercase(),
-                Address::Internal(int_add.clone()),
-                false,
-            );
+            wallet
+                .insert_address_atomic(
+                    int_add.to_string().to_lowercase(),
+                    Address::Internal(int_add.clone()),
+                    false,
+                )
+                .expect("Failed to update the wallet storage.");
         }
 
         wallet

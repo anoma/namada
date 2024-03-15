@@ -453,7 +453,7 @@ where
                         "Loading wallet from {}",
                         wallet_path.to_string_lossy()
                     );
-                    let mut wallet = crate::wallet::load(wallet_path)
+                    let wallet = crate::wallet::load(wallet_path)
                         .expect("Validator node must have a wallet");
                     let validator_local_config_path =
                         wallet_path.join("validator_local_config.toml");
@@ -472,7 +472,7 @@ where
                         };
 
                     wallet
-                        .take_validator_data()
+                        .take_validator_data_atomic()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,

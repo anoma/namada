@@ -93,25 +93,25 @@ mod dev {
     /// An established user address for testing & development
     pub fn albert_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("albert")
+            .find_address_atomic("albert")
+            .expect("Failed to read from the wallet storage.")
             .expect("Albert's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An established user address for testing & development
     pub fn bertha_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("bertha")
+            .find_address_atomic("bertha")
+            .expect("Failed to read from the wallet storage.")
             .expect("Bertha's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An established user address for testing & development
     pub fn christel_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("christel")
+            .find_address_atomic("christel")
+            .expect("Failed to read from the wallet storage.")
             .expect("Christel's address should be in the pre-genesis wallet")
-            .into_owned()
     }
 
     /// An implicit user address for testing & development
@@ -127,24 +127,28 @@ mod dev {
     /// An established validator address for testing & development
     pub fn validator_address() -> Address {
         PREGENESIS_WALLET
-            .find_address("validator-0")
+            .find_address_atomic("validator-0")
+            .expect("Failed to read from the wallet storage.")
             .expect(
                 "The zeroth validator's address should be in the pre-genesis \
                  wallet",
             )
-            .into_owned()
     }
 
     /// Get an unencrypted keypair from the pre-genesis wallet.
     pub fn get_unencrypted_keypair(name: &str) -> common::SecretKey {
-        let sk = match PREGENESIS_WALLET.get_secret_keys().get(name).unwrap().0
+        match PREGENESIS_WALLET
+            .get_secret_keys_atomic()
+            .expect("Failed to read from the wallet storage.")
+            .get(name)
+            .unwrap()
+            .0
         {
             namada_sdk::wallet::StoredKeypair::Encrypted(_) => {
                 panic!("{name}'s keypair should not be encrypted")
             }
-            namada_sdk::wallet::StoredKeypair::Raw(sk) => sk,
-        };
-        sk.clone()
+            namada_sdk::wallet::StoredKeypair::Raw(ref sk) => sk.clone(),
+        }
     }
 
     /// Get albert's keypair from the pre-genesis wallet.

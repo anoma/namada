@@ -4131,7 +4131,7 @@ pub mod args {
     impl CliToSdk<TxInitAccount<SdkTypes>> for TxInitAccount<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             TxInitAccount::<SdkTypes> {
                 tx,
                 vp_code_path: self.vp_code_path,
@@ -4186,7 +4186,7 @@ pub mod args {
     impl CliToSdk<TxBecomeValidator<SdkTypes>> for TxBecomeValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxBecomeValidator<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             TxBecomeValidator::<SdkTypes> {
                 tx,
                 scheme: self.scheme,
@@ -4306,7 +4306,7 @@ pub mod args {
     impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             TxInitValidator::<SdkTypes> {
                 tx,
                 scheme: self.scheme,
@@ -4455,7 +4455,7 @@ pub mod args {
     impl CliToSdk<TxUpdateAccount<SdkTypes>> for TxUpdateAccount<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxUpdateAccount<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             TxUpdateAccount::<SdkTypes> {
                 tx,
                 vp_code_path: self.vp_code_path,
@@ -4904,7 +4904,7 @@ pub mod args {
     impl CliToSdk<RevealPk<SdkTypes>> for RevealPk<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             RevealPk::<SdkTypes> {
                 tx,
                 public_key: chain_ctx.get(&self.public_key),
@@ -5470,7 +5470,7 @@ pub mod args {
     impl CliToSdk<ConsensusKeyChange<SdkTypes>> for ConsensusKeyChange<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> ConsensusKeyChange<SdkTypes> {
             let tx = self.tx.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             ConsensusKeyChange::<SdkTypes> {
                 tx,
                 validator: chain_ctx.get(&self.validator),
@@ -6278,7 +6278,7 @@ pub mod args {
 
     impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let chain_ctx = ctx.borrow_chain_or_exit();
             Query::<SdkTypes> {
                 ledger_address: chain_ctx.get(&self.ledger_address),
             }
@@ -6333,9 +6333,9 @@ pub mod args {
 
             use crate::wallet::CliWalletUtils;
 
-            let find_viewing_key = |w: &mut Wallet<CliWalletUtils>| {
-                w.find_viewing_key(&self.viewing_key.raw)
-                    .copied()
+            let find_viewing_key = |w: &Wallet<CliWalletUtils>| {
+                w.find_viewing_key_atomic(&self.viewing_key.raw)
+                    .expect("Failed to read from the wallet storage.")
                     .unwrap_or_else(|_| {
                         eprintln!(
                             "Unknown viewing key {}",
@@ -6347,10 +6347,10 @@ pub mod args {
             let viewing_key = if ctx.global_args.is_pre_genesis {
                 let wallet_path =
                     ctx.global_args.base_dir.join(PRE_GENESIS_DIR);
-                let mut wallet = crate::wallet::load_or_new(&wallet_path);
-                find_viewing_key(&mut wallet)
+                let wallet = crate::wallet::load_or_new(&wallet_path);
+                find_viewing_key(&wallet)
             } else {
-                find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
+                find_viewing_key(&ctx.borrow_chain_or_exit().wallet)
             };
             PayAddressGen::<SdkTypes> {
                 alias: self.alias,

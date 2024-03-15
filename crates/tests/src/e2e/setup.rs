@@ -163,13 +163,14 @@ where
             .expect("Could not locate pre-genesis wallet used for e2e tests.");
         let alias = format!("validator-{val}-balance-key");
         let (alias, sk) = wallet
-            .gen_store_secret_key(
+            .gen_store_secret_key_atomic(
                 SchemeType::Ed25519,
                 Some(alias),
                 true,
                 None,
                 &mut OsRng,
             )
+            .expect("Failed to update the wallet storage.")
             .unwrap_or_else(|| {
                 panic!("Could not generate new key for validator-{}", val)
             });
@@ -188,11 +189,13 @@ where
             );
             address
         };
-        wallet.insert_address(
-            validator_alias.clone(),
-            Address::Established(validator_address.clone()),
-            true,
-        );
+        wallet
+            .insert_address_atomic(
+                validator_alias.clone(),
+                Address::Established(validator_address.clone()),
+                true,
+            )
+            .expect("Failed to update the wallet storage.");
         wallet::save(&wallet).unwrap();
         // invoke `init-genesis-established-account` to generate a new
         // established account with the generated balance key

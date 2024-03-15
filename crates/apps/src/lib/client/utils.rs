@@ -687,7 +687,9 @@ pub fn derive_genesis_addresses(
             let maybe_alias =
                 maybe_pre_genesis_wallet.as_ref().and_then(|wallet| {
                     let implicit_address = (&pk.raw).into();
-                    wallet.find_alias(&implicit_address)
+                    wallet
+                        .find_alias_atomic(&implicit_address)
+                        .expect("Failed to read from the wallet storage.")
                 });
 
             if let Some(alias) = maybe_alias {
@@ -725,15 +727,16 @@ pub fn init_genesis_established_account(
         .wallet_aliases
         .iter()
         .map(|alias| {
-            let pk = pre_genesis_wallet.find_public_key(alias).unwrap_or_else(
-                |err| {
+            let pk = pre_genesis_wallet
+                .find_public_key_atomic(alias)
+                .expect("Failed to read from the wallet storage.")
+                .unwrap_or_else(|err| {
                     eprintln!(
                         "Failed to look-up `{alias}` in the pre-genesis \
                          wallet: {err}",
                     );
                     safe_exit(1)
-                },
-            );
+                });
             StringEncoded::new(pk)
         })
         .collect();
