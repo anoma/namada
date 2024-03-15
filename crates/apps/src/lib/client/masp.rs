@@ -13,6 +13,7 @@ use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn syncing<
     U: ShieldedUtils + MaybeSend + MaybeSync,
     C: Client + Sync,
@@ -22,6 +23,7 @@ pub async fn syncing<
     client: &C,
     io: &IO,
     batch_size: u64,
+    start_query_height: Option<BlockHeight>,
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
@@ -37,7 +39,15 @@ pub async fn syncing<
     let logger = CliLogger::new(io);
     let sync = async move {
         shielded
-            .fetch(client, &logger, last_query_height, batch_size, sks, fvks)
+            .fetch(
+                client,
+                &logger,
+                start_query_height,
+                last_query_height,
+                batch_size,
+                sks,
+                fvks,
+            )
             .await
             .map(|_| shielded)
     };

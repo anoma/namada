@@ -1,0 +1,1 @@
+ - Added an optional starting block argument for shielded sync ([\#2902](https://github.com/anoma/namada/pull/2902))
