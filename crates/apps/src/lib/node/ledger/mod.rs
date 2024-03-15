@@ -259,7 +259,12 @@ pub fn query_db(
     let value = deserializer(bytes).unwrap_or_else(|| {
         panic!("Unable to deserialize the value under key <{}>", key)
     });
-    tracing::info!("Key <{}>: {}\nThe value in bytes is {}", key, value, hex_bytes);
+    tracing::info!(
+        "Key <{}>: {}\nThe value in bytes is {}",
+        key,
+        value,
+        hex_bytes
+    );
 }
 
 /// Change the funds of an account in-place. Use with
