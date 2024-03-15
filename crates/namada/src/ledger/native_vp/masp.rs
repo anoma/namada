@@ -41,7 +41,11 @@ use crate::vm::WasmCacheAccess;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("MASP VP error: Native VP error: {0}")]
-    NativeVpError(#[source] native_vp::Error),
+    NativeVpError(
+        #[from]
+        #[source]
+        native_vp::Error,
+    ),
 }
 
 /// MASP VP result
@@ -74,18 +78,20 @@ where
         &self,
         keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let mut revealed_nullifiers = HashSet::new();
         let shielded_spends = match transaction.sapling_bundle() {
             Some(bundle) if !bundle.shielded_spends.is_empty() => {
                 &bundle.shielded_spends
             }
             _ => {
-                tracing::debug!(
+                let error = native_vp::Error::new_const(
                     "Missing expected spend descriptions in shielded \
-                     transaction"
-                );
-                return Ok(false);
+                     transaction",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
         };
 
@@ -94,12 +100,14 @@ where
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
-                tracing::debug!(
+                let error = native_vp::Error::new_const(
                     "MASP double spending attempt, the nullifier {:#?} has \
                      already been revealed previously",
-                    description.nullifier.0
-                );
-                return Ok(false);
+                    description.nullifier.0,
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
 
             // Check that the nullifier is indeed committed (no temp write
@@ -134,7 +142,7 @@ where
     fn valid_note_commitment_update(
         &self,
         transaction: &Transaction,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
         let tree_key = masp_commitment_tree_key();
@@ -165,28 +173,33 @@ where
         // This verifies that all and only the necessary notes have been
         // appended to the tree
         if previous_tree != post_tree {
-            tracing::debug!("The note commitment tree was incorrectly updated");
-            return Ok(false);
+            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "The note commitment tree was incorrectly updated",
+            ));
+            tracing::debug!("{error}");
+            return Err(error);
         }
 
-        Ok(true)
+        Ok(())
     }
 
     // Check that the spend descriptions anchors of a transaction are valid
     fn valid_spend_descriptions_anchor(
         &self,
         transaction: &Transaction,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let shielded_spends = match transaction.sapling_bundle() {
             Some(bundle) if !bundle.shielded_spends.is_empty() => {
                 &bundle.shielded_spends
             }
             _ => {
-                tracing::debug!(
-                    "Missing expected spend descriptions in shielded \
-                     transaction"
-                );
-                return Ok(false);
+                let error =
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Missing expected spend descriptions in shielded \
+                         transaction",
+                    ));
+                tracing::debug!("{error}");
+                return Err(error);
             }
         };
 
@@ -195,21 +208,23 @@ where
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
-                tracing::debug!(
-                    "Spend description refers to an invalid anchor"
-                );
-                return Ok(false);
+                let error =
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Spend description refers to an invalid anchor",
+                    ));
+                tracing::debug!("{error}");
+                return Err(error);
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     // Check that the convert descriptions anchors of a transaction are valid
     fn valid_convert_descriptions_anchor(
         &self,
         transaction: &Transaction,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
                 let anchor_key = masp_convert_anchor_key();
@@ -226,16 +241,20 @@ where
                     if namada_core::hash::Hash(description.anchor.to_bytes())
                         != expected_anchor
                     {
-                        tracing::debug!(
-                            "Convert description refers to an invalid anchor"
+                        let error = Error::NativeVpError(
+                            native_vp::Error::SimpleMessage(
+                                "Convert description refers to an invalid \
+                                 anchor",
+                            ),
                         );
-                        return Ok(false);
+                        tracing::debug!("{error}");
+                        return Err(error);
                     }
                 }
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn validate_state_and_get_transfer_data(
@@ -407,7 +426,7 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let epoch = self.ctx.get_block_epoch()?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
@@ -415,8 +434,11 @@ where
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
         {
-            tracing::debug!("MASP transaction is expired");
-            return Ok(false);
+            let error =
+                native_vp::Error::new_const("MASP transaction is expired")
+                    .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
 
         let mut transparent_tx_pool = I128Sum::zero();
@@ -433,12 +455,17 @@ where
             )?;
 
         if transfer.source != Address::Internal(Masp) {
-            // No shielded spends nor shielded converts are allowed
+            // No shielded spends nor shielded conversions are allowed
             if shielded_tx.sapling_bundle().is_some_and(|bundle| {
                 !(bundle.shielded_spends.is_empty()
                     && bundle.shielded_converts.is_empty())
             }) {
-                return Ok(false);
+                let error = native_vp::Error::new_const(
+                    "No shielded spends nor shielded conversions are allowed",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
 
             let transp_bundle =
@@ -453,9 +480,14 @@ where
             // To help recognize asset types not in the conversion tree
             let unepoched_tokens = unepoched_tokens(&transfer.token, denom)?;
             // Handle transparent input
-            // The following boundary conditions must be satisfied
+            //
+            // The following boundary conditions must be satisfied:
+            //
             // 1. Total of transparent input values equals containing transfer
-            // amount 2. Asset type must be properly derived
+            // amount
+            //
+            // 2. Asset type must be properly derived
+            //
             // 3. Public key must be the hash of the source
             for vin in &transp_bundle.vin {
                 // Non-masp sources add to the transparent tx pool
@@ -474,11 +506,12 @@ where
 
                 // Satisfies 3.
                 if <[u8; 20]>::from(hash) != vin.address.0 {
-                    tracing::debug!(
-                        "the public key of the output account does not match \
-                         the transfer target"
+                    let error = native_vp::Error::new_const(
+                        "The public key of the output account does not match \
+                         the transfer target",
                     );
-                    return Ok(false);
+                    tracing::debug!("{error}");
+                    return Err(error);
                 }
                 match conversion_state.assets.get(&vin.asset_type) {
                     // Satisfies 2. Note how the asset's epoch must be equal to
@@ -527,8 +560,12 @@ where
                             // If such an epoched asset type is available in the
                             // conversion tree, then we must reject the
                             // unepoched variant
-                            tracing::debug!("epoch is missing from asset type");
-                            return Ok(false);
+                            let error = native_vp::Error::new_const(
+                                "Epoch is missing from asset type",
+                            )
+                            .into();
+                            tracing::debug!("{error}");
+                            return Err(error);
                         } else {
                             // Otherwise note the contribution to this
                             // trransparent input
@@ -548,12 +585,22 @@ where
                         }
                     }
                     // unrecognized asset
-                    _ => return Ok(false),
+                    _ => {
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Unrecognized asset {}",
+                            vin.asset_type
+                        ))
+                        .into());
+                    }
                 };
             }
             // Satisfies 1.
             if total_in_values != transfer.amount {
-                return Ok(false);
+                return Err(native_vp::Error::new_const(
+                    "Total amount of transparent input values was not the \
+                     same as the transferred amount",
+                )
+                .into());
             }
         } else {
             // Handle shielded input
@@ -566,33 +613,36 @@ where
             // nullifier is being revealed by the tx
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                 if !transp_bundle.vin.is_empty() {
-                    tracing::debug!(
+                    let error = native_vp::Error::new_alloc(format!(
                         "Transparent input to a transaction from the masp \
                          must be 0 but is {}",
                         transp_bundle.vin.len()
-                    );
-                    return Ok(false);
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
                 }
             }
-            if !(self.valid_spend_descriptions_anchor(&shielded_tx)?
-                && self.valid_convert_descriptions_anchor(&shielded_tx)?
-                && self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?)
-            {
-                return Ok(false);
-            }
+
+            self.valid_spend_descriptions_anchor(&shielded_tx)?;
+            self.valid_convert_descriptions_anchor(&shielded_tx)?;
+            self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
         }
 
         // The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        if !self.valid_note_commitment_update(&shielded_tx)? {
-            return Ok(false);
-        }
+        self.valid_note_commitment_update(&shielded_tx)?;
 
         if transfer.target != Address::Internal(Masp) {
             // Handle transparent output
-            // The following boundary conditions must be satisfied
+            //
+            // The following boundary conditions must be satisfied:
+            //
             // 1. Total of transparent output values equals containing transfer
-            // amount 2. Asset type must be properly derived
+            // amount
+            //
+            // 2. Asset type must be properly derived
+            //
             // 3. Public key must be the hash of the target
 
             let transp_bundle =
@@ -625,11 +675,12 @@ where
 
                 // Satisfies 3.
                 if <[u8; 20]>::from(hash) != out.address.0 {
-                    tracing::debug!(
-                        "the public key of the output account does not match \
-                         the transfer target"
+                    let error = native_vp::Error::new_const(
+                        "The public key of the output account does not match \
+                         the transfer target",
                     );
-                    return Ok(false);
+                    tracing::debug!("{error}");
+                    return Err(error);
                 }
                 match conversion_state.assets.get(&out.asset_type) {
                     // Satisfies 2.
@@ -673,12 +724,22 @@ where
                             })?;
                     }
                     // unrecognized asset
-                    _ => return Ok(false),
+                    _ => {
+                        return Err(native_vp::Error::new_alloc(format!(
+                            "Unrecognized asset {}",
+                            out.asset_type
+                        ))
+                        .into());
+                    }
                 };
             }
             // Satisfies 1.
             if total_out_values != transfer.amount {
-                return Ok(false);
+                return Err(native_vp::Error::new_const(
+                    "Total amount of transparent output values was not the \
+                     same as the transferred amount",
+                )
+                .into());
             }
         } else {
             // Handle shielded output
@@ -689,40 +750,56 @@ where
             // Satisfies 1.
             if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                 if !transp_bundle.vout.is_empty() {
-                    tracing::debug!(
+                    let error = native_vp::Error::new_alloc(format!(
                         "Transparent output to a transaction from the masp \
                          must be 0 but is {}",
                         transp_bundle.vout.len()
-                    );
-                    return Ok(false);
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
                 }
             }
 
             // Staisfies 2.
             if shielded_tx
                 .sapling_bundle()
+                // NOTE: when resolving git merge conflicts (you will, trust
+                // me), do **NOT** take this branch, because it
+                // is buggy. if the sapling bundle is empty,
+                // this branch is not executed, and in that case
+                // there were no shielded outputs.
                 .is_some_and(|bundle| bundle.shielded_outputs.is_empty())
             {
-                return Ok(false);
+                let error = native_vp::Error::new_const(
+                    "There were no shielded outputs in the sapling bundle",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
         }
 
         match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
             None | Some(Ordering::Less) => {
-                tracing::debug!(
+                let error = native_vp::Error::new_const(
                     "Transparent transaction value pool must be nonnegative. \
                      Violation may be caused by transaction being constructed \
-                     in previous epoch. Maybe try again."
-                );
+                     in previous epoch. Maybe try again.",
+                )
+                .into();
+                tracing::debug!("{error}");
                 // Section 3.4: The remaining value in the transparent
                 // transaction value pool MUST be nonnegative.
-                return Ok(false);
+                return Err(error);
             }
             Some(Ordering::Greater) => {
-                tracing::debug!(
-                    "Transaction fees cannot be paid inside MASP transaction."
-                );
-                return Ok(false);
+                let error = native_vp::Error::new_const(
+                    "Transaction fees cannot be paid inside MASP transaction.",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
             _ => {}
         }
@@ -731,12 +808,16 @@ where
         self.ctx
             .charge_gas(MASP_VERIFY_SHIELDED_TX_GAS)
             .map_err(Error::NativeVpError)?;
-        Ok(verify_shielded_tx(&shielded_tx))
-    }
-}
 
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
+        // TODO: propagate errors inside of `verify_shielded_tx`
+        // up to the client
+        if verify_shielded_tx(&shielded_tx) {
+            Ok(())
+        } else {
+            Err(native_vp::Error::new_const(
+                "Verification failed on the shielded tx",
+            )
+            .into())
+        }
     }
 }
