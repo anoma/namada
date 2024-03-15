@@ -30,17 +30,17 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
-    #[error("Decoding error: {0}")]
-    Decoding(std::io::Error),
-    #[error("IBC message is required as transaction data")]
+    #[error("IBC VP error: Native VP error: {0}")]
+    NativeVpError(#[source] native_vp::Error),
+    #[error("IBC VP error: Decoding error: {0}")]
+    Decoding(#[source] std::io::Error),
+    #[error("IBC VP error: IBC message is required as transaction data")]
     NoTxData,
-    #[error("IBC action error: {0}")]
-    IbcAction(ActionError),
-    #[error("State change error: {0}")]
+    #[error("IBC VP error: IBC action error: {0}")]
+    IbcAction(#[source] ActionError),
+    #[error("IBC VP error: State change error: {0}")]
     StateChange(String),
-    #[error("IBC event error: {0}")]
+    #[error("IBC VP error: IBC event error: {0}")]
     IbcEvent(String),
 }
 

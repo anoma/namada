@@ -37,10 +37,12 @@ pub const MAX_PGF_ACTIONS: usize = 20;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub struct Error(#[from] native_vp::Error);
-
-//    #[error()]
-//    UnknownKeyChange(Key),
+#[error("Governance VP error: {0}")]
+pub struct Error(
+    #[from]
+    #[source]
+    native_vp::Error,
+);
 
 /// Governance VP
 pub struct GovernanceVp<'a, S, CA>

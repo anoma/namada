@@ -40,8 +40,8 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
+    #[error("MASP VP error: Native VP error: {0}")]
+    NativeVpError(#[source] native_vp::Error),
 }
 
 /// MASP VP result

@@ -22,8 +22,12 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
+    #[error("Multitoken VP error: Native VP error: {0}")]
+    NativeVpError(
+        #[from]
+        #[source]
+        native_vp::Error,
+    ),
 }
 
 /// Multitoken functions result

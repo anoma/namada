@@ -38,9 +38,13 @@ use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
-#[error(transparent)]
+#[error("Bridge Pool VP error: {0}")]
 /// Generic error that may be returned by the validity predicate
-pub struct Error(#[from] native_vp::Error);
+pub struct Error(
+    #[from]
+    #[source]
+    native_vp::Error,
+);
 
 /// A positive or negative amount
 #[derive(Copy, Clone)]

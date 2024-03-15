@@ -15,8 +15,12 @@ use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct Error(#[from] native_vp::Error);
+#[error("Non-usable token VP error: {0}")]
+pub struct Error(
+    #[from]
+    #[source]
+    native_vp::Error,
+);
 
 /// Validity predicate for non-usable tokens.
 ///
