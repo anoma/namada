@@ -2190,6 +2190,7 @@ pub async fn query_and_print_metadata(
             website,
             discord_handle,
             avatar,
+            validator_alias,
         }) => {
             display_line!(
                 context.io(),
@@ -2220,6 +2221,11 @@ pub async fn query_and_print_metadata(
                 display_line!(context.io(), "Avatar: {}", avatar);
             } else {
                 display_line!(context.io(), "No avatar");
+            }
+            if let Some(validator_alias) = validator_alias {
+                display_line!(context.io(), "Validator alias: {}", validator_alias);
+            } else {
+                display_line!(context.io(), "No validator alias");
             }
         }
         None => display_line!(
