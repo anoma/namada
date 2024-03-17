@@ -69,7 +69,7 @@ use crate::storage::{
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, write_last_reward_claim_epoch,
     write_pos_params, write_validator_address_raw_hash, write_validator_avatar,
-    write_validator_description, write_validator_discord_handle,
+    write_validator_alias, write_validator_description, write_validator_discord_handle,
     write_validator_email, write_validator_max_commission_rate_change,
     write_validator_metadata, write_validator_website,
 };
@@ -2585,6 +2585,7 @@ pub fn change_validator_metadata<S>(
     website: Option<String>,
     discord_handle: Option<String>,
     avatar: Option<String>,
+    validator_alias: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
 ) -> namada_storage::Result<()>
@@ -2605,6 +2606,9 @@ where
     }
     if let Some(avatar) = avatar {
         write_validator_avatar(storage, validator, &avatar)?;
+    }
+    if let Some(validator_alias) = validator_alias {
+        write_validator_alias(storage, validator, &validator_alias)?;
     }
     if let Some(commission_rate) = commission_rate {
         change_validator_commission_rate(
