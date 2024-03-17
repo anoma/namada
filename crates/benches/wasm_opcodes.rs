@@ -3,8 +3,8 @@
 //!      we expect the function call itself to represent the majority of the
 //!      cost
 //!    - All instruction (expect the empty function call) must be repeated a
-//!      certain amount of time because the default warmup of criterion doesn't
-//!      apply in this case
+//!      certain amount of time because the default iteratrions of criterion
+//!      don't apply in this case
 //!    - Some operations require some other instructions to run correctly, in
 //!      this case we need to subtract these costs
 //!    - From all operations we must subtract the cost of the empy function call
@@ -19,38 +19,25 @@ use wasm_instrument::parity_wasm::elements::{
 };
 use wasmer::{imports, Instance, Module, Store, Value};
 
+// Don't reduce this value too much or it will be impossible to see the
+// differences in execution times between the diffent instructions
 const ITERATIONS: u64 = 10_000;
 const ENTRY_POINT: &str = "op";
 
 lazy_static! {
-static ref WASM_OPTS: Vec<wasm_instrument::parity_wasm::elements::Instruction> = vec![
+    static ref WASM_OPTS: Vec<wasm_instrument::parity_wasm::elements::Instruction> = vec![
+        // Unreachable unconditionally traps, so no need to divide its cost by ITERATIONS because we only execute it once
         Unreachable,
         Nop,
         Block(BlockType::NoResult),
         Loop(BlockType::NoResult),
         // remove the cost of i32.const and nop
         If(BlockType::NoResult),
-        // Use 0 to return to the beginning of the block. Remove the cost of:
-        //    - 2 * global.get
-        //    - 2 * i32.const
-        //    - i32.add
-        //    - global.set
-        //    - i32.ne
-        //    - if
+        // Use 0 to exit the current block (branching in a block goes to the end of it, i.e. exits). Remove the cost of block
         Br(0u32),
- // Use 0 to return to the beginning of the block. Remove the cost of:
-        //    - 2 * global.get
-        //    - 2 * i32.const
-        //    - i32.add
-        //    - global.set
-        //    - i32.ne
+        // Use 0 to exit the current block. Remove the cost of block and i32.const
         BrIf(0u32),
-// If 0 on top of the stack return from block (and therefore execution), otherwise go back to the beginning of the block. Remove the cost of:
-        //    - 2 * global.get
-        //    - 2 * i32.const
-        //    - i32.add
-        //    - global.set
-        //    - i32.ne
+        // If 0 on top of the stack exit the current block. Remove the cost of block and i32.const:
         BrTable(Box::new(BrTableData {
             table: Box::new([1, 0]),
             default: 0u32,
@@ -395,7 +382,6 @@ static ref WASM_OPTS: Vec<wasm_instrument::parity_wasm::elements::Instruction> =
 struct WatBuilder {
     wat: String,
     instruction: wasm_instrument::parity_wasm::elements::Instruction,
-    repete: bool,
 }
 
 impl Display for WatBuilder {
@@ -413,12 +399,23 @@ impl Display for WatBuilder {
                 (func (export "{ENTRY_POINT}") (param $local_var i32)"#
         )?;
 
-        let reps = if self.repete { ITERATIONS } else { 1 };
-        for _ in 0..reps {
+        for _ in 0..ITERATIONS {
             writeln!(f, r#"{}"#, self.wat)?;
         }
         write!(f, r#"))"#)
     }
+}
+
+// Use singlepass compiler (the same one used in protocol) to prevent
+// optimizations that would compile out the benchmarks since most of them are
+// trivial operations
+fn get_wasm_store() -> Store {
+    wasmer::Store::new(
+        &wasmer_engine_universal::Universal::new(
+            wasmer_compiler_singlepass::Singlepass::default(),
+        )
+        .engine(),
+    )
 }
 
 // An empty wasm module to serve as the base reference for all the other
@@ -431,7 +428,7 @@ fn empty_module(c: &mut Criterion) {
         )
         "#,
     );
-    let module = Module::new(&Store::default(), module_wat).unwrap();
+    let module = Module::new(&get_wasm_store(), module_wat).unwrap();
     let instance = Instance::new(&module, &imports! {}).unwrap();
     let function = instance.exports.get_function(ENTRY_POINT).unwrap();
 
@@ -445,7 +442,7 @@ fn ops(c: &mut Criterion) {
 
     for builder in bench_functions() {
         let module =
-            Module::new(&Store::default(), builder.to_string()).unwrap();
+            Module::new(&get_wasm_store(), builder.to_string()).unwrap();
         let instance = Instance::new(&module, &imports! {}).unwrap();
         let function = instance.exports.get_function(ENTRY_POINT).unwrap();
 
@@ -470,12 +467,10 @@ fn bench_functions() -> Vec<WatBuilder> {
                 Unreachable | Nop => WatBuilder {
                     wat: format!(r#"{instruction}"#),
                     instruction,
-                    repete: true,
                 },
                 Block(_) | Loop(_) => WatBuilder {
                     wat: format!(r#"({instruction})"#),
                     instruction,
-                    repete: true,
                 },
                 If(_) => WatBuilder {
                     wat: format!(
@@ -488,62 +483,30 @@ fn bench_functions() -> Vec<WatBuilder> {
                         )"#
                     ),
                     instruction,
-                    repete: true,
                 },
                 Br(_) => WatBuilder {
                     wat: format!(
                         r#"
-                            (block
-                                global.get $iter
-                                i32.const 1
-                                i32.add
-                                (global.set $iter)
-                                global.get $iter
-                                i32.const {ITERATIONS}
-                                i32.ne
-                                (if
-                                    (then
-                                        {instruction}
-                                    )
-                                )
-                            )
+                        (block {instruction})
                         "#
                     ),
                     instruction,
-                    repete: false,
                 },
                 BrIf(_) | BrTable(_) => WatBuilder {
                     wat: format!(
                         r#"
-                            (block
-                                global.get $iter
-                                i32.const 1
-                                i32.add
-                                (global.set $iter)
-                                global.get $iter
-                                i32.const {ITERATIONS}
-                                i32.ne
-                                {instruction}
-                            )
+                        (block 
+                            i32.const 1
+                            {instruction}
+                        )
                         "#
                     ),
                     instruction,
-                    repete: false,
-                },
-                Drop => WatBuilder {
-                    wat: format!(
-                        r#"
-                            i32.const 1
-                            ({instruction})
-                            "#
-                    ),
-                    instruction,
-                    repete: true,
                 },
                 Return => {
-                    // To benchmark the result opcode we need to call a function
+                    // To benchmark the return opcode we need to call a function
                     // that returns something and then subtract the cost of
-                    // everything but return. This way we can run the return
+                    // everything. This way we can run the return
                     // opcode ITERATIONS times
                     WatBuilder {
                         wat: r#"
@@ -552,7 +515,6 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                         .to_string(),
                         instruction,
-                        repete: true,
                     }
                 }
                 Call(_) => WatBuilder {
@@ -561,54 +523,47 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                     .to_string(),
                     instruction,
-                    repete: true,
                 },
-                CallIndirect(_, _) => WatBuilder {
+                CallIndirect(_, _) | Drop => WatBuilder {
                     wat: format!(
                         r#"
-                            i32.const 0
-                            {instruction}
-                            "#
+                        i32.const 0
+                        {instruction}
+                        "#
                     ),
                     instruction,
-                    repete: true,
                 },
                 Select => WatBuilder {
                     wat: format!(
                         r#"
-                            i32.const 10
-                            i32.const 20
-                            i32.const 0
-                            {instruction}
-                            drop
-                            "#
+                        i32.const 10
+                        i32.const 20
+                        i32.const 0
+                        {instruction}
+                        drop
+                        "#
                     ),
                     instruction,
-                    repete: true,
                 },
                 GetLocal(_) | GetGlobal(_) | CurrentMemory(_) | I32Const(_)
                 | I64Const(_) | F32Const(_) | F64Const(_) => WatBuilder {
                     wat: format!(
                         r#"
-                            {instruction}
-                            drop
-                            "#
+                        {instruction}
+                        drop
+                        "#
                     ),
                     instruction,
-                    repete: true,
                 },
                 SetLocal(_) | SetGlobal(_) => WatBuilder {
                     wat: format!(
                         r#"
-                            i32.const 10
-                            {instruction}
-                            "#
+                        i32.const 10
+                        {instruction}
+                        "#
                     ),
                     instruction,
-                    repete: true,
                 },
-                // FIXME: should split this for the different types? First see
-                // results of benchmarks and then decide
                 I32Load(_, _)
                 | I64Load(_, _)
                 | F32Load(_, _)
@@ -627,13 +582,12 @@ fn bench_functions() -> Vec<WatBuilder> {
                 | GrowMemory(_) => WatBuilder {
                     wat: format!(
                         r#"
-                            i32.const 1
-                            {instruction}
-                            drop
-                            "#
+                        i32.const 1
+                        {instruction}
+                        drop
+                        "#
                     ),
                     instruction,
-                    repete: true,
                 },
                 I32Store(_, _)
                 | I64Store(_, _)
@@ -666,7 +620,6 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                         ),
                         instruction,
-                        repete: true,
                     }
                 }
                 I32Eqz | I64Eqz | I32Clz | I32Ctz | I32Popcnt | I64Clz
@@ -718,7 +671,6 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                         ),
                         instruction,
-                        repete: true,
                     }
                 }
                 I32Eq | I64Eq | F32Eq | F64Eq | I32Ne | I64Ne | F32Ne
@@ -765,7 +717,6 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                         ),
                         instruction,
-                        repete: true,
                     }
                 }
 
@@ -802,7 +753,6 @@ fn bench_functions() -> Vec<WatBuilder> {
                             "#
                         ),
                         instruction,
-                        repete: true,
                     }
                 }
                 _ => {

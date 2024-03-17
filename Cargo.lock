@@ -4306,6 +4306,8 @@ dependencies = [
  "tempfile",
  "wasm-instrument",
  "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-universal",
 ]
 
 [[package]]
