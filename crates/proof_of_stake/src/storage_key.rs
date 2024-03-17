@@ -55,6 +55,7 @@ const VALIDATOR_DESCRIPTION_KEY: &str = "description";
 const VALIDATOR_WEBSITE_KEY: &str = "website";
 const VALIDATOR_DISCORD_KEY: &str = "discord_handle";
 const VALIDATOR_AVATAR_KEY: &str = "avatar";
+const VALIDATOR_ALIAS_KEY: &str = "validator_alias";
 const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
@@ -277,6 +278,7 @@ pub fn is_validator_metadata_key(key: &Key) -> Option<&Address> {
                     | VALIDATOR_WEBSITE_KEY
                     | VALIDATOR_DISCORD_KEY
                     | VALIDATOR_AVATAR_KEY
+                    | VALIDATOR_ALIAS_KEY
             ) =>
         {
             Some(validator)
@@ -1025,6 +1027,13 @@ pub fn validator_discord_key(validator: &Address) -> Key {
 pub fn validator_avatar_key(validator: &Address) -> Key {
     validator_prefix(validator)
         .push(&VALIDATOR_AVATAR_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for a validator's alias
+pub fn validator_alias_key(validator: &Address) -> Key {
+    validator_prefix(validator)
+        .push(&VALIDATOR_ALIAS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

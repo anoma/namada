@@ -159,6 +159,7 @@ pub struct GenesisValidatorData {
     pub website: Option<String>,
     pub discord_handle: Option<String>,
     pub avatar: Option<String>,
+    pub validator_alias: Option<String>,
 }
 
 /// Panics if given `txs.validator_accounts` is not empty, because validator
@@ -285,6 +286,7 @@ pub fn init_validator(
         website,
         discord_handle,
         avatar,
+        validator_alias,
     }: GenesisValidatorData,
     validator_wallet: &ValidatorWallet,
 ) -> (Address, UnsignedTransactions) {
@@ -319,6 +321,7 @@ pub fn init_validator(
             website,
             discord_handle,
             avatar,
+            validator_alias,
         },
     };
     let unsigned_validator_addr =
@@ -631,6 +634,7 @@ impl TxToSign for ValidatorAccountTx<SignedPk> {
                 website: self.metadata.website.clone(),
                 discord_handle: self.metadata.discord_handle.clone(),
                 avatar: self.metadata.avatar.clone(),
+                validator_alias: self.metadata.validator_alias.clone(),
             },
         )
     }

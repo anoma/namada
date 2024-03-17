@@ -356,6 +356,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            validator_alias: None,
             commission_rate: None,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
@@ -392,6 +393,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            validator_alias: None,
         }
     }
 
@@ -424,6 +426,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            validator_alias: None,
         }
     }
 

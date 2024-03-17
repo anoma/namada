@@ -391,6 +391,8 @@ pub struct ValidatorMetaData {
     /// URL that points to a picture (e.g. PNG),
     /// identifying the validator
     pub avatar: Option<String>,
+    /// Validator's alias
+    pub validator_alias: Option<String>,
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -402,6 +404,7 @@ impl Default for ValidatorMetaData {
             website: Default::default(),
             discord_handle: Default::default(),
             avatar: Default::default(),
+            validator_alias: Default::default(),
         }
     }
 }

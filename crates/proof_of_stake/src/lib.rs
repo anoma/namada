@@ -40,6 +40,7 @@ use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
+use storage::write_validator_alias;
 use types::{into_tm_voting_power, DelegationEpochs};
 
 use crate::queries::{find_bonds, has_bonds};
@@ -2679,6 +2680,7 @@ pub fn change_validator_metadata<S>(
     website: Option<String>,
     discord_handle: Option<String>,
     avatar: Option<String>,
+    validator_alias: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
 ) -> namada_storage::Result<()>
@@ -2699,6 +2701,9 @@ where
     }
     if let Some(avatar) = avatar {
         write_validator_avatar(storage, validator, &avatar)?;
+    }
+    if let Some(validator_alias) = validator_alias {
+        write_validator_alias(storage, validator, &validator_alias)?;
     }
     if let Some(commission_rate) = commission_rate {
         change_validator_commission_rate(
