@@ -13,6 +13,66 @@ use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
+pub async fn syncing_with_height_increment<
+    U: ShieldedUtils + MaybeSend + MaybeSync,
+    C: Client + Sync,
+    IO: Io,
+>(
+    mut shielded: ShieldedContext<U>,
+    client: &C,
+    io: &IO,
+    batch_size: u64,
+    mut last_query_height: Option<BlockHeight>,
+    sks: &[ExtendedSpendingKey],
+    fvks: &[ViewingKey],
+) -> Result<ShieldedContext<U>, Error> {
+    let shutdown_signal = async {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        namada_sdk::control_flow::shutdown_send(tx).await;
+        rx.await
+    };
+
+    // add function to check if new spending key populates on 
+    // wallet list
+
+    display_line!(io, "{}", "==== Shielded sync started first step ====".on_white());
+    display_line!(io, "\n\n");
+
+    let logger = CliLogger::new(io);
+
+    // Increment the height based on the current value
+    if let Some(mut height) = last_query_height {
+        if height < BlockHeight(1000) {
+            height += BlockHeight(1000);
+        } else if height < BlockHeight(10000) {
+            height += BlockHeight(10000);
+        } else {
+            height += BlockHeight(100000);
+        }
+        last_query_height = Some(height);
+    }
+
+    let sync = async move {
+        shielded
+            .fetch(client, &logger, last_query_height, batch_size, sks, fvks)
+            .await
+            .map(|_| shielded)
+    };
+
+    tokio::select! {
+        sync = sync => {
+            let shielded = sync?;
+            display!(io, "Syncing finished\n");
+            Ok(shielded)
+        },
+        sig = shutdown_signal => {
+            sig.map_err(|e| Error::Other(e.to_string()))?;
+            display!(io, "\n");
+            Ok(ShieldedContext::default())
+        },
+    }
+}
+
 pub async fn syncing<
     U: ShieldedUtils + MaybeSend + MaybeSync,
     C: Client + Sync,
@@ -34,13 +94,16 @@ pub async fn syncing<
 
     display_line!(io, "{}", "==== Shielded sync started ====".on_white());
     display_line!(io, "\n\n");
+
     let logger = CliLogger::new(io);
+
     let sync = async move {
         shielded
             .fetch(client, &logger, last_query_height, batch_size, sks, fvks)
             .await
             .map(|_| shielded)
     };
+
     tokio::select! {
         sync = sync => {
             let shielded = sync?;
