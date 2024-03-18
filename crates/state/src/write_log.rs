@@ -217,6 +217,11 @@ impl WriteLog {
                 }
                 StorageModification::Delete => len as i64,
                 StorageModification::InitAccount { .. } => {
+                    // NOTE: errors from host functions force a shudown of the
+                    // wasm environment without the need for cooperation from
+                    // the wasm code (tx or vp), so there's no need to return
+                    // gas in case of an error because execution will terminate
+                    // anyway and this cannot be exploited to run the vm forever
                     return Err(Error::UpdateVpOfNewAccount);
                 }
                 StorageModification::Temp { .. } => {

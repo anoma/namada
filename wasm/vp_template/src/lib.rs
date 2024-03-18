@@ -1,6 +1,6 @@
 use namada_vp_prelude::*;
 
-#[validity_predicate(gas = 1000)]
+#[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,

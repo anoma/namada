@@ -800,7 +800,8 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 100_000_000;
+    const GAS_LIMIT: u64 = 10_000_000_000;
+    const WRAPPER_GAS_LIMIT: u64 = 20_000;
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
@@ -816,7 +817,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -857,7 +858,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -973,7 +974,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
@@ -1027,7 +1028,7 @@ mod test_finalize_block {
             },
             keypair.ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
         let processed_tx = ProcessedTx {
@@ -2758,7 +2759,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2775,7 +2776,7 @@ mod test_finalize_block {
             },
             keypair_2.ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
@@ -2816,8 +2817,8 @@ mod test_finalize_block {
             })
         }
 
-        shell.enqueue_tx(wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
-        shell.enqueue_tx(new_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
+        shell.enqueue_tx(wrapper.clone(), GAS_LIMIT.into());
+        shell.enqueue_tx(new_wrapper.clone(), GAS_LIMIT.into());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
 
@@ -2884,7 +2885,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2965,16 +2966,10 @@ mod test_finalize_block {
         }
 
         shell.enqueue_tx(out_of_gas_wrapper.clone(), Gas::default());
-        shell.enqueue_tx(
-            undecryptable_wrapper.clone(),
-            GAS_LIMIT_MULTIPLIER.into(),
-        );
+        shell.enqueue_tx(undecryptable_wrapper.clone(), GAS_LIMIT.into());
         shell.enqueue_tx(unsigned_wrapper.clone(), u64::MAX.into()); // Prevent out of gas which would still make the test pass
-        shell.enqueue_tx(
-            wrong_commitment_wrapper.clone(),
-            GAS_LIMIT_MULTIPLIER.into(),
-        );
-        shell.enqueue_tx(failing_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
+        shell.enqueue_tx(wrong_commitment_wrapper.clone(), GAS_LIMIT.into());
+        shell.enqueue_tx(failing_wrapper.clone(), GAS_LIMIT.into());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
 
@@ -3138,7 +3133,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();

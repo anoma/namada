@@ -4,8 +4,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use borsh_ext::BorshSerializeExt;
 use namada_core::storage::Epochs;
+use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
 use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
+use namada_vp_env::VpEnv;
 
 use crate::address::{Address, InternalAddress};
 use crate::ibc::IbcEvent;
@@ -73,9 +75,18 @@ where
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
             Some(StorageModification::Write { ref value }) => {
+                let gas = key.len() + value.len();
+                self.ctx
+                    .ctx
+                    .charge_gas(gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
                 Ok(Some(value.clone()))
             }
-            Some(StorageModification::Delete) => Ok(None),
+            Some(StorageModification::Delete) => {
+                self.ctx.ctx.charge_gas(
+                    key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+                )?;
+                Ok(None)
+            }
             Some(StorageModification::Temp { .. }) => {
                 Err(StorageError::new_const(
                     "Temp shouldn't be inserted in an IBC transaction",
@@ -84,7 +95,12 @@ where
             Some(StorageModification::InitAccount { .. }) => Err(
                 StorageError::new_const("InitAccount shouldn't be inserted"),
             ),
-            None => self.ctx.read_bytes(key),
+            None => {
+                self.ctx.ctx.charge_gas(
+                    key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+                )?;
+                self.ctx.read_bytes(key)
+            }
         }
     }
 
@@ -151,18 +167,20 @@ where
         key: &Key,
         value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        self.store.insert(
-            key.clone(),
-            StorageModification::Write {
-                value: value.as_ref().to_vec(),
-            },
-        );
-        Ok(())
+        let value = value.as_ref().to_vec();
+        let gas = key.len() + value.len();
+        self.store
+            .insert(key.clone(), StorageModification::Write { value });
+        self.ctx
+            .ctx
+            .charge_gas(gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
     }
 
     fn delete(&mut self, key: &Key) -> Result<()> {
         self.store.insert(key.clone(), StorageModification::Delete);
-        Ok(())
+        self.ctx
+            .ctx
+            .charge_gas(key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
     }
 }
 

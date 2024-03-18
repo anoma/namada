@@ -7,7 +7,7 @@ use namada_tx_prelude::eth_bridge_pool::{
 use namada_tx_prelude::parameters::native_erc20_key;
 use namada_tx_prelude::*;
 
-#[transaction(gas = 1038546)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
         ctx.set_commitment_sentinel();

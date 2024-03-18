@@ -3,7 +3,7 @@
 
 use namada_tx_prelude::*;
 
-#[transaction(gas = 260000)] // TODO: needs to be benchmarked
+#[transaction] // TODO: needs to be benchmarked
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;

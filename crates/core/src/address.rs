@@ -673,7 +673,7 @@ pub fn gen_deterministic_established_address(seed: impl AsRef<str>) -> Address {
 }
 
 /// Helpers for testing with addresses.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
     use std::collections::HashMap;
 

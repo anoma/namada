@@ -99,7 +99,11 @@ impl Shell {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
                     init,
-                    #[cfg(any(test, feature = "testing"))]
+                    #[cfg(any(
+                        test,
+                        feature = "testing",
+                        feature = "benches"
+                    ))]
                     1,
                 )
                 .map(Response::InitChain)

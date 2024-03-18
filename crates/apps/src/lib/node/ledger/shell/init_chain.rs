@@ -84,7 +84,8 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        #[cfg(any(test, feature = "testing"))] _num_validators: u64,
+        #[cfg(any(test, feature = "testing", feature = "benches"))]
+        _num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.state.in_mem().chain_id.as_str();

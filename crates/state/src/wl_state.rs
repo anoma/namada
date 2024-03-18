@@ -522,7 +522,7 @@ where
 
         // For convenience in tests, fill-in a header if it's missing.
         // Normally, the header is added in `FinalizeBlock`.
-        #[cfg(any(test, feature = "testing"))]
+        #[cfg(any(test, feature = "testing", feature = "benches"))]
         {
             if self.in_mem.header.is_none() {
                 self.in_mem.header = Some(storage::Header {

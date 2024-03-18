@@ -836,11 +836,6 @@ where
                         return Err(Error::MissingAddress(addr.clone()));
                     };
 
-                    // NOTE: because of the whitelisted gas and the gas
-                    // metering for the exposed vm
-                    // env functions,    the first
-                    // signature verification (if any) is accounted
-                    // twice
                     wasm::run::vp(
                         vp_code_hash,
                         tx,

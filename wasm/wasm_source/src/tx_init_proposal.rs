@@ -2,7 +2,7 @@
 
 use namada_tx_prelude::*;
 
-#[transaction(gas = 969395)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let data = tx.data().ok_or_err_msg("Missing data").map_err(|err| {
         ctx.set_commitment_sentinel();

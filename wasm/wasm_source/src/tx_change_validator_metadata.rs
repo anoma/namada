@@ -5,7 +5,7 @@ use namada_tx_prelude::transaction::pos::MetaDataChange;
 use namada_tx_prelude::*;
 
 // TODO: need to benchmark gas!!!
-#[transaction(gas = 220000)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data")?;
