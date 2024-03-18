@@ -3107,6 +3107,11 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DB_KEY: Arg<String> = arg("db-key");
+    pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
+        "db-column-family",
+        DefaultFn(|| storage::SUBSPACE_CF.to_string()),
+    );
     pub const DECRYPT: ArgFlag = flag("decrypt");
     pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
     pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
@@ -3163,6 +3168,7 @@ pub mod args {
     pub const GENESIS_VALIDATOR_ADDRESS: Arg<EstablishedAddress> =
         arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
+    pub const HASH: Arg<String> = arg("hash");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
@@ -3177,8 +3183,7 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.";
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
-    pub const KEY_HASH_LIST: ArgMulti<String, GlobPlus> =
-        arg_multi("key-hash-list");
+
     pub const LEDGER_ADDRESS: ArgDefault<Url> =
         arg("node").default(DefaultFn(|| {
             let raw = "http://127.0.0.1:26657";
@@ -3462,13 +3467,19 @@ pub mod args {
     pub struct LedgerUpdateDb {
         pub updates: PathBuf,
         pub dry_run: bool,
+        pub last_height: BlockHeight,
     }
 
     impl Args for LedgerUpdateDb {
         fn parse(matches: &ArgMatches) -> Self {
             let updates = PATH.parse(matches);
             let dry_run = DRY_RUN_TX.parse(matches);
-            Self { updates, dry_run }
+            let last_height = BLOCK_HEIGHT.parse(matches);
+            Self {
+                updates,
+                dry_run,
+                last_height,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3479,43 +3490,46 @@ pub mod args {
                 "If set, applies the updates but does not persist them. Using \
                  for testing and debugging.",
             ))
+            .arg(
+                BLOCK_HEIGHT
+                    .def()
+                    .help("The height at which the hard fork is happening."),
+            )
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct LedgerQueryDb {
-        pub key_hash_pairs: Vec<(storage::Key, [u8; 32])>,
+        pub key: storage::Key,
+        pub hash: [u8; 32],
+        pub cf: storage::DbColFam,
     }
 
     impl Args for LedgerQueryDb {
         fn parse(matches: &ArgMatches) -> Self {
-            let pairs = KEY_HASH_LIST
-                .parse(matches)
-                .into_iter()
-                .map(|pair| {
-                    let (hash, key) = pair
-                        .split_once(':')
-                        .expect("Key hash pairs must be colon separated.");
-                    let hash: [u8; 32] = HEXUPPER
-                        .decode(hash.to_uppercase().as_bytes())
-                        .unwrap()
-                        .try_into()
-                        .unwrap();
-                    let key = storage::Key::parse(key).unwrap();
-                    (key, hash)
-                })
-                .collect();
-
-            Self {
-                key_hash_pairs: pairs,
-            }
+            let key = storage::Key::parse(DB_KEY.parse(matches)).unwrap();
+            let hex_hash = HASH.parse(matches);
+            let hash: [u8; 32] = HEXUPPER
+                .decode(hex_hash.to_uppercase().as_bytes())
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let cf =
+                storage::DbColFam::from_str(&DB_COLUMN_FAMILY.parse(matches))
+                    .unwrap();
+            Self { key, hash, cf }
         }
 
         fn def(app: App) -> App {
-            app.arg(KEY_HASH_LIST.def().help(
-                "A comma separated list of entries of the form \
-                 <hex_type_hash>:<key>.",
-            ))
+            app.arg(DB_KEY.def().help("A database key to query"))
+                .arg(HASH.def().help(
+                    "The hex encoded type hash of the value contained under \
+                     the provided key.",
+                ))
+                .arg(DB_COLUMN_FAMILY.def().help(
+                    "The column family under which the key is kept. Defaults \
+                     to the subspace column family if none is provided.",
+                ))
         }
     }
 

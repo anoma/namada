@@ -10,8 +10,8 @@ use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::hash::Hash;
 use namada_core::storage::{
-    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, DbColFam, Epoch, EthEventsQueue, Header, Key,
+    KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{decode, encode, ethereum_events, ethereum_structs};
@@ -680,6 +680,7 @@ impl DB for MockDB {
         &self,
         _batch: &mut Self::WriteBatch,
         _height: Option<BlockHeight>,
+        _cf: &DbColFam,
         _key: &Key,
         _new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
