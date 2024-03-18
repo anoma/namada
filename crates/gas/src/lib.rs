@@ -68,8 +68,7 @@ pub const MASP_VERIFY_FINAL_GAS: u64 = 3_475_200;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-// FIXME: review this value
-const SCALE: u64 = 10_000;
+const SCALE: u64 = 100_000_000;
 
 /// Representation of gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,
