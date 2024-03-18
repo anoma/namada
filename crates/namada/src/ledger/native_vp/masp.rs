@@ -11,6 +11,7 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::address::InternalAddress::Masp;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
@@ -811,13 +812,11 @@ where
 
         // TODO: propagate errors inside of `verify_shielded_tx`
         // up to the client
-        if verify_shielded_tx(&shielded_tx) {
-            Ok(())
-        } else {
-            Err(native_vp::Error::new_const(
+        verify_shielded_tx(&shielded_tx).ok_or_else(|| {
+            native_vp::Error::new_const(
                 "Verification failed on the shielded tx",
             )
-            .into())
-        }
+            .into()
+        })
     }
 }
