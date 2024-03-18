@@ -363,7 +363,7 @@ pub struct ValidatorMetaData {
     /// identifying the validator
     pub avatar: Option<String>,
     /// Validator's alias
-    pub validator_metadata: Option<String>,
+    pub validator_alias: Option<String>,
 }
 
 #[cfg(any(test, feature = "testing"))]
