@@ -1,0 +1,1 @@
+Namada 0.32.0 is a minor release that adds state migration capabilities, fixes the user VP, refactors the shielded token ConversionState, fixes the rollback, and includes various other minor improvements.

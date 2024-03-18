@@ -1,5 +1,39 @@
 # CHANGELOG
 
+## v0.32.0
+
+Namada 0.32.0 is a minor release that adds state migration capabilities, fixes the user VP, refactors the shielded token ConversionState, fixes the rollback, and includes various other minor improvements.
+
+### BUG FIXES
+
+- Fixes the rollback command to correctly restore replay protection keys.
+  ([\#2599](https://github.com/anoma/namada/pull/2599))
+- Fix a bug preventing unjailing when it involves demotion of a validator out of
+  the consensus set. ([\#2617](https://github.com/anoma/namada/pull/2617))
+- Fixes the computation of the valid validator voting period.
+  ([\#2628](https://github.com/anoma/namada/pull/2628))
+- Clear IBC events emitted from rejected txs.
+  ([\#2850](https://github.com/anoma/namada/pull/2850))
+
+### FEATURES
+
+- Enable to update ConversionState token map by proposal wasm tx
+  ([\#2601](https://github.com/anoma/namada/issues/2601))
+- Implements state migration functionality.
+  ([\#2870](https://github.com/anoma/namada/pull/2870))
+
+### IMPROVEMENTS
+
+- In PoS VP validate governance proposal changes in PoS parameters.
+  ([\#2604](https://github.com/anoma/namada/pull/2604))
+ - This PR adds a proc macro that registers the deserializer of a type in a hashmap. This allows us to verify that 
+   data blob deserializes correctly if we are in possession of the hash map key. ([\#2814](https://github.com/anoma/namada/pull/2814))
+ - Adds tools to create json files to change db keys and various debugging and dry running logic. ([\#2835](https://github.com/anoma/namada/pull/2835))
+ - When iterating over key prefixes, we can additionally filter out keys based on a regex. ([\#2839](https://github.com/anoma/namada/pull/2839))
+- Some edits to logging and strings
+  ([\#2894](https://github.com/anoma/namada/pull/2894))
+ - Added an optional starting block argument for shielded sync ([\#2902](https://github.com/anoma/namada/pull/2902))
+
 ## v0.31.9
 
 Namada 0.31.9 is a patch release that includes a fix of IBC timestamp, transaction gas cost and shielded context for dry-ran transactions and RocksDB update.
