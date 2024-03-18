@@ -49,8 +49,6 @@ pub struct Event {
 /// The two types of custom events we currently use
 #[derive(Clone, Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum EventType {
-    /// The transaction was accepted to be included in a block
-    Accepted,
     /// The transaction was applied during block finalization
     Applied,
     /// The IBC transaction was applied during block finalization
@@ -66,7 +64,6 @@ pub enum EventType {
 impl Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EventType::Accepted => write!(f, "accepted"),
             EventType::Applied => write!(f, "applied"),
             EventType::Ibc(t) => write!(f, "{}", t),
             EventType::Proposal => write!(f, "proposal"),
@@ -82,7 +79,6 @@ impl FromStr for EventType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "accepted" => Ok(EventType::Accepted),
             "applied" => Ok(EventType::Applied),
             "proposal" => Ok(EventType::Proposal),
             "pgf_payments" => Ok(EventType::PgfPayment),

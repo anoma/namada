@@ -58,7 +58,7 @@ use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada_sdk::tendermint_rpc::endpoint::status;
-use namada_sdk::tx::{display_inner_resp, display_wrapper_resp_and_get_result};
+use namada_sdk::tx::display_inner_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
@@ -201,8 +201,12 @@ pub async fn query_transfers(
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
     // Now display historical shielded and transparent transactions
-    for (IndexedTx { height, index: idx }, (epoch, tfer_delta, tx_delta)) in
-        transfers
+    for (
+        IndexedTx {
+            height, index: idx, ..
+        },
+        (epoch, tfer_delta, tx_delta),
+    ) in transfers
     {
         // Check if this transfer pertains to the supplied owner
         let mut relevant = match &query_owner {
@@ -2769,23 +2773,10 @@ pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
         Ok(resp) => {
             display_inner_resp(context, &resp);
         }
-        Err(err1) => {
-            // If this fails then instead look for an acceptance event.
-            let wrapper_resp = query_tx_response(
-                context.client(),
-                namada_sdk::rpc::TxEventQuery::Accepted(&args.tx_hash),
-            )
-            .await;
-            match wrapper_resp {
-                Ok(resp) => {
-                    display_wrapper_resp_and_get_result(context, &resp);
-                }
-                Err(err2) => {
-                    // Print the errors that caused the lookups to fail
-                    edisplay_line!(context.io(), "{}\n{}", err1, err2);
-                    cli::safe_exit(1)
-                }
-            }
+        Err(err) => {
+            // Print the errors that caused the lookups to fail
+            edisplay_line!(context.io(), "{}", err);
+            cli::safe_exit(1)
         }
     }
 }

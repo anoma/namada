@@ -15,6 +15,7 @@ wasms += vp_always_true
 wasms += vp_eval
 wasms += vp_memory_limit
 wasms += vp_read_storage_key
+wasms += tx_invalid_data
 wasms += tx_proposal_code
 wasms += tx_proposal_masp_reward
 

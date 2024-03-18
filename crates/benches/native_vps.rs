@@ -966,10 +966,7 @@ fn parameters(c: &mut Criterion) {
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx =
-                    Tx::from_type(namada::tx::data::TxType::Decrypted(
-                        namada::tx::data::DecryptedTx::Decrypted,
-                    ));
+                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 tx
             }
@@ -1041,10 +1038,7 @@ fn pos(c: &mut Criterion) {
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx =
-                    Tx::from_type(namada::tx::data::TxType::Decrypted(
-                        namada::tx::data::DecryptedTx::Decrypted,
-                    ));
+                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 tx
             }

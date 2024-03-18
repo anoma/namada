@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::data::protocol::ProtocolTx;
-use crate::data::{hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx};
+use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
 use crate::proto;
 
 /// Represents an error in signature verification
@@ -904,15 +904,6 @@ impl Header {
         }
     }
 
-    /// Get the decrypted header if it is present
-    pub fn decrypted(&self) -> Option<DecryptedTx> {
-        if let TxType::Decrypted(decrypted) = &self.tx_type {
-            Some(decrypted.clone())
-        } else {
-            None
-        }
-    }
-
     /// Get the protocol header if it is present
     pub fn protocol(&self) -> Option<ProtocolTx> {
         if let TxType::Protocol(protocol) = &self.tx_type {
@@ -1341,8 +1332,6 @@ impl Tx {
                         err
                     ))
                 }),
-            // we extract the signed data, but don't check the signature
-            TxType::Decrypted(_) => Ok(None),
             // return as is
             TxType::Raw => Ok(None),
         }

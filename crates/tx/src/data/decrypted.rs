@@ -17,7 +17,6 @@ pub mod decrypted_tx {
         serde::Serialize,
         serde::Deserialize,
     )]
-    #[allow(clippy::large_enum_variant)]
     /// Holds the result of attempting to decrypt
     /// a transaction and the data necessary for
     /// other validators to verify
