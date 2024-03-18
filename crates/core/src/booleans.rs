@@ -27,3 +27,36 @@ impl<E> BoolResultUnitExt<E> for bool {
         if self { Ok(()) } else { Err(handle_err()) }
     }
 }
+
+/// Extend [`Result`] of [`bool`] values with the possibility to
+/// create [`Result`] values of unit and some error type.
+pub trait ResultBoolExt<E> {
+    /// Return `Ok(())` if `Ok(true)`, `Err(error)` if `Ok(false)`
+    /// or pass back the error if `Err(_)`.
+    fn true_or(self, error: E) -> Result<(), E>;
+
+    /// Return `Ok(())` if `Ok(true)`, `Err(handle_err())` if `Ok(false)`
+    /// or pass back the error if `Err(_)`.
+    fn true_or_else<F>(self, handle_err: F) -> Result<(), E>
+    where
+        F: FnOnce() -> E;
+}
+
+impl<E> ResultBoolExt<E> for Result<bool, E> {
+    /// Return `Ok(())` if `Ok(true)`, `Err(error)` if `Ok(false)`
+    /// or pass back the error if `Err(_)`.
+    #[inline]
+    fn true_or(self, error: E) -> Result<(), E> {
+        self.and_then(|ok| ok.ok_or(error))
+    }
+
+    /// Return `Ok(())` if `Ok(true)`, `Err(handle_err())` if `Ok(false)`
+    /// or pass back the error if `Err(_)`.
+    #[inline]
+    fn true_or_else<F>(self, handle_err: F) -> Result<(), E>
+    where
+        F: FnOnce() -> E,
+    {
+        self.and_then(|ok| ok.ok_or_else(handle_err))
+    }
+}
