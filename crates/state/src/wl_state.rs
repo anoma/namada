@@ -469,6 +469,7 @@ where
             conversion_state,
             ethereum_height,
             eth_events_queue,
+            commit_only_data,
         }) = self
             .0
             .db
@@ -489,6 +490,7 @@ where
                 in_mem.next_epoch_min_start_time = next_epoch_min_start_time;
                 in_mem.update_epoch_blocks_delay = update_epoch_blocks_delay;
                 in_mem.address_gen = address_gen;
+                in_mem.commit_only_data = commit_only_data;
             }
 
             // Rebuild Merkle tree - requires the values above to be set first
@@ -861,19 +863,25 @@ where
             .pred_epochs
             .get_epoch(height)
             .unwrap_or_default();
-        let epoch_start_height = match self
-            .in_mem
-            .block
-            .pred_epochs
-            .get_start_height_of_epoch(epoch)
-        {
-            Some(BlockHeight(0)) => BlockHeight(1),
-            Some(height) => height,
-            None => BlockHeight(1),
+        let start_height = if store_type == Some(StoreType::CommitData) {
+            // CommitData is stored every height
+            height
+        } else {
+            // others are stored at the first height of each epoch
+            match self
+                .in_mem
+                .block
+                .pred_epochs
+                .get_start_height_of_epoch(epoch)
+            {
+                Some(BlockHeight(0)) => BlockHeight(1),
+                Some(height) => height,
+                None => BlockHeight(1),
+            }
         };
         let stores = self
             .db
-            .read_merkle_tree_stores(epoch, epoch_start_height, store_type)?
+            .read_merkle_tree_stores(epoch, start_height, store_type)?
             .ok_or(Error::NoMerkleTree { height })?;
         let prefix = store_type.and_then(|st| st.provable_prefix());
         let mut tree = match store_type {
@@ -881,7 +889,7 @@ where
             None => MerkleTree::<H>::new(stores).expect("invalid stores"),
         };
         // Restore the tree state with diffs
-        let mut target_height = epoch_start_height;
+        let mut target_height = start_height;
         while target_height < height {
             target_height = target_height.next_height();
             let mut old_diff_iter =
@@ -972,17 +980,40 @@ where
                 }
             }
         }
-        if let Some(st) = store_type {
-            // Add the base tree with the given height
-            let mut stores = self
-                .db
-                .read_merkle_tree_stores(epoch, height, Some(StoreType::Base))?
-                .ok_or(Error::NoMerkleTree { height })?;
-            let restored_stores = tree.stores();
-            // Set the root and store of the rebuilt subtree
-            stores.set_root(&st, *restored_stores.root(&st));
-            stores.set_store(restored_stores.store(&st).to_owned());
-            tree = MerkleTree::<H>::new_partial(stores);
+
+        // Restore the base tree and CommitData tree
+        match store_type {
+            Some(st) => {
+                // It is enough to get the base tree
+                let mut stores = self
+                    .db
+                    .read_merkle_tree_stores(
+                        epoch,
+                        height,
+                        Some(StoreType::Base),
+                    )?
+                    .ok_or(Error::NoMerkleTree { height })?;
+                let restored_stores = tree.stores();
+                stores.set_root(&st, *restored_stores.root(&st));
+                stores.set_store(restored_stores.store(&st).to_owned());
+                tree = MerkleTree::<H>::new_partial(stores);
+            }
+            None => {
+                // Get the base and CommitData trees
+                let mut stores = self
+                    .db
+                    .read_merkle_tree_stores(epoch, height, None)?
+                    .ok_or(Error::NoMerkleTree { height })?;
+                let restored_stores = tree.stores();
+                // Set all rebuilt subtrees except for CommitData tree
+                for st in StoreType::iter_subtrees() {
+                    if *st != StoreType::CommitData {
+                        stores.set_root(st, *restored_stores.root(st));
+                        stores.set_store(restored_stores.store(st).to_owned());
+                    }
+                }
+                tree = MerkleTree::<H>::new(stores)?;
+            }
         }
         Ok(tree)
     }

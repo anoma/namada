@@ -242,7 +242,7 @@ impl StoreType {
             StoreType::PoS,
             StoreType::Ibc,
             StoreType::BridgePool,
-            StoreType::CommitData
+            StoreType::CommitData,
         ];
         SUB_TREE_TYPES.iter()
     }
@@ -354,17 +354,17 @@ impl fmt::Display for StoreType {
     }
 }
 
-/// Get the key prefix with which the base root and store are stored in the
+/// Get the key prefix with which the tree root and store are stored in the
 /// storage
-pub fn base_tree_key_prefix(height: BlockHeight) -> Key {
+pub fn tree_key_prefix_with_height(st: &StoreType, height: BlockHeight) -> Key {
     Key::from(height.to_db_key())
         .with_segment("tree".to_owned())
-        .with_segment(StoreType::Base.to_string())
+        .with_segment(st.to_string())
 }
 
-/// Get the key prefix with which the subtree root and store are stored in the
+/// Get the key prefix with which the tree root and store are stored in the
 /// storage
-pub fn subtree_key_prefix(st: &StoreType, epoch: Epoch) -> Key {
+pub fn tree_key_prefix_with_epoch(st: &StoreType, epoch: Epoch) -> Key {
     Key::from(epoch.to_db_key())
         .with_segment("tree".to_owned())
         .with_segment(st.to_string())

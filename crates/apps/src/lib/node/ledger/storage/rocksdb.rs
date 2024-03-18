@@ -45,7 +45,7 @@ use std::sync::Mutex;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use data_encoding::{HEXLOWER, HEXUPPER};
+use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
@@ -56,12 +56,15 @@ use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::replay_protection;
-use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
+use namada::state::merkle_tree::{
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
+};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
 };
 use namada::token::ConversionState;
+use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
@@ -719,6 +722,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let commit_only_data: CommitOnlyData = match self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load commit only data commitment from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let conversion_state: ConversionState = match self
             .0
             .get_cf(state_cf, "conversion_state")
@@ -790,7 +806,8 @@ impl DB for RocksDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
-                    // Restore the base tree of Merkle tree
+                    // Restore the base tree and the CommitData tree of Merkle
+                    // tree
                     "tree" => match segments.get(2) {
                         Some(s) => {
                             let st = StoreType::from_str(s)?;
@@ -835,7 +852,11 @@ impl DB for RocksDB {
         // Restore subtrees of Merkle tree
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
-                let key_prefix = subtree_key_prefix(st, epoch);
+                if *st == StoreType::CommitData {
+                    // CommitData tree has been already restored
+                    continue;
+                }
+                let key_prefix = tree_key_prefix_with_epoch(st, epoch);
                 let root_key =
                     key_prefix.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self
@@ -880,6 +901,7 @@ impl DB for RocksDB {
                 address_gen,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -1019,15 +1041,18 @@ impl DB for RocksDB {
         // Merkle tree
         {
             for st in StoreType::iter() {
-                if *st == StoreType::Base || is_full_commit {
-                    let key_prefix = if *st == StoreType::Base {
-                        base_tree_key_prefix(height)
-                    } else {
-                        subtree_key_prefix(st, epoch)
+                if *st == StoreType::Base
+                    || *st == StoreType::CommitData
+                    || is_full_commit
+                {
+                    let key_prefix = match st {
+                        StoreType::Base | StoreType::CommitData => {
+                            tree_key_prefix_with_height(st, height)
+                        }
+                        _ => tree_key_prefix_with_epoch(st, epoch),
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
-                    println!("{}, {}", st, HEXUPPER.encode(merkle_tree_stores.root(st).as_ref()));
                     batch.0.put_cf(
                         block_cf,
                         root_key.to_string(),
@@ -1139,10 +1164,11 @@ impl DB for RocksDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if *st == StoreType::Base {
-                base_tree_key_prefix(base_height)
-            } else {
-                subtree_key_prefix(st, epoch)
+            let key_prefix = match st {
+                StoreType::Base | StoreType::CommitData => {
+                    tree_key_prefix_with_height(st, base_height)
+                }
+                _ => tree_key_prefix_with_epoch(st, epoch),
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self
@@ -1475,7 +1501,7 @@ impl DB for RocksDB {
         epoch: Epoch,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let key_prefix = subtree_key_prefix(store_type, epoch);
+        let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = key_prefix.clone().with_segment("root".to_owned());
         batch.0.delete_cf(block_cf, root_key.to_string());
         let store_key = key_prefix.with_segment("store".to_owned());
@@ -1788,7 +1814,6 @@ mod test {
     };
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
-    use namada_sdk::storage::types::CommitOnlyData;
     use tempfile::tempdir;
     use test_log::test;
 
