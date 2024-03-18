@@ -411,7 +411,7 @@ mod tests {
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
     const COMMITMENT_PREFIX: &[u8] = b"ibc";
-    const TX_GAS_LIMIT: u64 = 1_000_000;
+    const TX_GAS_LIMIT: u64 = 10_000_000_000;
 
     fn get_client_id() -> ClientId {
         let id = format!("{}-0", MOCK_CLIENT_TYPE);

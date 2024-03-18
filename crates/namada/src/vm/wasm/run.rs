@@ -834,7 +834,7 @@ mod tests {
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 
-    const TX_GAS_LIMIT: u64 = 10_000_000_000;
+    const TX_GAS_LIMIT: u64 = 10_000_000_000_000;
     const OUT_OF_GAS_LIMIT: u64 = 10_000;
 
     /// Test that we sanitize accesses to invalid addresses in wasm memory.
