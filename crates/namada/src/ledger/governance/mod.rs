@@ -5,6 +5,7 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
+use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
 use namada_governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
 };
@@ -297,14 +298,8 @@ where
         }
 
         // first check if validator, then check if delegator
-        let is_validator = self
-            .is_validator(
-                pre_voting_start_epoch,
-                verifiers,
-                voter_address,
-                delegation_address,
-            )
-            .unwrap_or(false);
+        let is_validator =
+            self.is_validator(verifiers, voter_address, delegation_address)?;
 
         if is_validator
             && !is_valid_validator_voting_period(
@@ -322,14 +317,12 @@ where
             .into());
         }
 
-        let is_delegator = self
-            .is_delegator(
-                pre_voting_start_epoch,
-                verifiers,
-                voter_address,
-                delegation_address,
-            )
-            .unwrap_or(false);
+        let is_delegator = self.is_delegator(
+            pre_voting_start_epoch,
+            verifiers,
+            voter_address,
+            delegation_address,
+        )?;
 
         if !is_delegator {
             return Err(native_vp::Error::new_alloc(format!(
@@ -732,10 +725,16 @@ where
             .into());
         }
 
-        // TODO: bing bong
-        let bing_bong = (end_epoch - start_epoch) % min_period == 0;
-        if bing_bong {
-            todo!("BING");
+        let proposal_period_multiple_of_min_period =
+            (end_epoch - start_epoch) % min_period == 0;
+        if !proposal_period_multiple_of_min_period {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} does not have a voting period \
+                 that is a multiple of the minimum voting period \
+                 {min_period}. Starting epoch is {start_epoch}, and ending \
+                 epoch is {end_epoch}.",
+            ))
+            .into());
         }
 
         let proposal_meets_min_period =
@@ -796,16 +795,40 @@ where
             self.force_read(&max_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
-            tracing::info!(
-                "Proposal end epoch ({end_epoch}) must be after the start \
-                 epoch ({start_epoch}), and the start epoch must be after the \
-                 current epoch ({current_epoch})."
-            );
-            return Ok(false);
+            let error = native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id}'s end epoch ({end_epoch}) \
+                 must be after the start epoch ({start_epoch}), and the start \
+                 epoch must be after the current epoch ({current_epoch})."
+            ))
+            .into();
+            tracing::info!("{error}");
+            return Err(error);
         }
-        Ok((end_epoch - start_epoch) % min_period == 0
-            && (end_epoch - start_epoch).0 >= min_period
-            && (end_epoch - start_epoch).0 <= max_period)
+
+        let proposal_period_multiple_of_min_period =
+            (end_epoch - start_epoch) % min_period == 0;
+        if !proposal_period_multiple_of_min_period {
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} does not have a voting period \
+                 that is a multiple of the minimum voting period \
+                 {min_period}. Starting epoch is {start_epoch}, and ending \
+                 epoch is {end_epoch}.",
+            ))
+            .into());
+        }
+
+        let valid_voting_period = (end_epoch - start_epoch).0 >= min_period
+            && (end_epoch - start_epoch).0 <= max_period;
+
+        valid_voting_period.ok_or_else(|| {
+            native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} must have a voting period \
+                 with a minimum of {min_period} epochs, and a maximum of \
+                 {max_period} epochs. The starting epoch is {start_epoch}, \
+                 and the ending epoch is {end_epoch}.",
+            ))
+            .into()
+        })
     }
 
     /// Validate a funds key
@@ -813,7 +836,7 @@ where
         &self,
         proposal_id: u64,
         native_token_address: &Address,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
         let balance_key = token::storage_key::balance_key(
             native_token_address,
@@ -830,19 +853,58 @@ where
         let post_funds: token::Amount =
             self.force_read(&funds_key, ReadType::Post)?;
 
-        if let Some(pre_balance) = pre_balance {
-            let is_post_funds_greater_than_minimum =
-                post_funds >= min_funds_parameter;
-            let is_valid_funds = post_balance >= pre_balance
-                && post_balance - pre_balance == post_funds;
-            Ok(is_post_funds_greater_than_minimum && is_valid_funds)
-        } else {
-            Ok(post_funds >= min_funds_parameter && post_balance == post_funds)
-        }
+        pre_balance.map_or_else(
+            // null pre balance
+            || {
+                let is_post_funds_greater_than_minimum =
+                    post_funds >= min_funds_parameter;
+                is_post_funds_greater_than_minimum.ok_or_else(|| {
+                    native_vp::Error::new_alloc(format!(
+                        "Funds must be greater than the minimum funds of {}",
+                        min_funds_parameter.native_denominated()
+                    ))
+                    .into()
+                })?;
+
+                let post_balance_is_same = post_balance == post_funds;
+                post_balance_is_same.ok_or_else(|| {
+                    native_vp::Error::new_alloc(format!(
+                        "Funds and the balance of the governance account have \
+                         diverged: funds {} != balance {}",
+                        post_funds.native_denominated(),
+                        post_balance.native_denominated()
+                    ))
+                    .into()
+                })
+            },
+            // there was some non-zero balance in the governance account
+            |pre_balance| {
+                let is_post_funds_greater_than_minimum =
+                    post_funds >= min_funds_parameter;
+                is_post_funds_greater_than_minimum.ok_or_else(|| {
+                    native_vp::Error::new_alloc(format!(
+                        "Funds {} must be greater than the minimum funds of {}",
+                        post_funds.native_denominated(),
+                        min_funds_parameter.native_denominated()
+                    ))
+                    .into()
+                })?;
+
+                let is_valid_funds = post_balance >= pre_balance
+                    && post_balance - pre_balance == post_funds;
+                is_valid_funds.ok_or_else(|| {
+                    native_vp::Error::new_alloc(format!(
+                        "Invalid funds {} have been written to storage",
+                        post_funds.native_denominated()
+                    ))
+                    .into()
+                })
+            },
+        )
     }
 
     /// Validate a balance key
-    fn is_valid_balance(&self, native_token_address: &Address) -> Result<bool> {
+    fn is_valid_balance(&self, native_token_address: &Address) -> Result<()> {
         let balance_key = token::storage_key::balance_key(
             native_token_address,
             self.ctx.address,
@@ -857,12 +919,20 @@ where
         let post_balance: token::Amount =
             self.force_read(&balance_key, ReadType::Post)?;
 
-        if let Some(pre_balance) = pre_balance {
-            Ok(post_balance > pre_balance
-                && post_balance - pre_balance >= min_funds_parameter)
+        let balance_is_valid = if let Some(pre_balance) = pre_balance {
+            post_balance > pre_balance
+                && post_balance - pre_balance >= min_funds_parameter
         } else {
-            Ok(post_balance >= min_funds_parameter)
-        }
+            post_balance >= min_funds_parameter
+        };
+
+        balance_is_valid.ok_or_else(|| {
+            native_vp::Error::new_alloc(format!(
+                "Invalid balance {} has been written to storage",
+                post_balance.native_denominated()
+            ))
+            .into()
+        })
     }
 
     /// Validate a author key
@@ -870,33 +940,59 @@ where
         &self,
         proposal_id: u64,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let author_key = gov_storage::get_author_key(proposal_id);
 
         let has_pre_author = self.ctx.has_key_pre(&author_key)?;
         if has_pre_author {
-            return Ok(false);
+            return Err(native_vp::Error::new_alloc(format!(
+                "Proposal with id {proposal_id} already had an author written \
+                 to storage"
+            ))
+            .into());
         }
 
         let author = self.force_read(&author_key, ReadType::Post)?;
-        let author_exists =
-            namada_account::exists(&self.ctx.pre(), &author).unwrap_or(false);
+        namada_account::exists(&self.ctx.pre(), &author).true_or_else(
+            || {
+                native_vp::Error::new_alloc(format!(
+                    "No author account {author} could be found for the \
+                     proposal with id {proposal_id}"
+                ))
+                .into()
+            },
+        )?;
 
-        Ok(author_exists && verifiers.contains(&author))
+        verifiers.contains(&author).ok_or_else(|| {
+            native_vp::Error::new_alloc(format!(
+                "The VP of the proposal with id {proposal_id}'s author \
+                 {author} should have been triggered"
+            ))
+            .into()
+        })
     }
 
     /// Validate a counter key
-    pub fn is_valid_counter(&self, set_count: u64) -> Result<bool> {
+    pub fn is_valid_counter(&self, set_count: u64) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
         let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
         let post_counter: u64 =
             self.force_read(&counter_key, ReadType::Post)?;
 
-        Ok(pre_counter + set_count == post_counter)
+        let expected_counter = pre_counter + set_count;
+        let valid_counter = post_counter;
+
+        valid_counter.ok_or_else(|| {
+            native_vp::Error::new_alloc(format!(
+                "Invalid proposal counter. Expected {expected_counter}, but \
+                 got {post_counter} instead."
+            ))
+            .into()
+        })
     }
 
     /// Validate a commit key
-    pub fn is_valid_proposal_commit(&self) -> Result<bool> {
+    pub fn is_valid_proposal_commit(&self) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
         let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
         let post_counter: u64 =
@@ -905,22 +1001,44 @@ where
         // NOTE: can't do pre_counter + set_count == post_counter here
         // because someone may update an empty proposal that just
         // register a committing key causing a bug
-        Ok(pre_counter < post_counter)
+        let pre_counter_is_lower = pre_counter < post_counter;
+
+        pre_counter_is_lower.ok_or_else(|| {
+            native_vp::Error::new_alloc(format!(
+                "The value of the previous counter {pre_counter} must be \
+                 lower than the value of the new counter {post_counter}."
+            ))
+            .into()
+        })
     }
 
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
-        match tx.data() {
-            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                .map_err(Error),
-            None => Ok(false),
-        }
+    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
+        tx.data().map_or_else(
+            || {
+                Err(native_vp::Error::new_const(
+                    "Governance parameter changes require tx data to be \
+                     present",
+                ))
+            },
+            |data| {
+                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                    .map_err(Error)?
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Governance parameter changes can only be \
+                             performed by a governance proposal that has been \
+                             accepted",
+                        )
+                        .into()
+                    })
+            },
+        )
     }
 
     /// Check if a vote is from a validator
     pub fn is_validator(
         &self,
-        _epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
         delegation_address: &Address,
