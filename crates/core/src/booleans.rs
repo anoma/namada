@@ -16,7 +16,7 @@ pub trait BoolResultUnitExt<E> {
 impl<E> BoolResultUnitExt<E> for bool {
     #[inline]
     fn ok_or(self, error: E) -> Result<(), E> {
-        self.ok_or_else(|| error)
+        if self { Ok(()) } else { Err(error) }
     }
 
     #[inline]
