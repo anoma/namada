@@ -1271,7 +1271,7 @@ pub async fn query_proposal_result(
             (proposal_result, proposal_query)
         {
             display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-            if current_epoch >= proposal_query.voting_end_epoch {
+            if current_epoch > proposal_query.voting_end_epoch {
                 display_line!(context.io(), "{:4}{}", "", proposal_result);
             } else {
                 display_line!(

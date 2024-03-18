@@ -545,6 +545,12 @@ where
             return Ok(false);
         }
 
+        // TODO: HACK THAT NEEDS TO BE PROPERLY FIXED WITH PARAM
+        let latency = 30u64;
+        if start_epoch.0 - current_epoch.0 > latency {
+            return Ok(false);
+        }
+
         Ok((end_epoch - start_epoch) % min_period == 0
             && (end_epoch - start_epoch).0 >= min_period)
     }
