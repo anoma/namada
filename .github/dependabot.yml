@@ -1,19 +1,15 @@
-# .github/dependabot.yml
-
 version: 2
 updates:
-  # Define the package ecosystems to monitor for updates
   - package-ecosystem: "cargo"
-    # Specify directories where Dependabot should look for manifests
+
     directory: "/"
-    # Set update frequency (daily, weekly, or monthly)
+
     schedule:
       interval: "daily"
-    # Define the types of updates to check for (dependencies, security)
-    open-pull-requests-limit: 10 # Maximum number of open pull requests at once
-    # Limit the number of open pull requests at once
+
+    open-pull-requests-limit: 10
+
     ignore:
-      # Exclude certain dependencies or packages from being updated
       - dependency-name: "mach"
         versions: ["0.3.2"]
       - dependency-name: "parity-wasm"
