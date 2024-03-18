@@ -1883,7 +1883,6 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())
