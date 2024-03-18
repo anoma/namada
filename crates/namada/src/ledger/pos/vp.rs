@@ -2,23 +2,17 @@
 
 use std::collections::BTreeSet;
 
-// use borsh::BorshDeserialize;
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 // use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_proof_of_stake::storage_key::is_params_key;
 pub use namada_proof_of_stake::types;
-// use crate::ledger::pos::{
-//     is_validator_address_raw_hash_key,
-//     is_validator_max_commission_rate_change_key,
-// };
 use namada_state::StateRead;
-use namada_state::StorageRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
-use crate::address::{Address, InternalAddress};
+use crate::address::{self, Address};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::storage::{Key, KeySeg};
 use crate::vm::WasmCacheAccess;
@@ -71,11 +65,10 @@ where
         // use validation::DataUpdate::{self, *};
         // use validation::ValidatorUpdate::*;
 
-        let addr = Address::Internal(InternalAddress::PoS);
         // let mut changes: Vec<DataUpdate> = vec![];
-        let _current_epoch = self.ctx.pre().get_block_epoch()?;
+        // let _current_epoch = self.ctx.pre().get_block_epoch()?;
 
-        tracing::debug!("\nValidating PoS Tx\n");
+        tracing::debug!("\nValidating PoS storage changes\n");
 
         for key in keys_changed {
             if is_params_key(key) {
@@ -92,22 +85,24 @@ where
                 {
                     return Ok(false);
                 }
-            } else if key.segments.first() == Some(&addr.to_db_key()) {
-                // Unknown changes to this address space are disallowed
-                // tracing::info!("PoS unrecognized key change {} rejected",
-                // key);
+                let params = read_pos_params(&self.ctx.post())?.owned;
+                if !params.validate().is_empty() {
+                    return Ok(false);
+                }
+            } else if key.segments.first() == Some(&address::POS.to_db_key()) {
+                // No VP logic applied to all other PoS keys for now, as PoS txs
+                // are all whitelisted
                 tracing::debug!(
                     "PoS key change {} - No action is taken currently.",
                     key
                 );
-                // return Ok(false);
             } else {
-                tracing::debug!("PoS unrecognized key change {}", key);
                 // Unknown changes anywhere else are permitted
+                tracing::debug!("PoS unrecognized key change {}", key);
             }
         }
 
-        let _params = read_pos_params(&self.ctx.pre())?;
+        // let _params = read_pos_params(&self.ctx.pre())?;
         // let errors = validate(&params, changes, current_epoch);
         // Ok(if errors.is_empty() {
         //     true
