@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use namada_core::booleans::BoolResultUnitExt;
 use namada_governance::is_proposal_accepted;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;
@@ -168,14 +169,12 @@ where
                         == dec_mint.checked_sub(inc_mint)
                 };
 
-            if token_changes_are_balanced {
-                Ok(())
-            } else {
-                Err(native_vp::Error::new_const(
+            token_changes_are_balanced.ok_or_else(|| {
+                native_vp::Error::new_const(
                     "The transaction's token changes are unbalanced",
                 )
-                .into())
-            }
+                .into()
+            })
         })
     }
 }
@@ -200,14 +199,12 @@ where
                         if minter
                             == Address::Internal(InternalAddress::Ibc) =>
                     {
-                        if verifiers.contains(&minter) {
-                            Ok(())
-                        } else {
-                            Err(native_vp::Error::new_const(
+                        verifiers.contains(&minter).ok_or_else(|| {
+                            native_vp::Error::new_const(
                                 "The IBC VP was not triggered",
                             )
-                            .into())
-                        }
+                            .into()
+                        })
                     }
                     _ => Err(native_vp::Error::new_const(
                         "Only the IBC account is able to mint IBC tokens",
@@ -231,16 +228,15 @@ where
                 ))
             },
             |data| {
-                if is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                     .map_err(Error::NativeVpError)?
-                {
-                    Ok(())
-                } else {
-                    Err(native_vp::Error::new_const(
-                        "Token parameter changes can only be performed by a \
-                         governance proposal that has been accepted",
-                    ))
-                }
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Token parameter changes can only be performed by \
+                             a governance proposal that has been accepted",
+                        )
+                        .into()
+                    })
             },
         )
     }
