@@ -1541,7 +1541,7 @@ impl<C: NamadaTypes> MetaDataChange<C> {
     /// New validator alias
     pub fn validator_alias(self, validator_alias: String) -> Self {
         Self {
-            avatar: Some(validator_alias),
+            validator_alias: Some(validator_alias),
             ..self
         }
     }
