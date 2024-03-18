@@ -6,6 +6,9 @@ use std::fmt;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ethabi::Token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 pub use tiny_keccak::{Hasher, Keccak};
@@ -37,6 +40,7 @@ pub enum TryFromError {
     Ord,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct KeccakHash(pub [u8; 32]);

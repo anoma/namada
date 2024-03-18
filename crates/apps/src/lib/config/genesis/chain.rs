@@ -15,6 +15,9 @@ use namada::core::key::{common, RefTo};
 use namada::core::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::core::token::Amount;
 use namada::ledger::parameters::EpochDuration;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
@@ -589,6 +592,7 @@ pub struct Chain<ID> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -619,6 +623,7 @@ impl FinalizedTokens {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -640,6 +645,7 @@ impl DeriveEstablishedAddress for (&Alias, &templates::TokenConfig) {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -696,6 +702,7 @@ impl FinalizedTransactions {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -741,6 +748,7 @@ impl FinalizedParameters {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
 )]
@@ -757,6 +765,7 @@ pub struct FinalizedEstablishedAccountTx {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
 )]

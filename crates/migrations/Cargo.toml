@@ -1,6 +1,6 @@
 [package]
-name = "namada_macros"
-description = "Namada macros"
+name = "namada_migrations"
+description = "Namada DB migration tooling"
 resolver = "2"
 authors.workspace = true
 edition.workspace = true
@@ -13,16 +13,9 @@ repository.workspace = true
 version.workspace = true
 
 [lib]
-proc-macro = true
 
 [dependencies]
 data-encoding.workspace = true
-paste.workspace = true
-proc-macro2 = "1.0"
-quote = "1.0"
-syn = {version="1.0", features = ["full", "extra-traits"]}
-sha2.workspace = true
-lazy_static = "1.4.0"
-
-[dev-dependencies]
-pretty_assertions.workspace = true
+lazy_static.workspace = true
+linkme.workspace = true
+serde.workspace = true

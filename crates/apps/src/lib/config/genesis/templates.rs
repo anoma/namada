@@ -16,6 +16,9 @@ use namada::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
 use namada::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
@@ -66,6 +69,7 @@ pub fn read_transactions(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -116,6 +120,7 @@ impl UndenominatedBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -131,6 +136,7 @@ pub struct DenominatedBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -146,6 +152,7 @@ pub struct RawTokenBalances(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -161,6 +168,7 @@ pub struct TokenBalances(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -176,6 +184,7 @@ pub struct ValidityPredicates {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -190,6 +199,7 @@ pub struct WasmVpConfig {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -204,6 +214,7 @@ pub struct Tokens {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -366,6 +377,7 @@ impl ChainParams<Unvalidated> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -417,6 +429,7 @@ pub struct PosParams {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -469,6 +482,7 @@ pub struct PgfParams<T: TemplateValidation> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -498,6 +512,7 @@ impl TokenBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -512,6 +527,7 @@ pub struct Unvalidated {}
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,

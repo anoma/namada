@@ -7,6 +7,9 @@ use namada_core::address::Address;
 use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::storage::Epoch;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -32,6 +35,7 @@ pub enum ProposalError {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -69,6 +73,7 @@ impl InitProposalData {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -167,6 +172,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -191,6 +197,7 @@ impl StoragePgfFunding {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -243,6 +250,7 @@ where
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Ord,
@@ -294,6 +302,7 @@ impl Display for PGFTarget {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Ord,
@@ -309,7 +318,15 @@ pub struct PGFInternalTarget {
 
 /// The target of a PGF payment
 #[derive(
-    Debug, Clone, PartialEq, Serialize, Deserialize, Ord, Eq, PartialOrd,
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Ord,
+    Eq,
+    PartialOrd,
+    BorshDeserializer,
 )]
 pub struct PGFIbcTarget {
     /// The target address on the target chain
@@ -393,6 +410,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Eq,
@@ -508,7 +526,7 @@ impl Display for PGFAction {
     }
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 /// Proposal representation when fetched from the storage
 pub struct StorageProposal {
     /// The proposal id

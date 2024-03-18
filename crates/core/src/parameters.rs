@@ -2,6 +2,10 @@
 
 use std::collections::BTreeMap;
 
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
+
 use super::address::Address;
 use super::chain::ProposalBytes;
 use super::dec::Dec;
@@ -21,6 +25,7 @@ use crate::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct Parameters {
@@ -68,6 +73,7 @@ pub struct Parameters {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct EpochDuration {
