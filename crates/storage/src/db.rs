@@ -260,6 +260,12 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         key: &Key,
     ) -> Result<()>;
+
+    /// Delete the entire replay protection buffer
+    fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -294,6 +300,9 @@ pub trait DBIter<'iter> {
 
     /// Read replay protection storage from the last block
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
+
+    /// Read replay protection storage from the the buffer
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.

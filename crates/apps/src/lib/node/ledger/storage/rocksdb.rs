@@ -12,11 +12,13 @@
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
-//!   - `replay_protection`: hashes of the processed transactions
+//!   - `update_epoch_blocks_delay`: number of missing blocks before updating
+//!     PoS with CometBFT
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!     - `update_epoch_blocks_delay`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
@@ -515,6 +517,7 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
+            "update_epoch_blocks_delay",
             "tx_queue",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
@@ -528,7 +531,7 @@ impl RocksDB {
             // NOTE: we cannot restore the "pred/" keys themselves since we
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
-            // Tendermint.
+            // CometBFT.
         }
 
         // Revert conversion state if the epoch had been changed
@@ -549,11 +552,30 @@ impl RocksDB {
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
-        // Delete the tx hashes included in the last block
+        // Restore the state of replay protection to the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
-        tracing::info!("Removing replay protection hashes");
-        batch
-            .delete_cf(reprot_cf, replay_protection::last_prefix().to_string());
+        tracing::info!("Restoring replay protection state");
+        // Remove the "last" tx hashes
+        for (ref hash_str, _, _) in self.iter_replay_protection() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::last_key(&hash);
+            batch.delete_cf(reprot_cf, key.to_string());
+        }
+
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let last_key = replay_protection::last_key(&hash);
+            // Restore "buffer" bucket to "last"
+            batch.put_cf(reprot_cf, last_key.to_string(), vec![]);
+
+            // Remove anything in the buffer from the "all" prefix. Note that
+            // some hashes might be missing from "all" if they have been
+            // deleted, this is fine, in this case just continue
+            let all_key = replay_protection::all_key(&hash);
+            batch.delete_cf(reprot_cf, all_key.to_string());
+        }
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -1533,6 +1555,23 @@ impl DB for RocksDB {
 
         Ok(())
     }
+
+    fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+    ) -> Result<()> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::buffer_key(&hash);
+            batch.0.delete_cf(replay_protection_cf, key.to_string());
+        }
+
+        Ok(())
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
@@ -1583,6 +1622,15 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
         let stripped_prefix = Some(replay_protection::last_prefix());
+        iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
+    }
+
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+        let replay_protection_cf = self
+            .get_column_family(REPLAY_PROTECTION_CF)
+            .expect("{REPLAY_PROTECTION_CF} column family should exist");
+
+        let stripped_prefix = Some(replay_protection::buffer_prefix());
         iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
     }
 }
@@ -1785,6 +1833,7 @@ mod imp {
 #[cfg(test)]
 mod test {
     use namada::core::address::EstablishedAddressGen;
+    use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
     use tempfile::tempdir;
@@ -2014,6 +2063,26 @@ mod test {
             true,
         )
         .unwrap();
+        for tx in [b"tx1", b"tx2"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::all_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::buffer_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
+        for tx in [b"tx3", b"tx4"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
 
         add_block_to_batch(
             &db,
@@ -2048,6 +2117,34 @@ mod test {
         db.batch_delete_subspace_val(&mut batch, height_1, &delete_key, true)
             .unwrap();
 
+        db.prune_replay_protection_buffer(&mut batch).unwrap();
+        db.write_replay_protection_entry(
+            &mut batch,
+            &replay_protection::all_key(&Hash::sha256(b"tx3")),
+        )
+        .unwrap();
+
+        for tx in [b"tx3", b"tx4"] {
+            db.delete_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::buffer_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
+        for tx in [b"tx5", b"tx6"] {
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::last_key(&Hash::sha256(tx)),
+            )
+            .unwrap();
+        }
+
         add_block_to_batch(
             &db,
             &mut batch,
@@ -2067,6 +2164,14 @@ mod test {
         let deleted = db.read_subspace_val(&delete_key).unwrap();
         assert_eq!(deleted, None);
 
+        for tx in [b"tx1", b"tx2", b"tx3", b"tx5", b"tx6"] {
+            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
+        }
+        assert!(
+            !db.has_replay_protection_entry(&Hash::sha256(b"tx4"))
+                .unwrap()
+        );
+
         // Rollback to the first block height
         db.rollback(height_0).unwrap();
 
@@ -2084,6 +2189,15 @@ mod test {
                 .unwrap()
                 .unwrap();
         assert_eq!(conversion_state, encode(&conversion_state_0));
+        for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
+            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
+        }
+
+        for tx in [b"tx5", b"tx6"] {
+            assert!(
+                !db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+            );
+        }
     }
 
     #[test]
