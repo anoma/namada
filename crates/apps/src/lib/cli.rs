@@ -3065,6 +3065,9 @@ pub mod args {
         arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
+        arg_opt("from-height");
+    pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
             "pool-gas-amount",
@@ -5863,12 +5866,14 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = LEDGER_ADDRESS.parse(matches);
             let batch_size = BATCH_SIZE_OPT.parse(matches);
-            let last_query_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
+            let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
             Self {
                 ledger_address,
                 batch_size,
+                start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
@@ -5881,9 +5886,14 @@ pub mod args {
                     "Optional batch size which determines how many txs to \
                      fetch before caching locally. Default is 1.",
                 ))
-                .arg(BLOCK_HEIGHT_OPT.def().help(
+                .arg(BLOCK_HEIGHT_TO_OPT.def().help(
                     "Option block height to sync up to. Default is latest.",
                 ))
+                .arg(
+                    BLOCK_HEIGHT_FROM_OPT
+                        .def()
+                        .help("Option block height to sync from."),
+                )
                 .arg(SPENDING_KEYS.def().help(
                     "List of new spending keys with which to check note \
                      ownership. These will be added to the shielded context.",
@@ -5901,6 +5911,7 @@ pub mod args {
             ShieldedSync {
                 ledger_address: self.ledger_address,
                 batch_size: self.batch_size,
+                start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
                     .spending_keys

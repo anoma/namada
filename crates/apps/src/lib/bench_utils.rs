@@ -1000,6 +1000,7 @@ impl BenchShieldedCtx {
                 &StdIo,
                 1,
                 None,
+                None,
                 &[spending_key.into()],
                 &[],
             ))
