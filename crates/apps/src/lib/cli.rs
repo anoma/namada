@@ -5547,6 +5547,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let avatar = AVATAR_OPT.parse(matches);
+            let validator_alias = VALIDATOR_ALIAS_OPT.parse(matches);
             let commission_rate = COMMISSION_RATE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
             Self {
