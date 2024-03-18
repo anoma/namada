@@ -17,6 +17,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::eth_bridge_pool::erc20_token_address;
 use namada_core::hints;
 use namada_ethereum_bridge::storage::bridge_pool::{
@@ -634,29 +635,21 @@ where
                 &wnam_address,
                 &transfer,
                 escrow_checks.token_check,
-            )
-            .and_then(|ok| {
-                if ok {
-                    Ok(())
-                } else {
-                    Err(native_vp::Error::new_const(
-                        "The wrapped NAM tokens were not escrowed properly",
-                    )
-                    .into())
-                }
+            )?
+            .ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "The wrapped NAM tokens were not escrowed properly",
+                )
+                .into()
             })
         } else {
-            self.check_escrowed_toks(escrow_checks.token_check)
-                .and_then(|ok| {
-                    if ok {
-                        Ok(())
-                    } else {
-                        Err(native_vp::Error::new_alloc(format!(
-                            "The {} tokens were not escrowed properly",
-                            transfer.transfer.asset
-                        ))
-                        .into())
-                    }
+            self.check_escrowed_toks(escrow_checks.token_check)?
+                .ok_or_else(|| {
+                    native_vp::Error::new_alloc(format!(
+                        "The {} tokens were not escrowed properly",
+                        transfer.transfer.asset
+                    ))
+                    .into()
                 })
         }
         .inspect(|_| {
