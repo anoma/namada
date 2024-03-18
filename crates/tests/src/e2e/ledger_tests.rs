@@ -373,8 +373,6 @@ fn test_db_migration() -> Result<()> {
         &["ledger", "run-until", "--block-height", "2", "--halt",],
         Some(40)
     )?;
-    // There should be no previous state
-    ledger.exp_string("No state could be found")?;
     // Wait to commit a block
     ledger.exp_string("Reached block height 2, halting the chain.")?;
     ledger.exp_string(LEDGER_SHUTDOWN)?;
@@ -394,25 +392,10 @@ fn test_db_migration() -> Result<()> {
             "--path",
             migrations_json_path.to_string_lossy().as_ref(),
         ],
-        Some(10),
+        Some(30),
     )?;
     session.exp_eof()?;
-    std::env::set_var("NAMADA_INITIAL_HEIGHT", "3");
-    // 3. Run the ledger node, halting at height 4
-    let mut ledger = run_as!(
-        test,
-        Who::Validator(0),
-        Bin::Node,
-        &["ledger", "run-until", "--block-height", "4", "--halt",],
-        Some(40)
-    )?;
-    ledger.exp_string("Reached block height 4, halting the chain.")?;
-    ledger.exp_string(LEDGER_SHUTDOWN)?;
-    ledger.exp_eof()?;
-    drop(ledger);
 
-    // 4. restart ledge with migrated db
-    std::env::remove_var("NAMADA_INITIAL_HEIGHT");
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;

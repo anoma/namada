@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key,
+    BlockHash, BlockHeight, BlockResults, DbColFam, Epoch, Epochs,
+    EthEventsQueue, Header, Key,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{ethereum_events, ethereum_structs};
@@ -274,6 +274,7 @@ pub trait DB: Debug {
         &self,
         batch: &mut Self::WriteBatch,
         height: Option<BlockHeight>,
+        cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()>;
