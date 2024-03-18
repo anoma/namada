@@ -267,6 +267,16 @@ pub trait DB: Debug {
         &mut self,
         batch: &mut Self::WriteBatch,
     ) -> Result<()>;
+
+    /// Overwrite a new value in storage, taking into
+    /// account values stored at a previous height
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.

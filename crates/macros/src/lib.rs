@@ -414,8 +414,7 @@ fn impl_borsh_deserializer<T: ToTokens>(
         #[cfg(feature = "migrations")]
         #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
         static #deserializer_ident: fn() = || {
-            let mut locked = ::namada_migrations::TYPE_DESERIALIZERS.lock().unwrap();
-            locked.insert(#hash, |bytes| {
+            ::namada_migrations::register_deserializer(#hash, |bytes| {
                 #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
             });
         };
