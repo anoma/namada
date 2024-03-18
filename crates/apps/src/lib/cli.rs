@@ -7193,7 +7193,6 @@ pub mod args {
                 .arg(VALIDATOR_ALIAS_OPT.def().help(
                     "The validator's alias. This is an optional parameter.",
                 ))
-                
         }
     }
 
