@@ -28,6 +28,7 @@ pub enum TestWasms {
     VpMemoryLimit,
     VpReadStorageKey,
     TxProposalMaspRewards,
+    TxProposalIbcTokenInflation,
 }
 
 impl TestWasms {
@@ -46,6 +47,9 @@ impl TestWasms {
             TestWasms::VpMemoryLimit => "vp_memory_limit.wasm",
             TestWasms::VpReadStorageKey => "vp_read_storage_key.wasm",
             TestWasms::TxProposalMaspRewards => "tx_proposal_masp_reward.wasm",
+            TestWasms::TxProposalIbcTokenInflation => {
+                "tx_proposal_ibc_token_inflation.wasm"
+            }
         };
         let cwd =
             env::current_dir().expect("Couldn't get current working directory");

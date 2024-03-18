@@ -18,8 +18,6 @@ pub struct ConversionState {
     pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
-    /// A map from token alias to actual address.
-    pub tokens: BTreeMap<String, Address>,
     /// Map assets to their latest conversion and position in Merkle tree
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<

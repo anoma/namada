@@ -17,6 +17,7 @@ wasms += vp_memory_limit
 wasms += vp_read_storage_key
 wasms += tx_proposal_code
 wasms += tx_proposal_masp_reward
+wasms += tx_proposal_ibc_token_inflation
 
 
 # Build all wasms

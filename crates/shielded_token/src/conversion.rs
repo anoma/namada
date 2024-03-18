@@ -1,7 +1,11 @@
 //! MASP rewards conversions
 
 use namada_core::address::{Address, MASP};
+#[cfg(any(feature = "multicore", test))]
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::hash::Hash;
 use namada_core::uint::Uint;
 use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
@@ -11,6 +15,8 @@ use namada_trans_token::inflation::{
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
+#[cfg(any(feature = "multicore", test))]
+use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
@@ -220,12 +226,10 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let mut masp_reward_keys: Vec<_> = storage
-        .conversion_state()
-        .tokens
-        .values()
-        .cloned()
-        .collect();
+    let token_map_key = masp_token_map_key();
+    let token_map: namada_core::masp::TokenMap =
+        storage.read(&token_map_key)?.unwrap_or_default();
+    let mut masp_reward_keys: Vec<_> = token_map.values().cloned().collect();
     let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
     // on it
@@ -517,6 +521,10 @@ where
             );
         }
     }
+    // store only the assets hash because the size is quite large
+    let assets_hash =
+        Hash::sha256(storage.conversion_state().assets.serialize_to_vec());
+    storage.write(&masp_assets_hash_key(), assets_hash)?;
 
     Ok(())
 }
@@ -615,9 +623,11 @@ mod tests {
                 .unwrap();
 
                 // Insert tokens into MASP conversion state
-                s.conversion_state_mut()
-                    .tokens
-                    .insert(alias.to_string(), token_addr.clone());
+                let token_map_key = masp_token_map_key();
+                let mut token_map: namada_core::masp::TokenMap =
+                    s.read(&token_map_key).unwrap().unwrap_or_default();
+                token_map.insert(alias.to_string(), token_addr.clone());
+                s.write(&token_map_key, token_map).unwrap();
             }
         }
 
