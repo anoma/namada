@@ -15,7 +15,6 @@ use namada_merkle_tree::{
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
-use crate::tx_queue::TxQueue;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -69,8 +68,6 @@ pub struct BlockStateRead {
     pub results: BlockResults,
     /// The conversion state
     pub conversion_state: ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
@@ -106,8 +103,6 @@ pub struct BlockStateWrite<'a> {
     pub results: &'a BlockResults,
     /// The conversion state
     pub conversion_state: &'a ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: &'a TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,

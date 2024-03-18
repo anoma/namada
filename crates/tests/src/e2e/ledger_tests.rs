@@ -58,8 +58,8 @@ use crate::e2e::setup::{
     Who,
 };
 use crate::strings::{
-    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_ACCEPTED,
-    TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
+    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
+    TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
 
@@ -579,10 +579,6 @@ fn ledger_txs_and_queries() -> Result<()> {
                 tx_args.clone()
             };
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-
-            if !dry_run {
-                client.exp_string(TX_ACCEPTED)?;
-            }
             client.exp_string(TX_APPLIED_SUCCESS)?;
             client.assert_success();
         }
@@ -753,7 +749,6 @@ fn wrapper_disposable_signer() -> Result<()> {
             &validator_one_rpc,
         ];
         let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-        client.exp_string(TX_ACCEPTED)?;
         client.exp_string(TX_APPLIED_SUCCESS)?;
     }
 
@@ -792,7 +787,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
@@ -849,7 +843,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
@@ -899,7 +892,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_REJECTED)?;
 
     client.assert_success();
@@ -951,7 +943,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_FAILED)?;
     client.assert_success();
     Ok(())
@@ -1803,7 +1794,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string(TX_ACCEPTED)?;
                 client.exp_string(TX_APPLIED_SUCCESS)?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
@@ -1821,20 +1811,24 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     Ok(())
 }
 
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Submit a valid proposal
-/// 3. Query the proposal
-/// 4. Query token balance (submitted funds)
-/// 5. Query governance address balance
-/// 6. Submit an invalid proposal
-/// 7. Check invalid proposal was not accepted
-/// 8. Query token balance (funds shall not be submitted)
-/// 9. Send a yay vote from a validator
-/// 10. Send a yay vote from a normal user
-/// 11. Query the proposal and check the result
-/// 12. Wait proposal grace and check proposal author funds
-/// 13. Check governance address funds are 0
+// In this test we:
+// 1. Run the ledger node
+// 2. Submit a valid proposal
+// 3. Query the proposal
+// 4. Query token balance (submitted funds)
+// 5. Query governance address balance
+// 6. Submit an invalid proposal
+// 7. Check invalid proposal was not accepted
+// 8. Query token balance (funds shall not be submitted)
+// 9. Send a yay vote from a validator
+// 10. Send a yay vote from a normal user
+// 11. Query the proposal and check the result
+// 12. Wait proposal grace and check proposal author funds
+// 13. Check governance address funds are 0
+// 14. Query the new parameters
+// 15. Try to initialize a new account which should fail
+// 16. Submit a tx that triggers an already existing account which should
+//     succeed
 #[test]
 fn proposal_submission() -> Result<()> {
     let test = setup::network(
@@ -2133,13 +2127,56 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("nam: 0")?;
     client.assert_success();
 
-    // // 14. Query parameters
+    // 14. Query parameters
     let query_protocol_parameters =
         vec!["query-protocol-parameters", "--node", &validator_one_rpc];
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
     client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
+    client.assert_success();
+
+    // 15. Try to initialize a new account with the no more allowlisted vp
+    let init_account = vec![
+        "init-account",
+        "--public-keys",
+        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
+        "--threshold",
+        "1",
+        "--code-path",
+        VP_USER_WASM,
+        "--alias",
+        "Test-Account",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, init_account, Some(30))?;
+    client.exp_regex("VP code is not allowed in allowlist parameter")?;
+    client.assert_success();
+
+    // 16. Submit a tx touching a previous account with the no more allowlisted
+    //     vp and verify that the transaction succeeds, i.e. the non allowlisted
+    //     vp can still run
+    let transfer = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, transfer, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
@@ -3303,6 +3340,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let _bg_validator_0 =
@@ -3815,6 +3859,7 @@ fn change_consensus_key() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(
