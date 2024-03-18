@@ -4140,7 +4140,6 @@ where
     Ok(result)
 }
 
-
 #[test]
 fn rollback() -> Result<()> {
     let test = setup::single_node_net()?;
@@ -4193,31 +4192,36 @@ fn rollback() -> Result<()> {
     drop(ledger);
 
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
-    let (_, matched_one) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+    let (_, matched_one) =
+        ledger.exp_regex("Last state root hash: .*, height: .*")?;
 
     ledger.exp_regex("Committed block hash: .*,")?;
     ledger.interrupt()?;
     drop(ledger);
 
-    let mut rollback = run_as!(test, Who::Validator(0), Bin::Node, &["ledger", "rollback"], Some(40))?;
+    let mut rollback = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Node,
+        &["ledger", "rollback"],
+        Some(40)
+    )?;
     rollback.assert_success();
 
     let mut ledger = start_namada_ledger_node(&test, Some(0), Some(40))?;
-    let (_, matched_two) = ledger.exp_regex("Last state root hash: .*, height: .*")?;
+    let (_, matched_two) =
+        ledger.exp_regex("Last state root hash: .*, height: .*")?;
 
     println!("{}, {}", matched_one, matched_two);
 
-
-    
-
-    // read Committed block hash: {merkle_root}, height: {committed_height} with committed height =  height + 1
+    // read Committed block hash: {merkle_root}, height: {committed_height} with
+    // committed height =  height + 1
 
     // stop ledger
 
     // rollback
 
     // check last app hash = committed one
-
 
     Ok(())
 }

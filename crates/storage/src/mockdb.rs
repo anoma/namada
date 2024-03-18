@@ -16,7 +16,8 @@ use namada_core::storage::{
 use namada_core::time::DateTimeUtc;
 use namada_core::{decode, encode, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
-    base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
+    MerkleTreeStoresRead, StoreType,
 };
 use namada_replay_protection as replay_protection;
 
@@ -172,7 +173,7 @@ impl DB for MockDB {
         // Restore subtrees of Merkle tree
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
-                let prefix_key = subtree_key_prefix(st, epoch);
+                let prefix_key = tree_key_prefix_with_epoch(st, epoch);
                 let root_key =
                     prefix_key.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
@@ -275,11 +276,15 @@ impl DB for MockDB {
         // Merkle tree
         {
             for st in StoreType::iter() {
-                if *st == StoreType::Base || is_full_commit {
-                    let key_prefix = if *st == StoreType::Base {
-                        base_tree_key_prefix(height)
-                    } else {
-                        subtree_key_prefix(st, epoch)
+                if *st == StoreType::Base
+                    || *st == StoreType::CommitData
+                    || is_full_commit
+                {
+                    let key_prefix = match st {
+                        StoreType::Base | StoreType::CommitData => {
+                            tree_key_prefix_with_height(st, height)
+                        }
+                        _ => tree_key_prefix_with_epoch(st, epoch),
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
@@ -382,10 +387,11 @@ impl DB for MockDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if *st == StoreType::Base {
-                base_tree_key_prefix(base_height)
-            } else {
-                subtree_key_prefix(st, epoch)
+            let key_prefix = match st {
+                StoreType::Base | StoreType::CommitData => {
+                    tree_key_prefix_with_height(st, base_height)
+                }
+                _ => tree_key_prefix_with_epoch(st, epoch),
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self.0.borrow().get(&root_key.to_string()).cloned();
@@ -619,7 +625,7 @@ impl DB for MockDB {
         store_type: &StoreType,
         epoch: Epoch,
     ) -> Result<()> {
-        let prefix_key = subtree_key_prefix(store_type, epoch);
+        let prefix_key = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = prefix_key
             .push(&"root".to_owned())
             .map_err(Error::KeyError)?;

@@ -472,11 +472,6 @@ mod tests {
         let mut batch = PersistentState::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
             if height != state.in_mem().block.height {
-                // to check the root later
-                roots.insert(
-                    state.in_mem().block.height,
-                    state.in_mem().merkle_root(),
-                );
                 if state.in_mem().block.height.0 % 5 == 0 {
                     // new epoch every 5 heights
                     state.in_mem_mut().block.epoch =
@@ -485,6 +480,11 @@ mod tests {
                     state.in_mem_mut().block.pred_epochs.new_epoch(height);
                 }
                 state.commit_block_from_batch(batch)?;
+                // to check the root later
+                roots.insert(
+                    state.in_mem().block.height,
+                    state.in_mem().merkle_root(),
+                );
                 let hash = BlockHash::default();
                 let next_height = state.in_mem().block.height.next_height();
                 state.in_mem_mut().begin_block(hash, next_height)?;
