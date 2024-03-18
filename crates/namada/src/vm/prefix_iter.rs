@@ -1,8 +1,7 @@
 //! The storage prefix iterators can be used to iterate over a common prefix of
 //! storage keys.
 
-use std::collections::HashMap;
-
+use namada_core::collections::HashMap;
 use namada_state::PrefixIter;
 
 /// A temporary iterators storage, used during a wasm run after which it's

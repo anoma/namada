@@ -6,8 +6,7 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use std::collections::HashMap;
-
+use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::storage::BlockHeight;
 
@@ -141,7 +140,7 @@ mod tests {
                 event_type: EventType::Accepted,
                 level: EventLevel::Block,
                 attributes: {
-                    let mut attrs = std::collections::HashMap::new();
+                    let mut attrs = namada_core::collections::HashMap::new();
                     attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },
@@ -152,7 +151,7 @@ mod tests {
                 event_type: EventType::Applied,
                 level: EventLevel::Block,
                 attributes: {
-                    let mut attrs = std::collections::HashMap::new();
+                    let mut attrs = namada_core::collections::HashMap::new();
                     attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },

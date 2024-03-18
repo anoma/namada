@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 
 use crate::pgf::REWARD_DISTRIBUTION_LIMIT;

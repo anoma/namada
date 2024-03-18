@@ -10,7 +10,6 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,6 +31,7 @@ use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::chain::ChainId;
+use namada_core::collections::HashMap;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;

@@ -1,0 +1,4 @@
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "Non-deterministic iter - use indexmap::IndexMap instead" },
+  { path = "std::collections::HashSet", reason = "Non-deterministic iter - use indexmap::IndexSet instead" },
+]

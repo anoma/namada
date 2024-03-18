@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::core::account::AccountPublicKeysMap;
 use namada::core::address;
+use namada::core::collections::{HashMap, HashSet};
 use namada::ledger::storage::DB;
 use namada::token::{Amount, Transfer};
 use namada::tx::Signature;

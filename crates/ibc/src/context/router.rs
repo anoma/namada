@@ -1,8 +1,8 @@
 //! Functions to handle IBC modules
 
-use std::collections::HashMap;
 use std::rc::Rc;
 
+use namada_core::collections::HashMap;
 use namada_core::ibc::core::host::types::identifiers::PortId;
 use namada_core::ibc::core::router::module::Module;
 use namada_core::ibc::core::router::router::Router;

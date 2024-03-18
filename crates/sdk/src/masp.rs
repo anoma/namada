@@ -1,7 +1,7 @@
 //! MASP verification wrappers.
 
 use std::cmp::Ordering;
-use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -51,6 +51,7 @@ use masp_proofs::prover::LocalTxProver;
 #[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::{Address, MASP};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,

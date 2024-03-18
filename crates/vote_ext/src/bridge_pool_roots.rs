@@ -2,11 +2,11 @@
 //! of the bridge pool merkle root to be added
 //! to storage. This will be used to generate
 //! bridge pool inclusion proofs for Ethereum.
-use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::collections::HashSet;
 use namada_core::key::common;
 use namada_core::key::common::Signature;
 use namada_core::storage::BlockHeight;
@@ -117,7 +117,7 @@ impl DerefMut for MultiSignedVext {
 }
 
 impl IntoIterator for MultiSignedVext {
-    type IntoIter = std::collections::hash_set::IntoIter<SignedVext>;
+    type IntoIter = namada_core::collections::hash_set::IntoIter<SignedVext>;
     type Item = SignedVext;
 
     fn into_iter(self) -> Self::IntoIter {

@@ -1,8 +1,10 @@
 //! Validity predicate for the Ethereum bridge
-use std::collections::{BTreeSet, HashSet};
+
+use std::collections::BTreeSet;
 
 use eyre::{eyre, Result};
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;

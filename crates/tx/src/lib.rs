@@ -4,9 +4,8 @@ pub mod data;
 pub mod proto;
 mod types;
 
-use std::collections::HashMap;
-
 use data::TxType;
+use namada_core::collections::HashMap;
 use namada_core::event::{Event, EventLevel, EventType};
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;

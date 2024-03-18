@@ -1,7 +1,7 @@
 //! SDK RPC queries
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
@@ -11,6 +11,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::key::common;
 use namada_core::storage::{
@@ -720,7 +721,7 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
         )
     })?;
     // Reformat the event attributes so as to ease value extraction
-    let event_map: std::collections::HashMap<&str, &str> = query_event
+    let event_map: namada_core::collections::HashMap<&str, &str> = query_event
         .attributes
         .iter()
         .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))

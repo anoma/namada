@@ -1,10 +1,11 @@
 //! Slashing tingzzzz
 
 use std::cmp::{self, Reverse};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::tm_raw_hash_to_string;
 use namada_core::storage::{BlockHeight, Epoch};

@@ -1,11 +1,12 @@
 //! Logic for acting on events
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
     erc20_nut_address, erc20_token_address, PendingTransfer,
@@ -355,7 +356,7 @@ where
             balance.spend(&pending_transfer.gas_fee.amount)
         })?;
         state.delete(&key)?;
-        _ = pending_keys.remove(&key);
+        _ = pending_keys.swap_remove(&key);
         _ = changed_keys.insert(key);
         _ = changed_keys.insert(pool_balance_key);
         _ = changed_keys.insert(relayer_rewards_key);
@@ -568,11 +569,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use assert_matches::assert_matches;
     use namada_core::address::gen_established_address;
     use namada_core::address::testing::{gen_implicit_address, nam, wnam};
+    use namada_core::collections::HashMap;
     use namada_core::eth_bridge_pool::GasFee;
     use namada_core::ethereum_events::testing::{
         arbitrary_keccak_hash, arbitrary_nonce, DAI_ERC20_ETH_ADDRESS,

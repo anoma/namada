@@ -5,7 +5,6 @@
 //! `universal` module).
 
 use std::collections::hash_map::RandomState;
-use std::collections::HashMap;
 use std::fs;
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -15,6 +14,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clru::{CLruCache, CLruCacheConfig, WeightScale};
+use namada_core::collections::HashMap;
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
@@ -366,7 +366,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         err
                     );
                     let mut progress = self.progress.write().unwrap();
-                    progress.remove(&hash);
+                    progress.swap_remove(&hash);
                     Err(err)
                 }
             },
@@ -377,7 +377,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     err
                 );
                 let mut progress = self.progress.write().unwrap();
-                progress.remove(&hash);
+                progress.swap_remove(&hash);
                 Err(err)
             }
         }
@@ -441,7 +441,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                             hash.to_string(),
                                             err
                                         );
-                                        progress.remove(&hash);
+                                        progress.swap_remove(&hash);
                                         return Err(err);
                                     }
                                 },
@@ -453,7 +453,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                         hash.to_string(),
                                         err
                                     );
-                                    progress.remove(&hash);
+                                    progress.swap_remove(&hash);
                                     return Err(err);
                                 }
                             };
