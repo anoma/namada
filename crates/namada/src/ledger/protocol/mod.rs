@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
@@ -927,13 +928,15 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::NutNativeVpError)
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_) => {
+                        internal_addr @ (InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_)) => {
                             // The address should be a part of a multitoken
                             // key
-                            Ok(verifiers.contains(&Address::Internal(
-                                InternalAddress::Multitoken,
-                            )))
+                            verifiers
+                                .contains(&Address::Internal(
+                                    InternalAddress::Multitoken,
+                                ))
+                                .ok_or(Error::AccessForbidden(*internal_addr))
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };

@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use namada_core::address::{Address, InternalAddress};
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_tx::Tx;
@@ -54,16 +55,15 @@ where
             "Non usable tokens VP triggered",
         );
 
-        let is_multitoken =
-            verifiers.contains(&Address::Internal(InternalAddress::Multitoken));
-        if !is_multitoken {
-            let error = native_vp::Error::new_const(
-                "Rejecting non-multitoken transfer tx",
-            )
-            .into();
-            tracing::debug!("{error}");
-            return Err(error);
-        }
+        verifiers
+            .contains(&Address::Internal(InternalAddress::Multitoken))
+            .ok_or_else(|| {
+                let error = Error(native_vp::Error::new_const(
+                    "Rejecting non-multitoken transfer tx",
+                ));
+                tracing::debug!("{error}");
+                error
+            })?;
 
         let nut_owners =
             keys_changed.iter().filter_map(
