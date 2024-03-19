@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
-pub use namada_core::ibc::{IbcEvent, IbcShieldedTransfer};
+pub use namada_core::ibc::IbcEvent;
 use namada_core::token::Amount;
 pub use namada_ibc::storage::{ibc_token, is_ibc_key};
 pub use namada_ibc::{

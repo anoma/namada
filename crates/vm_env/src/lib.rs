@@ -120,7 +120,7 @@ pub mod tx {
 
         /// Execute IBC tx.
         // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-        pub fn namada_tx_ibc_execute();
+        pub fn namada_tx_ibc_execute() -> i64;
 
         /// Set the sentinel for a wrong tx section commitment
         pub fn namada_tx_set_commitment_sentinel();

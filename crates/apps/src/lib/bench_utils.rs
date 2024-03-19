@@ -380,7 +380,7 @@ impl BenchShell {
 
         let msg = MsgTransfer {
             message,
-            shielded_transfer: None,
+            transfer: None,
         };
 
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())

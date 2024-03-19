@@ -9,7 +9,6 @@ use std::time::Duration;
 use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
@@ -18,6 +17,8 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
 use namada_core::dec::Dec;
@@ -32,11 +33,11 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
-use namada_core::ibc::{
-    is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
-};
+use namada_core::ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, TransferSource, TransferTarget};
+use namada_core::masp::{
+    AssetData, PaymentAddress, TransferSource, TransferTarget,
+};
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
@@ -48,7 +49,7 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::storage::channel_key;
+use namada_ibc::storage::{channel_key, ibc_token};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
@@ -56,6 +57,7 @@ use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Signature, *};
+use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
@@ -2111,6 +2113,9 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let refund_target =
+        get_refund_target(context, &args.source, &args.refund_target).await?;
+
     let source = args.source.effective_address();
     let signing_data = signing::aux_signing_data(
         context,
@@ -2213,38 +2218,48 @@ pub async fn build_ibc_transfer(
         tx.add_memo(memo);
     }
 
-    let shielded_transfer =
-        shielded_parts.map(|(shielded_transfer, asset_types)| {
-            let masp_tx_hash =
-                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-            let transfer = token::Transfer {
-                source: source.clone(),
-                // The token will be escrowed to IBC address
-                target: Address::Internal(InternalAddress::Ibc),
-                token: args.token.clone(),
-                amount: validated_amount,
-                // The address could be a payment address, but the address isn't
-                // that of this chain.
-                key: None,
-                // Link the Transfer to the MASP Transaction by hash code
-                shielded: Some(masp_tx_hash),
-            };
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                metadata: shielded_transfer.metadata,
-                builder: shielded_transfer.builder,
-                target: masp_tx_hash,
-            });
-            IbcShieldedTransfer {
-                transfer,
-                masp_tx: shielded_transfer.masp_tx,
-            }
+    let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
+        let masp_tx_hash =
+            tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+        let transfer = token::Transfer {
+            source: source.clone(),
+            // The token will be escrowed to IBC address
+            target: Address::Internal(InternalAddress::Ibc),
+            token: args.token.clone(),
+            amount: validated_amount,
+            // The address could be a payment address, but the address isn't
+            // that of this chain.
+            key: None,
+            // Link the Transfer to the MASP Transaction by hash code
+            shielded: Some(masp_tx_hash),
+        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            metadata: shielded_transfer.metadata,
+            builder: shielded_transfer.builder,
+            target: masp_tx_hash,
         });
+        transfer
+    });
 
     // Check the token and make the tx data
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
             .await;
+    // The refund target should be given or created if the source is shielded.
+    // Otherwise, the refund target should be None.
+    assert!(
+        (args.source.spending_key().is_some() && refund_target.is_some())
+            || (args.source.address().is_some() && refund_target.is_none())
+    );
+    // If the refund address is given, set the refund address. It is used only
+    // when refunding and won't affect the actual transfer because the actual
+    // source will be the MASP address and the MASP transaction is generated by
+    // the shielded source address.
+    let sender = refund_target
+        .map(|t| t.to_string())
+        .unwrap_or(source.to_string())
+        .into();
     let data = if args.port_id == PortId::transfer() {
         let token = PrefixedCoin {
             denom: ibc_denom
@@ -2255,7 +2270,7 @@ pub async fn build_ibc_transfer(
         };
         let packet_data = PacketData {
             token,
-            sender: source.to_string().into(),
+            sender,
             receiver: args.receiver.clone().into(),
             memo: args.memo.clone().unwrap_or_default().into(),
         };
@@ -2266,11 +2281,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgTransfer {
-            message,
-            shielded_transfer,
-        }
-        .serialize_to_vec()
+        MsgTransfer { message, transfer }.serialize_to_vec()
     } else if let Some((trace_path, base_class_id, token_id)) =
         is_nft_trace(&ibc_denom)
     {
@@ -2290,7 +2301,7 @@ pub async fn build_ibc_transfer(
             token_ids,
             token_uris: None,
             token_data: None,
-            sender: source.to_string().into(),
+            sender,
             receiver: args.receiver.clone().into(),
             memo: args.memo.clone().map(|m| m.into()),
         };
@@ -2301,11 +2312,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgNftTransfer {
-            message,
-            shielded_transfer,
-        }
-        .serialize_to_vec()
+        MsgNftTransfer { message, transfer }.serialize_to_vec()
     } else {
         return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
@@ -2863,7 +2870,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
-) -> Result<Option<IbcShieldedTransfer>> {
+) -> Result<Option<(token::Transfer, MaspTransaction)>> {
     let key = match args.target.payment_address() {
         Some(pa) if pa.is_pinned() => Some(pa.hash()),
         Some(_) => None,
@@ -2875,16 +2882,27 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let token = namada_ibc::received_ibc_token(
-        &ibc_denom,
-        &src_port_id,
-        &src_channel_id,
-        &args.port_id,
-        &args.channel_id,
-    )
-    .map_err(|e| {
-        Error::Other(format!("Getting IBC Token failed: error {e}"))
-    })?;
+    let token = if args.refund {
+        if ibc_denom.contains('/') {
+            ibc_token(ibc_denom)
+        } else {
+            // the token is a base token
+            Address::decode(&ibc_denom)
+                .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
+        }
+    } else {
+        // Need to check the prefix
+        namada_ibc::received_ibc_token(
+            &ibc_denom,
+            &src_port_id,
+            &src_channel_id,
+            &args.port_id,
+            &args.channel_id,
+        )
+        .map_err(|e| {
+            Error::Other(format!("Getting IBC Token failed: error {e}"))
+        })?
+    };
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 
@@ -2910,20 +2928,17 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     if let Some(shielded_transfer) = shielded_transfer {
+        let masp_tx_hash =
+            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
         let transfer = token::Transfer {
             source: source.clone(),
             target: MASP,
             token: token.clone(),
             amount: validated_amount,
             key,
-            shielded: Some(
-                Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash(),
-            ),
+            shielded: Some(masp_tx_hash),
         };
-        Ok(Some(IbcShieldedTransfer {
-            transfer,
-            masp_tx: shielded_transfer.masp_tx,
-        }))
+        Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)
     }
@@ -3074,6 +3089,62 @@ async fn target_exists_or_err(
         Error::from(TxSubmitError::TargetLocationDoesNotExist(err))
     })
     .await
+}
+
+/// Returns the given refund target address if the given address is valid for
+/// the IBC shielded transfer. Returns an error if the address is transparent
+/// or the address is given for non-shielded transfer.
+async fn get_refund_target(
+    context: &impl Namada,
+    source: &TransferSource,
+    refund_target: &Option<TransferTarget>,
+) -> Result<Option<PaymentAddress>> {
+    match (source, refund_target) {
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::PaymentAddress(pa)),
+        ) => Ok(Some(*pa)),
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::Address(addr)),
+        ) => Err(Error::Other(format!(
+            "Transparent address can't be specified as a refund target: {}",
+            addr,
+        ))),
+        (TransferSource::ExtendedSpendingKey(spending_key), None) => {
+            // Generate a new payment address
+            let viewing_key =
+                ExtendedFullViewingKey::from(&(*spending_key).into()).fvk.vk;
+            let mut rng = OsRng;
+            let (div, _g_d) = crate::masp::find_valid_diversifier(&mut rng);
+            let payment_addr: PaymentAddress = viewing_key
+                .to_payment_address(div)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Converting to a payment address failed".to_string(),
+                    )
+                })?
+                .into();
+            let alias = format!("ibc-refund-target-{}", rng.next_u64());
+            let mut wallet = context.wallet_mut().await;
+            wallet
+                .insert_payment_addr(alias, payment_addr, false)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Adding a new payment address failed".to_string(),
+                    )
+                })?;
+            wallet.save().map_err(|e| {
+                Error::Other(format!("Saving wallet error: {e}"))
+            })?;
+            Ok(Some(payment_addr))
+        }
+        (_, Some(_)) => Err(Error::Other(
+            "Refund target can't be specified for non-shielded transfer"
+                .to_string(),
+        )),
+        (_, None) => Ok(None),
+    }
 }
 
 enum CheckBalance {

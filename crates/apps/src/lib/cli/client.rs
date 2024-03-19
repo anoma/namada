@@ -742,20 +742,6 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
-                    Sub::GenIbcShieldedTransfer(GenIbcShieldedTransfer(
-                        args,
-                    )) => {
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        let ledger_address =
-                            chain_ctx.get(&args.query.ledger_address);
-                        let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&ledger_address)
-                        });
-                        client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
-                        tx::gen_ibc_shielded_transfer(&namada, args).await?;
-                    }
                 }
             }
             cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {

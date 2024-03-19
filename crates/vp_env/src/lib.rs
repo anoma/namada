@@ -8,14 +8,11 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
-use namada_core::ibc::core::channel::types::msgs::PacketMsg;
-use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_core::ibc::IbcEvent;
 use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
 use namada_core::token::Transfer;
-use namada_ibc::{decode_message, get_shielded_transfer, IbcMessage};
+use namada_ibc::{decode_message, IbcEvent, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;
 
@@ -121,33 +118,31 @@ where
     ) -> Result<Transaction, namada_storage::Error> {
         let signed = tx_data;
         let data = signed.data().ok_or_err_msg("No transaction data")?;
-        if let Ok(transfer) = Transfer::try_from_slice(&data) {
-            let shielded_hash = transfer
-                .shielded
-                .ok_or_err_msg("unable to find shielded hash")?;
-            let masp_tx = signed
-                .get_section(&shielded_hash)
-                .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg("unable to find shielded section")?;
-            return Ok(masp_tx);
-        }
-
-        let shielded_transfer = match decode_message(&data).map_err(|_| {
-            namada_storage::Error::new_const("Unknown IBC message")
-        })? {
-            IbcMessage::Transfer(msg) => msg.shielded_transfer,
-            IbcMessage::NftTransfer(msg) => msg.shielded_transfer,
-            IbcMessage::Envelope(envelope) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
-                    get_shielded_transfer(&msg)
-                } else {
-                    None
+        let transfer = match Transfer::try_from_slice(&data) {
+            Ok(transfer) => Some(transfer),
+            Err(_) => {
+                match decode_message(&data).map_err(|_| {
+                    namada_storage::Error::new_const("Unknown IBC message")
+                })? {
+                    IbcMessage::Transfer(msg) => msg.transfer,
+                    IbcMessage::NftTransfer(msg) => msg.transfer,
+                    IbcMessage::RecvPacket(msg) => msg.transfer,
+                    IbcMessage::AckPacket(msg) => msg.transfer,
+                    IbcMessage::Timeout(msg) => msg.transfer,
+                    IbcMessage::Envelope(_) => None,
                 }
             }
         };
-        shielded_transfer
-            .map(|st| st.masp_tx)
-            .ok_or_err_msg("No shielded transfer in the IBC message")
+
+        let shielded_hash = transfer
+            .ok_or_err_msg("Missing transfer")?
+            .shielded
+            .ok_or_err_msg("unable to find shielded hash")?;
+        let masp_tx = signed
+            .get_section(&shielded_hash)
+            .and_then(|x| x.as_ref().masp_tx())
+            .ok_or_err_msg("unable to find shielded section")?;
+        Ok(masp_tx)
     }
 
     /// Charge the provided gas for the current vp
