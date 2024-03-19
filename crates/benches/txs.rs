@@ -459,10 +459,9 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 0,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(None),
+                                    r#type: ProposalType::Default,
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),
@@ -509,12 +508,11 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 1,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(Some(
+                                    r#type: ProposalType::DefaultWithWasm(
                                         wasm_code_section.get_hash(),
-                                    )),
+                                    ),
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),

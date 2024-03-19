@@ -106,8 +106,3 @@ Vote is valid if it follows these rules:
 The outcome of a proposal is computed at the epoch specific in the `endEpoch` field and executed at `graceEpoch` field (if it contains a non-empty `proposalCode` field).
 A proposal is accepted only if enough `yay` votes (net of the voting power) to match the threshold set in `ProposalType` is reached.
 If a proposal gets accepted, the locked funds will be reimbursed to the author. In case it gets rejected, the locked funds will be moved to slash fund.
-
-## Off-chain proposal
-
-In cases where it's not possible to run a proposal online (for example, when the chain is halted), an offline mechanism can be used.
-The ledger offers the possibility to create and sign proposals that are verified against a specific chain epoch.

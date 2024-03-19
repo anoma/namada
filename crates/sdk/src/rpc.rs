@@ -997,7 +997,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                         proposal_votes.add_validator(
                             &vote.validator,
                             voting_power,
-                            vote.data.into(),
+                            vote.data,
                         );
                     }
                     false => {
@@ -1014,7 +1014,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                             &vote.delegator,
                             &vote.validator,
                             voting_power,
-                            vote.data.into(),
+                            vote.data,
                         );
                     }
                 }
