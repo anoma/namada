@@ -2005,13 +2005,14 @@ pub async fn build_vote_proposal(
     }
 
     let delegations = if is_validator {
-        let stake = get_validator_stake(context.client(), epoch, voter_address).await?;
+        let stake =
+            get_validator_stake(context.client(), epoch, voter_address).await?;
 
         if stake.is_zero() {
             eprintln!(
                 "Voter address {} is a validator but has no stake, so it has \
                  no votes.",
-                 voter_address
+                voter_address
             );
             if !tx.force {
                 return Err(Error::Other(
@@ -2032,7 +2033,10 @@ pub async fn build_vote_proposal(
         .collect::<Vec<Address>>();
 
         if validators.is_empty() {
-            eprintln!("Voter address {} does not have any delegations.", voter_address);
+            eprintln!(
+                "Voter address {} does not have any delegations.",
+                voter_address
+            );
             if !tx.force {
                 return Err(Error::Other(
                     "Voter address must have delegations".to_string(),
