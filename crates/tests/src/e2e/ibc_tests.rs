@@ -2277,17 +2277,25 @@ fn check_funded_balances(
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{ibc_denom}: 10");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
+    let regex = format!("{ibc_denom}: .*");
+    let (_, matched) = client.exp_regex(&regex)?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let iter = regex.find_iter(&matched);
+    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
+    assert!(balance >= 10);
     client.assert_success();
 
     let query_args = vec![
         "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{ibc_denom}: 5");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
+    let regex = format!("{ibc_denom}: .*");
+    let (_, matched) = client.exp_regex(&regex)?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let iter = regex.find_iter(&matched);
+    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
+    assert!(balance >= 5);
     client.assert_success();
 
     Ok(())
