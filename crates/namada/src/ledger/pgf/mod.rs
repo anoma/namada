@@ -156,7 +156,8 @@ where
             || {
                 Err(native_vp::Error::new_const(
                     "PGF parameter changes require tx data to be present",
-                ))
+                )
+                .into())
             },
             |data| {
                 is_proposal_accepted(&self.ctx.pre(), data.as_ref())
@@ -185,7 +186,7 @@ enum KeyType<'a> {
 }
 
 impl<'k> From<&'k Key> for KeyType<'k> {
-    fn from(key: &Key) -> Self {
+    fn from(key: &'k Key) -> Self {
         if let Some(addr) = pgf_storage::is_stewards_key(key) {
             Self::Stewards(addr)
         } else if pgf_storage::is_fundings_key(key) {

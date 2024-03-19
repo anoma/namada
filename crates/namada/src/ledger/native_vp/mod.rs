@@ -557,7 +557,8 @@ pub trait StorageReader {
             Ok(None) => Err(state::StorageError::AllocMessage(format!(
                 "Expected a value to be present in the key {key}"
             ))),
-            result => result,
+            Ok(Some(x)) => Ok(x),
+            Err(err) => Err(err),
         }
     }
 
@@ -570,7 +571,8 @@ pub trait StorageReader {
             Ok(None) => Err(state::StorageError::AllocMessage(format!(
                 "Expected a value to be present in the key {key}"
             ))),
-            result => result,
+            Ok(Some(x)) => Ok(x),
+            Err(err) => Err(err),
         }
     }
 }

@@ -57,7 +57,8 @@ where
             || {
                 Err(native_vp::Error::new_const(
                     "PoS parameter changes require tx data to be present",
-                ))
+                )
+                .into())
             },
             |data| {
                 namada_governance::is_proposal_accepted(
