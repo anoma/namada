@@ -13,12 +13,14 @@ use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
-use crate::storage::{bond_handle, delegation_targets_handle, read_pos_params, unbond_handle};
-use crate::types::{
-    BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, Slash,
-    UnbondDetails,
+use crate::storage::{
+    bond_handle, delegation_targets_handle, read_pos_params, unbond_handle,
 };
-use crate::{storage_key, PosParams};
+use crate::types::{
+    BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
+    DelegationEpochs, Slash, UnbondDetails,
+};
+use crate::{bond_amount, storage_key, PosParams};
 
 /// Find all validators to which a given bond `owner` (or source) has a
 /// delegation
@@ -30,27 +32,47 @@ pub fn find_delegation_validators<S>(
 where
     S: StorageRead,
 {
-    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
-    // let mut delegations: HashSet<Address> = HashSet::new();
+    let validators = delegation_targets_handle(owner);
+    if validators.is_empty(storage)? {
+        return Ok(HashSet::new());
+    }
 
-    // for iter_result in
-    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    // {
-    //     let (key, _bond_bytes) = iter_result?;
-    //     let validator_address = storage_key::get_validator_address_from_bond(
-    //         &key,
-    //     )
-    //     .ok_or_else(|| {
-    //         namada_storage::Error::new_const(
-    //             "Delegation key should contain validator address.",
-    //         )
-    //     })?;
-    //     delegations.insert(validator_address);
-    // }
-    let delegation_targets = delegation_targets_handle(owner).at(epoch);
-    delegation_targets
-        .iter(storage)?
-        .collect::<Result<HashSet<Address>, _>>()
+    let mut delegation_targets = HashSet::<Address>::new();
+
+    for validator in validators.iter(storage)? {
+        let (
+            val,
+            DelegationEpochs {
+                prev_ranges,
+                last_range: (last_start, last_end),
+            },
+        ) = validator?;
+
+        // Now determine if the validator held a bond from delegator at epoch
+        if *epoch >= last_start {
+            // the `last_range` will tell us if there was a bond
+            if let Some(end) = last_end {
+                if *epoch < end {
+                    delegation_targets.insert(val);
+                }
+            } else {
+                // this is bond is currently held
+                delegation_targets.insert(val);
+            }
+        } else {
+            // need to search through the `prev_ranges` now
+            for (start, end) in prev_ranges.iter().rev() {
+                if *epoch >= *start {
+                    if *epoch < *end {
+                        delegation_targets.insert(val);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(delegation_targets)
 }
 
 /// Find all validators to which a given bond `owner` (or source) has a
@@ -63,32 +85,55 @@ pub fn find_delegations<S>(
 where
     S: StorageRead,
 {
-    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
-    let params = read_pos_params(storage)?;
-    let mut delegations: HashMap<Address, token::Amount> = HashMap::new();
+    let validators = delegation_targets_handle(owner);
+    if validators.is_empty(storage)? {
+        return Ok(HashMap::new());
+    }
 
-    // for iter_result in
-    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    // {
-    //     let (key, _bond_bytes) = iter_result?;
-    //     let validator_address = storage_key::get_validator_address_from_bond(
-    //         &key,
-    //     )
-    //     .ok_or_else(|| {
-    //         namada_storage::Error::new_const(
-    //             "Delegation key should contain validator address.",
-    //         )
-    //     })?;
-    //     let deltas_sum = bond_handle(owner, &validator_address)
-    //         .get_sum(storage, *epoch, &params)?
-    //         .unwrap_or_default();
-    //     delegations.insert(validator_address, deltas_sum);
-    // }
-    let delegation_targets = delegation_targets_handle(owner).at(epoch);
-    for validator in delegation_targets.iter(storage)? {
-        let validator = validator?;
-        let stake = bond_handle(owner, &validator).get_sum(storage, *epoch, &params)?.unwrap_or_default();
-        delegations.insert(validator, stake);
+    let mut delegations = HashMap::<Address, token::Amount>::new();
+
+    for validator in validators.iter(storage)? {
+        let (
+            val,
+            DelegationEpochs {
+                prev_ranges,
+                last_range: (last_start, last_end),
+            },
+        ) = validator?;
+
+        // TODO: Should use raw bonds or slashed stake??
+        let bond_amount = bond_amount(
+            storage,
+            &BondId {
+                source: owner.clone(),
+                validator: val.clone(),
+            },
+            *epoch,
+        )?;
+
+        // Now determine if the validator held a bond from delegator at epoch
+        if *epoch >= last_start {
+            // the `last_range` will tell us if there was a bond
+            if let Some(end) = last_end {
+                if *epoch < end {
+                    // this bond was previously held
+                    delegations.insert(val, bond_amount);
+                }
+            } else {
+                // this bond is currently held
+                delegations.insert(val, bond_amount);
+            }
+        } else {
+            // need to search through the `prev_ranges` now
+            for (start, end) in prev_ranges.iter().rev() {
+                if *epoch >= *start {
+                    if *epoch < *end {
+                        delegations.insert(val, bond_amount);
+                    }
+                    break;
+                }
+            }
+        }
     }
     Ok(delegations)
 }

@@ -2223,7 +2223,7 @@ pub async fn build_vote_proposal(
         id: *proposal_id,
         vote: proposal_vote,
         voter: voter_address.clone(),
-        delegation_validators,
+        delegation_validators: delegations,
     };
 
     build(

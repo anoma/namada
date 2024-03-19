@@ -263,12 +263,47 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 /// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
+/// Contains information on epoch periods (start, end) in which a delegator had
+/// a bonded with a certain validator. The `end` epoch is the first epoch at
+/// which the bond ceased to exist (exclusive).
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct DelegationEpochs {
+    /// Previous ranges during which a bond existed
+    pub prev_ranges: Vec<(Epoch, Epoch)>,
+    /// The last range during which a bond existed
+    pub last_range: (Epoch, Option<Epoch>),
+}
+
 /// The set of all target validators for a given delegator.
-pub type DelegationTargets = crate::epoched::NestedEpoched<
-    LazySet<Address>,
-    crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetMaxProposalPeriodPlus,
->;
+pub type DelegationTargets = LazyMap<Address, DelegationEpochs>;
+
+// impl DelegationTargets {
+//     pub fn get_delegation_validators<S>(
+//         &self,
+//         storage: &mut S,
+//         epoch: Epoch,
+//     ) -> namada_storage::Result<Option<&LazySet<Address>>>
+//     where
+//         S: StorageRead,
+//     {
+//         let oldest_epoch = self
+//             .get_last_update(storage)?
+//             .expect("Oldest epoch should be set");
+
+//         if epoch < oldest_epoch {
+//             // Should we return an error or None?
+//             return Ok(None);
+//         }
+
+//         let mut epoch = epoch;
+//         while epoch >= oldest_epoch {
+//             if let Some(validators) = self.get(epoch, storage)? {
+//                 return Ok(Some(validators));
+//             }
+//             epoch = epoch - 1;
+//         }
+//     }
+// }
 
 #[derive(
     Debug,

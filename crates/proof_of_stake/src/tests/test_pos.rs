@@ -22,7 +22,7 @@ use token::get_effective_total_native_supply;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
-use crate::queries::bonds_and_unbonds;
+use crate::queries::{bonds_and_unbonds, find_delegation_validators};
 use crate::rewards::{
     log_block_rewards_aux, update_rewards_products_and_mint_inflation,
     PosRewardsCalculator,
@@ -38,6 +38,7 @@ use crate::storage::{
 use crate::test_utils::test_init_genesis;
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
+    get_genesis_validators,
 };
 use crate::token::{credit_tokens, read_balance};
 use crate::types::{
@@ -1748,4 +1749,114 @@ fn test_jail_for_liveness_aux(validators: Vec<GenesisValidator>) {
         &storage.write_log(),
         &storage_clone.write_log()
     );
+}
+
+#[test]
+fn test_delegation_targets() {
+    let stakes = vec![
+        token::Amount::native_whole(1),
+        token::Amount::native_whole(2),
+    ];
+    let mut s = TestState::default();
+    let mut current_epoch = s.in_mem().block.epoch;
+    let params = OwnedPosParams::default();
+
+    let genesis_validators = get_genesis_validators(2, stakes.clone());
+    let validator1 = genesis_validators[0].address.clone();
+    let validator2 = genesis_validators[1].address.clone();
+
+    let delegator = address::testing::gen_implicit_address();
+    let staking_token = staking_token_address(&s);
+    credit_tokens(
+        &mut s,
+        &staking_token,
+        &delegator,
+        token::Amount::native_whole(20),
+    )
+    .unwrap();
+
+    let params = test_init_genesis(
+        &mut s,
+        params,
+        genesis_validators.into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+
+    // Check initial delegation targets
+    for epoch in Epoch::iter_bounds_inclusive(
+        current_epoch,
+        current_epoch + params.pipeline_len,
+    ) {
+        println!("Epoch: {:?}", epoch);
+        let delegatees1 =
+            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert_eq!(delegatees2.len(), 1);
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
+    }
+
+    // Advance an epoch and check if the delegation targets are properly updated
+    // in the absence of bonds
+    current_epoch = advance_epoch(&mut s, &params);
+    for epoch in Epoch::iter_bounds_inclusive(
+        Epoch::default(),
+        current_epoch + params.pipeline_len,
+    ) {
+        println!("Epoch: {:?}", epoch);
+        let delegatees1 =
+            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert_eq!(delegatees2.len(), 1);
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
+    }
+
+    // Bond from a delegator to validator1 in epoch 1
+    bond_tokens(
+        &mut s,
+        Some(&delegator),
+        &validator1,
+        token::Amount::native_whole(3),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Completely self-unbond from validator2
+    unbond_tokens(&mut s, None, &validator2, stakes[1], current_epoch, false)
+        .unwrap();
+
+    // Check the delegation targets now
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+    for epoch in
+        Epoch::iter_bounds_inclusive(Epoch::default(), pipeline_epoch.prev())
+    {
+        println!("Epoch: {:?}", epoch);
+        let delegatees1 =
+            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert_eq!(delegatees2.len(), 1);
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
+    }
+
+    let delegatees1 =
+        find_delegation_validators(&s, &validator1, &pipeline_epoch).unwrap();
+    let delegatees2 =
+        find_delegation_validators(&s, &validator2, &pipeline_epoch).unwrap();
+    let del_delegatees =
+        find_delegation_validators(&s, &delegator, &pipeline_epoch).unwrap();
+    assert_eq!(delegatees1.len(), 1);
+    assert_eq!(delegatees2.len(), 0);
+    assert_eq!(del_delegatees.len(), 1);
+    assert!(delegatees1.contains(&validator1));
+    assert!(del_delegatees.contains(&validator1));
 }

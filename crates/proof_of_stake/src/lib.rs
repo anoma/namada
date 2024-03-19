@@ -39,7 +39,7 @@ use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
-use types::into_tm_voting_power;
+use types::{into_tm_voting_power, DelegationEpochs};
 
 use crate::queries::{find_bonds, has_bonds};
 use crate::rewards::{
@@ -256,15 +256,14 @@ where
         return Err(BondError::NotAValidator(validator.clone()).into());
     }
 
-    let bond_handle = bond_handle(source, validator);
-    let total_bonded_handle = total_bonded_handle(validator);
-
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
         tracing::debug!("\nBonds before incrementing: {bonds:#?}");
     }
 
     // Initialize or update the bond at the pipeline offset
+    let bond_handle = bond_handle(source, validator);
+    let total_bonded_handle = total_bonded_handle(validator);
     bond_handle.add(storage, amount, current_epoch, offset)?;
     total_bonded_handle.add(storage, amount, current_epoch, offset)?;
 
@@ -274,9 +273,13 @@ where
     }
 
     // Add the validator to the delegation targets
-    let target_validators =
-        delegation_targets_handle(source).at(&(current_epoch + offset));
-    target_validators.insert(storage, validator.clone())?;
+    add_delegation_target(
+        storage,
+        source,
+        validator,
+        current_epoch + offset,
+        current_epoch,
+    )?;
 
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
@@ -528,9 +531,13 @@ where
         .get_sum(storage, pipeline_epoch, &params)?
         .unwrap_or_default();
     if bonds_total.is_zero() {
-        delegation_targets_handle(source)
-            .at(&pipeline_epoch)
-            .remove(storage, validator)?;
+        remove_delegation_target(
+            storage,
+            source,
+            validator,
+            pipeline_epoch,
+            current_epoch,
+        )?;
     }
 
     // `updatedUnbonded`
@@ -2151,6 +2158,15 @@ where
         pipeline_epoch,
     )?;
 
+    // Add the dest validator to the delegation targets
+    add_delegation_target(
+        storage,
+        delegator,
+        dest_validator,
+        pipeline_epoch,
+        current_epoch,
+    )?;
+
     // Update validator set for dest validator
     let is_jailed_or_inactive_at_pipeline = matches!(
         validator_state_handle(dest_validator).get(
@@ -2927,6 +2943,75 @@ where
         // consensus set
         prune_liveness_data(storage, current_epoch)?;
     }
+
+    Ok(())
+}
+
+fn add_delegation_target<S>(
+    storage: &mut S,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+    _current_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let bond_holders = delegation_targets_handle(delegator);
+    if let Some(delegations) = bond_holders.get(storage, validator)?.as_mut() {
+        let (start, end) = delegations.last_range;
+        if let Some(end) = end {
+            // Add the `last_range` pair to the `prev_ranges` and make a new
+            // `last_range`
+            delegations.prev_ranges.push((start, end));
+            delegations.last_range = (epoch, None);
+            bond_holders.insert(
+                storage,
+                validator.clone(),
+                delegations.clone(),
+            )?;
+        } else {
+            // do nothing since the last bond is still active
+        }
+    } else {
+        // Make a new delegation to this source-validator pair
+        let first_delegation = DelegationEpochs {
+            prev_ranges: vec![],
+            last_range: (epoch, None),
+        };
+        bond_holders.insert(storage, validator.clone(), first_delegation)?;
+    }
+
+    // Todo: possibly update the data by pruning old pairs in
+    // `delegations.prev_ranges`??
+
+    Ok(())
+}
+
+fn remove_delegation_target<S>(
+    storage: &mut S,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+    _current_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let validators = delegation_targets_handle(delegator);
+    if let Some(delegation) = validators.get(storage, validator)?.as_mut() {
+        debug_assert!(
+            delegation.last_range.1.is_none(),
+            "End epoch should be None since we are removing the delegation
+              right now!!"
+        );
+        delegation.last_range.1 = Some(epoch);
+        validators.insert(storage, validator.clone(), delegation.clone())?;
+    } else {
+        panic!("Delegation should exist since we are removing it right now!!!");
+    }
+
+    // TODO: possibly update the data by pruning old pairs or validators??
 
     Ok(())
 }

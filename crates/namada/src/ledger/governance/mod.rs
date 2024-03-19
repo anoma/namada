@@ -257,10 +257,16 @@ where
         let pre_voting_end_epoch: Epoch =
             self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
 
-        let voter = gov_storage::get_voter_address(key)
-            .ok_or(Error::InvalidVoteKey(key.to_string()))?;
-        let validator = gov_storage::get_vote_delegation_address(key)
-            .ok_or(Error::InvalidVoteKey(key.to_string()))?;
+        let voter = gov_storage::get_voter_address(key).ok_or(
+            native_vp::Error::new_alloc(format!(
+                "Failed to parse a voter from the vote key {key}",
+            )),
+        )?;
+        let validator = gov_storage::get_vote_delegation_address(key).ok_or(
+            native_vp::Error::new_alloc(format!(
+                "Failed to parse a validator from the vote key {key}",
+            )),
+        )?;
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
@@ -295,7 +301,7 @@ where
         {
             if delegations.is_empty() {
                 return Err(native_vp::Error::new_alloc(format!(
-                    "No delegations found for {voter_address}"
+                    "No delegations found for {voter}"
                 ))
                 .into());
             } else {
@@ -310,13 +316,13 @@ where
             }
         } else {
             return Err(native_vp::Error::new_alloc(format!(
-                "Failed to query delegations for {voter_address}"
+                "Failed to query delegations for {voter}"
             ))
             .into());
         };
         if !all_delegations_are_valid {
             return Err(native_vp::Error::new_alloc(format!(
-                "Not all delegations of {voter_address} were deemed valid"
+                "Not all delegations of {voter} were deemed valid"
             ))
             .into());
         }
@@ -340,8 +346,7 @@ where
         }
 
         // first check if validator, then check if delegator
-        let is_validator =
-            self.is_validator(verifiers, voter, validator)?;
+        let is_validator = self.is_validator(verifiers, voter, validator)?;
 
         if is_validator {
             return is_valid_validator_voting_period(
@@ -351,9 +356,9 @@ where
             )
             .ok_or_else(|| {
                 native_vp::Error::new_alloc(format!(
-                    "Validator {voter_address} voted outside of the voting \
-                     period. Current epoch: {current_epoch}, pre voting start \
-                     epoch: {pre_voting_start_epoch}, pre voting end epoch: \
+                    "Validator {voter} voted outside of the voting period. \
+                     Current epoch: {current_epoch}, pre voting start epoch: \
+                     {pre_voting_start_epoch}, pre voting end epoch: \
                      {pre_voting_end_epoch}."
                 ))
                 .into()
@@ -369,8 +374,7 @@ where
 
         if !is_delegator {
             return Err(native_vp::Error::new_alloc(format!(
-                "Address {voter_address} is neither a validator nor a \
-                 delegator."
+                "Address {voter} is neither a validator nor a delegator."
             ))
             .into());
         }
