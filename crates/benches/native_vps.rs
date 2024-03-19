@@ -120,10 +120,9 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: 0,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
-                        r#type: ProposalType::Default(None),
+                        r#type: ProposalType::Default,
                         voting_start_epoch,
                         voting_end_epoch: voting_start_epoch + 3_u64,
                         grace_epoch: voting_start_epoch + 9_u64,
@@ -172,12 +171,11 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: 1,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
-                        r#type: ProposalType::Default(Some(
+                        r#type: ProposalType::DefaultWithWasm(
                             wasm_code_section.get_hash(),
-                        )),
+                        ),
                         voting_start_epoch,
                         voting_end_epoch: voting_start_epoch + 3_u64,
                         grace_epoch: voting_start_epoch + 9_u64,
