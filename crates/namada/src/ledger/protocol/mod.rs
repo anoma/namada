@@ -936,7 +936,11 @@ where
                                 .contains(&Address::Internal(
                                     InternalAddress::Multitoken,
                                 ))
-                                .ok_or(Error::AccessForbidden(*internal_addr))
+                                .ok_or_else(|| {
+                                    Error::AccessForbidden(
+                                        internal_addr.clone(),
+                                    )
+                                })
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };

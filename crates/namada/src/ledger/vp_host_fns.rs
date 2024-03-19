@@ -41,14 +41,15 @@ impl ShouldHaltVp for RuntimeError {
     }
 }
 
-impl ShouldHaltVp for crate::storage::Error {
+impl ShouldHaltVp for crate::state::StorageError {
     fn should_halt_vp(&self) -> bool {
         let maybe_get_err = || {
             let boxed_err = match self {
-                crate::storage::Error::Custom(custom_err)
-                | crate::storage::Error::CustomWithMessage(_, custom_err) => {
-                    Some(custom_err)
-                }
+                crate::state::StorageError::Custom(custom_err)
+                | crate::state::StorageError::CustomWithMessage(
+                    _,
+                    custom_err,
+                ) => Some(&custom_err.0),
                 _ => None,
             }?;
 

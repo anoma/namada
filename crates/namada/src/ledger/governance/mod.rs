@@ -396,10 +396,10 @@ where
 
                 // we allow only a single steward to be added
                 if total_stewards_added > 1 {
-                    return Err(native_vp::Error::new_const(
+                    Err(native_vp::Error::new_const(
                         "Only one steward is allowed to be added per proposal",
                     )
-                    .into());
+                    .into())
                 } else if total_stewards_added == 0 {
                     let is_valid_total_pgf_actions =
                         stewards.len() < MAX_PGF_ACTIONS;
@@ -521,15 +521,13 @@ where
                     .count() as u64
                     == 0;
 
-                if !are_targets_unique {
-                    return Err(native_vp::Error::new_alloc(format!(
+                are_targets_unique.ok_or_else(|| {
+                    native_vp::Error::new_const(
                         "One or more payment targets were added and removed \
                          in the same proposal",
-                    ))
-                    .into());
-                }
-
-                Ok(())
+                    )
+                    .into()
+                })
             }
             _ => Ok(()), // default proposal
         }
@@ -951,15 +949,15 @@ where
         }
 
         let author = self.force_read(&author_key, ReadType::Post)?;
-        namada_account::exists(&self.ctx.pre(), &author).true_or_else(
-            || {
+        namada_account::exists(&self.ctx.pre(), &author)
+            .map_err(Error)
+            .true_or_else(|| {
                 native_vp::Error::new_alloc(format!(
                     "No author account {author} could be found for the \
                      proposal with id {proposal_id}"
                 ))
                 .into()
-            },
-        )?;
+            })?;
 
         verifiers.contains(&author).ok_or_else(|| {
             native_vp::Error::new_alloc(format!(

@@ -119,9 +119,9 @@ where
                             }
                             steward.is_valid_reward_distribution().ok_or_else(
                                 || {
-                                    native_vp::Error::new_alloc(format!(
-                                        "Steward commissions are invalid"
-                                    ))
+                                    native_vp::Error::new_const(
+                                        "Steward commissions are invalid",
+                                    )
                                     .into()
                                 },
                             )

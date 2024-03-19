@@ -119,10 +119,10 @@ where
                 .read_bytes_post(&nullifier_key)?
                 .is_some_and(|value| value.is_empty())
                 .ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
+                    Error::NativeVpError(native_vp::Error::new_const(
                         "The nullifier should have been committed with no \
                          associated data",
-                    )))
+                    ))
                 })?;
 
             revealed_nullifiers.insert(nullifier_key);
