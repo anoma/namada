@@ -330,8 +330,10 @@ impl MockNode {
                 locked.state.in_mem().get_last_block_height() + 1;
             locked.state.in_mem_mut().next_epoch_min_start_height =
                 next_epoch_height;
-            locked.state.in_mem_mut().next_epoch_min_start_time =
-                DateTimeUtc::now();
+            locked.state.in_mem_mut().next_epoch_min_start_time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
             let next_epoch_min_start_height =
                 locked.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
@@ -426,6 +428,7 @@ impl MockNode {
             hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
+                #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
@@ -507,6 +510,7 @@ impl MockNode {
         self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let req = RequestProcessProposal {
             txs: txs.clone().into_iter().map(|tx| tx.into()).collect(),
@@ -542,6 +546,7 @@ impl MockNode {
             hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
+                #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },

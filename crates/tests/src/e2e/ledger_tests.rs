@@ -1204,10 +1204,17 @@ fn pos_bonds() -> Result<()> {
         "Current epoch: {}, earliest epoch for withdrawal: {}",
         epoch, delegation_withdrawable_epoch
     );
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 delegation_withdrawable_epoch
@@ -1333,10 +1340,17 @@ fn pos_rewards() -> Result<()> {
     let mut last_epoch = get_epoch(&test, &validator_0_rpc)?;
     let wait_epoch = last_epoch + 4_u64;
 
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(40, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
 
@@ -1504,10 +1518,17 @@ fn test_bond_queries() -> Result<()> {
     client.assert_success();
 
     // 3. Wait for epoch 4
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", 1);
         }
         let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
@@ -1784,10 +1805,17 @@ fn pos_init_validator() -> Result<()> {
         "Current epoch: {}, earliest epoch with updated bonded stake: {}",
         epoch, earliest_update_epoch
     );
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
         let epoch = epoch_sleep(&test, &non_validator_rpc, 40)?;
@@ -3304,10 +3332,17 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 deactivate_epoch + pipeline_len
@@ -3347,10 +3382,17 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     client.assert_success();
 
     let reactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 reactivate_epoch + pipeline_len
@@ -3605,10 +3647,17 @@ fn test_invalid_validator_txs() -> Result<()> {
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 deactivate_epoch + pipeline_len

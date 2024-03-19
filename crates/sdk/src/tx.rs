@@ -375,6 +375,7 @@ pub async fn submit_tx(
     // Broadcast the supplied transaction
     broadcast_tx(context, &to_broadcast).await?;
 
+    #[allow(clippy::disallowed_methods)]
     let deadline = time::Instant::now()
         + time::Duration::from_secs(
             DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS,
@@ -2192,7 +2193,11 @@ pub async fn build_ibc_transfer(
     let now: std::result::Result<
         crate::tendermint::Time,
         namada_core::tendermint::Error,
-    > = DateTimeUtc::now().try_into();
+    > = {
+        #[allow(clippy::disallowed_methods)]
+        DateTimeUtc::now()
+    }
+    .try_into();
     let now = now.map_err(|e| Error::Other(e.to_string()))?;
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {

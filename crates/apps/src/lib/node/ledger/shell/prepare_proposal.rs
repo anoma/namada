@@ -911,6 +911,7 @@ mod test_prepare_proposal {
             None,
         )));
 
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let block_time =
             namada::core::tendermint_proto::google::protobuf::Timestamp {

@@ -2540,8 +2540,10 @@ mod test {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let next_epoch_min_start_height = BlockHeight::default();
+        #[allow(clippy::disallowed_methods)]
         let next_epoch_min_start_time = DateTimeUtc::now();
         let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
