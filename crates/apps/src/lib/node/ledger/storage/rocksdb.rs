@@ -119,7 +119,8 @@ pub fn open(
 
     tracing::info!(
         "Using {} compactions threads and {} compression threads for RocksDB.",
-        compaction_threads, compression_threads
+        compaction_threads,
+        compression_threads
     );
 
     // DB options
@@ -132,8 +133,8 @@ pub fn open(
     db_opts.set_wal_compression_type(DBCompressionType::Zstd);
     db_opts.set_compression_options_parallel_threads(compression_threads);
     db_opts.add_compact_on_deletion_collector_factory(10000, 6000, 0.5);
-    // or should we just run compaction periodicly ? maybe based on some multiple of block time?
-    // db_opts.set_periodic_compaction_seconds(60)
+    // or should we just run compaction periodicly ? maybe based on some
+    // multiple of block time? db_opts.set_periodic_compaction_seconds(60)
 
     db_opts.set_bytes_per_sync(1048576);
     set_max_open_files(&mut db_opts);
