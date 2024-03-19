@@ -15,6 +15,7 @@ use namada::proof_of_stake::storage::{
 };
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
+use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
@@ -386,6 +387,7 @@ where
                             if wrapper_args
                                 .expect("Missing required wrapper arguments")
                                 .is_committed_fee_unshield
+                                || is_masp_tx(&result.changed_keys)
                             {
                                 tx_event["is_valid_masp_tx"] =
                                     format!("{}", tx_index);
@@ -401,11 +403,7 @@ where
                                 tx_event["hash"],
                                 result
                             );
-                            if result.vps_result.accepted_vps.contains(
-                                &Address::Internal(
-                                    address::InternalAddress::Masp,
-                                ),
-                            ) {
+                            if is_masp_tx(&result.changed_keys) {
                                 tx_event["is_valid_masp_tx"] =
                                     format!("{}", tx_index);
                             }

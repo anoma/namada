@@ -1,13 +1,16 @@
 //! MASP utilities
 
+use std::collections::BTreeSet;
+
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
+use namada_core::storage;
 use namada_core::storage::IndexedTx;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
-    masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
+    is_masp_key, masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -81,4 +84,12 @@ pub fn handle_masp_tx(
     }
 
     Ok(())
+}
+
+/// Check if a transaction was a MASP transaction. This means
+/// that at least one key owned by MASP was changed. We cannot
+/// simply check that the MASP VP was triggered, as this can
+/// be manually requested to be triggered by users.
+pub fn is_masp_tx(changed_keys: &BTreeSet<storage::Key>) -> bool {
+    changed_keys.iter().any(is_masp_key)
 }

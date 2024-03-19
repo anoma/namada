@@ -1,0 +1,1 @@
+ - Checks that a MASP key was changed when identifying a MASP tx ([\#2684](https://github.com/anoma/namada/pull/2790))
