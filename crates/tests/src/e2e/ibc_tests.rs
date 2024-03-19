@@ -226,7 +226,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -255,7 +254,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_b,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -274,7 +272,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(0, 0)),
         None,
         false,
@@ -306,7 +303,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -322,7 +318,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         None,
         None,
         false,
@@ -345,7 +340,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -385,7 +379,6 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
             .parameters
             .ibc_params
             .default_per_epoch_throughput_limit = Amount::max_signed();
-
         setup::set_validators(1, genesis, base_dir, |_| 0)
     };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -453,6 +446,12 @@ fn proposal_ibc_token_inflation() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -484,29 +483,15 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let port_id_b: PortId = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
+    let (channel_id_a, _channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
     let _bg_hermes = hermes.background();
 
-    // Get masp proof for the following IBC transfer from the destination chain
-    // It will send 1 APFEL to PA(B) on Chain B
-    // PA(B) on Chain B will receive APFEL on chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(&test_a, APFEL)?;
     // wait the next epoch not to update the epoch during the IBC transfer
     wait_epochs(&test_b, 1)?;
-    let file_path = gen_ibc_shielded_transfer(
-        &test_b,
-        AB_PAYMENT_ADDRESS,
-        token_addr.to_string(),
-        1,
-        &port_id_b,
-        &channel_id_b,
-    )?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
     transfer(
@@ -518,7 +503,6 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        Some(&file_path.to_string_lossy()),
         None,
         None,
         false,
@@ -588,7 +572,6 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
 
@@ -602,7 +585,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         None,
         // expect an error of the throughput limit
         Some("Transaction was rejected by VPs"),
@@ -629,7 +611,6 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
 
@@ -652,7 +633,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(20, 0)),
         None,
         false,
@@ -1404,7 +1384,6 @@ fn transfer_token(
         channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1483,7 +1462,6 @@ fn try_invalid_transfers(
         port_id_a,
         channel_id_a,
         None,
-        None,
         Some("The amount for the IBC transfer should be an integer"),
         false,
     )?;
@@ -1500,7 +1478,6 @@ fn try_invalid_transfers(
         &"port".parse().unwrap(),
         channel_id_a,
         None,
-        None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
@@ -1516,7 +1493,6 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
-        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -1581,7 +1557,6 @@ fn transfer_back(
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
-        None,
         None,
         None,
         false,
@@ -1655,7 +1630,6 @@ fn transfer_timeout(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        None,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1688,46 +1662,6 @@ fn transfer_timeout(
     )?;
 
     Ok(())
-}
-
-fn gen_ibc_shielded_transfer(
-    test: &Test,
-    target: impl AsRef<str>,
-    token: impl AsRef<str>,
-    amount: u64,
-    port_id: &PortId,
-    channel_id: &ChannelId,
-) -> Result<PathBuf> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let output_folder = test.test_dir.path().to_string_lossy();
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
-        target.as_ref(),
-        "--token",
-        token.as_ref(),
-        "--amount",
-        &amount.to_string(),
-        "--port-id",
-        port_id.as_ref(),
-        "--channel-id",
-        channel_id.as_ref(),
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    Ok(file_path)
-}
-
-fn get_shielded_transfer_path(client: &mut NamadaCmd) -> Result<PathBuf> {
-    let (_unread, matched) =
-        client.exp_regex("Output IBC shielded transfer .*")?;
-    let file_path = matched.trim().split(' ').last().expect("invalid output");
-    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
 
 fn get_commitment_proof(
@@ -1830,7 +1764,6 @@ fn transfer(
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
-    memo: Option<&str>,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1859,12 +1792,6 @@ fn transfer(
         "--node",
         &rpc,
     ];
-
-    let memo_path = memo.unwrap_or_default();
-    if memo.is_some() {
-        tx_args.push("--memo-path");
-        tx_args.push(memo_path);
-    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
