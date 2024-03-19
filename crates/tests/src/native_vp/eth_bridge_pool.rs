@@ -19,7 +19,6 @@ mod test_bridge_pool_vp {
     use namada::tx::Tx;
     use namada_apps::wallet::defaults::{albert_address, bertha_address};
     use namada_apps::wasm_loader;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_sdk::eth_bridge::{
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,
@@ -117,11 +116,10 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, BRIDGE_POOL_ADDRESS);
         vp_env
-            .validate_tx(&gas_meter, &sentinel, |ctx| BridgePoolVp { ctx })
-            .expect("Test failed")
+            .validate_tx(&gas_meter, |ctx| BridgePoolVp { ctx })
+            .is_ok()
     }
 
     fn validate_tx(tx: Tx) {

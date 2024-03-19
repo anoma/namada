@@ -154,7 +154,6 @@ mod tests {
     use namada::gas::VpGasMeter;
     use namada::ledger::pos::PosVP;
     use namada::token;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
@@ -440,23 +439,27 @@ mod tests {
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &tx_env.gas_meter.borrow(),
             ));
-            let sentinel = RefCell::new(VpSentinel::default());
             let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-            let result = vp_env.validate_tx(&gas_meter, &sentinel, PosVP::new);
+            let result = vp_env.validate_tx(&gas_meter, PosVP::new);
 
             // Put the tx_env back before checking the result
             tx_host_env::set(vp_env.tx_env);
 
-            let result =
-                result.expect("Validation of valid changes must not fail!");
-
             // The expected result depends on the current state
-            if self.is_current_tx_valid {
-                // Changes must be accepted
-                assert!(result, "Validation of valid changes must pass!");
-            } else {
-                // Invalid changes must be rejected
-                assert!(!result, "Validation of invalid changes must fail!");
+            match (self.is_current_tx_valid, result) {
+                (true, Ok(())) => {}
+                (true, Err(err)) => {
+                    // Changes must be accepted
+                    panic!(
+                        "Validation of valid changes must pass! Got error: \
+                         {err}"
+                    );
+                }
+                (false, Err(_)) => {}
+                (false, Ok(())) => {
+                    // Invalid changes must be rejected
+                    panic!("Validation of invalid changes must fail!");
+                }
             }
         }
     }
