@@ -213,6 +213,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -241,6 +242,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_b,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -259,6 +261,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         Some(Duration::new(0, 0)),
         None,
         false,
@@ -290,6 +293,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -305,6 +309,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -327,6 +332,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -1238,6 +1244,7 @@ fn transfer_token(
         channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1316,6 +1323,7 @@ fn try_invalid_transfers(
         port_id_a,
         channel_id_a,
         None,
+        None,
         Some("The amount for the IBC transfer should be an integer"),
         false,
     )?;
@@ -1332,6 +1340,7 @@ fn try_invalid_transfers(
         &"port".parse().unwrap(),
         channel_id_a,
         None,
+        None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
@@ -1347,6 +1356,7 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
+        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -1411,6 +1421,7 @@ fn transfer_back(
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
+        None,
         None,
         None,
         false,
@@ -1484,6 +1495,7 @@ fn transfer_timeout(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        None,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1507,7 +1519,13 @@ fn transfer_timeout(
     // Update the client state of Chain B on Chain A
     update_client_with_height(test_b, test_a, client_id_a, height_b)?;
     // Timeout on Chain A
-    submit_ibc_tx(test_a, msg.to_any(), ALBERT, ALBERT_KEY, false)?;
+    submit_ibc_tx(
+        test_a,
+        make_ibc_data(msg.to_any()),
+        ALBERT,
+        ALBERT_KEY,
+        false,
+    )?;
 
     Ok(())
 }
@@ -1545,56 +1563,11 @@ fn gen_ibc_shielded_transfer(
     Ok(file_path)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn shielded_transfer(
-    test_a: &Test,
-    test_b: &Test,
-    client_id_a: &ClientId,
-    client_id_b: &ClientId,
-    port_id_a: &PortId,
-    channel_id_a: &ChannelId,
-    port_id_b: &PortId,
-    channel_id_b: &ChannelId,
-) -> Result<()> {
-    // Get masp proof for the following IBC transfer from the destination chain
-    // It will send 10 BTC from Chain A to PA(B) on Chain B
-    // PA(B) on Chain B will receive BTC on chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(test_a, BTC)?;
-    let file_path = gen_ibc_shielded_transfer(
-        test_b,
-        AB_PAYMENT_ADDRESS,
-        token_addr.to_string(),
-        10,
-        port_id_b,
-        channel_id_b,
-    )?;
-
-    // Send a token to the shielded address on Chain A
-    transfer_on_chain(test_a, ALBERT, AA_PAYMENT_ADDRESS, BTC, 10, ALBERT_KEY)?;
-    let rpc = get_actor_rpc(test_a, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AA_VIEWING_KEY,
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test_a, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-
-    // Send a token from SP(A) on Chain A to PA(B) on Chain B
-    let amount = Amount::native_whole(10).to_string_native();
-    let height = transfer(
-    submit_ibc_tx(
-        test_a,
-        make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
-        false,
-    )?;
-
-    Ok(())
+fn get_shielded_transfer_path(client: &mut NamadaCmd) -> Result<PathBuf> {
+    let (_unread, matched) =
+        client.exp_regex("Output IBC shielded transfer .*")?;
+    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
 
 fn get_commitment_proof(
@@ -1697,6 +1670,7 @@ fn transfer(
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
+    memo: Option<&str>,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1725,6 +1699,12 @@ fn transfer(
         "--node",
         &rpc,
     ];
+
+    let memo_path = memo.unwrap_or_default();
+    if memo.is_some() {
+        tx_args.push("--memo-path");
+        tx_args.push(memo_path);
+    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
