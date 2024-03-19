@@ -101,11 +101,11 @@ where
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
-                let error = native_vp::Error::new_const(
-                    "MASP double spending attempt, the nullifier {:#?} has \
+                let error = native_vp::Error::new_alloc(format!(
+                    "MASP double spending attempt, the nullifier {:?} has \
                      already been revealed previously",
                     description.nullifier.0,
-                )
+                ))
                 .into();
                 tracing::debug!("{error}");
                 return Err(error);
@@ -115,10 +115,15 @@ where
             // and no delete) and carries no associated data (the latter not
             // strictly necessary for validation, but we don't expect any
             // value for this key anyway)
-            match self.ctx.read_bytes_post(&nullifier_key)? {
-                Some(value) if value.is_empty() => (),
-                _ => return Ok(false),
-            }
+            self.ctx
+                .read_bytes_post(&nullifier_key)?
+                .is_some_and(|value| value.is_empty())
+                .ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
+                        "The nullifier should have been committed with no \
+                         associated data",
+                    )))
+                })?;
 
             revealed_nullifiers.insert(nullifier_key);
         }
@@ -127,15 +132,17 @@ where
             keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
         {
             if !revealed_nullifiers.contains(nullifier_key) {
-                tracing::debug!(
+                let error = native_vp::Error::new_alloc(format!(
                     "An unexpected MASP nullifier key {nullifier_key} has \
                      been revealed by the transaction"
-                );
-                return Ok(false);
+                ))
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     // Check that a transaction carrying output descriptions correctly updates
@@ -510,7 +517,8 @@ where
                     let error = native_vp::Error::new_const(
                         "The public key of the output account does not match \
                          the transfer target",
-                    );
+                    )
+                    .into();
                     tracing::debug!("{error}");
                     return Err(error);
                 }
@@ -679,7 +687,8 @@ where
                     let error = native_vp::Error::new_const(
                         "The public key of the output account does not match \
                          the transfer target",
-                    );
+                    )
+                    .into();
                     tracing::debug!("{error}");
                     return Err(error);
                 }

@@ -2,6 +2,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use namada_core::address::Address;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
@@ -58,11 +59,12 @@ where
             let bridge_pool_is_verifier =
                 verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS);
 
-            bridge_pool_is_verifier.then_some(()).ok_or_else(|| {
+            bridge_pool_is_verifier.ok_or_else(|| {
                 native_vp::Error::new_const(
                     "Bridge pool VP was not marked as a verifier of the \
                      transaction",
                 )
+                .into()
             })
         } else {
             Err(native_vp::Error::new_const(
@@ -274,7 +276,7 @@ mod tests {
 
         let result = validate_changed_keys(&nam(), &keys_changed);
 
-        assert_matches!(result, Ok(true));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -293,7 +295,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
@@ -304,7 +306,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
     }
 
@@ -316,7 +318,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
 
         {
@@ -329,7 +331,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
 
         {
@@ -346,7 +348,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
     }
 
@@ -394,7 +396,7 @@ mod tests {
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(res.expect("Test failed"));
+        assert!(res.is_ok());
     }
 
     /// Test that escrowing must increase the balance
@@ -439,7 +441,7 @@ mod tests {
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(!res.expect("Test failed"));
+        assert!(res.is_err());
     }
 
     /// Test that the VP checks that the bridge pool vp will
@@ -487,6 +489,6 @@ mod tests {
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(!res.expect("Test failed"));
+        assert!(res.is_err());
     }
 }

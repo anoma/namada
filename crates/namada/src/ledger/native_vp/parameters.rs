@@ -56,7 +56,8 @@ where
             } else {
                 return Err(native_vp::Error::new_const(
                     "Token parameter changes require tx data to be present",
-                ));
+                )
+                .into());
             };
             match key_type {
                 KeyType::PARAMETER => {

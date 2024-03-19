@@ -859,11 +859,10 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    native_vp::Error::new_alloc(format!(
+                    Error(native_vp::Error::new_alloc(format!(
                         "Funds must be greater than the minimum funds of {}",
                         min_funds_parameter.native_denominated()
-                    ))
-                    .into()
+                    )))
                 })?;
 
                 let post_balance_is_same = post_balance == post_funds;
@@ -882,12 +881,11 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    native_vp::Error::new_alloc(format!(
+                    Error(native_vp::Error::new_alloc(format!(
                         "Funds {} must be greater than the minimum funds of {}",
                         post_funds.native_denominated(),
                         min_funds_parameter.native_denominated()
-                    ))
-                    .into()
+                    )))
                 })?;
 
                 let is_valid_funds = post_balance >= pre_balance
@@ -980,7 +978,7 @@ where
             self.force_read(&counter_key, ReadType::Post)?;
 
         let expected_counter = pre_counter + set_count;
-        let valid_counter = post_counter;
+        let valid_counter = expected_counter == post_counter;
 
         valid_counter.ok_or_else(|| {
             native_vp::Error::new_alloc(format!(
@@ -1019,7 +1017,8 @@ where
                 Err(native_vp::Error::new_const(
                     "Governance parameter changes require tx data to be \
                      present",
-                ))
+                )
+                .into())
             },
             |data| {
                 is_proposal_accepted(&self.ctx.pre(), data.as_ref())
