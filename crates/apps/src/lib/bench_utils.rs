@@ -365,6 +365,7 @@ impl BenchShell {
 
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
+        #[allow(clippy::disallowed_methods)]
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();
@@ -459,6 +460,7 @@ impl BenchShell {
             .expect("write failed");
 
         // Set consensus state
+        #[allow(clippy::disallowed_methods)]
         let now: namada::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let consensus_key = addr_key.join(&Key::from(

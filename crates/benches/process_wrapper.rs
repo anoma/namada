@@ -53,6 +53,7 @@ fn process_tx(c: &mut Criterion) {
     )));
     let wrapper = tx.to_bytes();
 
+    #[allow(clippy::disallowed_methods)]
     let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {

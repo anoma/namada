@@ -547,6 +547,7 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
+        #[allow(clippy::disallowed_methods)]
         let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data

@@ -625,6 +625,7 @@ pub mod testing {
                 last_block: None,
                 last_epoch: Epoch::default(),
                 next_epoch_min_start_height: BlockHeight::default(),
+                #[allow(clippy::disallowed_methods)]
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
