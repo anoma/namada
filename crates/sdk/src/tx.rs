@@ -1994,7 +1994,7 @@ pub async fn build_vote_proposal(
             eprintln!(
                 "NB: voter address {} is a validator, and validators can only \
                  vote on proposals within the first 2/3 of the voting period.",
-                 voter_address
+                voter_address
             );
         }
         if !tx.force {
