@@ -128,7 +128,7 @@ impl VerifySigGadget {
         owner: &Address,
     ) -> VpResult {
         if !self.has_validated_sig {
-            verify_signatures(ctx, tx_data, addr)?;
+            verify_signatures(ctx, tx_data, owner)?;
             self.has_validated_sig = true;
         }
         Ok(())
