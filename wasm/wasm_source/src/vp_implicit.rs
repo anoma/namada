@@ -85,53 +85,64 @@ fn validate_tx(
 
     keys_changed.iter().try_for_each(|key| {
         let key_type: KeyType = key.into();
-        let result = match key_type {
+        let validate_change = || match key_type {
             KeyType::Pk(owner) => {
                 if owner == &addr {
-                    if ctx.has_key_pre(key)? {
-                        // If the PK is already reveal, reject the tx
-                        return reject();
-                    }
-                    let post: Option<key::common::PublicKey> =
-                        ctx.read_post(key)?;
-                    match post {
-                        Some(pk) => {
+                    let key_was_not_already_revealed =
+                        !ctx.has_key_pre(key).into_vp_error()?;
+                    key_was_not_already_revealed.ok_or_else(|| {
+                        VpError::Erased(format!(
+                            "Public key of {addr} has already been revealed"
+                        ))
+                    })?;
+
+                    let pubkey_in_storage =
+                        ctx.read_post(key).into_vp_error()?;
+                    pubkey_in_storage.map_or_else(
+                        || {
+                            Err(VpError::Erased(
+                                "Public keys that have been revealed cannot \
+                                 be deleted"
+                                    .into(),
+                            ))
+                        },
+                        |pk: key::common::PublicKey| {
                             let addr_from_pk: Address = (&pk).into();
+                            let pk_derived_addr_is_correct =
+                                addr_from_pk == addr;
+
                             // Check that address matches with the address
                             // derived from the PK
-                            if addr_from_pk != addr {
-                                return reject();
-                            }
-                        }
-                        None => {
-                            // Revealed PK cannot be deleted
-                            return reject();
-                        }
-                    }
+                            pk_derived_addr_is_correct.ok_or_else(|| {
+                                VpError::Erased(format!(
+                                    "The address derived from the revealed \
+                                     public key {addr_from_pk} does not match \
+                                     the implicit account's address {addr}"
+                                ))
+                            })
+                        },
+                    )?;
                 }
-                true
+                Ok(())
             }
             KeyType::TokenBalance { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
-                        ctx.read_pre(key)?.unwrap_or_default();
+                        ctx.read_pre(key).into_vp_error()?.unwrap_or_default();
                     let post: token::Amount =
-                        ctx.read_post(key)?.unwrap_or_default();
+                        ctx.read_post(key).into_vp_error()?.unwrap_or_default();
                     let change = post.change() - pre.change();
-                    // debit has to signed, credit doesn't
-                    let valid = change.non_negative() || *valid_sig;
+                    gadget.verify_signatures_when(
+                        // NB: debit has to signed, credit doesn't
+                        || change.is_negative(),
+                        ctx,
+                        &tx_data,
+                        &addr,
+                    )?;
                     let sign = if change.non_negative() { "" } else { "-" };
-                    debug_log!(
-                        "token key: {}, change: {}{:?}, valid_sig: {}, valid \
-                         modification: {}",
-                        key,
-                        sign,
-                        change,
-                        *valid_sig,
-                        valid
-                    );
-                    valid
+                    debug_log!("token key: {key}, change: {sign}{change:?}");
                 } else {
+                    // If this is not the owner, allow any change
                     debug_log!(
                         "This address ({}) is not of owner ({}) of token key: \
                          {}",
@@ -139,12 +150,24 @@ fn validate_tx(
                         owner,
                         key
                     );
-                    // If this is not the owner, allow any change
-                    true
                 }
+                Ok(())
             }
-            KeyType::TokenMinted => verifiers.contains(&address::MULTITOKEN),
-            KeyType::TokenMinter(minter) => minter != &addr || *valid_sig,
+            KeyType::TokenMinted => {
+                verifiers.contains(&address::MULTITOKEN).ok_or_else(|| {
+                    VpError::Erased(
+                        "The Multitoken VP should have been a verifier for \
+                         this transaction, since a token was minted"
+                            .into(),
+                    )
+                })
+            }
+            KeyType::TokenMinter(minter_addr) => gadget.verify_signatures_when(
+                || minter_addr == &addr,
+                ctx,
+                &tx_data,
+                &addr,
+            ),
             KeyType::PoS => validate_pos_changes(ctx, &addr, key, &mut gadget),
             KeyType::PgfSteward(pgf_steward_addr) => gadget
                 .verify_signatures_when(
@@ -166,7 +189,7 @@ fn validate_tx(
                 gadget.verify_signatures(ctx, &tx_data, &addr)
             }
         };
-        result.inspect_err(|reason| {
+        validate_change().inspect_err(|reason| {
             log_string(format!(
                 "Modification on key {key} failed vp_implicit: {reason}"
             ));
@@ -204,13 +227,16 @@ fn validate_pos_changes(
         let is_valid_state =
             match state_change {
                 Some((address, epoch)) => {
-                    let params_pre = storage::read_pos_params(&ctx.pre())?;
+                    let params_pre =
+                        storage::read_pos_params(&ctx.pre()).into_vp_error()?;
                     let state_pre = storage::validator_state_handle(address)
                         .get(&ctx.pre(), epoch, &params_pre)?;
 
-                    let params_post = storage::read_pos_params(&ctx.post())?;
+                    let params_post = storage::read_pos_params(&ctx.post())
+                        .into_vp_error()?;
                     let state_post = storage::validator_state_handle(address)
-                        .get(&ctx.post(), epoch, &params_post)?;
+                        .get(&ctx.post(), epoch, &params_post)
+                        .into_vp_error()?;
 
                     match (state_pre, state_post) {
                         (Some(pre), Some(post)) => {
