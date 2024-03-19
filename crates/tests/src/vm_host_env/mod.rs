@@ -1303,6 +1303,10 @@ mod tests {
             minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         );
+        let mint_amount_key = ibc_storage::mint_amount_key(&ibc_token);
+        let init_bal = Amount::from_u64(100);
+        writes.insert(mint_amount_key, init_bal.serialize_to_vec());
+        writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.state.write_bytes(&key, &val).expect("write error");

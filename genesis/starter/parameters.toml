@@ -96,3 +96,10 @@ stewards = []
 pgf_inflation_rate = "0.1"
 # The pgf stewards inflation rate
 stewards_inflation_rate = "0.01"
+
+# IBC parameters
+[ibc_params]
+# default mint limit of each token
+default_mint_limit = "0"
+# default per-epoch throughput limit of each token
+default_per_epoch_throughput_limit = "0"
