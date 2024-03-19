@@ -676,14 +676,9 @@ impl WriteLog {
         PrefixIter { iter }
     }
 
-    /// Check if the given tx hash has already been processed. Returns `None` if
-    /// the key is not known.
-    pub fn has_replay_protection_entry(&self, hash: &Hash) -> Option<bool> {
-        self.replay_protection
-            .get(hash)
-            // FIXME: is this correct? Probably I should also consider the
-            // deleted ones
-            .map(|action| matches!(action, ReProtStorageModification::Write))
+    /// Check if the given tx hash has already been processed
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> bool {
+        self.replay_protection.contains_key(hash)
     }
 
     /// Write the transaction hash

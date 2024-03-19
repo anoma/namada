@@ -1063,10 +1063,8 @@ where
 
     /// Check if the given tx hash has already been processed
     pub fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
-        // FIXME: review this
-        if let Some(present) = self.write_log.has_replay_protection_entry(hash)
-        {
-            return Ok(present);
+        if self.write_log.has_replay_protection_entry(hash) {
+            return Ok(true);
         }
 
         self.db()
