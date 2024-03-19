@@ -10,7 +10,6 @@ use namada::core::storage::{BlockHash, BlockHeight};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
-use namada::tx::Tx;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
@@ -19,11 +18,9 @@ use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
 use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
-use crate::facade::tendermint::v0_37::abci::response::DeliverTx;
 use crate::facade::tendermint::v0_37::abci::{
     request, Request as Req, Response as Resp,
 };
-use crate::facade::tendermint_proto::v0_37::abci::ResponseDeliverTx;
 use crate::facade::tower_abci::BoxError;
 use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
 
@@ -108,18 +105,8 @@ impl AbcippShim {
                     Ok(Resp::BeginBlock(Default::default()))
                 }
                 Req::DeliverTx(tx) => {
-                    let mut deliver: DeliverTx = Default::default();
-                    // Attach events to this transaction if possible
-                    if Tx::try_from(&tx.tx[..]).is_ok() {
-                        let resp = ResponseDeliverTx::default();
-                        deliver.events = resp
-                            .events
-                            .into_iter()
-                            .map(|v| TryFrom::try_from(v).unwrap())
-                            .collect();
-                    }
                     self.delivered_txs.push(tx.tx);
-                    Ok(Resp::DeliverTx(deliver))
+                    Ok(Resp::DeliverTx(Default::default()))
                 }
                 Req::EndBlock(_) => {
                     let begin_block_request =
