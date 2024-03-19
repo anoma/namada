@@ -3021,7 +3021,7 @@ name = "indexmap"
 version = "2.2.4"
 source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
 dependencies = [
- "borsh",
+ "borsh 1.2.1",
  "equivalent",
  "hashbrown 0.14.3",
  "serde",
