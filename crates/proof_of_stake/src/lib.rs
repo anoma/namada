@@ -2206,7 +2206,8 @@ where
             // Promote the next below-capacity validator to consensus
             promote_next_below_capacity_validator_to_consensus(
                 storage,
-                pipeline_epoch,
+                current_epoch,
+                params.pipeline_len,
             )?;
         }
 
@@ -2291,8 +2292,8 @@ where
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Jailed,
-                pipeline_epoch,
-                0,
+                current_epoch,
+                params.pipeline_len,
             )?;
             return Ok(());
         }
@@ -2724,10 +2725,14 @@ where
 
     // Remove the validator from the set starting at the update epoch and up
     // thru the pipeline epoch.
-    let pipeline_epoch = current_epoch + params.pipeline_len;
-    for epoch in
-        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
-    {
+    let start = validator_set_update_epoch
+        .0
+        .checked_sub(current_epoch.0)
+        .unwrap(); // Safe unwrap
+    let end = params.pipeline_len;
+
+    for offset in start..=end {
+        let epoch = current_epoch + offset;
         let prev_state = validator_state_handle(validator)
             .get(storage, epoch, params)?
             .expect("Expected to find a valid validator.");
@@ -2742,9 +2747,11 @@ where
                 // For the pipeline epoch only:
                 // promote the next max inactive validator to the active
                 // validator set at the pipeline offset
-                if epoch == pipeline_epoch {
+                if offset == params.pipeline_len {
                     promote_next_below_capacity_validator_to_consensus(
-                        storage, epoch,
+                        storage,
+                        current_epoch,
+                        offset,
                     )?;
                 }
             }
