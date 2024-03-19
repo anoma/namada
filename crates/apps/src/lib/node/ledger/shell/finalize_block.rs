@@ -463,14 +463,15 @@ where
                             protocol::Error::ReplayAttempt(_),
                         ) = msg
                         {
-                            // Remove the wrapper hash but keep the inner tx
+                            // Mark the wrapper hash as redundant but keep the
+                            // inner tx
                             // hash. A replay of the wrapper is impossible since
                             // the inner tx hash is committed to storage and
                             // we validate the wrapper against that hash too
                             let header_hash = replay_protection_hashes
                                 .expect("This cannot fail")
                                 .header_hash;
-                            self.state.delete_tx_hash(header_hash);
+                            self.state.redundant_tx_hash(header_hash);
                         }
                     }
 
@@ -638,8 +639,8 @@ where
         Ok(())
     }
 
-    // Write the inner tx hash to storage and remove the corresponding wrapper
-    // hash since it's redundant (we check the inner tx hash too when validating
+    // Write the inner tx hash to storage and mark the corresponding wrapper
+    // hash as redundant (we check the inner tx hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
     fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
@@ -652,7 +653,7 @@ where
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
-            self.state.delete_tx_hash(header_hash)
+            self.state.redundant_tx_hash(header_hash)
         }
     }
 }

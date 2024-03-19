@@ -116,8 +116,12 @@ impl<'wl> TryFrom<&'wl StorageModification>
 pub(crate) enum ReProtStorageModification {
     /// Write an entry
     Write,
-    /// Delete an entry
-    Delete,
+    /// Mark an entry as redundant, another hash is already preventing the
+    /// execution of this one. Redundant hashes should not be committed to
+    /// storage
+    // FIXME: only wrapper can be deleted, should I find a way to make it
+    // clearer?
+    Redundant,
 }
 
 /// The write log storage
@@ -677,14 +681,12 @@ impl WriteLog {
     pub fn has_replay_protection_entry(&self, hash: &Hash) -> Option<bool> {
         self.replay_protection
             .get(hash)
-            .map(|action| !matches!(action, ReProtStorageModification::Delete))
+            // FIXME: is this correct? Probably I should also consider the
+            // deleted ones
+            .map(|action| matches!(action, ReProtStorageModification::Write))
     }
 
     /// Write the transaction hash
-    // FIXME: maybe rename the Delete enum variant to something like Redundant
-    // so it's clear that we are not deleteing them from storage but we jsut
-    // won't write them to storage FIXME: maybe also rename the Write
-    // variant
     pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
@@ -701,19 +703,16 @@ impl WriteLog {
         Ok(())
     }
 
-    // FIXME: when writing to storage filter out the deleted ones? Or maybe just
-    // avoid them
-
-    /// Remove the transaction hash
+    /// Mark the transaction hash as redundant
     // FIXME: also, this shouldn't get propagated t ostoeragge because now I can
     // only delte hashes in the same block, not from the previous one. So this
     // is an operation limited to the writelog only
-    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if let Some(ReProtStorageModification::Delete) = self
+    pub(crate) fn redundant_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        if let Some(ReProtStorageModification::Redundant) = self
             .replay_protection
-            .insert(hash, ReProtStorageModification::Delete)
+            .insert(hash, ReProtStorageModification::Redundant)
         {
-            // Cannot delete the same hash more than once
+            // Cannot mark the same hash as redundant more than once
             return Err(Error::ReplayProtection(format!(
                 "Requested a delete on hash {hash} over a previous delete"
             )));
@@ -993,7 +992,7 @@ mod tests {
 
             // delete previous hash
             // FIXME: still relevant?
-            write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
+            write_log.redundant_tx_hash(Hash::sha256("tx1".as_bytes()));
         }
 
         // commit a block
@@ -1017,7 +1016,7 @@ mod tests {
         // try to delete finalized hash which shouldn't work
         state
             .write_log
-            .delete_tx_hash(Hash::sha256("tx2".as_bytes()));
+            .redundant_tx_hash(Hash::sha256("tx2".as_bytes()));
 
         // commit a block
         state.commit_block().expect("commit failed");

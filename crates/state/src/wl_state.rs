@@ -229,14 +229,8 @@ where
                         // further
                         &replay_protection::last_key(&hash),
                     )?,
-                ReProtStorageModification::Delete => {
-                    // Cache in case of a rollback
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::buffer_key(&hash),
-                    )?;
-
-                    self.delete_replay_protection_entry(
+                ReProtStorageModification::Redundant => self
+                    .delete_replay_protection_entry(
                         batch,
                         // FIXME: now I can only delete hashes in the same
                         // block, so probably I should never get to this point
@@ -651,9 +645,10 @@ where
         self.write_log.drop_tx()
     }
 
-    /// Delete the provided transaction's hash from storage.
-    pub fn delete_tx_hash(&mut self, hash: Hash) {
-        self.write_log.delete_tx_hash(hash);
+    /// Mark the provided transaction's hash as redundant to prevent committing
+    /// it to storage.
+    pub fn redundant_tx_hash(&mut self, hash: Hash) {
+        self.write_log.redundant_tx_hash(hash);
     }
 
     #[inline]
@@ -1068,6 +1063,7 @@ where
 
     /// Check if the given tx hash has already been processed
     pub fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
+        // FIXME: review this
         if let Some(present) = self.write_log.has_replay_protection_entry(hash)
         {
             return Ok(present);
