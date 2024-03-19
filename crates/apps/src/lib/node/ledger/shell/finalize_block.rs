@@ -2576,6 +2576,138 @@ mod test_finalize_block {
         }
     }
 
+    // Test two identical txs in the same block. The first one fails but doesn't
+    // write the hash (because of invalid signature). The second one must be
+    // able to execute and pass
+    #[test]
+    fn test_duplicated_tx_same_block_with_failure() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = crate::wallet::defaults::albert_keypair();
+        let keypair_2 = crate::wallet::defaults::bertha_keypair();
+
+        let tx_code = TestWasms::TxWriteStorageKey.read_bytes();
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new(tx_code, None));
+        let key = Key::from(Address::from(&keypair_2.ref_to()).to_db_key())
+            .push(&"test".to_string())
+            .unwrap();
+        wrapper.set_data(Data::new(
+            TxWriteData {
+                key,
+                value: "test".as_bytes().to_vec(),
+            }
+            .serialize_to_vec(),
+        ));
+
+        let mut new_wrapper = wrapper.clone();
+        new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            keypair_2.ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            None,
+        ))));
+        new_wrapper.add_section(Section::Signature(Signature::new(
+            vec![new_wrapper.raw_header_hash()],
+            [(0, keypair_2.clone())].into_iter().collect(),
+            None,
+        )));
+        // This is a signature coming from the wrong signer which will be
+        // rejected by the vp
+        wrapper.add_section(Section::Signature(Signature::new(
+            vec![wrapper.raw_header_hash()],
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
+        )));
+        new_wrapper.add_section(Section::Signature(Signature::new(
+            new_wrapper.sechashes(),
+            [(0, keypair_2)].into_iter().collect(),
+            None,
+        )));
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            [(0, keypair)].into_iter().collect(),
+            None,
+        )));
+
+        let mut processed_txs: Vec<ProcessedTx> = vec![];
+        for tx in [&wrapper, &new_wrapper] {
+            processed_txs.push(ProcessedTx {
+                tx: tx.to_bytes().into(),
+                result: TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "".into(),
+                },
+            })
+        }
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.state.in_mem().block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        let code = event[1].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+
+        // This hash must be present as succesfully added by the second
+        // transaction
+        assert!(
+            shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+                .unwrap_or_default()
+        );
+        assert!(
+            shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.header_hash())
+                .unwrap_or_default()
+        );
+        assert!(
+            shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&new_wrapper.raw_header_hash())
+                .unwrap_or_default()
+        );
+        assert!(
+            !shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&new_wrapper.header_hash())
+                .unwrap_or_default()
+        );
+    }
+
     /// Test that if a transaction fails because of out-of-gas,
     ///  invalid signature or wrong section commitment, its hash
     /// is not committed to storage. Also checks that a tx failing for other
