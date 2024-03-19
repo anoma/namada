@@ -587,6 +587,7 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -600,6 +601,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         // expect an error of the throughput limit
         Some("Transaction was rejected by VPs"),
@@ -626,6 +628,7 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -648,6 +651,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         Some(Duration::new(20, 0)),
         None,
         false,
