@@ -95,7 +95,7 @@ use crate::e2e::setup::{
     self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
-    LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
+    LEDGER_STARTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
 
@@ -1261,7 +1261,6 @@ fn transfer_on_chain(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
@@ -1791,7 +1790,6 @@ fn delegate_token(test: &Test) -> Result<()> {
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(())
@@ -1839,7 +1837,6 @@ fn propose_funding(
         &rpc_a,
     ];
     let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())
@@ -1914,7 +1911,6 @@ fn submit_votes(test: &Test) -> Result<()> {
         submit_proposal_vote,
         Some(40)
     )?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
@@ -1932,7 +1928,6 @@ fn submit_votes(test: &Test) -> Result<()> {
     ];
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(())

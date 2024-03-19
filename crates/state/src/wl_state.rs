@@ -13,7 +13,7 @@ use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 
 use crate::in_memory::InMemory;
 use crate::write_log::{
-    self, ReProtStorageModification, StorageModification, WriteLog,
+    ReProtStorageModification, StorageModification, WriteLog,
 };
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
@@ -490,7 +490,6 @@ where
             results,
             address_gen,
             conversion_state,
-            tx_queue,
             ethereum_height,
             eth_events_queue,
         }) = self
@@ -523,7 +522,6 @@ where
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;
             in_mem.conversion_state = conversion_state;
-            in_mem.tx_queue = tx_queue;
             in_mem.ethereum_height = ethereum_height;
             in_mem.eth_events_queue = eth_events_queue;
             tracing::debug!("Loaded storage from DB");
@@ -577,7 +575,6 @@ where
             update_epoch_blocks_delay: self.in_mem.update_epoch_blocks_delay,
             address_gen: &self.in_mem.address_gen,
             conversion_state: &self.in_mem.conversion_state,
-            tx_queue: &self.in_mem.tx_queue,
             ethereum_height: self.in_mem.ethereum_height.as_ref(),
             eth_events_queue: &self.in_mem.eth_events_queue,
         };
@@ -651,8 +648,8 @@ where
     }
 
     /// Delete the provided transaction's hash from storage.
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
-        self.write_log.delete_tx_hash(hash)
+    pub fn delete_tx_hash(&mut self, hash: Hash) {
+        self.write_log.delete_tx_hash(hash);
     }
 
     #[inline]

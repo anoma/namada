@@ -267,7 +267,7 @@ where
                     .ctx
                     .read_post::<IndexedTx>(pin_keys.first().unwrap())?
                 {
-                    Some(IndexedTx { height, index })
+                    Some(IndexedTx { height, index, .. })
                         if height == self.ctx.get_block_height()?
                             && index == self.ctx.get_tx_index()? => {}
                     Some(_) => {

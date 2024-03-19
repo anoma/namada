@@ -60,8 +60,8 @@ use crate::e2e::setup::{
     Who,
 };
 use crate::strings::{
-    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_ACCEPTED,
-    TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
+    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
+    TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
 
@@ -652,10 +652,6 @@ fn ledger_txs_and_queries() -> Result<()> {
                 tx_args.clone()
             };
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-
-            if !dry_run {
-                client.exp_string(TX_ACCEPTED)?;
-            }
             client.exp_string(TX_APPLIED_SUCCESS)?;
             client.assert_success();
         }
@@ -826,7 +822,6 @@ fn wrapper_disposable_signer() -> Result<()> {
             &validator_one_rpc,
         ];
         let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-        client.exp_string(TX_ACCEPTED)?;
         client.exp_string(TX_APPLIED_SUCCESS)?;
     }
 
@@ -865,7 +860,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
@@ -922,7 +916,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
@@ -972,7 +965,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_REJECTED)?;
 
     client.assert_success();
@@ -1024,7 +1016,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_FAILED)?;
     client.assert_success();
     Ok(())
@@ -1876,7 +1867,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string(TX_ACCEPTED)?;
                 client.exp_string(TX_APPLIED_SUCCESS)?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
@@ -3376,6 +3366,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let _bg_validator_0 =
@@ -3888,6 +3885,7 @@ fn change_consensus_key() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(

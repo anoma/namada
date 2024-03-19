@@ -220,15 +220,10 @@ pub async fn process_tx(
         expect_dry_broadcast(TxBroadcastData::DryRun(tx), context).await
     } else {
         // We use this to determine when the wrapper tx makes it on-chain
-        let wrapper_hash = tx.header_hash().to_string();
+        let tx_hash = tx.header_hash().to_string();
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
-        let decrypted_hash = tx.raw_header_hash().to_string();
-        let to_broadcast = TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        };
+        let to_broadcast = TxBroadcastData::Live { tx, tx_hash };
         // TODO: implement the code to resubmit the wrapper if it fails because
         // of masp epoch Either broadcast or submit transaction and
         // collect result into sum type
@@ -313,12 +308,8 @@ pub async fn broadcast_tx(
     context: &impl Namada,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response> {
-    let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => Ok((tx, wrapper_hash, decrypted_hash)),
+    let (tx, tx_hash) = match to_broadcast {
+        TxBroadcastData::Live { tx, tx_hash } => Ok((tx, tx_hash)),
         TxBroadcastData::DryRun(tx) => {
             Err(TxSubmitError::ExpectLiveRun(tx.clone()))
         }
@@ -342,14 +333,7 @@ pub async fn broadcast_tx(
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
-            display_line!(
-                context.io(),
-                "Wrapper transaction hash: {wrapper_tx_hash}",
-            );
-            display_line!(
-                context.io(),
-                "Inner transaction hash: {decrypted_tx_hash}",
-            );
+            display_line!(context.io(), "Transaction hash: {tx_hash}",);
         }
         Ok(response)
     } else {
@@ -373,12 +357,8 @@ pub async fn submit_tx(
     context: &impl Namada,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse> {
-    let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => Ok((tx, wrapper_hash, decrypted_hash)),
+    let (_, tx_hash) = match &to_broadcast {
+        TxBroadcastData::Live { tx, tx_hash } => Ok((tx, tx_hash)),
         TxBroadcastData::DryRun(tx) => {
             Err(TxSubmitError::ExpectLiveRun(tx.clone()))
         }
@@ -398,36 +378,12 @@ pub async fn submit_tx(
         "Awaiting transaction approval",
     );
 
-    let response = {
-        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event =
-            rpc::query_tx_status(context, wrapper_query, deadline).await?;
-        let wrapper_resp = TxResponse::from_event(event);
-
-        if display_wrapper_resp_and_get_result(context, &wrapper_resp) {
-            display_line!(
-                context.io(),
-                "Waiting for inner transaction result..."
-            );
-            // The transaction is now on chain. We wait for it to be decrypted
-            // and applied
-            // We also listen to the event emitted when the encrypted
-            // payload makes its way onto the blockchain
-            let decrypted_query =
-                rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event =
-                rpc::query_tx_status(context, decrypted_query, deadline)
-                    .await?;
-            let inner_resp = TxResponse::from_event(event);
-
-            display_inner_resp(context, &inner_resp);
-            Ok(inner_resp)
-        } else {
-            Ok(wrapper_resp)
-        }
-    };
-
-    response
+    // The transaction is now on chain. We wait for it to be applied
+    let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
+    let event = rpc::query_tx_status(context, tx_query, deadline).await?;
+    let response = TxResponse::from_event(event);
+    display_inner_resp(context, &response);
+    Ok(response)
 }
 
 /// Display a result of a wrapper tx.
@@ -2989,11 +2945,9 @@ async fn expect_dry_broadcast(
             let result = rpc::dry_run_tx(context, tx.to_bytes()).await?;
             Ok(ProcessTxResponse::DryRun(result))
         }
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash: _,
-            decrypted_hash: _,
-        } => Err(Error::from(TxSubmitError::ExpectDryRun(tx))),
+        TxBroadcastData::Live { tx, tx_hash: _ } => {
+            Err(Error::from(TxSubmitError::ExpectDryRun(tx)))
+        }
     }
 }
 

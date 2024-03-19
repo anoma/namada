@@ -10,7 +10,7 @@ use namada_merkle_tree::{MerkleRoot, MerkleTree};
 use namada_migrations::*;
 use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;
-use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, StorageHasher, TxIndex, BLOCK_HASH_LENGTH,
@@ -57,8 +57,6 @@ where
     pub tx_index: TxIndex,
     /// The currently saved conversion state
     pub conversion_state: ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: TxQueue,
     /// Queue of expired transactions that need to be retransmitted.
     ///
     /// These transactions do not need to be persisted, as they are
@@ -142,7 +140,6 @@ where
             update_epoch_blocks_delay: None,
             tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
-            tx_queue: TxQueue::default(),
             expired_txs_queue: ExpiredTxsQueue::default(),
             native_token,
             ethereum_height: None,

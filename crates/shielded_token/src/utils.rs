@@ -76,6 +76,7 @@ pub fn handle_masp_tx(
             IndexedTx {
                 height: ctx.get_block_height()?,
                 index: ctx.get_tx_index()?,
+                is_wrapper: false,
             },
         )?;
     }
