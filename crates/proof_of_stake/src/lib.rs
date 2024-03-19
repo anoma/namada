@@ -266,9 +266,14 @@ where
     }
 
     // Add the validator to the delegation targets
-    let target_validators =
-        delegation_targets_handle(source).at(&(current_epoch + offset));
-    target_validators.insert(storage, validator.clone())?;
+    add_delegation_target(
+        storage,
+        &params,
+        source,
+        validator,
+        current_epoch + offset,
+        current_epoch,
+    )?;
 
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
@@ -2143,6 +2148,16 @@ where
         pipeline_epoch,
     )?;
 
+    // Add the dest validator to the delegation targets
+    add_delegation_target(
+        storage,
+        &params,
+        delegator,
+        dest_validator,
+        pipeline_epoch,
+        current_epoch,
+    )?;
+
     // Update validator set for dest validator
     let is_jailed_or_inactive_at_pipeline = matches!(
         validator_state_handle(dest_validator).get(
@@ -2914,5 +2929,25 @@ where
         prune_liveness_data(storage, current_epoch)?;
     }
 
+    Ok(())
+}
+
+fn add_delegation_target<S>(
+    storage: &mut S,
+    params: &PosParams,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+    current_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let bond_holders = delegation_targets_handle(delegator);
+    if bond_holders.get_data_handler().is_empty(storage)? {
+        bond_holders.init(storage, current_epoch)?;
+    }
+    bond_holders.update_data(storage, params, current_epoch)?;
+    bond_holders.at(&epoch).insert(storage, validator.clone())?;
     Ok(())
 }

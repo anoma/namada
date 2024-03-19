@@ -31,27 +31,37 @@ pub fn find_delegation_validators<S>(
 where
     S: StorageRead,
 {
-    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
-    // let mut delegations: HashSet<Address> = HashSet::new();
+    let validators = delegation_targets_handle(owner);
+    if validators.get_data_handler().is_empty(storage)? {
+        return Ok(HashSet::new());
+    }
 
-    // for iter_result in
-    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    // {
-    //     let (key, _bond_bytes) = iter_result?;
-    //     let validator_address = storage_key::get_validator_address_from_bond(
-    //         &key,
-    //     )
-    //     .ok_or_else(|| {
-    //         namada_storage::Error::new_const(
-    //             "Delegation key should contain validator address.",
-    //         )
-    //     })?;
-    //     delegations.insert(validator_address);
-    // }
-    let delegation_targets = delegation_targets_handle(owner).at(epoch);
-    delegation_targets
-        .iter(storage)?
-        .collect::<Result<HashSet<Address>, _>>()
+    let oldest_epoch = validators
+        .get_oldest_epoch(storage)?
+        .expect("Oldest epoch should be set");
+
+    if *epoch < oldest_epoch {
+        // Should we return an error or None?
+        return Ok(HashSet::new());
+    }
+
+    let mut epoch = *epoch;
+    while epoch >= oldest_epoch {
+        if validators.at(&epoch).is_empty(storage)? {
+            epoch = epoch - 1;
+        } else {
+            return validators
+                .at(&epoch)
+                .iter(storage)?
+                .collect::<Result<HashSet<Address>, _>>();
+        }
+    }
+
+    Ok(HashSet::new())
+
+    // validators
+    //     .iter(storage)?
+    //     .collect::<Result<HashSet<Address>, _>>()
 }
 
 /// Find all validators to which a given bond `owner` (or source) has a
@@ -64,36 +74,41 @@ pub fn find_delegations<S>(
 where
     S: StorageRead,
 {
-    // let bonds_prefix = storage_key::bonds_for_source_prefix(owner);
     let params = read_pos_params(storage)?;
     let mut delegations: HashMap<Address, token::Amount> = HashMap::new();
 
-    // for iter_result in
-    //     namada_storage::iter_prefix_bytes(storage, &bonds_prefix)?
-    // {
-    //     let (key, _bond_bytes) = iter_result?;
-    //     let validator_address = storage_key::get_validator_address_from_bond(
-    //         &key,
-    //     )
-    //     .ok_or_else(|| {
-    //         namada_storage::Error::new_const(
-    //             "Delegation key should contain validator address.",
-    //         )
-    //     })?;
-    //     let deltas_sum = bond_handle(owner, &validator_address)
-    //         .get_sum(storage, *epoch, &params)?
-    //         .unwrap_or_default();
-    //     delegations.insert(validator_address, deltas_sum);
-    // }
-    let delegation_targets = delegation_targets_handle(owner).at(epoch);
-    for validator in delegation_targets.iter(storage)? {
-        let validator = validator?;
-        let stake = bond_handle(owner, &validator)
-            .get_sum(storage, *epoch, &params)?
-            .unwrap_or_default();
-        delegations.insert(validator, stake);
+    let validators = delegation_targets_handle(owner);
+    if validators.get_data_handler().is_empty(storage)? {
+        return Ok(HashMap::new());
     }
-    Ok(delegations)
+
+    let oldest_epoch = validators
+        .get_oldest_epoch(storage)?
+        .expect("Oldest epoch should be set");
+    dbg!(&oldest_epoch);
+    if *epoch < oldest_epoch {
+        // Should we return an error or None?
+        return Ok(HashMap::new());
+    }
+
+    let mut epoch = *epoch;
+    while epoch >= oldest_epoch {
+        if validators.at(&epoch).is_empty(storage)? {
+            epoch = epoch - 1;
+        } else {
+            for validator in validators.at(&epoch).iter(storage)? {
+                let validator = validator?;
+                // Should use raw bonds or slashed stake??
+                let stake = bond_handle(owner, &validator)
+                    .get_sum(storage, epoch, &params)?
+                    .unwrap_or_default();
+                delegations.insert(validator, stake);
+            }
+            return Ok(delegations);
+        }
+    }
+
+    Ok(HashMap::new())
 }
 
 /// Find if the given source address has any bonds.
