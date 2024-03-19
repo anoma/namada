@@ -2,6 +2,8 @@
 
 use core::time::Duration;
 
+use namada_core::address::Address;
+use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
 use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 use namada_core::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
 use namada_core::ibc::core::channel::types::channel::ChannelEnd;
@@ -24,10 +26,13 @@ use namada_core::ibc::core::host::types::identifiers::{
 };
 use namada_core::ibc::primitives::proto::{Any, Protobuf};
 use namada_core::ibc::primitives::Timestamp;
+use namada_core::ibc::{NftClass, NftMetadata};
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
 use namada_core::time::DurationSecs;
 use namada_parameters::storage::get_max_expected_time_per_block_key;
+use namada_token::storage_key::balance_key;
+use namada_token::Amount;
 use prost::Message;
 use sha2::Digest;
 
@@ -45,7 +50,9 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::client_state_key(client_id);
         match self.read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
-                .map_err(ClientError::Decode)?
+                .map_err(|e| ClientError::Other {
+                    description: e.to_string(),
+                })?
                 .try_into()
                 .map_err(ContextError::from),
             None => Err(ClientError::ClientStateNotFound {
@@ -75,7 +82,9 @@ pub trait IbcCommonContext: IbcStorageContext {
         let key = storage::consensus_state_key(client_id, height);
         match self.read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
-                .map_err(ClientError::Decode)?
+                .map_err(|e| ClientError::Other {
+                    description: e.to_string(),
+                })?
                 .try_into()
                 .map_err(ContextError::from),
             None => Err(ClientError::ConsensusStateNotFound {
@@ -114,7 +123,9 @@ pub trait IbcCommonContext: IbcStorageContext {
         consensus_state: Vec<u8>,
     ) -> Result<AnyConsensusState> {
         Any::decode(&consensus_state[..])
-            .map_err(ClientError::Decode)?
+            .map_err(|e| ClientError::Other {
+                description: e.to_string(),
+            })?
             .try_into()
             .map_err(ContextError::from)
     }
@@ -643,26 +654,71 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.write(key, count).map_err(ContextError::from)
     }
 
-    /// Write the IBC denom. The given address could be a non-Namada token.
-    fn store_ibc_denom(
+    /// Write the IBC trace. The given address could be a non-Namada token.
+    fn store_ibc_trace(
         &mut self,
         addr: impl AsRef<str>,
         trace_hash: impl AsRef<str>,
-        denom: impl AsRef<str>,
+        trace: impl AsRef<str>,
     ) -> Result<()> {
-        let key = storage::ibc_denom_key(addr, trace_hash.as_ref());
+        let key = storage::ibc_trace_key(addr, trace_hash.as_ref());
         let has_key = self.has_key(&key).map_err(|_| ChannelError::Other {
-            description: format!("Reading the IBC denom failed: Key {key}"),
+            description: format!("Reading the IBC trace failed: Key {key}"),
         })?;
         if !has_key {
-            self.write(&key, denom.as_ref()).map_err(|_| {
+            self.write(&key, trace.as_ref()).map_err(|_| {
                 ChannelError::Other {
                     description: format!(
-                        "Writing the denom failed: Key {key}",
+                        "Writing the trace failed: Key {key}",
                     ),
                 }
             })?;
         }
         Ok(())
+    }
+
+    /// Get the NFT class
+    fn nft_class(
+        &self,
+        class_id: &PrefixedClassId,
+    ) -> Result<Option<NftClass>> {
+        let key = storage::nft_class_key(class_id);
+        self.read(&key).map_err(ContextError::from)
+    }
+
+    /// Store the NFT class
+    fn store_nft_class(&mut self, class: NftClass) -> Result<()> {
+        let key = storage::nft_class_key(&class.class_id);
+        self.write(&key, class).map_err(ContextError::from)
+    }
+
+    /// Get the NFT metadata
+    fn nft_metadata(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+    ) -> Result<Option<NftMetadata>> {
+        let key = storage::nft_metadata_key(class_id, token_id);
+        self.read(&key).map_err(ContextError::from)
+    }
+
+    /// Store the NFT metadata
+    fn store_nft_metadata(&mut self, metadata: NftMetadata) -> Result<()> {
+        let key =
+            storage::nft_metadata_key(&metadata.class_id, &metadata.token_id);
+        self.write(&key, metadata).map_err(ContextError::from)
+    }
+
+    /// Return true if the NFT is owned by the owner
+    fn is_nft_owned(
+        &self,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+        owner: &Address,
+    ) -> Result<bool> {
+        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let balance_key = balance_key(&ibc_token, owner);
+        let amount = self.read::<Amount>(&balance_key)?;
+        Ok(amount == Some(Amount::from_u64(1)))
     }
 }

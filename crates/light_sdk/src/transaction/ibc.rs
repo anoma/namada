@@ -3,7 +3,7 @@ use std::str::FromStr;
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada_sdk::ibc::primitives::Msg;
+use namada_sdk::ibc::primitives::ToProto;
 use namada_sdk::key::common;
 use namada_sdk::storage::Epoch;
 use namada_sdk::time::DateTimeUtc;

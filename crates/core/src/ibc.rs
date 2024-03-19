@@ -14,21 +14,33 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::address::HASH_LEN;
-use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use super::address::{Address, InternalAddress, HASH_LEN};
+use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
+use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
+use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
+use crate::ibc::apps::nft_transfer::types::{
+    ClassData, ClassId, ClassUri, Memo as NftMemo, PrefixedClassId, TokenData,
+    TokenId, TokenUri, TracePath as NftTracePath,
+};
+use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use crate::ibc::apps::transfer::types::{Memo, PrefixedDenom, TracePath};
 use crate::ibc::core::handler::types::events::{
     Error as IbcEventError, IbcEvent as RawIbcEvent,
 };
 use crate::ibc::primitives::proto::Protobuf;
-use crate::masp::PaymentAddress;
 use crate::tendermint::abci::Event as AbciEvent;
 use crate::token::Transfer;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
-/// The event type defined in ibc-rs for IBC denom
-pub const EVENT_TYPE_DENOM_TRACE: &str = "denomination_trace";
+/// The event type defined in ibc-rs for receiving an NFT
+pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
+/// The event attribute key defined in ibc-rs for receiving result
+pub const EVENT_ATTRIBUTE_SUCCESS: &str = "success";
+/// The event attribute value defined in ibc-rs for receiving success
+pub const EVENT_VALUE_SUCCESS: &str = "true";
+/// The escrow address for IBC transfer
+pub const IBC_ESCROW_ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
 /// IBC token hash derived from a denomination.
 #[derive(
@@ -115,16 +127,16 @@ impl std::fmt::Display for IbcEvent {
     }
 }
 
-/// IBC transfer message to send from a shielded address
+/// IBC transfer message with `IbcShieldedTransfer`
 #[derive(Debug, Clone)]
-pub struct MsgShieldedTransfer {
+pub struct MsgTransfer {
     /// IBC transfer message
-    pub message: MsgTransfer,
+    pub message: IbcMsgTransfer,
     /// MASP tx with token transfer
-    pub shielded_transfer: IbcShieldedTransfer,
+    pub shielded_transfer: Option<IbcShieldedTransfer>,
 }
 
-impl BorshSerialize for MsgShieldedTransfer {
+impl BorshSerialize for MsgTransfer {
     fn serialize<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -135,14 +147,50 @@ impl BorshSerialize for MsgShieldedTransfer {
     }
 }
 
-impl BorshDeserialize for MsgShieldedTransfer {
+impl BorshDeserialize for MsgTransfer {
     fn deserialize_reader<R: std::io::Read>(
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, shielded_transfer): (Vec<u8>, IbcShieldedTransfer) =
+        let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
             BorshDeserialize::deserialize_reader(reader)?;
-        let message = MsgTransfer::decode_vec(&msg)
+        let message = IbcMsgTransfer::decode_vec(&msg)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        Ok(Self {
+            message,
+            shielded_transfer,
+        })
+    }
+}
+
+/// IBC NFT transfer message with `IbcShieldedTransfer`
+#[derive(Debug, Clone)]
+pub struct MsgNftTransfer {
+    /// IBC NFT transfer message
+    pub message: IbcMsgNftTransfer,
+    /// MASP tx with token transfer
+    pub shielded_transfer: Option<IbcShieldedTransfer>,
+}
+
+impl BorshSerialize for MsgNftTransfer {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        let encoded_msg = self.message.clone().encode_vec();
+        let members = (encoded_msg, self.shielded_transfer.clone());
+        BorshSerialize::serialize(&members, writer)
+    }
+}
+
+impl BorshDeserialize for MsgNftTransfer {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let (msg, shielded_transfer): (Vec<u8>, Option<IbcShieldedTransfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
+        let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self {
             message,
@@ -206,6 +254,24 @@ pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
     ))
 }
 
+/// Returns the trace path and the token string if the trace is an NFT one
+pub fn is_nft_trace(
+    trace: impl AsRef<str>,
+) -> Option<(NftTracePath, String, String)> {
+    // The trace should be {port}/{channel}/.../{class_id}/{token_id}
+    if let Some((class_id, token_id)) = trace.as_ref().rsplit_once('/') {
+        let prefixed_class_id = PrefixedClassId::from_str(class_id).ok()?;
+        // The base token isn't decoded because it could be non Namada token
+        Some((
+            prefixed_class_id.trace_path,
+            prefixed_class_id.base_class_id.to_string(),
+            token_id.to_string(),
+        ))
+    } else {
+        None
+    }
+}
+
 impl From<IbcShieldedTransfer> for Memo {
     fn from(shielded: IbcShieldedTransfer) -> Self {
         let bytes = shielded.serialize_to_vec();
@@ -224,29 +290,207 @@ impl TryFrom<Memo> for IbcShieldedTransfer {
     }
 }
 
-/// Get the shielded transfer from the memo
-pub fn get_shielded_transfer(
-    event: &IbcEvent,
-) -> Result<Option<IbcShieldedTransfer>> {
-    if event.event_type != EVENT_TYPE_PACKET {
-        // This event is not for receiving a token
-        return Ok(None);
+impl From<IbcShieldedTransfer> for NftMemo {
+    fn from(shielded: IbcShieldedTransfer) -> Self {
+        let bytes = shielded.serialize_to_vec();
+        HEXUPPER.encode(&bytes).into()
     }
-    let is_success =
-        event.attributes.get("success") == Some(&"true".to_string());
-    let receiver = event.attributes.get("receiver");
-    let is_shielded = if let Some(receiver) = receiver {
-        PaymentAddress::from_str(receiver).is_ok()
-    } else {
-        false
-    };
-    if !is_success || !is_shielded {
-        return Ok(None);
+}
+
+impl TryFrom<NftMemo> for IbcShieldedTransfer {
+    type Error = Error;
+
+    fn try_from(memo: NftMemo) -> Result<Self> {
+        let bytes = HEXUPPER
+            .decode(memo.as_ref().as_bytes())
+            .map_err(Error::DecodingHex)?;
+        Self::try_from_slice(&bytes).map_err(Error::DecodingShieldedTransfer)
+    }
+}
+
+/// NFT class
+#[derive(Clone, Debug)]
+pub struct NftClass {
+    /// NFT class ID
+    pub class_id: PrefixedClassId,
+    /// NFT class URI
+    pub class_uri: Option<ClassUri>,
+    /// NFT class data
+    pub class_data: Option<ClassData>,
+}
+
+impl BorshSerialize for NftClass {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.class_id.to_string(), writer)?;
+        match &self.class_uri {
+            Some(uri) => {
+                BorshSerialize::serialize(&true, writer)?;
+                BorshSerialize::serialize(&uri.to_string(), writer)?;
+            }
+            None => BorshSerialize::serialize(&false, writer)?,
+        }
+        match &self.class_data {
+            Some(data) => {
+                BorshSerialize::serialize(&true, writer)?;
+                BorshSerialize::serialize(&data.to_string(), writer)
+            }
+            None => BorshSerialize::serialize(&false, writer),
+        }
+    }
+}
+
+impl BorshDeserialize for NftClass {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let class_id: String = BorshDeserialize::deserialize_reader(reader)?;
+        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+
+        let is_uri: bool = BorshDeserialize::deserialize_reader(reader)?;
+        let class_uri = if is_uri {
+            let uri_str: String = BorshDeserialize::deserialize_reader(reader)?;
+            Some(uri_str.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?)
+        } else {
+            None
+        };
+
+        let is_data: bool = BorshDeserialize::deserialize_reader(reader)?;
+        let class_data = if is_data {
+            let data_str: String =
+                BorshDeserialize::deserialize_reader(reader)?;
+            Some(data_str.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            class_id,
+            class_uri,
+            class_data,
+        })
+    }
+}
+
+impl NftClassContext for NftClass {
+    fn get_id(&self) -> &ClassId {
+        &self.class_id.base_class_id
     }
 
-    event
-        .attributes
-        .get("memo")
-        .map(|memo| IbcShieldedTransfer::try_from(Memo::from(memo.clone())))
-        .transpose()
+    fn get_uri(&self) -> Option<&ClassUri> {
+        self.class_uri.as_ref()
+    }
+
+    fn get_data(&self) -> Option<&ClassData> {
+        self.class_data.as_ref()
+    }
+}
+
+/// NFT metadata
+#[derive(Clone, Debug)]
+pub struct NftMetadata {
+    /// NFT class ID
+    pub class_id: PrefixedClassId,
+    /// NFT ID
+    pub token_id: TokenId,
+    /// NFT URI
+    pub token_uri: Option<TokenUri>,
+    /// NFT data
+    pub token_data: Option<TokenData>,
+}
+
+impl BorshSerialize for NftMetadata {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.class_id.to_string(), writer)?;
+        BorshSerialize::serialize(&self.token_id.to_string(), writer)?;
+        match &self.token_uri {
+            Some(uri) => {
+                BorshSerialize::serialize(&true, writer)?;
+                BorshSerialize::serialize(&uri.to_string(), writer)?;
+            }
+            None => BorshSerialize::serialize(&false, writer)?,
+        }
+        match &self.token_data {
+            Some(data) => {
+                BorshSerialize::serialize(&true, writer)?;
+                BorshSerialize::serialize(&data.to_string(), writer)
+            }
+            None => BorshSerialize::serialize(&false, writer),
+        }
+    }
+}
+
+impl BorshDeserialize for NftMetadata {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        use std::io::{Error, ErrorKind};
+        let class_id: String = BorshDeserialize::deserialize_reader(reader)?;
+        let class_id = class_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+
+        let token_id: String = BorshDeserialize::deserialize_reader(reader)?;
+        let token_id = token_id.parse().map_err(|e: NftTransferError| {
+            Error::new(ErrorKind::InvalidData, e.to_string())
+        })?;
+
+        let is_uri: bool = BorshDeserialize::deserialize_reader(reader)?;
+        let token_uri = if is_uri {
+            let uri_str: String = BorshDeserialize::deserialize_reader(reader)?;
+            Some(uri_str.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?)
+        } else {
+            None
+        };
+
+        let is_data: bool = BorshDeserialize::deserialize_reader(reader)?;
+        let token_data = if is_data {
+            let data_str: String =
+                BorshDeserialize::deserialize_reader(reader)?;
+            Some(data_str.parse().map_err(|e: NftTransferError| {
+                Error::new(ErrorKind::InvalidData, e.to_string())
+            })?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            class_id,
+            token_id,
+            token_uri,
+            token_data,
+        })
+    }
+}
+
+impl NftContext for NftMetadata {
+    fn get_class_id(&self) -> &ClassId {
+        &self.class_id.base_class_id
+    }
+
+    fn get_id(&self) -> &TokenId {
+        &self.token_id
+    }
+
+    fn get_uri(&self) -> Option<&TokenUri> {
+        self.token_uri.as_ref()
+    }
+
+    fn get_data(&self) -> Option<&TokenData> {
+        self.token_data.as_ref()
+    }
 }

@@ -16,7 +16,7 @@ use namada::core::time::DurationSecs;
 use namada::gas::TxGasMeter;
 use namada::governance::parameters::GovernanceParameters;
 use namada::ibc::apps::transfer::types::error::TokenTransferError;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
 use namada::ibc::apps::transfer::types::{
     ack_success_b64, PrefixedCoin, VERSION,
@@ -55,6 +55,7 @@ pub use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::Timestamp;
+use namada::ibc::MsgTransfer;
 use namada::ledger::gas::VpGasMeter;
 pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
@@ -294,7 +295,7 @@ pub fn init_storage() -> (Address, Address) {
 }
 
 pub fn client_id() -> ClientId {
-    ClientId::new(client_type(), 0).expect("invalid client ID")
+    ClientId::new(&client_type().to_string(), 0).expect("invalid client ID")
 }
 
 pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
@@ -442,8 +443,8 @@ pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
 }
 
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
-    let client_type = client_type();
-    let counterparty_client_id = ClientId::new(client_type, 42).unwrap();
+    let counterparty_client_id =
+        ClientId::new(&client_type().to_string(), 42).unwrap();
     let commitment_prefix =
         CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
     let counterparty =
@@ -522,8 +523,8 @@ fn dummy_proof_height() -> Height {
 }
 
 fn dummy_connection_counterparty() -> ConnCounterparty {
-    let client_type = client_type();
-    let client_id = ClientId::new(client_type, 42).expect("invalid client ID");
+    let client_id = ClientId::new(&client_type().to_string(), 42)
+        .expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
     let commitment_prefix =
         CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
@@ -636,7 +637,7 @@ pub fn msg_transfer(
 ) -> MsgTransfer {
     let amount = DenominatedAmount::native(Amount::native_whole(100));
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
-    MsgTransfer {
+    let message = IbcMsgTransfer {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
         packet_data: PacketData {
@@ -652,10 +653,14 @@ pub fn msg_transfer(
         },
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timestamp,
+    };
+    MsgTransfer {
+        message,
+        shielded_transfer: None,
     }
 }
 
-pub fn set_timeout_timestamp(msg: &mut MsgTransfer) {
+pub fn set_timeout_timestamp(msg: &mut IbcMsgTransfer) {
     msg.timeout_timestamp_on_b =
         (msg.timeout_timestamp_on_b - Duration::from_secs(201)).unwrap();
 }
@@ -738,7 +743,7 @@ pub fn msg_timeout_on_close(
 }
 
 pub fn packet_from_message(
-    msg: &MsgTransfer,
+    msg: &IbcMsgTransfer,
     sequence: Sequence,
     counterparty: &ChanCounterparty,
 ) -> Packet {
