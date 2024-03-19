@@ -86,6 +86,8 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
+const ENV_VAR_ROCKSDB_COMPRESSION_THREADS: &str =
+    "NAMADA_ROCKSDB_COMPRESSION_THREADS";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -109,9 +111,15 @@ pub fn open(
         // If not set, default to quarter of logical CPUs count
         logical_cores / 4,
     ) as i32;
+    let compression_threads = num_of_threads(
+        ENV_VAR_ROCKSDB_COMPRESSION_THREADS,
+        // If not set, default to quarter of logical CPUs count
+        logical_cores / 8,
+    ) as i32;
+
     tracing::info!(
-        "Using {} compactions threads for RocksDB.",
-        compaction_threads
+        "Using {} compactions threads and {} compression threads for RocksDB.",
+        compaction_threads, compression_threads
     );
 
     // DB options
@@ -120,6 +128,12 @@ pub fn open(
     // This gives `compaction_threads` number to compaction threads and 1 thread
     // for flush background jobs: https://github.com/facebook/rocksdb/blob/17ce1ca48be53ba29138f92dafc9c853d9241377/options/options.cc#L622
     db_opts.increase_parallelism(compaction_threads);
+
+    db_opts.set_wal_compression_type(DBCompressionType::Zstd);
+    db_opts.set_compression_options_parallel_threads(compression_threads);
+    db_opts.add_compact_on_deletion_collector_factory(10000, 6000, 0.5);
+    // or should we just run compaction periodicly ? maybe based on some multiple of block time?
+    // db_opts.set_periodic_compaction_seconds(60)
 
     db_opts.set_bytes_per_sync(1048576);
     set_max_open_files(&mut db_opts);
