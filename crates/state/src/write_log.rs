@@ -118,8 +118,6 @@ pub(crate) enum ReProtStorageModification {
     Write,
     /// Delete an entry
     Delete,
-    /// Finalize an entry
-    Finalize,
 }
 
 /// The write log storage
@@ -683,6 +681,10 @@ impl WriteLog {
     }
 
     /// Write the transaction hash
+    // FIXME: maybe rename the Delete enum variant to something like Redundant
+    // so it's clear that we are not deleteing them from storage but we jsut
+    // won't write them to storage FIXME: maybe also rename the Write
+    // variant
     pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
         if self
             .replay_protection
@@ -699,25 +701,21 @@ impl WriteLog {
         Ok(())
     }
 
-    /// Remove the transaction hash
-    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) {
-        self.replay_protection
-            .insert(hash, ReProtStorageModification::Delete);
-    }
+    // FIXME: when writing to storage filter out the deleted ones? Or maybe just
+    // avoid them
 
-    /// Move the transaction hash of the previous block to the list of all
-    /// blocks. This functions should be called at the beginning of the block
-    /// processing, before any other replay protection operation is done
-    pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if self
+    /// Remove the transaction hash
+    // FIXME: also, this shouldn't get propagated t ostoeragge because now I can
+    // only delte hashes in the same block, not from the previous one. So this
+    // is an operation limited to the writelog only
+    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
+        if let Some(ReProtStorageModification::Delete) = self
             .replay_protection
-            .insert(hash, ReProtStorageModification::Finalize)
-            .is_some()
+            .insert(hash, ReProtStorageModification::Delete)
         {
-            // Cannot finalize an hash if other requests have already been
-            // committed for the same hash
+            // Cannot delete the same hash more than once
             return Err(Error::ReplayProtection(format!(
-                "Requested a finalize on hash {hash} over a previous request"
+                "Requested a delete on hash {hash} over a previous delete"
             )));
         }
 
@@ -950,6 +948,7 @@ mod tests {
 
     #[test]
     fn test_replay_protection_commit() {
+        // FIXME: review this test
         let mut state = crate::testing::TestState::default();
 
         {
@@ -993,14 +992,8 @@ mod tests {
                 .unwrap();
 
             // delete previous hash
+            // FIXME: still relevant?
             write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
-
-            // finalize previous hashes
-            for tx in ["tx2", "tx3"] {
-                write_log
-                    .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
-                    .unwrap();
-            }
         }
 
         // commit a block
@@ -1020,6 +1013,7 @@ mod tests {
                 .expect("read failed")
         );
 
+        // FIXME: still relevant?
         // try to delete finalized hash which shouldn't work
         state
             .write_log

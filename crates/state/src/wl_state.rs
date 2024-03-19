@@ -238,26 +238,12 @@ where
 
                     self.delete_replay_protection_entry(
                         batch,
+                        // FIXME: now I can only delete hashes in the same
+                        // block, so probably I should never get to this point
                         // Can only delete tx hashes from the previous block,
                         // no further
                         &replay_protection::last_key(&hash),
-                    )?
-                }
-                ReProtStorageModification::Finalize => {
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::all_key(&hash),
-                    )?;
-                    // Cache in case of a rollback
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::buffer_key(&hash),
-                    )?;
-                    self.delete_replay_protection_entry(
-                        batch,
-                        &replay_protection::last_key(&hash),
-                    )?;
-                }
+                    )?,
             }
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
