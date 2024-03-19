@@ -1,11 +1,12 @@
 //! Contains types necessary for processing Ethereum events
 //! in vote extensions.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::ops::Deref;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::ethereum_events::EthereumEvent;
 use namada_core::key::common::{self, Signature};
 use namada_core::storage::BlockHeight;

@@ -1,7 +1,7 @@
 //! SDK functions to construct different types of transactions
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,6 +21,7 @@ use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;

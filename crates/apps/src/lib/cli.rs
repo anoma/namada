@@ -2974,7 +2974,6 @@ pub mod cmds {
 }
 
 pub mod args {
-    use std::collections::HashMap;
     use std::env;
     use std::net::SocketAddr;
     use std::path::PathBuf;
@@ -2983,6 +2982,7 @@ pub mod args {
     use data_encoding::HEXUPPER;
     use namada::core::address::{Address, EstablishedAddress};
     use namada::core::chain::{ChainId, ChainIdPrefix};
+    use namada::core::collections::HashMap;
     use namada::core::dec::Dec;
     use namada::core::ethereum_events::EthAddress;
     use namada::core::keccak::KeccakHash;

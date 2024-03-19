@@ -1,10 +1,11 @@
 //! Queriezzz
 
 use std::cmp;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;

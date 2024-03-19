@@ -1,7 +1,6 @@
 //! IBC-related data types
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -14,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::address::{Address, InternalAddress, HASH_LEN};
+use crate::collections::HashMap;
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;

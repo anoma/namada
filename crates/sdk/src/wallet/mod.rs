@@ -5,7 +5,7 @@ mod keys;
 pub mod pre_genesis;
 pub mod store;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -13,6 +13,7 @@ use alias::Alias;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
@@ -769,7 +770,7 @@ impl<U: WalletIo> Wallet<U> {
         // Try cache first
         if let Some(cached_key) = self
             .decrypted_key_cache
-            .get(&alias_pkh_or_pk.as_ref().into())
+            .get(&Alias::from(alias_pkh_or_pk.as_ref()))
         {
             return Ok(cached_key.clone());
         }
@@ -810,8 +811,9 @@ impl<U: WalletIo> Wallet<U> {
         password: Option<Zeroizing<String>>,
     ) -> Result<ExtendedSpendingKey, FindKeyError> {
         // Try cache first
-        if let Some(cached_key) =
-            self.decrypted_spendkey_cache.get(&alias.as_ref().into())
+        if let Some(cached_key) = self
+            .decrypted_spendkey_cache
+            .get(&Alias::from(alias.as_ref()))
         {
             return Ok(*cached_key);
         }

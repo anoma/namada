@@ -1,8 +1,9 @@
 //! Contexts for IBC validity predicate
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 
 use borsh_ext::BorshSerializeExt;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::Epochs;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
 use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
