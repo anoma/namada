@@ -13,8 +13,8 @@
 
 use core::ops::Deref;
 
+use booleans::BoolResultUnitExt;
 use namada_vp_prelude::*;
-use once_cell::unsync::Lazy;
 
 enum KeyType<'a> {
     /// Public key - written once revealed
@@ -81,13 +81,11 @@ fn validate_tx(
         verifiers
     );
 
-    let valid_sig = Lazy::new(|| {
-        matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
-    });
+    let mut gadget = VerifySigGadget::new();
 
-    for key in keys_changed.iter() {
+    keys_changed.iter().try_for_each(|key| {
         let key_type: KeyType = key.into();
-        let is_valid = match key_type {
+        let result = match key_type {
             KeyType::Pk(owner) => {
                 if owner == &addr {
                     if ctx.has_key_pre(key)? {
@@ -147,22 +145,33 @@ fn validate_tx(
             }
             KeyType::TokenMinted => verifiers.contains(&address::MULTITOKEN),
             KeyType::TokenMinter(minter) => minter != &addr || *valid_sig,
-            KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
-            KeyType::PgfSteward(address) => address != &addr || *valid_sig,
-            KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
-            KeyType::Masp | KeyType::Ibc => true,
+            KeyType::PoS => validate_pos_changes(ctx, &addr, key, &mut gadget),
+            KeyType::PgfSteward(pgf_steward_addr) => gadget
+                .verify_signatures_when(
+                    || pgf_steward_addr == &addr,
+                    ctx,
+                    &tx_data,
+                    &addr,
+                ),
+            KeyType::GovernanceVote(voter_addr) => gadget
+                .verify_signatures_when(
+                    || voter_addr == &addr,
+                    ctx,
+                    &tx_data,
+                    &addr,
+                ),
+            KeyType::Masp | KeyType::Ibc => Ok(()),
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
-                *valid_sig
+                gadget.verify_signatures(ctx, &tx_data, &addr)
             }
         };
-        if !is_valid {
-            log_string(format!("key {} modification failed vp_implicit", key));
-            return reject();
-        }
-    }
-
-    accept()
+        result.inspect_err(|reason| {
+            log_string(format!(
+                "Modification on key {key} failed vp_implicit: {reason}"
+            ));
+        })
+    })
 }
 
 fn validate_pos_changes(

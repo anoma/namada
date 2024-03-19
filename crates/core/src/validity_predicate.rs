@@ -14,6 +14,7 @@ impl<T, E> VpErrorExtResult<T> for Result<T, E>
 where
     E: core::fmt::Display,
 {
+    // FIXME: we can't erase gas errors!
     #[inline]
     fn into_vp_error(self) -> Result<T, VpError> {
         self.map_err(|err| VpError::Erased(err.to_string()))

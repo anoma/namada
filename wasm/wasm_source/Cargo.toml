@@ -35,14 +35,13 @@ tx_vote_proposal = ["namada_tx_prelude"]
 tx_withdraw = ["namada_tx_prelude"]
 tx_update_steward_commission = ["namada_tx_prelude"]
 tx_resign_steward = ["namada_tx_prelude"]
-vp_implicit = ["namada_vp_prelude", "once_cell"]
-vp_user = ["namada_vp_prelude", "once_cell"]
+vp_implicit = ["namada_vp_prelude"]
+vp_user = ["namada_vp_prelude"]
 
 [dependencies]
 namada_tx_prelude = {path = "../../crates/tx_prelude", optional = true}
 namada_vp_prelude = {path = "../../crates/vp_prelude", optional = true}
 
-once_cell = {version = "1.8.0", optional = true}
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 

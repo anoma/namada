@@ -67,7 +67,9 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpEnvResult<bool> {
 }
 
 /// Verify section signatures
-pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
+#[cold]
+#[inline(never)]
+fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let max_signatures_per_transaction =
         parameters::max_signatures_per_transaction(&ctx.pre())
             .into_vp_error()?;
@@ -100,6 +102,54 @@ pub fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
         },
         VpError::InvalidSignature,
     )
+}
+
+/// Utility to minimize signature verification ops.
+#[derive(Default)]
+#[repr(transparent)]
+pub struct VerifySigGadget {
+    has_validated_sig: bool,
+}
+
+impl VerifySigGadget {
+    /// Create a new [`VerifySigGadget`].
+    pub const fn new() -> Self {
+        Self {
+            has_validated_sig: false,
+        }
+    }
+
+    /// Verify a tx signature, only paying the cost of this operation once.
+    #[inline(always)]
+    pub fn verify_signatures(
+        &mut self,
+        ctx: &Ctx,
+        tx_data: &Tx,
+        owner: &Address,
+    ) -> VpResult {
+        if !self.has_validated_sig {
+            verify_signatures(ctx, tx_data, addr)?;
+            self.has_validated_sig = true;
+        }
+        Ok(())
+    }
+
+    /// Identical to [`Self::verify_signatures`], but execute a predicate before
+    /// validating a sig. If the predicate returns false, we do not check tx
+    /// signatures.
+    #[inline(always)]
+    pub fn verify_signatures_when<F: FnOnce() -> bool>(
+        &mut self,
+        predicate: F,
+        ctx: &Ctx,
+        tx_data: &Tx,
+        owner: &Address,
+    ) -> VpResult {
+        if predicate() {
+            self.verify_signatures(ctx, tx_data, owner)?;
+        }
+        Ok(())
+    }
 }
 
 /// Format and log a string in a debug build.
