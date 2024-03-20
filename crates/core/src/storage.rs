@@ -653,6 +653,14 @@ impl Key {
         self.iter_addresses().cloned().collect()
     }
 
+    /// Returns the address from the first key segment if it's an address.
+    pub fn fst_address(&self) -> Option<&Address> {
+        self.segments.first().and_then(|s| match s {
+            DbKeySeg::AddressSeg(addr) => Some(addr),
+            DbKeySeg::StringSeg(_) => None,
+        })
+    }
+
     /// Iterates over all addresses in the key segments
     pub fn iter_addresses<'k, 'this: 'k>(
         &'this self,
