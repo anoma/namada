@@ -613,7 +613,9 @@ impl wasm_instrument::gas_metering::Rules for GasRules {
     ) -> Option<u32> {
         // NOTE: costs set to 0 don't actually trigger the injection of a call
         // to the gas host function (no useless instructions are
-        // injected) NOTE: none of these costs should be zero
+        // injected)
+        // NOTE: these costs are taken from the benchmarks crate. None of them
+        // should be zero
         let gas = match instruction {
             Unreachable => 129_358,
             // Just a flag, aribitrary cost of 1
