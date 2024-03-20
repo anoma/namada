@@ -2421,7 +2421,7 @@ mod shell_tests {
         // Write wrapper hash to storage
         let mut batch = namada::state::testing::TestState::batch();
         let wrapper_hash = wrapper.header_hash();
-        let wrapper_hash_key = replay_protection::last_key(&wrapper_hash);
+        let wrapper_hash_key = replay_protection::current_key(&wrapper_hash);
         shell
             .state
             .write_replay_protection_entry(&mut batch, &wrapper_hash_key)
@@ -2458,7 +2458,7 @@ mod shell_tests {
 
         let inner_tx_hash = wrapper.raw_header_hash();
         // Write inner hash in storage
-        let inner_hash_key = replay_protection::last_key(&inner_tx_hash);
+        let inner_hash_key = replay_protection::current_key(&inner_tx_hash);
         shell
             .state
             .write_replay_protection_entry(&mut batch, &inner_hash_key)

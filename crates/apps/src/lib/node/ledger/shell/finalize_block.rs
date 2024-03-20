@@ -471,7 +471,9 @@ where
                             let header_hash = replay_protection_hashes
                                 .expect("This cannot fail")
                                 .header_hash;
-                            self.state.redundant_tx_hash(header_hash);
+                            self.state.redundant_tx_hash(header_hash).expect(
+                                "Error while marking tx hash as redundant",
+                            );
                         }
                     }
 
@@ -653,7 +655,9 @@ where
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
-            self.state.redundant_tx_hash(header_hash)
+            self.state
+                .redundant_tx_hash(header_hash)
+                .expect("Error while marking tx hash as redundant");
         }
     }
 }
@@ -2430,7 +2434,7 @@ mod test_finalize_block {
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
 
         let wrapper_hash_key =
-            replay_protection::last_key(&wrapper_tx.header_hash());
+            replay_protection::current_key(&wrapper_tx.header_hash());
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
@@ -2450,27 +2454,31 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(shell
-            .shell
-            .state
-            .write_log()
-            .has_replay_protection_entry(&wrapper_tx.raw_header_hash()));
+        assert!(
+            shell
+                .shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
+        );
         // Check that the hash is present in the merkle tree
-        assert!(!shell
-            .shell
-            .state
-            .in_mem()
-            .block
-            .tree
-            .has_key(&wrapper_hash_key)
-            .unwrap());
+        assert!(
+            !shell
+                .shell
+                .state
+                .in_mem()
+                .block
+                .tree
+                .has_key(&wrapper_hash_key)
+                .unwrap()
+        );
     }
 
     /// Test that a tx that has already been applied in the same block
     /// doesn't get reapplied
     #[test]
     fn test_duplicated_tx_same_block() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::albert_keypair();
         let keypair_2 = crate::wallet::defaults::bertha_keypair();
 
@@ -2545,14 +2553,34 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.raw_header_hash()));
-            assert!(!shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.header_hash()));
+            assert!(
+                shell
+                    .state
+                    .write_log()
+                    .has_replay_protection_entry(&wrapper.raw_header_hash())
+            );
+            assert!(
+                shell
+                    .state
+                    .write_log()
+                    .has_replay_protection_entry(&wrapper.header_hash())
+            );
+        }
+        // Commit to check the hashes from storage
+        shell.commit();
+        for wrapper in [&wrapper, &new_wrapper] {
+            assert!(
+                shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.raw_header_hash())
+                    .unwrap()
+            );
+            assert!(
+                !shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.header_hash())
+                    .unwrap()
+            );
         }
     }
 
@@ -2666,7 +2694,7 @@ mod test_finalize_block {
     /// reason has its hash written to storage.
     #[test]
     fn test_tx_hash_handling() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::bertha_keypair();
         let mut out_of_gas_wrapper = {
             let tx_code = TestWasms::TxNoOp.read_bytes();
@@ -2806,27 +2834,68 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for valid_wrapper in [
+            &out_of_gas_wrapper,
+            &unsigned_wrapper,
+            &wrong_commitment_wrapper,
+        ] {
+            assert!(
+                !shell.state.write_log().has_replay_protection_entry(
+                    &valid_wrapper.raw_header_hash()
+                )
+            );
+            assert!(
+                shell
+                    .state
+                    .write_log()
+                    .has_replay_protection_entry(&valid_wrapper.header_hash())
+            );
+        }
+        assert!(
+            shell.state.write_log().has_replay_protection_entry(
+                &failing_wrapper.raw_header_hash()
+            )
+        );
+        assert!(
+            shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&failing_wrapper.header_hash())
+        );
+
+        // Commit to check the hashes from storage
+        shell.commit();
+        for valid_wrapper in [
             out_of_gas_wrapper,
             unsigned_wrapper,
             wrong_commitment_wrapper,
         ] {
-            assert!(!shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&valid_wrapper.raw_header_hash()));
-            assert!(shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&valid_wrapper.header_hash()));
+            assert!(
+                !shell
+                    .state
+                    .has_replay_protection_entry(
+                        &valid_wrapper.raw_header_hash()
+                    )
+                    .unwrap()
+            );
+            assert!(
+                shell
+                    .state
+                    .has_replay_protection_entry(&valid_wrapper.header_hash())
+                    .unwrap()
+            );
         }
-        assert!(shell
-            .state
-            .write_log()
-            .has_replay_protection_entry(&failing_wrapper.raw_header_hash()));
-        assert!(!shell
-            .state
-            .write_log()
-            .has_replay_protection_entry(&failing_wrapper.header_hash()));
+        assert!(
+            shell
+                .state
+                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
+                .unwrap()
+        );
+        assert!(
+            !shell
+                .state
+                .has_replay_protection_entry(&failing_wrapper.header_hash())
+                .unwrap()
+        );
     }
 
     #[test]
@@ -2892,14 +2961,18 @@ mod test_finalize_block {
             .as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
 
-        assert!(shell
-            .state
-            .write_log()
-            .has_replay_protection_entry(&wrapper_hash));
-        assert!(!shell
-            .state
-            .write_log()
-            .has_replay_protection_entry(&wrapper.raw_header_hash()));
+        assert!(
+            shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper_hash)
+        );
+        assert!(
+            !shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+        );
     }
 
     // Test that the fees are paid even if the inner transaction fails and its
@@ -3292,9 +3365,11 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(enqueued_slashes_handle()
-            .at(&Epoch::default())
-            .is_empty(&shell.state)?);
+        assert!(
+            enqueued_slashes_handle()
+                .at(&Epoch::default())
+                .is_empty(&shell.state)?
+        );
         assert_eq!(
             get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
@@ -3313,17 +3388,21 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(enqueued_slashes_handle()
-                .at(&epoch)
-                .is_empty(&shell.state)?);
+            assert!(
+                enqueued_slashes_handle()
+                    .at(&epoch)
+                    .is_empty(&shell.state)?
+            );
             assert_eq!(
                 get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(!enqueued_slashes_handle()
-            .at(&processing_epoch)
-            .is_empty(&shell.state)?);
+        assert!(
+            !enqueued_slashes_handle()
+                .at(&processing_epoch)
+                .is_empty(&shell.state)?
+        );
 
         // Advance to the processing epoch
         loop {
@@ -3346,9 +3425,11 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(enqueued_slashes_handle()
-                    .at(&shell.state.in_mem().block.epoch)
-                    .is_empty(&shell.state)?);
+                assert!(
+                    enqueued_slashes_handle()
+                        .at(&shell.state.in_mem().block.epoch)
+                        .is_empty(&shell.state)?
+                );
                 let stake1 = read_validator_stake(
                     &shell.state,
                     &params,
@@ -3835,11 +3916,13 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
-        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
-            &val1.address
-        )
-        .is_empty(&shell.state)
-        .unwrap());
+        assert!(
+            namada_proof_of_stake::storage::validator_slashes_handle(
+                &val1.address
+            )
+            .is_empty(&shell.state)
+            .unwrap()
+        );
 
         tracing::debug!("Advancing to epoch 7");
 
@@ -3904,18 +3987,22 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(namada_proof_of_stake::is_validator_frozen(
-            &shell.state,
-            &val1.address,
-            current_epoch,
-            &params
-        )
-        .unwrap());
-        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
-            &val1.address
-        )
-        .is_empty(&shell.state)
-        .unwrap());
+        assert!(
+            namada_proof_of_stake::is_validator_frozen(
+                &shell.state,
+                &val1.address,
+                current_epoch,
+                &params
+            )
+            .unwrap()
+        );
+        assert!(
+            namada_proof_of_stake::storage::validator_slashes_handle(
+                &val1.address
+            )
+            .is_empty(&shell.state)
+            .unwrap()
+        );
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(

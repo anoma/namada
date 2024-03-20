@@ -121,6 +121,8 @@ pub(crate) enum ReProtStorageModification {
     /// storage
     // FIXME: only wrapper can be deleted, should I find a way to make it
     // clearer?
+    // FIXME: manual test rollback on local devnet
+    // FIXME: manual test replay attack on local devnet
     Redundant,
 }
 
@@ -699,21 +701,22 @@ impl WriteLog {
     }
 
     /// Mark the transaction hash as redundant
-    // FIXME: also, this shouldn't get propagated t ostoeragge because now I can
-    // only delte hashes in the same block, not from the previous one. So this
-    // is an operation limited to the writelog only
     pub(crate) fn redundant_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if let Some(ReProtStorageModification::Redundant) = self
+        match self
             .replay_protection
             .insert(hash, ReProtStorageModification::Redundant)
         {
-            // Cannot mark the same hash as redundant more than once
-            return Err(Error::ReplayProtection(format!(
-                "Requested a delete on hash {hash} over a previous delete"
-            )));
+            Some(ReProtStorageModification::Write) => Ok(()),
+            Some(ReProtStorageModification::Redundant) => {
+                Err(Error::ReplayProtection(format!(
+                    "Requested a redundant modification on hash {hash} over a \
+                     previous redundant"
+                )))
+            }
+            None => Err(Error::ReplayProtection(format!(
+                "Requested a redundant modification on unknown hash {hash}"
+            ))),
         }
-
-        Ok(())
     }
 }
 
@@ -942,7 +945,6 @@ mod tests {
 
     #[test]
     fn test_replay_protection_commit() {
-        // FIXME: review this test
         let mut state = crate::testing::TestState::default();
 
         {
@@ -985,16 +987,17 @@ mod tests {
                 .write_tx_hash(Hash::sha256("tx6".as_bytes()))
                 .unwrap();
 
-            // delete previous hash
-            // FIXME: still relevant?
-            write_log.redundant_tx_hash(Hash::sha256("tx1".as_bytes()));
+            // Mark one hash as redundant
+            write_log
+                .redundant_tx_hash(Hash::sha256("tx4".as_bytes()))
+                .unwrap();
         }
 
         // commit a block
         state.commit_block().expect("commit failed");
 
         assert!(state.write_log.replay_protection.is_empty());
-        for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
+        for tx in ["tx1", "tx2", "tx3", "tx5", "tx6"] {
             assert!(
                 state
                     .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
@@ -1003,25 +1006,38 @@ mod tests {
         }
         assert!(
             !state
-                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+                .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
                 .expect("read failed")
         );
+        {
+            let write_log = state.write_log_mut();
+            write_log
+                .write_tx_hash(Hash::sha256("tx7".as_bytes()))
+                .unwrap();
+            // Mark one hash as redundant
+            write_log
+                .redundant_tx_hash(Hash::sha256("tx7".as_bytes()))
+                .unwrap();
+            // Try to rewrite the same hash and check that it fails
+            assert!(
+                write_log
+                    .write_tx_hash(Hash::sha256("tx7".as_bytes()))
+                    .is_err()
+            );
 
-        // FIXME: still relevant?
-        // try to delete finalized hash which shouldn't work
-        state
-            .write_log
-            .redundant_tx_hash(Hash::sha256("tx2".as_bytes()));
+            // mark as redundant a missing hash and check that it fails
+            assert!(
+                state
+                    .write_log
+                    .redundant_tx_hash(Hash::sha256("tx8".as_bytes()))
+                    .is_err()
+            );
 
-        // commit a block
-        state.commit_block().expect("commit failed");
-
-        assert!(state.write_log.replay_protection.is_empty());
-        assert!(
-            state
-                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
-                .expect("read failed")
-        );
+            // Do not assert the state of replay protections because these
+            // errors will actually trigger a shut down of the node. Also, since
+            // we write the values before validating them, the state would be
+            // wrong
+        }
     }
 
     // Test that writing a value on top of a temporary write is not allowed

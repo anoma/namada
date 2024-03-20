@@ -255,15 +255,8 @@ pub trait DB: Debug {
         key: &Key,
     ) -> Result<()>;
 
-    /// Delete a replay protection entry
-    fn delete_replay_protection_entry(
-        &mut self,
-        batch: &mut Self::WriteBatch,
-        key: &Key,
-    ) -> Result<()>;
-
-    /// Delete the entire replay protection buffer
-    fn prune_replay_protection_buffer(
+    /// Move the current replay protection bucket to the general one
+    fn move_current_replay_protection_entries(
         &mut self,
         batch: &mut Self::WriteBatch,
     ) -> Result<()>;
@@ -330,11 +323,8 @@ pub trait DBIter<'iter> {
         prefix: Option<&'iter Key>,
     ) -> Self::PrefixIter;
 
-    /// Read replay protection storage from the last block
-    fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
-
-    /// Read replay protection storage from the the buffer
-    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter;
+    /// Read replay protection storage from the current bucket
+    fn iter_current_replay_protection(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.

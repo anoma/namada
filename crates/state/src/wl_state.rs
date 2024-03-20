@@ -214,9 +214,9 @@ where
         }
         debug_assert!(self.0.write_log.block_write_log.is_empty());
 
-        // Replay protections specifically. Starts with pruning the buffer from
-        // the previous block
-        self.prune_replay_protection_buffer(batch)?;
+        // Replay protections specifically. Starts with moving the current
+        // hashes from the previous block to the general bucket
+        self.move_current_replay_protection_entries(batch)?;
 
         for (hash, entry) in
             std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
@@ -225,19 +225,10 @@ where
                 ReProtStorageModification::Write => self
                     .write_replay_protection_entry(
                         batch,
-                        // Can only write tx hashes to the previous block, no
-                        // further
-                        &replay_protection::last_key(&hash),
+                        &replay_protection::current_key(&hash),
                     )?,
-                ReProtStorageModification::Redundant => self
-                    .delete_replay_protection_entry(
-                        batch,
-                        // FIXME: now I can only delete hashes in the same
-                        // block, so probably I should never get to this point
-                        // Can only delete tx hashes from the previous block,
-                        // no further
-                        &replay_protection::last_key(&hash),
-                    )?,
+                // Redundant hashes should not be committed to storage
+                ReProtStorageModification::Redundant => (),
             }
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
@@ -375,31 +366,12 @@ where
         Ok(())
     }
 
-    /// Delete the provided tx hash from storage
-    pub fn delete_replay_protection_entry(
-        &mut self,
-        batch: &mut D::WriteBatch,
-        key: &Key,
-    ) -> Result<()> {
-        self.db.delete_replay_protection_entry(batch, key)?;
-        Ok(())
-    }
-
-    /// Delete the replay protection buffer
-    pub fn prune_replay_protection_buffer(
+    /// Move the tx hashes from the current bucket to the general one
+    pub fn move_current_replay_protection_entries(
         &mut self,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
-        Ok(self.db.prune_replay_protection_buffer(batch)?)
-    }
-
-    /// Iterate the replay protection storage from the last block
-    pub fn iter_replay_protection(
-        &self,
-    ) -> Box<dyn Iterator<Item = Hash> + '_> {
-        Box::new(self.db.iter_replay_protection().map(|(raw_key, _, _)| {
-            raw_key.parse().expect("Failed hash conversion")
-        }))
+        Ok(self.db.move_current_replay_protection_entries(batch)?)
     }
 
     /// Get oldest epoch which has the valid signed nonce of the bridge pool
@@ -647,8 +619,11 @@ where
 
     /// Mark the provided transaction's hash as redundant to prevent committing
     /// it to storage.
-    pub fn redundant_tx_hash(&mut self, hash: Hash) {
-        self.write_log.redundant_tx_hash(hash);
+    pub fn redundant_tx_hash(
+        &mut self,
+        hash: Hash,
+    ) -> crate::write_log::Result<()> {
+        self.write_log.redundant_tx_hash(hash)
     }
 
     #[inline]

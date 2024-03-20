@@ -733,7 +733,7 @@ mod test_prepare_proposal {
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
+        let hash_key = replay_protection::current_key(&wrapper_unsigned_hash);
         shell
             .state
             .write_bytes(&hash_key, vec![])
@@ -814,7 +814,7 @@ mod test_prepare_proposal {
         let inner_unsigned_hash = wrapper.raw_header_hash();
 
         // Write inner hash to storage
-        let hash_key = replay_protection::last_key(&inner_unsigned_hash);
+        let hash_key = replay_protection::current_key(&inner_unsigned_hash);
         shell
             .state
             .write_bytes(&hash_key, vec![])
