@@ -11,7 +11,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use core::ops::Deref;
+use core::cell::RefCell;
 
 use booleans::BoolResultUnitExt;
 use namada_vp_prelude::*;
@@ -85,7 +85,7 @@ fn validate_tx(
 
     keys_changed.iter().try_for_each(|key| {
         let key_type: KeyType = key.into();
-        let validate_change = || match key_type {
+        let mut validate_change = || match key_type {
             KeyType::Pk(owner) => {
                 if owner == &addr {
                     let key_was_not_already_revealed =
@@ -168,7 +168,9 @@ fn validate_tx(
                 &tx_data,
                 &addr,
             ),
-            KeyType::PoS => validate_pos_changes(ctx, &addr, key, &mut gadget),
+            KeyType::PoS => {
+                validate_pos_changes(ctx, &tx_data, &addr, key, &mut gadget)
+            }
             KeyType::PgfSteward(pgf_steward_addr) => gadget
                 .verify_signatures_when(
                     || pgf_steward_addr == &addr,
@@ -199,11 +201,16 @@ fn validate_tx(
 
 fn validate_pos_changes(
     ctx: &Ctx,
+    tx_data: &Tx,
     owner: &Address,
     key: &storage::Key,
-    valid_sig: &impl Deref<Target = bool>,
+    gadget: &mut VerifySigGadget,
 ) -> VpResult {
     use proof_of_stake::{storage, storage_key};
+
+    // Kinda silly to wrap this in a ref cell, but it's required
+    // for the mut borrow to be valid across all closures below
+    let gadget = RefCell::new(gadget);
 
     // Bond or unbond
     let is_valid_bond_or_unbond_change = || {
@@ -212,110 +219,140 @@ fn validate_pos_changes(
             .or_else(|| storage_key::is_bond_epoched_meta_key(key))
             .or_else(|| {
                 storage_key::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
-            });
-        if let Some(bond_id) = bond_id {
+            })
+            .ok_or(VpError::Unspecified)?;
+        gadget.borrow_mut().verify_signatures_when(
             // Bonds and unbonds changes for this address must be signed
-            return &bond_id.source != owner || **valid_sig;
-        };
-        // Unknown changes are not allowed
-        false
+            || &bond_id.source == owner,
+            ctx,
+            tx_data,
+            owner,
+        )
     };
 
     // Changes in validator state
     let is_valid_state_change = || {
         let state_change = storage_key::is_validator_state_key(key);
-        let is_valid_state =
-            match state_change {
-                Some((address, epoch)) => {
-                    let params_pre =
-                        storage::read_pos_params(&ctx.pre()).into_vp_error()?;
-                    let state_pre = storage::validator_state_handle(address)
-                        .get(&ctx.pre(), epoch, &params_pre)?;
+        let is_valid_state = match state_change {
+            Some((address, epoch)) => {
+                let params_pre =
+                    storage::read_pos_params(&ctx.pre()).into_vp_error()?;
+                let state_pre = storage::validator_state_handle(address)
+                    .get(&ctx.pre(), epoch, &params_pre)
+                    .into_vp_error()?;
 
-                    let params_post = storage::read_pos_params(&ctx.post())
-                        .into_vp_error()?;
-                    let state_post = storage::validator_state_handle(address)
-                        .get(&ctx.post(), epoch, &params_post)
-                        .into_vp_error()?;
+                let params_post =
+                    storage::read_pos_params(&ctx.post()).into_vp_error()?;
+                let state_post = storage::validator_state_handle(address)
+                    .get(&ctx.post(), epoch, &params_post)
+                    .into_vp_error()?;
 
-                    match (state_pre, state_post) {
-                        (Some(pre), Some(post)) => {
-                            use proof_of_stake::types::ValidatorState::*;
+                match (state_pre, state_post) {
+                    (Some(pre), Some(post)) => {
+                        use proof_of_stake::types::ValidatorState::*;
 
-                            // Bonding and unbonding may affect validator sets
-                            if matches!(
-                                pre,
-                                Consensus | BelowCapacity | BelowThreshold
-                            ) && matches!(
-                                post,
-                                Consensus | BelowCapacity | BelowThreshold
-                            ) {
-                                true
-                            } else {
-                                // Unknown state changes are not allowed
-                                false
-                            }
-                        }
-                        (Some(_pre), None) => {
-                            // Clearing of old epoched data
+                        // Bonding and unbonding may affect validator sets
+                        if matches!(
+                            pre,
+                            Consensus | BelowCapacity | BelowThreshold
+                        ) && matches!(
+                            post,
+                            Consensus | BelowCapacity | BelowThreshold
+                        ) {
                             true
+                        } else {
+                            // Unknown state changes are not allowed
+                            false
                         }
-                        _ => false,
                     }
+                    (Some(_pre), None) => {
+                        // Clearing of old epoched data
+                        true
+                    }
+                    _ => false,
                 }
-                None => false,
-            };
+            }
+            None => false,
+        };
 
-        VpResult::Ok(
-            is_valid_state
-                || storage_key::is_validator_state_epoched_meta_key(key)
-                || storage_key::is_consensus_validator_set_key(key)
-                || storage_key::is_below_capacity_validator_set_key(key),
-        )
+        (is_valid_state
+            || storage_key::is_validator_state_epoched_meta_key(key)
+            || storage_key::is_consensus_validator_set_key(key)
+            || storage_key::is_below_capacity_validator_set_key(key))
+        .ok_or(VpError::Unspecified)
     };
 
     let is_valid_reward_claim = || {
         if let Some(bond_id) =
             storage_key::is_last_pos_reward_claim_epoch_key(key)
         {
-            // Claims for this address must be signed
-            return &bond_id.source != owner || **valid_sig;
+            return gadget.borrow_mut().verify_signatures_when(
+                // Claims for this address must be signed
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
         if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
-            // Redelegations auto-claim rewards
-            return &bond_id.source != owner || **valid_sig;
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations auto-claim rewards
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
 
-        false
+        Err(VpError::Unspecified)
     };
 
     let is_valid_redelegation = || {
         if storage_key::is_validator_redelegations_key(key) {
-            return true;
+            return Ok(());
         }
         if let Some(delegator) =
             storage_key::is_delegator_redelegations_key(key)
         {
-            // Redelegations for this address must be signed
-            return delegator != owner || **valid_sig;
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations for this address must be signed
+                || delegator == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
         if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
-            // Redelegations auto-claim rewards
-            return &bond_id.source != owner || **valid_sig;
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations auto-claim rewards
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
-        false
+        Err(VpError::Unspecified)
     };
 
-    Ok(is_valid_bond_or_unbond_change()
+    let pos_state_changes = is_valid_bond_or_unbond_change().is_ok()
         || storage_key::is_total_deltas_key(key)
         || storage_key::is_validator_deltas_key(key)
         || storage_key::is_validator_total_bond_or_unbond_key(key)
         || storage_key::is_validator_set_positions_key(key)
         || storage_key::is_total_consensus_stake_key(key)
-        || is_valid_state_change()?
-        || is_valid_reward_claim()
-        || is_valid_redelegation()
-        || **valid_sig)
+        || is_valid_state_change().is_ok()
+        || is_valid_reward_claim().is_ok()
+        || is_valid_redelegation().is_ok();
+    let unknown_state_changes = !pos_state_changes;
+
+    let result = gadget.borrow_mut().verify_signatures_when(
+        || unknown_state_changes,
+        ctx,
+        tx_data,
+        owner,
+    );
+
+    result
 }
 
 #[cfg(test)]
