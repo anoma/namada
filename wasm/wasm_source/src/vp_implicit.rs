@@ -199,6 +199,8 @@ fn validate_tx(
     })
 }
 
+// TODO: handle I/O errors
+// TODO: pass back to user proper PoS err reporting
 fn validate_pos_changes(
     ctx: &Ctx,
     tx_data: &Tx,
@@ -352,7 +354,12 @@ fn validate_pos_changes(
         owner,
     );
 
-    result
+    result.map_err(|err| match err {
+        VpError::Unspecified => {
+            VpError::Erased("Invalid PoS state changes".into())
+        }
+        err => err,
+    })
 }
 
 #[cfg(test)]
