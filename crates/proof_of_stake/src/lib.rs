@@ -419,6 +419,10 @@ where
     let remaining_at_pipeline = bonds_handle
         .get_sum(storage, pipeline_epoch, &params)?
         .unwrap_or_default();
+    println!(
+        "\nREMAINING AT PIPELINE = {}",
+        remaining_at_pipeline.to_string_native()
+    );
     if amount > remaining_at_pipeline {
         return Err(UnbondError::UnbondAmountGreaterThanBond(
             amount.to_string_native(),
@@ -524,10 +528,17 @@ where
     let bonds_total = bonds_handle
         .get_sum(storage, pipeline_epoch, &params)?
         .unwrap_or_default();
+    println!("\nBONDS TOTAL = {}", bonds_total.to_string_native());
     if bonds_total.is_zero() {
-        delegation_targets_handle(source)
-            .at(&pipeline_epoch)
-            .remove(storage, validator)?;
+        println!("Removing delegation target");
+        remove_delegation_target(
+            storage,
+            &params,
+            source,
+            validator,
+            pipeline_epoch,
+            current_epoch,
+        )?;
     }
 
     // `updatedUnbonded`
@@ -2949,5 +2960,22 @@ where
     }
     bond_holders.update_data(storage, params, current_epoch)?;
     bond_holders.at(&epoch).insert(storage, validator.clone())?;
+    Ok(())
+}
+
+fn remove_delegation_target<S>(
+    storage: &mut S,
+    params: &PosParams,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+    current_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let bond_holders = delegation_targets_handle(delegator);
+    bond_holders.update_data(storage, params, current_epoch)?;
+    bond_holders.at(&epoch).remove(storage, validator)?;
     Ok(())
 }
