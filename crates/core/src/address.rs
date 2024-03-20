@@ -66,6 +66,10 @@ pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 pub const MULTITOKEN: Address = Address::Internal(InternalAddress::Multitoken);
 /// Internal Eth bridge address
 pub const ETH_BRIDGE: Address = Address::Internal(InternalAddress::EthBridge);
+/// Address with temporary storage is used to pass data from txs to VPs which is
+/// never committed to DB
+pub const TEMP_STORAGE: Address =
+    Address::Internal(InternalAddress::TempStorage);
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;
@@ -135,6 +139,9 @@ impl From<raw::Address<'_, raw::Validated>> for Address {
                 InternalAddress::IbcToken(IbcTokenHash(*raw_addr.data())),
             ),
             raw::Discriminant::Masp => Address::Internal(InternalAddress::Masp),
+            raw::Discriminant::TempStorage => {
+                Address::Internal(InternalAddress::TempStorage)
+            }
         }
     }
 }
@@ -226,6 +233,11 @@ impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
             }
             Address::Internal(InternalAddress::Masp) => {
                 raw::Address::from_discriminant(raw::Discriminant::Masp)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::TempStorage) => {
+                raw::Address::from_discriminant(raw::Discriminant::TempStorage)
                     .validate()
                     .expect("This raw address is valid")
             }
@@ -557,6 +569,9 @@ pub enum InternalAddress {
     Pgf,
     /// Masp
     Masp,
+    /// Address with temporary storage is used to pass data from txs to VPs
+    /// which is never committed to DB
+    TempStorage,
 }
 
 impl Display for InternalAddress {
@@ -578,6 +593,7 @@ impl Display for InternalAddress {
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
                 Self::Masp => "MASP".to_string(),
+                Self::TempStorage => "TempStorage".to_string(),
             }
         )
     }
@@ -802,8 +818,9 @@ pub mod testing {
             InternalAddress::Nut(_) => {}
             InternalAddress::Pgf => {}
             InternalAddress::Masp => {}
-            InternalAddress::Multitoken => {} /* Add new addresses in the
-                                               * `prop_oneof` below. */
+            InternalAddress::Multitoken => {}
+            InternalAddress::TempStorage => {} /* Add new addresses in the
+                                                * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -819,6 +836,7 @@ pub mod testing {
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
             Just(InternalAddress::Masp),
+            Just(InternalAddress::TempStorage),
         ]
     }
 
