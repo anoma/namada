@@ -13,10 +13,9 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::address::{Address, InternalAddress, MASP};
+use namada::core::address::{Address, InternalAddress, MASP, MULTITOKEN};
 use namada::core::collections::{HashMap, HashSet};
 use namada::core::hash::Hash;
-use namada::core::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::core::key::*;
 use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::core::storage::{
@@ -34,9 +33,7 @@ use namada::governance::utils::{ProposalVotes, VotePower};
 use namada::governance::ProposalVote;
 use namada::io::Io;
 use namada::ledger::events::Event;
-use namada::ledger::ibc::storage::{
-    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
-};
+use namada::ledger::ibc::storage::ibc_trace_key;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
@@ -172,7 +169,8 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let token_map = query_tokens(context, None, None).await;
+    let token_map =
+        query_tokens(context, query_token.as_ref(), None, true).await;
     let tokens = token_map.values().collect();
     let _ = shielded
         .precompute_asset_types(context.client(), tokens)
@@ -377,15 +375,16 @@ pub async fn query_transparent_balance(
     context: &impl Namada,
     args: args::QueryBalance,
 ) {
-    let prefix = Key::from(
-        Address::Internal(namada::core::address::InternalAddress::Multitoken)
-            .to_db_key(),
-    );
     match (args.token, args.owner) {
         (Some(base_token), Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens =
-                query_tokens(context, Some(&base_token), Some(&owner)).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                Some(&owner),
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 let balance_key =
                     token::storage_key::balance_key(&token, &owner);
@@ -424,7 +423,9 @@ pub async fn query_transparent_balance(
         }
         (None, Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens = query_tokens(context, None, Some(&owner)).await;
+            let tokens =
+                query_tokens(context, None, Some(&owner), args.show_ibc_tokens)
+                    .await;
             for (token_alias, token) in tokens {
                 let balance =
                     get_token_balance(context.client(), &token, &owner).await;
@@ -435,7 +436,13 @@ pub async fn query_transparent_balance(
             }
         }
         (Some(base_token), None) => {
-            let tokens = query_tokens(context, Some(&base_token), None).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                None,
+                args.show_ibc_tokens,
+            )
+            .await;
             for (_, token) in tokens {
                 let prefix = token::storage_key::balance_prefix(&token);
                 let balances =
@@ -447,6 +454,7 @@ pub async fn query_transparent_balance(
             }
         }
         (None, None) => {
+            let prefix = Key::from(MULTITOKEN.to_db_key());
             let balances = query_storage_prefix(context, &prefix).await;
             if let Some(balances) = balances {
                 print_balances(context, balances, None, None).await;
@@ -480,7 +488,9 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let token_map = query_tokens(context, None, None).await;
+    let token_map =
+        query_tokens(context, args.token.as_ref(), None, args.show_ibc_tokens)
+            .await;
     let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
@@ -551,8 +561,13 @@ pub async fn query_pinned_balance(
                 )
             }
             (Ok((balance, _undecoded, epoch)), Some(base_token)) => {
-                let tokens =
-                    query_tokens(context, Some(base_token), None).await;
+                let tokens = query_tokens(
+                    context,
+                    Some(base_token),
+                    None,
+                    args.show_ibc_tokens,
+                )
+                .await;
                 for (token_alias, token) in &tokens {
                     let total_balance = balance
                         .0
@@ -724,17 +739,26 @@ async fn lookup_token_alias(
     token: &Address,
     owner: &Address,
 ) -> String {
-    if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
-        let ibc_trace_key =
-            ibc_trace_key(owner.to_string(), trace_hash.to_string());
-        match query_storage_value::<_, String>(context.client(), &ibc_trace_key)
+    match token {
+        Address::Internal(InternalAddress::IbcToken(trace_hash)) => {
+            let ibc_trace_key =
+                ibc_trace_key(owner.to_string(), trace_hash.to_string());
+            match query_storage_value::<_, String>(
+                context.client(),
+                &ibc_trace_key,
+            )
             .await
-        {
-            Ok(ibc_trace) => get_ibc_trace_alias(context, ibc_trace).await,
-            Err(_) => token.to_string(),
+            {
+                Ok(ibc_trace) => {
+                    context.wallet().await.lookup_ibc_token_alias(ibc_trace)
+                }
+                Err(_) => token.to_string(),
+            }
         }
-    } else {
-        context.wallet().await.lookup_alias(token)
+        Address::Internal(InternalAddress::Erc20(eth_addr)) => {
+            eth_addr.to_canonical()
+        }
+        _ => context.wallet().await.lookup_alias(token),
     }
 }
 
@@ -743,79 +767,88 @@ async fn query_tokens(
     context: &impl Namada,
     base_token: Option<&Address>,
     owner: Option<&Address>,
+    show_ibc_tokens: bool,
 ) -> BTreeMap<String, Address> {
     let wallet = context.wallet().await;
-    let mut base_token = base_token;
-    // Base tokens
-    let mut tokens = match base_token {
-        Some(base_token) => {
-            let mut map = BTreeMap::new();
-            if let Some(alias) = wallet.find_alias(base_token) {
-                map.insert(alias.to_string(), base_token.clone());
-            }
-            map
+    let mut tokens = BTreeMap::new();
+    match base_token {
+        Some(token)
+            if matches!(
+                token,
+                Address::Internal(InternalAddress::IbcToken(_))
+            ) =>
+        {
+            let ibc_denom =
+                rpc::query_ibc_denom(context, token.to_string(), owner).await;
+            let alias =
+                context.wallet().await.lookup_ibc_token_alias(ibc_denom);
+            tokens.insert(alias, token.clone());
+            // we don't need to check other IBC prefixes
+            return tokens;
         }
-        None => wallet.tokens_with_aliases(),
-    };
-
-    // Check all IBC denoms if the token isn't an pre-existing token
-    if tokens.is_empty() {
-        base_token = None;
+        Some(token) => {
+            if let Address::Internal(InternalAddress::Erc20(eth_addr)) = token {
+                tokens.insert(eth_addr.to_string(), token.clone());
+            } else {
+                let alias = wallet
+                    .find_alias(token)
+                    .map(|alias| alias.to_string())
+                    .unwrap_or(token.to_string());
+                tokens.insert(alias, token.clone());
+            }
+        }
+        None => tokens = wallet.tokens_with_aliases(),
     }
-    let prefixes = match (base_token, owner) {
-        (Some(base_token), Some(owner)) => vec![
-            ibc_trace_key_prefix(Some(base_token.to_string())),
-            ibc_trace_key_prefix(Some(owner.to_string())),
-        ],
-        (Some(base_token), None) => {
-            vec![ibc_trace_key_prefix(Some(base_token.to_string()))]
-        }
-        (None, Some(_)) => {
-            // Check all IBC denoms because the owner might not know IBC token
-            // transfers in the same chain
-            vec![ibc_trace_key_prefix(None)]
-        }
-        (None, None) => vec![ibc_trace_key_prefix(None)],
-    };
 
-    for prefix in prefixes {
-        let ibc_denoms = query_storage_prefix::<String>(context, &prefix).await;
-        if let Some(ibc_denoms) = ibc_denoms {
-            for (key, ibc_trace) in ibc_denoms {
-                if let Some((_, hash)) = is_ibc_trace_key(&key) {
-                    let ibc_denom_alias =
-                        get_ibc_trace_alias(context, ibc_trace).await;
-                    let hash: IbcTokenHash = hash.parse().expect(
-                        "Parsing an IBC token hash from storage shouldn't fail",
-                    );
-                    let ibc_token =
-                        Address::Internal(InternalAddress::IbcToken(hash));
-                    tokens.insert(ibc_denom_alias, ibc_token);
-                }
+    if !show_ibc_tokens {
+        return tokens;
+    }
+
+    match rpc::query_ibc_tokens(
+        context,
+        base_token.map(|t| t.to_string()),
+        owner,
+    )
+    .await
+    {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let ibc_trace_alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                tokens.insert(ibc_trace_alias, addr);
             }
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
         }
     }
     tokens
 }
 
-async fn get_ibc_trace_alias(
+pub async fn query_ibc_tokens(
     context: &impl Namada,
-    ibc_trace: impl AsRef<str>,
-) -> String {
+    args: args::QueryIbcToken,
+) {
     let wallet = context.wallet().await;
-    is_ibc_denom(&ibc_trace)
-        .map(|(trace_path, base_token)| {
-            let base_token_alias = match Address::decode(&base_token) {
-                Ok(base_token) => wallet.lookup_alias(&base_token),
-                Err(_) => base_token,
-            };
-            if trace_path.is_empty() {
-                base_token_alias
-            } else {
-                format!("{}/{}", trace_path, base_token_alias)
+    let token = args.token.map(|t| {
+        wallet
+            .find_address(&t)
+            .map(|addr| addr.to_string())
+            .unwrap_or(t)
+    });
+    let owner = args.owner.map(|o| o.address().unwrap_or(MASP));
+    match rpc::query_ibc_tokens(context, token, owner.as_ref()).await {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                display_line!(context.io(), "{}: {}", alias, addr);
             }
-        })
-        .unwrap_or(ibc_trace.as_ref().to_string())
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
+        }
+    }
 }
 
 /// Query votes for the given proposal
@@ -930,7 +963,13 @@ pub async fn query_shielded_balance(
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
         // Precompute asset types to increase chances of success in decoding
-        let token_map = query_tokens(context, None, None).await;
+        let token_map = query_tokens(
+            context,
+            args.token.as_ref(),
+            None,
+            args.show_ibc_tokens,
+        )
+        .await;
         let tokens = token_map.values().collect();
         let _ = shielded
             .precompute_asset_types(context.client(), tokens)
@@ -944,8 +983,13 @@ pub async fn query_shielded_balance(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(base_token), true) => {
-            let tokens =
-                query_tokens(context, Some(&base_token), Some(&MASP)).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                Some(&MASP),
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key =
@@ -1071,7 +1115,13 @@ pub async fn query_shielded_balance(
         // Here the user wants to know the balance for a specific token across
         // users
         (Some(base_token), false) => {
-            let tokens = query_tokens(context, Some(&base_token), None).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                None,
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 let mut found_any = false;
                 display_line!(context.io(), "Shielded Token {}:", token_alias);
