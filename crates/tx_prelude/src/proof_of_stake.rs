@@ -26,6 +26,10 @@ impl Ctx {
         validator: &Address,
         amount: token::Amount,
     ) -> TxResult {
+        // The tx must be authorized by the source address
+        let verifier = source.as_ref().unwrap_or(&validator);
+        self.insert_verifier(verifier)?;
+
         let current_epoch = self.get_block_epoch()?;
         bond_tokens(self, source, validator, amount, current_epoch, None)
     }
@@ -39,6 +43,10 @@ impl Ctx {
         validator: &Address,
         amount: token::Amount,
     ) -> EnvResult<ResultSlashing> {
+        // The tx must be authorized by the source address
+        let verifier = source.as_ref().unwrap_or(&validator);
+        self.insert_verifier(verifier)?;
+
         let current_epoch = self.get_block_epoch()?;
         unbond_tokens(self, source, validator, amount, current_epoch, false)
     }
@@ -51,6 +59,10 @@ impl Ctx {
         source: Option<&Address>,
         validator: &Address,
     ) -> EnvResult<token::Amount> {
+        // The tx must be authorized by the source address
+        let verifier = source.as_ref().unwrap_or(&validator);
+        self.insert_verifier(verifier)?;
+
         let current_epoch = self.get_block_epoch()?;
         withdraw_tokens(self, source, validator, current_epoch)
     }
@@ -61,6 +73,9 @@ impl Ctx {
         validator: &Address,
         consensus_key: &common::PublicKey,
     ) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         change_consensus_key(self, validator, consensus_key, current_epoch)
     }
@@ -71,12 +86,18 @@ impl Ctx {
         validator: &Address,
         rate: &Dec,
     ) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         change_validator_commission_rate(self, validator, *rate, current_epoch)
     }
 
     /// Unjail a jailed validator and re-enter the validator sets.
     pub fn unjail_validator(&mut self, validator: &Address) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         unjail_validator(self, validator, current_epoch)
     }
@@ -89,6 +110,9 @@ impl Ctx {
         dest_validator: &Address,
         amount: token::Amount,
     ) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(owner)?;
+
         let current_epoch = self.get_block_epoch()?;
         redelegate_tokens(
             self,
@@ -106,6 +130,10 @@ impl Ctx {
         source: Option<&Address>,
         validator: &Address,
     ) -> EnvResult<token::Amount> {
+        // The tx must be authorized by the source address
+        let verifier = source.as_ref().unwrap_or(&validator);
+        self.insert_verifier(verifier)?;
+
         let current_epoch = self.get_block_epoch()?;
         claim_reward_tokens(self, source, validator, current_epoch)
     }
@@ -133,6 +161,9 @@ impl Ctx {
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
         let params = read_pos_params(self)?;
+
+        // The tx must be authorized by the source address
+        self.insert_verifier(&address)?;
 
         become_validator(
             self,
@@ -162,12 +193,18 @@ impl Ctx {
 
     /// Deactivate validator
     pub fn deactivate_validator(&mut self, validator: &Address) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         deactivate_validator(self, validator, current_epoch)
     }
 
     /// Reactivate validator
     pub fn reactivate_validator(&mut self, validator: &Address) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         reactivate_validator(self, validator, current_epoch)
     }
@@ -184,6 +221,9 @@ impl Ctx {
         avatar: Option<String>,
         commission_rate: Option<Dec>,
     ) -> TxResult {
+        // The tx must be authorized by the source address
+        self.insert_verifier(validator)?;
+
         let current_epoch = self.get_block_epoch()?;
         change_validator_metadata(
             self,

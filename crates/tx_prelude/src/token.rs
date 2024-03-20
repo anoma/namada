@@ -4,6 +4,7 @@ use namada_proof_of_stake::token::storage_key::{
 };
 use namada_storage::{Error as StorageError, ResultExt};
 pub use namada_token::*;
+use namada_tx_env::TxEnv;
 
 use crate::{Ctx, StorageRead, StorageWrite, TxResult};
 
@@ -16,6 +17,9 @@ pub fn transfer(
     token: &Address,
     amount: DenominatedAmount,
 ) -> TxResult {
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(src)?;
+
     let amount = denom_to_amount(amount, token, ctx)?;
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
@@ -41,6 +45,9 @@ pub fn undenominated_transfer(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(src)?;
+
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);
