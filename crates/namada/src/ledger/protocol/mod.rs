@@ -955,6 +955,10 @@ where
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
+                        InternalAddress::TempStorage => Err(
+                            // Temp storage changes must never be committed
+                            Error::AccessForbidden((*internal_addr).clone()),
+                        ),
                     }
                 }
             };
