@@ -53,13 +53,13 @@ fn process_tx(c: &mut Criterion) {
     )));
     let wrapper = tx.to_bytes();
 
+    #[allow(clippy::disallowed_methods)]
     let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {
         b.iter_batched(
             || {
                 (
-                    shell.state.in_mem().tx_queue.clone(),
                     // Prevent block out of gas and replay protection
                     shell.state.with_temp_write_log(),
                     ValidationMeta::from(shell.state.read_only()),
@@ -69,7 +69,6 @@ fn process_tx(c: &mut Criterion) {
                 )
             },
             |(
-                tx_queue,
                 mut temp_state,
                 mut validation_meta,
                 mut vp_wasm_cache,
@@ -81,7 +80,6 @@ fn process_tx(c: &mut Criterion) {
                     shell
                         .check_proposal_tx(
                             &wrapper,
-                            &mut tx_queue.iter(),
                             &mut validation_meta,
                             &mut temp_state,
                             datetime,

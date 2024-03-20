@@ -444,6 +444,17 @@ impl Finalized {
         }
     }
 
+    pub fn get_ibc_params(&self) -> namada::ibc::parameters::IbcParameters {
+        let templates::IbcParams {
+            default_mint_limit,
+            default_per_epoch_throughput_limit,
+        } = self.parameters.ibc_params.clone();
+        namada::ibc::parameters::IbcParameters {
+            default_mint_limit,
+            default_per_epoch_throughput_limit,
+        }
+    }
+
     pub fn get_token_address(&self, alias: &Alias) -> Option<&Address> {
         self.tokens.token.get(alias).map(|token| &token.address)
     }
@@ -713,6 +724,7 @@ pub struct FinalizedParameters {
     pub gov_params: templates::GovernanceParams,
     pub pgf_params: namada::governance::pgf::parameters::PgfParameters,
     pub eth_bridge_params: Option<templates::EthBridgeParams>,
+    pub ibc_params: templates::IbcParams,
 }
 
 impl FinalizedParameters {
@@ -723,6 +735,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params,
             eth_bridge_params,
+            ibc_params,
         }: templates::Parameters<Validated>,
     ) -> Self {
         use namada::governance::pgf::parameters::PgfParameters;
@@ -737,6 +750,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params: finalized_pgf_params,
             eth_bridge_params,
+            ibc_params,
         }
     }
 }

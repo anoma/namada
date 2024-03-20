@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::{InitAccount, UpdateAccount};
 use namada::core::address::{self, Address};
+use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::hash::Hash;
 use namada::core::key::{
@@ -24,8 +24,9 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
+use namada::ibc::primitives::ToProto;
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
@@ -459,10 +460,9 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 0,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(None),
+                                    r#type: ProposalType::Default,
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),
@@ -509,12 +509,11 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 1,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(Some(
+                                    r#type: ProposalType::DefaultWithWasm(
                                         wasm_code_section.get_hash(),
-                                    )),
+                                    ),
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
                                     grace_epoch: 18.into(),
@@ -746,13 +745,9 @@ fn ibc(c: &mut Criterion) {
 
     // Connection handshake
     let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
+        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
         counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
+            ClientId::from_str("07-tendermint-1").unwrap(),
             None,
             CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
         ),
@@ -760,7 +755,9 @@ fn ibc(c: &mut Criterion) {
         delay_period: std::time::Duration::new(100, 0),
         signer: defaults::albert_address().to_string().into(),
     };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Channel handshake
     let msg = MsgChannelOpenInit {
@@ -773,7 +770,9 @@ fn ibc(c: &mut Criterion) {
     };
 
     // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    let mut data = vec![];
+    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
     // Ibc transfer
     let outgoing_transfer = shell.generate_ibc_transfer_tx();

@@ -6,7 +6,7 @@ pub mod templates;
 pub mod transactions;
 pub mod utils;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -14,6 +14,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::address::{Address, EstablishedAddress};
 use namada::core::chain::ProposalBytes;
+use namada::core::collections::HashMap;
 use namada::core::key::*;
 use namada::core::storage;
 use namada::core::string_encoding::StringEncoded;
@@ -361,6 +362,7 @@ pub fn make_dev_genesis(
     let mut genesis = finalize(
         templates,
         ChainIdPrefix::from_str("test").unwrap(),
+        #[allow(clippy::disallowed_methods)]
         DateTimeUtc::now(),
         Duration::from_secs(30).into(),
     );

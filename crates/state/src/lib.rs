@@ -585,7 +585,7 @@ pub mod testing {
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
-    use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+    use namada_storage::tx_queue::ExpiredTxsQueue;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -625,6 +625,7 @@ pub mod testing {
                 last_block: None,
                 last_epoch: Epoch::default(),
                 next_epoch_min_start_height: BlockHeight::default(),
+                #[allow(clippy::disallowed_methods)]
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
@@ -632,7 +633,6 @@ pub mod testing {
                 update_epoch_blocks_delay: None,
                 tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
-                tx_queue: TxQueue::default(),
                 expired_txs_queue: ExpiredTxsQueue::default(),
                 native_token: address::testing::nam(),
                 ethereum_height: None,

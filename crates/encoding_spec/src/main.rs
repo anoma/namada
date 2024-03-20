@@ -15,7 +15,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::io::Write;
 
 use borsh::schema::{BorshSchemaContainer, Declaration, Definition};
@@ -25,6 +25,7 @@ use lazy_static::lazy_static;
 use madato::types::TableRow;
 use namada::account;
 use namada::core::address::Address;
+use namada::core::collections::HashSet;
 use namada::core::key::ed25519::{PublicKey, Signature};
 use namada::core::storage::{self, Epoch};
 use namada::core::token;

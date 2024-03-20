@@ -1,7 +1,7 @@
 //! MASP native VP
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
@@ -11,6 +11,7 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::address::InternalAddress::Masp;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::{IndexedTx, Key};
 use namada_gas::MASP_VERIFY_SHIELDED_TX_GAS;
@@ -267,7 +268,7 @@ where
                     .ctx
                     .read_post::<IndexedTx>(pin_keys.first().unwrap())?
                 {
-                    Some(IndexedTx { height, index })
+                    Some(IndexedTx { height, index, .. })
                         if height == self.ctx.get_block_height()?
                             && index == self.ctx.get_tx_index()? => {}
                     Some(_) => {

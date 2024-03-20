@@ -53,11 +53,10 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use borsh::BorshDeserialize;
     use itertools::Itertools;
     use namada::core::chain::ChainId;
+    use namada::core::collections::HashMap;
     use namada::core::ethereum_events::Uint;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;

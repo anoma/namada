@@ -137,9 +137,9 @@ pub fn main() -> Result<()> {
 fn sleep_until(time: Option<DateTimeUtc>) {
     // Sleep until start time if needed
     if let Some(time) = time {
-        if let Ok(sleep_time) =
-            time.0.signed_duration_since(Utc::now()).to_std()
-        {
+        #[allow(clippy::disallowed_methods)]
+        let now = Utc::now();
+        if let Ok(sleep_time) = time.0.signed_duration_since(now).to_std() {
             if !sleep_time.is_zero() {
                 tracing::info!(
                     "Waiting ledger start time: {:?}, time left: {:?}",

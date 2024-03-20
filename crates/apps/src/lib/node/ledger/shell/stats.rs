@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use std::fmt::Display;
+
+use namada::core::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct InternalStats {

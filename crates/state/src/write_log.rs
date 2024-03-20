@@ -1,10 +1,11 @@
 //! Write log is temporary storage for modifications performed by a transaction.
 //! before they are committed to the ledger's storage.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
@@ -608,24 +609,9 @@ impl WriteLog {
     }
 
     /// Remove the transaction hash
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        match self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Delete)
-        {
-            None => Ok(()),
-            // Allow overwriting a previous finalize request
-            Some(ReProtStorageModification::Finalize) => Ok(()),
-            Some(_) =>
-            // Cannot delete an hash that still has to be written to
-            // storage or has already been deleted
-            {
-                Err(Error::ReplayProtection(format!(
-                    "Requested a delete on hash {hash} not yet committed to \
-                     storage"
-                )))
-            }
-        }
+    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) {
+        self.replay_protection
+            .insert(hash, ReProtStorageModification::Delete);
     }
 
     /// Move the transaction hash of the previous block to the list of all
@@ -916,9 +902,7 @@ mod tests {
                 .unwrap();
 
             // delete previous hash
-            write_log
-                .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
-                .unwrap();
+            write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
 
             // finalize previous hashes
             for tx in ["tx2", "tx3"] {
@@ -948,8 +932,7 @@ mod tests {
         // try to delete finalized hash which shouldn't work
         state
             .write_log
-            .delete_tx_hash(Hash::sha256("tx2".as_bytes()))
-            .unwrap();
+            .delete_tx_hash(Hash::sha256("tx2".as_bytes()));
 
         // commit a block
         state.commit_block().expect("commit failed");
@@ -1050,6 +1033,7 @@ pub mod testing {
                 arb_storage_modification(can_init_account),
                 0..100,
             )
+            .prop_map(|map| map.into_iter().collect())
         })
     }
 

@@ -1,8 +1,9 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::BlockHeight;
 use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;
@@ -60,7 +61,7 @@ impl NewVotes {
         let mut inner = self.inner;
         let mut removed = HashSet::default();
         for voter in voters {
-            if inner.remove(voter).is_some() {
+            if inner.swap_remove(voter).is_some() {
                 removed.insert(voter);
             }
         }
@@ -69,7 +70,7 @@ impl NewVotes {
 }
 
 impl IntoIterator for NewVotes {
-    type IntoIter = std::collections::hash_set::IntoIter<Self::Item>;
+    type IntoIter = namada_core::collections::hash_set::IntoIter<Self::Item>;
     type Item = (Address, BlockHeight, token::Amount);
 
     fn into_iter(self) -> Self::IntoIter {

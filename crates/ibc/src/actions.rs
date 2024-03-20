@@ -4,21 +4,19 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::borsh::BorshSerializeExt;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::primitives::Msg;
-use namada_core::ibc::IbcEvent;
+use namada_core::ibc::{IbcEvent, MsgTransfer};
 use namada_core::tendermint::Time as TmTime;
-use namada_core::token::DenominatedAmount;
+use namada_core::token::Amount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
-use namada_state::write_log::WriteLog;
 use namada_state::{
-    DBIter, Epochs, InMemory, ResultExt, State, StateRead, StorageError,
-    StorageHasher, StorageRead, StorageResult, StorageWrite, TxHostEnvState,
-    WlState, DB,
+    DBIter, Epochs, ResultExt, State, StateRead, StorageError, StorageHasher,
+    StorageRead, StorageResult, StorageWrite, TxHostEnvState, WlState, DB,
 };
 use namada_token as token;
 
@@ -117,181 +115,7 @@ where
     }
 }
 
-/// Temporary wrapper to have gas cost compatible with v0.31.6.
-// TODO: Delete this wrapper and use `TxHostEnvState` directly in a breaking
-// release. Differs in `iter_next`.
-#[derive(Debug)]
-pub struct CompatibleIbcTxHostEnvState<'a, D, H>(pub TxHostEnvState<'a, D, H>)
-where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher;
-
-impl<D, H> StorageRead for CompatibleIbcTxHostEnvState<'_, D, H>
-where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-{
-    type PrefixIter<'iter> = namada_state::PrefixIter<'iter, D> where Self: 'iter;
-
-    fn read_bytes(
-        &self,
-        key: &namada_storage::Key,
-    ) -> StorageResult<Option<Vec<u8>>> {
-        self.0.read_bytes(key)
-    }
-
-    fn has_key(&self, key: &namada_storage::Key) -> StorageResult<bool> {
-        self.0.has_key(key)
-    }
-
-    fn iter_prefix<'iter>(
-        &'iter self,
-        prefix: &namada_storage::Key,
-    ) -> StorageResult<Self::PrefixIter<'iter>> {
-        let (iter, gas) = namada_state::iter_prefix_post(
-            self.0.write_log(),
-            self.0.db(),
-            prefix,
-        );
-        self.0.charge_gas(gas).into_storage_result()?;
-        Ok(iter)
-    }
-
-    fn iter_next<'iter>(
-        &'iter self,
-        iter: &mut Self::PrefixIter<'iter>,
-    ) -> StorageResult<Option<(String, Vec<u8>)>> {
-        use namada_state::write_log;
-        let write_log = self.0.write_log();
-        for (key, val, iter_gas) in iter.by_ref() {
-            let (log_val, log_gas) = write_log.read(
-                &namada_storage::Key::parse(key.clone())
-                    .into_storage_result()?,
-            );
-            self.0
-                .charge_gas(iter_gas + log_gas)
-                .into_storage_result()?;
-            match log_val {
-                Some(write_log::StorageModification::Write { ref value }) => {
-                    return Ok(Some((key, value.clone())));
-                }
-                Some(&write_log::StorageModification::Delete) => {
-                    // check the next because the key has already deleted
-                    continue;
-                }
-                Some(&write_log::StorageModification::InitAccount {
-                    ..
-                }) => {
-                    // a VP of a new account doesn't need to be iterated
-                    continue;
-                }
-                Some(write_log::StorageModification::Temp { ref value }) => {
-                    return Ok(Some((key, value.clone())));
-                }
-                None => {
-                    return Ok(Some((key, val)));
-                }
-            }
-        }
-        Ok(None)
-    }
-
-    fn get_chain_id(&self) -> StorageResult<String> {
-        self.0.get_chain_id()
-    }
-
-    fn get_block_height(&self) -> StorageResult<namada_storage::BlockHeight> {
-        self.0.get_block_height()
-    }
-
-    fn get_block_header(
-        &self,
-        height: namada_storage::BlockHeight,
-    ) -> StorageResult<Option<namada_storage::Header>> {
-        StorageRead::get_block_header(&self.0, height)
-    }
-
-    fn get_block_hash(&self) -> StorageResult<namada_storage::BlockHash> {
-        self.0.get_block_hash()
-    }
-
-    fn get_block_epoch(&self) -> StorageResult<namada_storage::Epoch> {
-        self.0.get_block_epoch()
-    }
-
-    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
-        self.0.get_pred_epochs()
-    }
-
-    fn get_tx_index(&self) -> StorageResult<namada_storage::TxIndex> {
-        self.0.get_tx_index()
-    }
-
-    fn get_native_token(&self) -> StorageResult<Address> {
-        self.0.get_native_token()
-    }
-}
-
-impl<D, H> StorageWrite for CompatibleIbcTxHostEnvState<'_, D, H>
-where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-{
-    fn write_bytes(
-        &mut self,
-        key: &namada_storage::Key,
-        val: impl AsRef<[u8]>,
-    ) -> StorageResult<()> {
-        self.0.write_bytes(key, val)
-    }
-
-    fn delete(&mut self, key: &namada_storage::Key) -> StorageResult<()> {
-        self.0.delete(key)
-    }
-}
-
-impl<D, H> StateRead for CompatibleIbcTxHostEnvState<'_, D, H>
-where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-{
-    type D = D;
-    type H = H;
-
-    fn write_log(&self) -> &WriteLog {
-        self.0.write_log
-    }
-
-    fn db(&self) -> &D {
-        self.0.db()
-    }
-
-    fn in_mem(&self) -> &InMemory<Self::H> {
-        self.0.in_mem()
-    }
-
-    fn charge_gas(&self, gas: u64) -> namada_state::Result<()> {
-        self.0.charge_gas(gas)
-    }
-}
-
-impl<D, H> State for CompatibleIbcTxHostEnvState<'_, D, H>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    fn write_log_mut(&mut self) -> &mut WriteLog {
-        self.0.write_log_mut()
-    }
-
-    fn split_borrow(
-        &mut self,
-    ) -> (&mut WriteLog, &InMemory<Self::H>, &Self::D) {
-        self.0.split_borrow()
-    }
-}
-
-impl<D, H> IbcStorageContext for CompatibleIbcTxHostEnvState<'_, D, H>
+impl<D, H> IbcStorageContext for TxHostEnvState<'_, D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -320,9 +144,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self, token, src, dest, amount.amount())
+        token::transfer(self, token, src, dest, amount)
     }
 
     fn handle_masp_tx(
@@ -338,9 +162,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self, token, target, amount.amount())?;
+        token::credit_tokens(self, token, target, amount)?;
         let minter_key = token::storage_key::minter_key(token);
         self.write(&minter_key, Address::Internal(InternalAddress::Ibc))
     }
@@ -349,9 +173,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self, token, target, amount.amount())
+        token::burn_tokens(self, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -359,7 +183,7 @@ where
     }
 }
 
-impl<D, H> IbcCommonContext for CompatibleIbcTxHostEnvState<'_, D, H>
+impl<D, H> IbcCommonContext for TxHostEnvState<'_, D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -396,9 +220,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self.state, token, src, dest, amount.amount())
+        token::transfer(self.state, token, src, dest, amount)
     }
 
     /// Handle masp tx
@@ -415,9 +239,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self.state, token, target, amount.amount())?;
+        token::credit_tokens(self.state, token, target, amount)?;
         let minter_key = token::storage_key::minter_key(token);
         self.state
             .write(&minter_key, Address::Internal(InternalAddress::Ibc))
@@ -428,9 +252,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self.state, token, target, amount.amount())
+        token::burn_tokens(self.state, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -470,18 +294,22 @@ where
         + read_epoch_duration_parameter(state)?.min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
-    let ibc_message = MsgTransfer {
+    let message = IbcMsgTransfer {
         port_id_on_a: target.port_id.clone(),
         chan_id_on_a: target.channel_id.clone(),
         packet_data,
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
-    let any_msg = ibc_message.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data).into_storage_result()?;
+    let data = MsgTransfer {
+        message,
+        transfer: None,
+    }
+    .serialize_to_vec();
 
     let ctx = IbcProtocolContext { state };
     let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)));
-    actions.execute(&data).into_storage_result()
+    actions.execute(&data).into_storage_result()?;
+
+    Ok(())
 }

@@ -43,14 +43,14 @@ mod dry_run_tx {
     {
         use borsh_ext::BorshSerializeExt;
         use namada_gas::{Gas, GasMetering, TxGasMeter};
-        use namada_tx::data::{DecryptedTx, TxType};
+        use namada_tx::data::TxType;
         use namada_tx::Tx;
 
         use crate::ledger::protocol::ShellParams;
         use crate::storage::TxIndex;
 
         let mut temp_state = ctx.state.with_temp_write_log();
-        let mut tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+        let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
         let mut cumulated_gas = Gas::default();
@@ -77,12 +77,10 @@ mod dry_run_tx {
 
                 temp_state.write_log_mut().commit_tx();
                 cumulated_gas = tx_gas_meter.borrow_mut().get_tx_consumed_gas();
-
-                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
                 TxGasMeter::new_from_sub_limit(available_gas)
             }
-            TxType::Protocol(_) | TxType::Decrypted(_) => {
+            TxType::Protocol(_) => {
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
                 TxGasMeter::new(GasLimit::from(
@@ -91,7 +89,6 @@ mod dry_run_tx {
             }
             TxType::Raw => {
                 // Cast tx to a decrypted for execution
-                tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
 
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
@@ -145,7 +142,6 @@ mod test {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
-    use namada_tx::data::decrypted::DecryptedTx;
     use namada_tx::data::TxType;
     use namada_tx::{Code, Data, Tx};
     use tempfile::TempDir;
@@ -286,8 +282,7 @@ mod test {
         assert_eq!(current_epoch, read_epoch);
 
         // Request dry run tx
-        let mut outer_tx =
-            Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = client.state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash, None));
         outer_tx.set_data(Data::new(vec![]));

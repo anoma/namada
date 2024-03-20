@@ -1,12 +1,12 @@
 //! A module for loading WASM files and downloading pre-built WASMs.
 use core::borrow::Borrow;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use data_encoding::HEXLOWER;
 use eyre::{eyre, WrapErr};
 use futures::future::join_all;
+use namada::core::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;

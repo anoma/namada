@@ -9,8 +9,8 @@ use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::write_log::StorageModification;
-use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
-use namada_tx::data::TxSentinel;
+use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
+use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{Commitment, Section, Tx};
 use parity_wasm::elements;
 use thiserror::Error;
@@ -84,10 +84,36 @@ pub enum Error {
     ConversionError(String),
     #[error("Invalid transaction signature")]
     InvalidTxSignature,
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    #[error("Tx is not allowed in allowlist parameter")]
+    DisallowedTx,
 }
 
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
+/// `Hash` is not included in the `tx_allowlist` parameter.
+pub fn check_tx_allowed<S>(tx: &Tx, storage: &S) -> Result<()>
+where
+    S: StorageRead,
+{
+    if let TxType::Wrapper(_) = tx.header().tx_type {
+        if let Some(code_sec) = tx
+            .get_section(tx.code_sechash())
+            .and_then(|x| Section::code_sec(&x))
+        {
+            if crate::parameters::is_tx_allowed(storage, &code_sec.code.hash())
+                .map_err(|e| Error::StorageError(e.to_string()))?
+            {
+                return Ok(());
+            }
+        }
+        return Err(Error::DisallowedTx);
+    }
+    Ok(())
+}
 
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
@@ -101,13 +127,18 @@ pub fn tx<S, CA>(
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    S: StateRead + State,
+    S: StateRead + State + StorageRead,
     CA: 'static + WasmCacheAccess,
 {
     let tx_code = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingSection(tx.code_sechash().to_string()))?;
+
+    // Check if the tx code is allowed (to be done after the check on the code
+    // section commitment to let the replay protection mechanism run some
+    // optimizations)
+    check_tx_allowed(tx, state)?;
 
     // If the transaction code has a tag, ensure that the tag hash equals the
     // transaction code's hash.
@@ -624,7 +655,8 @@ mod tests {
     use itertools::Either;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
-    use namada_tx::data::TxType;
+    use namada_token::DenominatedAmount;
+    use namada_tx::data::{Fee, TxType};
     use namada_tx::{Code, Data};
     use test_log::test;
     use wasmer_vm::TrapCode;
@@ -1281,6 +1313,73 @@ mod tests {
         )
         .unwrap();
         assert!(!passed);
+    }
+
+    #[test]
+    fn test_apply_wasm_tx_allowlist() {
+        let mut state = TestState::default();
+
+        let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
+        // store the wasm code
+        let read_code_hash = Hash::sha256(&tx_read_key);
+        let code_len = (tx_read_key.len() as u64).serialize_to_vec();
+        let key = Key::wasm_code(&read_code_hash);
+        let len_key = Key::wasm_code_len(&read_code_hash);
+        state.write_bytes(&key, tx_read_key).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
+
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(
+            namada_tx::data::WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: state.in_mem().native_token.clone(),
+                },
+                namada_core::key::testing::common_sk_from_simple_seed(0)
+                    .to_public(),
+                namada_state::Epoch(0),
+                0.into(),
+                None,
+            ),
+        )));
+        tx.add_code_from_hash(read_code_hash, None);
+        wrapper_tx.add_code_from_hash(read_code_hash, None);
+        tx.add_serialized_data(vec![]);
+        wrapper_tx.add_serialized_data(vec![]);
+
+        // Check that using a disallowed wrapper tx leads to an error, but a raw
+        // tx is ok even if not allowlisted
+        {
+            let allowlist = vec![format!("{}-bad", read_code_hash)];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut state, allowlist,
+            )
+            .unwrap();
+            state.commit_tx();
+
+            let result = check_tx_allowed(&wrapper_tx, &state);
+            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
+            let result = check_tx_allowed(&tx, &state);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
+
+        // Check that using an allowed wrapper tx doesn't lead to
+        // `Error::DisallowedTx`
+        {
+            let allowlist = vec![read_code_hash.to_string()];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut state, allowlist,
+            )
+            .unwrap();
+            state.commit_tx();
+
+            let result = check_tx_allowed(&wrapper_tx, &state);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
     }
 
     fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {

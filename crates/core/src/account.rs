@@ -1,6 +1,6 @@
 //! Account types
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
@@ -9,6 +9,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::key::{common, RefTo};
+use crate::collections::HashMap;
 use crate::hints;
 
 #[derive(

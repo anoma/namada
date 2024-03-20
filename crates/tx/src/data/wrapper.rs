@@ -25,7 +25,7 @@ pub mod wrapper_tx {
     use sha2::{Digest, Sha256};
     use thiserror::Error;
 
-    use crate::data::{DecryptedTx, TxType};
+    use crate::data::TxType;
     use crate::{Code, Data, Section, Tx};
 
     /// TODO: Determine a sane number for this
@@ -200,6 +200,7 @@ pub mod wrapper_tx {
         pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
+        // TODO: Is this still necessary without the DKG? Seems not
         pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
@@ -302,8 +303,7 @@ pub mod wrapper_tx {
             transfer_code_tag: Option<String>,
             unshield: Transaction,
         ) -> Result<Tx, WrapperTxErr> {
-            let mut tx =
-                Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+            let mut tx = Tx::from_type(TxType::Raw);
             let masp_section = tx.add_section(Section::MaspTx(unshield));
             let masp_hash = Hash(
                 masp_section

@@ -1,9 +1,15 @@
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
-use namada_core::address;
+use namada_core::address::testing::{
+    established_address_1, established_address_2,
+};
+use namada_core::address::{self, Address};
 use namada_core::dec::Dec;
+use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
+use namada_core::key::RefTo;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestState;
@@ -19,9 +25,10 @@ use crate::queries::bonds_and_unbonds;
 use crate::slashing::{process_slashes, slash};
 use crate::storage::{
     bond_handle, delegator_redelegated_bonds_handle,
-    delegator_redelegated_unbonds_handle, read_total_stake,
-    read_validator_stake, total_bonded_handle, total_unbonded_handle,
-    unbond_handle, validator_incoming_redelegations_handle,
+    delegator_redelegated_unbonds_handle, enqueued_slashes_handle,
+    read_total_stake, read_validator_stake, total_bonded_handle,
+    total_unbonded_handle, unbond_handle,
+    validator_incoming_redelegations_handle,
     validator_outgoing_redelegations_handle, validator_slashes_handle,
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle,
@@ -32,7 +39,7 @@ use crate::tests::helpers::{
     test_slashes_with_unbonding_params,
 };
 use crate::token::{credit_tokens, read_balance};
-use crate::types::{BondId, GenesisValidator, SlashType};
+use crate::types::{BondId, GenesisValidator, Slash, SlashType};
 use crate::{
     bond_tokens, redelegate_tokens, staking_token_address, token,
     unbond_tokens, withdraw_tokens, OwnedPosParams, RedelegationError,
@@ -1499,4 +1506,145 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     let diff = val_stake - self_bond_amount - del_bond_amount;
     assert!(diff <= 2.into());
+}
+
+#[test]
+fn test_one_slash_per_block_height() {
+    let mut storage = TestState::default();
+    let params = OwnedPosParams {
+        unbonding_len: 4,
+        validator_stake_threshold: token::Amount::zero(),
+        ..Default::default()
+    };
+
+    let validator1 = established_address_1();
+    let validator2 = established_address_2();
+
+    let gen_validators = [
+        GenesisValidator {
+            address: validator1.clone(),
+            tokens: 100.into(),
+            consensus_key: keypair_1().ref_to(),
+            protocol_key: keypair_3().ref_to(),
+            eth_cold_key: keypair_3().ref_to(),
+            eth_hot_key: keypair_3().ref_to(),
+            commission_rate: Default::default(),
+            max_commission_rate_change: Default::default(),
+            metadata: Default::default(),
+        },
+        GenesisValidator {
+            address: validator2.clone(),
+            tokens: 100.into(),
+            consensus_key: keypair_2().ref_to(),
+            protocol_key: keypair_3().ref_to(),
+            eth_cold_key: keypair_3().ref_to(),
+            eth_hot_key: keypair_3().ref_to(),
+            commission_rate: Default::default(),
+            max_commission_rate_change: Default::default(),
+            metadata: Default::default(),
+        },
+    ];
+
+    // Genesis
+    let current_epoch = storage.in_mem().block.epoch;
+    let params = test_init_genesis(
+        &mut storage,
+        params,
+        gen_validators.clone().into_iter(),
+        current_epoch,
+    )
+    .unwrap();
+    storage.commit_block().unwrap();
+
+    let enqueued_slashes = enqueued_slashes_handle();
+
+    let slash11 = Slash {
+        block_height: 0,
+        epoch: 0.into(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::zero(),
+    };
+    let slash12 = Slash {
+        block_height: 0,
+        epoch: 0.into(),
+        r#type: SlashType::LightClientAttack,
+        rate: Dec::zero(),
+    };
+    let slash13 = Slash {
+        block_height: 1,
+        epoch: 0.into(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::zero(),
+    };
+    let slash21 = Slash {
+        block_height: 0,
+        epoch: 0.into(),
+        r#type: SlashType::LightClientAttack,
+        rate: Dec::zero(),
+    };
+    let slash22 = Slash {
+        block_height: 0,
+        epoch: 0.into(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::zero(),
+    };
+    let slash23 = Slash {
+        block_height: 1,
+        epoch: 0.into(),
+        r#type: SlashType::DuplicateVote,
+        rate: Dec::zero(),
+    };
+
+    let processing_epoch =
+        current_epoch + params.slash_processing_epoch_offset();
+    let enqueue = |stg: &mut TestState, slash: &Slash, validator: &Address| {
+        crate::slashing::slash(
+            stg,
+            &params,
+            current_epoch,
+            slash.epoch,
+            slash.block_height,
+            slash.r#type,
+            validator,
+            current_epoch.next(),
+        )
+        .unwrap();
+    };
+
+    // Enqueue some of the slashes
+    enqueue(&mut storage, &slash11, &validator1);
+    enqueue(&mut storage, &slash21, &validator2);
+    enqueue(&mut storage, &slash13, &validator1);
+    enqueue(&mut storage, &slash23, &validator2);
+
+    // Check
+    let res = enqueued_slashes
+        .get_data_handler()
+        .collect_map(&storage)
+        .unwrap();
+    let exp = BTreeMap::from_iter([(
+        processing_epoch,
+        BTreeMap::from_iter([
+            (
+                validator1.clone(),
+                BTreeMap::from_iter([(0, slash11), (1, slash13)]),
+            ),
+            (
+                validator2.clone(),
+                BTreeMap::from_iter([(0, slash21), (1, slash23)]),
+            ),
+        ]),
+    )]);
+    assert_eq!(res, exp);
+
+    // Enqueue new slashes
+    enqueue(&mut storage, &slash12, &validator1);
+    enqueue(&mut storage, &slash22, &validator2);
+
+    // Check that the slashes are still the same now
+    let res = enqueued_slashes
+        .get_data_handler()
+        .collect_map(&storage)
+        .unwrap();
+    assert_eq!(res, exp);
 }

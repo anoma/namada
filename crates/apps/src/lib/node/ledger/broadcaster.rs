@@ -33,8 +33,10 @@ impl Broadcaster {
     /// by the receiver
     async fn run_loop(&mut self, genesis_time: DateTimeUtc) {
         // wait for start time if necessary
+        #[allow(clippy::disallowed_methods)]
+        let now = Utc::now();
         if let Ok(sleep_time) =
-            genesis_time.0.signed_duration_since(Utc::now()).to_std()
+            genesis_time.0.signed_duration_since(now).to_std()
         {
             if !sleep_time.is_zero() {
                 tokio::time::sleep(sleep_time).await;
@@ -57,7 +59,10 @@ impl Broadcaster {
                 strategy: time::Constant(time::Duration::from_secs(1)),
             }
             .timeout(
-                time::Instant::now() + time::Duration::from_secs(timeout),
+                {
+                    #[allow(clippy::disallowed_methods)]
+                    time::Instant::now()
+                } + time::Duration::from_secs(timeout),
                 || async {
                     match self.client.status().await {
                         Ok(status) => ControlFlow::Break(status),

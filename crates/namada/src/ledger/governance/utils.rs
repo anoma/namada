@@ -1,7 +1,6 @@
 //! Governance utility functions
 
-use std::collections::HashMap;
-
+use namada_core::collections::HashMap;
 use namada_governance::utils::TallyResult;
 use namada_sdk::events::{Event, EventLevel};
 use thiserror::Error;

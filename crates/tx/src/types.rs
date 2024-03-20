@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
@@ -16,6 +16,7 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::ChainId;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;
@@ -30,7 +31,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::data::protocol::ProtocolTx;
-use crate::data::{hash_tx, DecryptedTx, Fee, GasLimit, TxType, WrapperTx};
+use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
 use crate::proto;
 
 /// Represents an error in signature verification
@@ -232,7 +233,13 @@ impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             data,
         }
     }
@@ -331,7 +338,13 @@ impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             code: Commitment::Id(code),
             tag,
         }
@@ -343,7 +356,13 @@ impl Code {
         tag: Option<String>,
     ) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             code: Commitment::Hash(hash),
             tag,
         }
@@ -901,6 +920,7 @@ impl Header {
             tx_type,
             chain_id: ChainId::default(),
             expiration: None,
+            #[allow(clippy::disallowed_methods)]
             timestamp: DateTimeUtc::now(),
             code_hash: namada_core::hash::Hash::default(),
             data_hash: namada_core::hash::Hash::default(),
@@ -918,15 +938,6 @@ impl Header {
     pub fn wrapper(&self) -> Option<WrapperTx> {
         if let TxType::Wrapper(wrapper) = &self.tx_type {
             Some(*wrapper.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Get the decrypted header if it is present
-    pub fn decrypted(&self) -> Option<DecryptedTx> {
-        if let TxType::Decrypted(decrypted) = &self.tx_type {
-            Some(decrypted.clone())
         } else {
             None
         }
@@ -1361,8 +1372,6 @@ impl Tx {
                         err
                     ))
                 }),
-            // we extract the signed data, but don't check the signature
-            TxType::Decrypted(_) => Ok(None),
             // return as is
             TxType::Raw => Ok(None),
         }

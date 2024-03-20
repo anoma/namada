@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use namada::core::collections::HashMap;
 use namada::core::encode;
 use namada::core::event::EmitEvents;
 use namada::core::storage::Epoch;
@@ -11,10 +10,11 @@ use namada::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
 use namada::governance::utils::{
-    compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
-    VotePower,
+    compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
-use namada::governance::{storage as gov_api, ADDRESS as gov_address};
+use namada::governance::{
+    storage as gov_api, ProposalVote, ADDRESS as gov_address,
+};
 use namada::ibc;
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::ledger::pos::BondId;
@@ -94,7 +94,7 @@ where
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
-                    ProposalType::Default(_) => {
+                    ProposalType::Default => {
                         let proposal_code =
                             gov_api::get_proposal_code(&shell.state, id)?;
                         let result = execute_default_proposal(
@@ -103,15 +103,31 @@ where
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "Governance proposal (default {} wasm) {} has \
-                             been executed ({}) and passed.",
-                            if proposal_code.is_some() {
-                                "with"
-                            } else {
-                                "without"
-                            },
+                            "Default Governance proposal {} has been executed \
+                             and passed.",
                             id,
-                            result
+                        );
+
+                        ProposalEvent::default_proposal_event(
+                            id,
+                            proposal_code.is_some(),
+                            result,
+                        )
+                        .into()
+                    }
+                    ProposalType::DefaultWithWasm(_) => {
+                        let proposal_code =
+                            gov_api::get_proposal_code(&shell.state, id)?;
+                        let result = execute_default_proposal(
+                            shell,
+                            id,
+                            proposal_code.clone(),
+                        )?;
+                        tracing::info!(
+                            "DefaultWithWasm Governance proposal {} has been \
+                             executed and passed, wasm executiong was {}.",
+                            id,
+                            if result { "successful" } else { "unsuccessful" }
                         );
 
                         ProposalEvent::default_proposal_event(
@@ -235,10 +251,12 @@ where
 {
     let votes = gov_api::get_proposal_votes(storage, proposal_id)?;
 
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut validator_voting_power: HashMap<Address, VotePower> =
         HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut delegator_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
@@ -253,7 +271,7 @@ where
                 read_validator_stake(storage, params, &validator, epoch)
                     .unwrap_or_default();
 
-            validators_vote.insert(validator.clone(), vote_data.into());
+            validators_vote.insert(validator.clone(), vote_data);
             validator_voting_power.insert(validator, validator_stake);
         } else {
             let validator = vote.validator.clone();
@@ -267,7 +285,7 @@ where
             let delegator_stake = bond_amount(storage, &bond_id, epoch);
 
             if let Ok(stake) = delegator_stake {
-                delegators_vote.insert(delegator.clone(), vote_data.into());
+                delegators_vote.insert(delegator.clone(), vote_data);
                 delegator_voting_power
                     .entry(delegator)
                     .or_default()
@@ -299,7 +317,7 @@ where
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
         shell.state.write(&pending_execution_key, ())?;
 
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));

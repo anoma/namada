@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -11,6 +10,7 @@ use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
 use namada::control_flow::time::Duration;
+use namada::core::collections::HashMap;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
 use namada::core::hash::Hash;
@@ -330,8 +330,10 @@ impl MockNode {
                 locked.state.in_mem().get_last_block_height() + 1;
             locked.state.in_mem_mut().next_epoch_min_start_height =
                 next_epoch_height;
-            locked.state.in_mem_mut().next_epoch_min_start_time =
-                DateTimeUtc::now();
+            locked.state.in_mem_mut().next_epoch_min_start_time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
             let next_epoch_min_start_height =
                 locked.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
@@ -426,6 +428,7 @@ impl MockNode {
             hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
+                #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
@@ -501,28 +504,13 @@ impl MockNode {
         );
     }
 
-    /// Advance to a block height that allows
-    /// txs
-    fn advance_to_allowed_block(&self) {
-        loop {
-            let not_allowed =
-                { self.shell.lock().unwrap().encrypted_txs_not_allowed() };
-            if not_allowed {
-                self.finalize_and_commit();
-            } else {
-                break;
-            }
-        }
-    }
-
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
     pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
-        // The block space allocator disallows encrypted txs in certain blocks.
-        // Advance to block height that allows txs.
-        self.advance_to_allowed_block();
+        self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let req = RequestProcessProposal {
             txs: txs.clone().into_iter().map(|tx| tx.into()).collect(),
@@ -558,6 +546,7 @@ impl MockNode {
             hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
+                #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
@@ -779,21 +768,6 @@ impl<'a> Client for &'a MockNode {
         } else {
             self.clear_results();
         }
-        let (proposer_address, _) = self.prepare_request();
-        let req = RequestPrepareProposal {
-            proposer_address: proposer_address.into(),
-            ..Default::default()
-        };
-        let txs: Vec<Vec<u8>> = {
-            let locked = self.shell.lock().unwrap();
-            locked.prepare_proposal(req).txs
-        }
-        .into_iter()
-        .map(|tx| tx.into())
-        .collect();
-        if !txs.is_empty() {
-            self.submit_txs(txs);
-        }
         Ok(resp)
     }
 
@@ -972,7 +946,7 @@ fn parse_tm_query(
     query: namada::tendermint_rpc::query::Query,
 ) -> dumb_queries::QueryMatcher {
     const QUERY_PARSING_REGEX_STR: &str =
-        r"^tm\.event='NewBlock' AND (accepted|applied)\.hash='([^']+)'$";
+        r"^tm\.event='NewBlock' AND applied\.hash='([^']+)'$";
 
     lazy_static! {
         /// Compiled regular expression used to parse Tendermint queries.
@@ -983,13 +957,10 @@ fn parse_tm_query(
     let captures = QUERY_PARSING_REGEX.captures(&query).unwrap();
 
     match captures.get(0).unwrap().as_str() {
-        "accepted" => dumb_queries::QueryMatcher::accepted(
-            captures.get(1).unwrap().as_str().try_into().unwrap(),
-        ),
         "applied" => dumb_queries::QueryMatcher::applied(
             captures.get(1).unwrap().as_str().try_into().unwrap(),
         ),
-        _ => unreachable!("We only query accepted or applied txs"),
+        _ => unreachable!("We only query applied txs"),
     }
 }
 

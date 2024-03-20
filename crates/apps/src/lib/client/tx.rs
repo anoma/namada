@@ -1,6 +1,4 @@
-use std::collections::HashSet;
 use std::fs::File;
-use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
@@ -8,16 +6,12 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::core::address::{Address, ImplicitAddress};
+use namada::core::collections::HashSet;
 use namada::core::dec::Dec;
 use namada::core::key::{self, *};
-use namada::governance::cli::offline::{
-    OfflineProposal, OfflineSignedProposal, OfflineVote,
-};
 use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
-use namada::governance::ProposalVote;
-use namada::ibc::apps::transfer::types::Memo;
 use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::data::pos::{BecomeValidator, ConsensusKeyChange};
@@ -1022,52 +1016,7 @@ where
     let current_epoch = rpc::query_and_print_epoch(namada).await;
     let governance_parameters =
         rpc::query_governance_parameters(namada.client()).await;
-    let (mut tx_builder, signing_data) = if args.is_offline {
-        let proposal = OfflineProposal::try_from(args.proposal_data.as_ref())
-            .map_err(|e| {
-                error::TxSubmitError::FailedGovernaneProposalDeserialize(
-                    e.to_string(),
-                )
-            })?
-            .validate(current_epoch, args.tx.force)
-            .map_err(|e| {
-                error::TxSubmitError::InvalidProposal(e.to_string())
-            })?;
-
-        let default_signer = Some(proposal.author.clone());
-        let signing_data = aux_signing_data(
-            namada,
-            &args.tx,
-            Some(proposal.author.clone()),
-            default_signer,
-        )
-        .await?;
-
-        let mut wallet = namada.wallet_mut().await;
-        let signed_offline_proposal = proposal.sign(
-            args.tx
-                .signing_keys
-                .iter()
-                .map(|pk| wallet.find_key_by_pk(pk, None))
-                .collect::<Result<_, _>>()
-                .expect("secret keys corresponding to public keys not found"),
-            &signing_data.account_public_keys_map.unwrap(),
-        );
-        let output_file_path = signed_offline_proposal
-            .serialize(args.tx.output_folder)
-            .map_err(|e| {
-                error::TxSubmitError::FailedGovernaneProposalDeserialize(
-                    e.to_string(),
-                )
-            })?;
-
-        display_line!(
-            namada.io(),
-            "Proposal serialized to: {}",
-            output_file_path
-        );
-        return Ok(());
-    } else if args.is_pgf_funding {
+    let (mut tx_builder, signing_data) = if args.is_pgf_funding {
         let proposal =
             PgfFundingProposal::try_from(args.proposal_data.as_ref())
                 .map_err(|e| {
@@ -1162,69 +1111,7 @@ pub async fn submit_vote_proposal<N: Namada>(
 where
     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
 {
-    let (mut tx_builder, signing_data) = if args.is_offline {
-        let default_signer = Some(args.voter.clone());
-        let signing_data = aux_signing_data(
-            namada,
-            &args.tx,
-            Some(args.voter.clone()),
-            default_signer.clone(),
-        )
-        .await?;
-
-        let proposal_vote = ProposalVote::try_from(args.vote)
-            .map_err(|_| error::TxSubmitError::InvalidProposalVote)?;
-
-        let proposal = OfflineSignedProposal::try_from(
-            args.proposal_data.clone().unwrap().as_ref(),
-        )
-        .map_err(|e| error::TxSubmitError::InvalidProposal(e.to_string()))?
-        .validate(
-            &signing_data.account_public_keys_map.clone().unwrap(),
-            signing_data.threshold,
-            args.tx.force,
-        )
-        .map_err(|e| error::TxSubmitError::InvalidProposal(e.to_string()))?;
-        let delegations = rpc::get_delegators_delegation_at(
-            namada.client(),
-            &args.voter,
-            proposal.proposal.tally_epoch,
-        )
-        .await
-        .keys()
-        .cloned()
-        .collect::<Vec<Address>>();
-
-        let offline_vote = OfflineVote::new(
-            &proposal,
-            proposal_vote,
-            args.voter.clone(),
-            delegations,
-        );
-
-        let mut wallet = namada.wallet_mut().await;
-        let offline_signed_vote = offline_vote.sign(
-            args.tx
-                .signing_keys
-                .iter()
-                .map(|pk| wallet.find_key_by_pk(pk, None))
-                .collect::<Result<_, _>>()
-                .expect("secret keys corresponding to public keys not found"),
-            &signing_data.account_public_keys_map.unwrap(),
-        );
-        let output_file_path = offline_signed_vote
-            .serialize(args.tx.output_folder)
-            .expect("Should be able to serialize the offline proposal");
-
-        display_line!(
-            namada.io(),
-            "Proposal vote serialized to: {}",
-            output_file_path
-        );
-        return Ok(());
-    } else {
-        args.build(namada).await?
-    };
+    let (mut tx_builder, signing_data) = args.build(namada).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
@@ -1611,31 +1498,4 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
-}
-
-pub async fn gen_ibc_shielded_transfer(
-    context: &impl Namada,
-    args: args::GenIbcShieldedTransfer,
-) -> Result<(), error::Error> {
-    if let Some(shielded_transfer) =
-        tx::gen_ibc_shielded_transfer(context, args.clone()).await?
-    {
-        let tx_id = shielded_transfer.masp_tx.txid().to_string();
-        let filename = format!("ibc_shielded_transfer_{}.memo", tx_id);
-        let output_path = match &args.output_folder {
-            Some(path) => path.join(filename),
-            None => filename.into(),
-        };
-        let mut out = File::create(&output_path)
-            .expect("Should be able to create the out file.");
-        out.write_all(Memo::from(shielded_transfer).as_ref().as_bytes())
-            .expect("IBC memo should be deserializable.");
-        println!(
-            "Output IBC shielded transfer for {tx_id} to {}",
-            output_path.to_string_lossy()
-        );
-    } else {
-        eprintln!("No shielded transfer for this IBC transfer.")
-    }
-    Ok(())
 }

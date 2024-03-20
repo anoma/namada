@@ -3,13 +3,14 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::common;
 use namada_core::storage::{Epoch, KeySeg};
@@ -136,7 +137,7 @@ pub type ValidatorAddresses = crate::epoched::NestedEpoched<
 
 /// Slashes indexed by validator address and then block height (for easier
 /// retrieval and iteration when processing)
-pub type ValidatorSlashes = NestedMap<Address, Slashes>;
+pub type ValidatorSlashes = NestedMap<Address, LazyMap<u64, Slash>>;
 
 /// Epoched slashes, where the outer epoch key is the epoch in which the slash
 /// is processed

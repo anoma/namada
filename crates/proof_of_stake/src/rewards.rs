@@ -1,8 +1,7 @@
 //! PoS rewards distribution.
 
-use std::collections::{HashMap, HashSet};
-
 use namada_core::address::{self, Address};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::{self, Amount};

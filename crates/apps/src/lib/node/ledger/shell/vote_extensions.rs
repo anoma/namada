@@ -4,6 +4,7 @@ pub mod bridge_pool_vext;
 pub mod eth_events;
 pub mod val_set_update;
 
+use drain_filter_polyfill::DrainFilter;
 use namada::ethereum_bridge::protocol::transactions::bridge_pool_roots::sign_bridge_pool_root;
 use namada::ethereum_bridge::protocol::transactions::ethereum_events::sign_ethereum_events;
 use namada::ethereum_bridge::protocol::transactions::validator_set_update::sign_validator_set_update;
@@ -115,9 +116,10 @@ where
     /// ones we could deserialize to vote extension protocol txs.
     pub fn deserialize_vote_extensions<'shell>(
         &'shell self,
-        txs: &'shell [TxBytes],
-    ) -> impl Iterator<Item = TxBytes> + 'shell {
-        txs.iter().filter_map(move |tx_bytes| {
+        txs: &'shell mut Vec<TxBytes>,
+    ) -> DrainFilter<'shell, TxBytes, impl FnMut(&mut TxBytes) -> bool + 'shell>
+    {
+        drain_filter_polyfill::VecExt::drain_filter(txs, move |tx_bytes| {
             let tx = match Tx::try_from(tx_bytes.as_ref()) {
                 Ok(tx) => tx,
                 Err(err) => {
@@ -126,25 +128,21 @@ where
                         "Failed to deserialize tx in \
                          deserialize_vote_extensions"
                     );
-                    return None;
+                    return false;
                 }
             };
-            match (&tx).try_into().ok()? {
-                EthereumTxData::BridgePoolVext(_) => Some(tx_bytes.clone()),
-                EthereumTxData::EthEventsVext(ext) => {
+            match (&tx).try_into().ok() {
+                Some(EthereumTxData::BridgePoolVext(_)) => true,
+                Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least
                     // one valid nonce
-                    ext.data
-                        .ethereum_events
-                        .iter()
-                        .any(|event| {
-                            self.state
-                                .ethbridge_queries()
-                                .validate_eth_event_nonce(event)
-                        })
-                        .then(|| tx_bytes.clone())
+                    ext.data.ethereum_events.iter().any(|event| {
+                        self.state
+                            .ethbridge_queries()
+                            .validate_eth_event_nonce(event)
+                    })
                 }
-                EthereumTxData::ValSetUpdateVext(ext) => {
+                Some(EthereumTxData::ValSetUpdateVext(ext)) => {
                     // only include non-stale validator set updates
                     // in block proposals. it might be sitting long
                     // enough in the mempool for it to no longer be
@@ -154,13 +152,13 @@ where
                     // to remove it from the mempool this way, but it
                     // will eventually be evicted, getting replaced
                     // by newer txs.
-                    (!self
+                    let is_seen = self
                         .state
                         .ethbridge_queries()
-                        .valset_upd_seen(ext.data.signing_epoch.next()))
-                    .then(|| tx_bytes.clone())
+                        .valset_upd_seen(ext.data.signing_epoch.next());
+                    !is_seen
                 }
-                _ => None,
+                _ => false,
             }
         })
     }

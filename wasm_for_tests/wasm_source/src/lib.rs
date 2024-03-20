@@ -49,7 +49,7 @@ pub mod main {
         ctx.write(&target_key, 9_u64)?;
 
         // parameters
-        let target_key = parameters_storage::get_tx_allowlist_storage_key();
+        let target_key = parameters_storage::get_vp_allowlist_storage_key();
         ctx.write(&target_key, vec!["hash"])?;
         Ok(())
     }
@@ -219,6 +219,22 @@ pub mod main {
         // using `ctx.write_bytes` instead of `ctx.write` here, as we want to
         // write the actual bytes, not a Borsh-serialization of a `Vec<u8>`
         ctx.write_bytes(&key, &value[..])?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "tx_invalid_data")]
+pub mod main {
+    use namada_tx_prelude::*;
+
+    #[transaction(gas = 1000)]
+    fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
+        let signed = tx_data;
+        let _data =
+            signed.data().ok_or_err_msg("Missing data").map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
         Ok(())
     }
 }

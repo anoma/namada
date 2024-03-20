@@ -1,12 +1,12 @@
 //! [`Epoched`] and [`EpochedDelta`] are structures for data that is set for
 //! future (and possibly past) epochs.
 
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::storage::{self, Epoch};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -447,13 +447,11 @@ where
                 //     panic!("WARNING: no data existing in
                 // {new_oldest_epoch}"); }
                 self.set_oldest_epoch(storage, new_oldest_epoch)?;
-
-                // Update the epoch of the last update to the current epoch
-                let key = self.get_last_update_storage_key();
-                storage.write(&key, current_epoch)?;
-                return Ok(());
             }
         }
+        // Update the epoch of the last update to the current epoch
+        let key = self.get_last_update_storage_key();
+        storage.write(&key, current_epoch)?;
 
         Ok(())
     }

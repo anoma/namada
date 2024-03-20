@@ -13,9 +13,7 @@ use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
-use namada_tx::data::{
-    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
-};
+use namada_tx::data::{GasLimit, TxResult, TxType, VpsResult, WrapperTx};
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -50,6 +48,8 @@ pub enum Error {
     StateError(namada_state::Error),
     #[error("Storage error: {0}")]
     StorageError(namada_state::StorageError),
+    #[error("Wrapper tx runner error: {0}")]
+    WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -96,8 +96,6 @@ pub enum Error {
     MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
-    #[error("Tx is not allowed in allowlist parameter.")]
-    DisallowedTx,
 }
 
 /// Shell parameters for running wasm transactions.
@@ -174,8 +172,8 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     match tx.header().tx_type {
-        TxType::Raw => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted) => apply_wasm_tx(
+        // Raw trasaction type is allowed only for governance proposals
+        TxType::Raw => apply_wasm_tx(
             tx,
             &tx_index,
             ShellParams {
@@ -192,7 +190,7 @@ where
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
             let changed_keys = apply_wrapper_tx(
-                tx,
+                tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
                 tx_bytes,
@@ -203,18 +201,21 @@ where
                     tx_wasm_cache,
                 },
                 wrapper_args,
+            )
+            .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+            let mut inner_res = apply_wasm_tx(
+                tx,
+                &tx_index,
+                ShellParams {
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
             )?;
-            Ok(TxResult {
-                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                changed_keys,
-                vps_result: VpsResult::default(),
-                initialized_accounts: vec![],
-                ibc_events: BTreeSet::default(),
-                eth_bridge_events: BTreeSet::default(),
-            })
-        }
-        TxType::Decrypted(DecryptedTx::Undecryptable) => {
-            Ok(TxResult::default())
+
+            inner_res.wrapper_changed_keys = changed_keys;
+            Ok(inner_res)
         }
     }
 }
@@ -618,35 +619,13 @@ where
 
     Ok(TxResult {
         gas_used,
+        wrapper_changed_keys: Default::default(),
         changed_keys,
         vps_result,
         initialized_accounts,
         ibc_events,
         eth_bridge_events: BTreeSet::default(),
     })
-}
-
-/// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
-/// and its code `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<D, H>(tx: &Tx, state: &WlState<D, H>) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    if let TxType::Decrypted(DecryptedTx::Decrypted) = tx.header().tx_type {
-        if let Some(code_sec) = tx
-            .get_section(tx.code_sechash())
-            .and_then(|x| Section::code_sec(&x))
-        {
-            if crate::parameters::is_tx_allowed(state, &code_sec.code.hash())
-                .map_err(Error::StorageError)?
-            {
-                return Ok(());
-            }
-        }
-        return Err(Error::DisallowedTx);
-    }
-    Ok(())
 }
 
 /// Apply a derived transaction to storage based on some protocol transaction.
@@ -1032,11 +1011,9 @@ fn merge_vp_results(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::chain::ChainId;
+    use namada_core::collections::HashMap;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_core::keccak::keccak_hash;
@@ -1186,45 +1163,5 @@ mod tests {
         assert_eq!(voting_power, expected);
 
         Ok(())
-    }
-
-    #[test]
-    fn test_apply_wasm_tx_allowlist() {
-        let (mut state, _validators) = test_utils::setup_default_storage();
-
-        let mut tx = Tx::new(ChainId::default(), None);
-        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        // pseudo-random code hash
-        let code = vec![1_u8, 2, 3];
-        let tx_hash = Hash::sha256(&code);
-        tx.set_code(namada_tx::Code::new(code, None));
-
-        // Check that using a disallowed tx leads to an error
-        {
-            let allowlist = vec![format!("{}-bad", tx_hash)];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
-            )
-            .unwrap();
-            state.commit_tx();
-
-            let result = check_tx_allowed(&tx, &state);
-            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
-        }
-
-        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
-        {
-            let allowlist = vec![tx_hash.to_string()];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
-            )
-            .unwrap();
-            state.commit_tx();
-
-            let result = check_tx_allowed(&tx, &state);
-            if let Err(result) = result {
-                assert!(!matches!(result, Error::DisallowedTx));
-            }
-        }
     }
 }

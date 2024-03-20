@@ -4,9 +4,8 @@ pub mod data;
 pub mod proto;
 mod types;
 
-use std::collections::HashMap;
-
 use data::TxType;
+use namada_core::collections::HashMap;
 use namada_core::event::{Event, EventLevel, EventType};
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
@@ -22,24 +21,11 @@ pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
     let mut event = match tx.header().tx_type {
         TxType::Wrapper(_) => {
             let mut event = Event {
-                event_type: EventType::Accepted,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx.header_hash().to_string();
-            event
-        }
-        TxType::Decrypted(_) => {
-            let mut event = Event {
                 event_type: EventType::Applied,
                 level: EventLevel::Tx,
                 attributes: HashMap::new(),
             };
-            event["hash"] = tx
-                .clone()
-                .update_header(TxType::Raw)
-                .header_hash()
-                .to_string();
+            event["hash"] = tx.header_hash().to_string();
             event
         }
         TxType::Protocol(_) => {

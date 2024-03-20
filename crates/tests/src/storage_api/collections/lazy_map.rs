@@ -58,7 +58,8 @@ mod tests {
     /// `Transition`s, which are also being accumulated into
     /// `current_transitions`. It then:
     ///
-    /// - checks its state against an in-memory `std::collections::HashMap`
+    /// - checks its state against an in-memory
+    ///   `namada_core::collections::HashMap`
     /// - runs validation and checks that the `LazyMap::Action`s reported from
     ///   validation match with transitions that were applied
     ///

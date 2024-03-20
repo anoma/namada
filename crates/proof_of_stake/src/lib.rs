@@ -24,10 +24,11 @@ mod tests;
 
 use core::fmt::Debug;
 use std::cmp::{self};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::event::EmitEvents;
 use namada_core::key::common;
@@ -2205,7 +2206,8 @@ where
             // Promote the next below-capacity validator to consensus
             promote_next_below_capacity_validator_to_consensus(
                 storage,
-                pipeline_epoch,
+                current_epoch,
+                params.pipeline_len,
             )?;
         }
 
@@ -2290,8 +2292,8 @@ where
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Jailed,
-                pipeline_epoch,
-                0,
+                current_epoch,
+                params.pipeline_len,
             )?;
             return Ok(());
         }
@@ -2485,6 +2487,10 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
+    use namada_core::chain::ProposalBytes;
+    use namada_core::hash::Hash;
+    use namada_core::time::DurationSecs;
+    use namada_parameters::{init_storage, EpochDuration};
     use namada_trans_token::credit_tokens;
 
     use super::*;
@@ -2568,6 +2574,27 @@ pub mod test_utils {
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;
         let params = read_non_pos_owned_params(storage, owned)?;
+        let chain_parameters = namada_parameters::Parameters {
+            max_tx_bytes: 123456789,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 2,
+                min_duration: DurationSecs(4),
+            },
+            max_expected_time_per_block: DurationSecs(2),
+            max_proposal_bytes: ProposalBytes::default(),
+            max_block_gas: 10000000,
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
+            implicit_vp_code_hash: Some(Hash::default()),
+            epochs_per_year: 10000000,
+            max_signatures_per_transaction: 15,
+            staked_ratio: Dec::new(2, 3).unwrap(),
+            pos_inflation_amount: token::Amount::from_u64(1000),
+            fee_unshielding_gas_limit: 10000,
+            fee_unshielding_descriptions_limit: 15,
+            minimum_gas_price: BTreeMap::new(),
+        };
+        init_storage(&chain_parameters, storage).unwrap();
         init_genesis_helper(storage, &params, validators, current_epoch)?;
         Ok(params)
     }
@@ -2698,10 +2725,14 @@ where
 
     // Remove the validator from the set starting at the update epoch and up
     // thru the pipeline epoch.
-    let pipeline_epoch = current_epoch + params.pipeline_len;
-    for epoch in
-        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
-    {
+    let start = validator_set_update_epoch
+        .0
+        .checked_sub(current_epoch.0)
+        .unwrap(); // Safe unwrap
+    let end = params.pipeline_len;
+
+    for offset in start..=end {
+        let epoch = current_epoch + offset;
         let prev_state = validator_state_handle(validator)
             .get(storage, epoch, params)?
             .expect("Expected to find a valid validator.");
@@ -2716,9 +2747,11 @@ where
                 // For the pipeline epoch only:
                 // promote the next max inactive validator to the active
                 // validator set at the pipeline offset
-                if epoch == pipeline_epoch {
+                if offset == params.pipeline_len {
                     promote_next_below_capacity_validator_to_consensus(
-                        storage, epoch,
+                        storage,
+                        current_epoch,
+                        offset,
                     )?;
                 }
             }

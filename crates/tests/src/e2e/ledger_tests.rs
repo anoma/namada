@@ -10,7 +10,6 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
@@ -32,6 +31,7 @@ use namada_apps::config::ethereum_bridge;
 use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::chain::ChainId;
+use namada_core::collections::HashMap;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::governance::pgf::cli::steward::Commission;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -48,9 +48,7 @@ use super::helpers::{
     get_height, get_pregenesis_wallet, wait_for_block_height,
     wait_for_wasm_pre_compile,
 };
-use super::setup::{
-    get_all_wasms_hashes, set_ethereum_bridge_mode, working_dir, NamadaCmd,
-};
+use super::setup::{set_ethereum_bridge_mode, working_dir, NamadaCmd};
 use crate::e2e::helpers::{
     epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
     is_debug_mode, parse_reached_epoch,
@@ -60,8 +58,8 @@ use crate::e2e::setup::{
     Who,
 };
 use crate::strings::{
-    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_ACCEPTED,
-    TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
+    LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
+    TX_FAILED, TX_REJECTED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
 
@@ -652,10 +650,6 @@ fn ledger_txs_and_queries() -> Result<()> {
                 tx_args.clone()
             };
             let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-
-            if !dry_run {
-                client.exp_string(TX_ACCEPTED)?;
-            }
             client.exp_string(TX_APPLIED_SUCCESS)?;
             client.assert_success();
         }
@@ -826,7 +820,6 @@ fn wrapper_disposable_signer() -> Result<()> {
             &validator_one_rpc,
         ];
         let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-        client.exp_string(TX_ACCEPTED)?;
         client.exp_string(TX_APPLIED_SUCCESS)?;
     }
 
@@ -865,7 +858,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
     let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
@@ -922,7 +914,6 @@ fn wrapper_disposable_signer() -> Result<()> {
     ];
     let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
 
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
@@ -972,7 +963,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_REJECTED)?;
 
     client.assert_success();
@@ -1024,7 +1014,6 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_ACCEPTED)?;
     client.exp_string(TX_FAILED)?;
     client.assert_success();
     Ok(())
@@ -1215,10 +1204,17 @@ fn pos_bonds() -> Result<()> {
         "Current epoch: {}, earliest epoch for withdrawal: {}",
         epoch, delegation_withdrawable_epoch
     );
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 delegation_withdrawable_epoch
@@ -1344,10 +1340,17 @@ fn pos_rewards() -> Result<()> {
     let mut last_epoch = get_epoch(&test, &validator_0_rpc)?;
     let wait_epoch = last_epoch + 4_u64;
 
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(40, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", wait_epoch);
         }
 
@@ -1515,10 +1518,17 @@ fn test_bond_queries() -> Result<()> {
     client.assert_success();
 
     // 3. Wait for epoch 4
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", 1);
         }
         let epoch = epoch_sleep(&test, &validator_one_rpc, 40)?;
@@ -1795,10 +1805,17 @@ fn pos_init_validator() -> Result<()> {
         "Current epoch: {}, earliest epoch with updated bonded stake: {}",
         epoch, earliest_update_epoch
     );
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(20, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!("Timed out waiting for epoch: {}", earliest_update_epoch);
         }
         let epoch = epoch_sleep(&test, &non_validator_rpc, 40)?;
@@ -1876,7 +1893,6 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
                 let mut args = (*tx_args).clone();
                 args.push(&*validator_one_rpc);
                 let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string(TX_ACCEPTED)?;
                 client.exp_string(TX_APPLIED_SUCCESS)?;
                 client.assert_success();
                 let res: Result<()> = Ok(());
@@ -1894,20 +1910,24 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     Ok(())
 }
 
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Submit a valid proposal
-/// 3. Query the proposal
-/// 4. Query token balance (submitted funds)
-/// 5. Query governance address balance
-/// 6. Submit an invalid proposal
-/// 7. Check invalid proposal was not accepted
-/// 8. Query token balance (funds shall not be submitted)
-/// 9. Send a yay vote from a validator
-/// 10. Send a yay vote from a normal user
-/// 11. Query the proposal and check the result
-/// 12. Wait proposal grace and check proposal author funds
-/// 13. Check governance address funds are 0
+// In this test we:
+// 1. Run the ledger node
+// 2. Submit a valid proposal
+// 3. Query the proposal
+// 4. Query token balance (submitted funds)
+// 5. Query governance address balance
+// 6. Submit an invalid proposal
+// 7. Check invalid proposal was not accepted
+// 8. Query token balance (funds shall not be submitted)
+// 9. Send a yay vote from a validator
+// 10. Send a yay vote from a normal user
+// 11. Query the proposal and check the result
+// 12. Wait proposal grace and check proposal author funds
+// 13. Check governance address funds are 0
+// 14. Query the new parameters
+// 15. Try to initialize a new account which should fail
+// 16. Submit a tx that triggers an already existing account which should
+//     succeed
 #[test]
 fn proposal_submission() -> Result<()> {
     let test = setup::network(
@@ -2206,13 +2226,56 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("nam: 0")?;
     client.assert_success();
 
-    // // 14. Query parameters
+    // 14. Query parameters
     let query_protocol_parameters =
         vec!["query-protocol-parameters", "--node", &validator_one_rpc];
 
     let mut client =
         run!(test, Bin::Client, query_protocol_parameters, Some(30))?;
     client.exp_regex(".*Min. proposal grace epochs: 9.*")?;
+    client.assert_success();
+
+    // 15. Try to initialize a new account with the no more allowlisted vp
+    let init_account = vec![
+        "init-account",
+        "--public-keys",
+        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
+        "--threshold",
+        "1",
+        "--code-path",
+        VP_USER_WASM,
+        "--alias",
+        "Test-Account",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, init_account, Some(30))?;
+    client.exp_regex("VP code is not allowed in allowlist parameter")?;
+    client.assert_success();
+
+    // 16. Submit a tx touching a previous account with the no more allowlisted
+    //     vp and verify that the transaction succeeds, i.e. the non allowlisted
+    //     vp can still run
+    let transfer = [
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, transfer, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     Ok(())
@@ -2619,160 +2682,6 @@ fn pgf_steward_change_commissions() -> Result<()> {
     client.exp_string(&format!("- 0.7 to {}", bertha))?;
     client.exp_string(&format!("- 0.05 to {}", christel))?;
     client.exp_string("Pgf fundings: no fundings are currently set.")?;
-    client.assert_success();
-
-    Ok(())
-}
-
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Create an offline proposal
-/// 3. Create an offline vote
-/// 4. Tally offline
-#[test]
-fn proposal_offline() -> Result<()> {
-    let working_dir = setup::working_dir();
-    let test = setup::network(
-        |mut genesis, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(1);
-            genesis.parameters.parameters.max_proposal_bytes =
-                Default::default();
-            genesis.parameters.parameters.min_num_of_blocks = 4;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
-            genesis.parameters.parameters.vp_allowlist =
-                Some(get_all_wasms_hashes(&working_dir, Some("vp_")));
-            // Enable tx allowlist to test the execution of a
-            // non-allowed tx by governance
-            genesis.parameters.parameters.tx_allowlist =
-                Some(get_all_wasms_hashes(&working_dir, Some("tx_")));
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        },
-        None,
-    )?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // 1. Run the ledger node
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
-
-    // 1.1 Delegate some token
-    let tx_args = vec![
-        "bond",
-        "--validator",
-        "validator-0",
-        "--source",
-        ALBERT,
-        "--amount",
-        "900",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-    client.assert_success();
-
-    // 2. Create an offline proposal
-    let albert = find_address(&test, ALBERT)?;
-    let valid_proposal_json = json!(
-        {
-            "content": {
-                "title": "TheTitle",
-                "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
-                "created": "2022-03-10T08:54:37Z",
-                "license": "MIT",
-                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
-                "requires": "2"
-            },
-            "author": albert,
-            "tally_epoch": 3_u64,
-        }
-    );
-    let valid_proposal_json_path =
-        test.test_dir.path().join("valid_proposal.json");
-    write_json_file(valid_proposal_json_path.as_path(), valid_proposal_json);
-
-    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    while epoch.0 <= 3 {
-        sleep(1);
-        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
-    }
-
-    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
-
-    let offline_proposal_args = vec![
-        "init-proposal",
-        "--data-path",
-        valid_proposal_json_path.to_str().unwrap(),
-        "--offline",
-        "--signing-keys",
-        ALBERT_KEY,
-        "--output-folder-path",
-        test.test_dir.path().to_str().unwrap(),
-        "--node",
-        &validator_one_rpc,
-    ];
-
-    let mut client = run!(test, Bin::Client, offline_proposal_args, Some(15))?;
-    let (_, matched) = client.exp_regex("Proposal serialized to: .*")?;
-    client.assert_success();
-
-    let proposal_path = matched
-        .split(':')
-        .collect::<Vec<&str>>()
-        .get(1)
-        .unwrap()
-        .trim()
-        .to_string();
-
-    // 3. Generate an offline yay vote
-    let submit_proposal_vote = vec![
-        "vote-proposal",
-        "--data-path",
-        &proposal_path,
-        "--vote",
-        "yay",
-        "--address",
-        ALBERT,
-        "--offline",
-        "--signing-keys",
-        ALBERT_KEY,
-        "--output-folder-path",
-        test.test_dir.path().to_str().unwrap(),
-        "--node",
-        &validator_one_rpc,
-    ];
-
-    let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
-    client.exp_string("Proposal vote serialized to: ")?;
-    client.assert_success();
-
-    // 4. Compute offline tally
-    let tally_offline = vec![
-        "query-proposal-result",
-        "--data-path",
-        test.test_dir.path().to_str().unwrap(),
-        "--offline",
-        "--node",
-        &validator_one_rpc,
-    ];
-
-    let mut client = run!(test, Bin::Client, tally_offline, Some(15))?;
-    client.exp_string("Parsed 1 votes")?;
-    client.exp_string("rejected with 900.000000 yay votes")?;
     client.assert_success();
 
     Ok(())
@@ -3376,6 +3285,13 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(1),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
 
     // 1. Run the ledger node
     let _bg_validator_0 =
@@ -3416,10 +3332,17 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 deactivate_epoch + pipeline_len
@@ -3459,10 +3382,17 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     client.assert_success();
 
     let reactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 reactivate_epoch + pipeline_len
@@ -3717,10 +3647,17 @@ fn test_invalid_validator_txs() -> Result<()> {
     client.assert_success();
 
     let deactivate_epoch = get_epoch(&test, &validator_1_rpc)?;
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(120, 0);
     loop {
-        if Instant::now().duration_since(start) > loop_timeout {
+        if {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        }
+        .duration_since(start)
+            > loop_timeout
+        {
             panic!(
                 "Timed out waiting for epoch: {}",
                 deactivate_epoch + pipeline_len
@@ -3888,6 +3825,7 @@ fn change_consensus_key() -> Result<()> {
 
     Ok(())
 }
+
 #[test]
 fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(
