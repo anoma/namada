@@ -174,7 +174,8 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let token_map = query_tokens(context, None, None, true).await;
+    let token_map =
+        query_tokens(context, query_token.as_ref(), None, true).await;
     let tokens = token_map.values().collect();
     let _ = shielded
         .precompute_asset_types(context.client(), tokens)
@@ -489,7 +490,8 @@ pub async fn query_pinned_balance(
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
     let token_map =
-        query_tokens(context, None, None, args.show_ibc_tokens).await;
+        query_tokens(context, args.token.as_ref(), None, args.show_ibc_tokens)
+            .await;
     let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
@@ -962,8 +964,13 @@ pub async fn query_shielded_balance(
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
         // Precompute asset types to increase chances of success in decoding
-        let token_map =
-            query_tokens(context, None, None, args.show_ibc_tokens).await;
+        let token_map = query_tokens(
+            context,
+            args.token.as_ref(),
+            None,
+            args.show_ibc_tokens,
+        )
+        .await;
         let tokens = token_map.values().collect();
         let _ = shielded
             .precompute_asset_types(context.client(), tokens)
