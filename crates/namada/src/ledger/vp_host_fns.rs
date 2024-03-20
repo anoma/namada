@@ -10,7 +10,6 @@ use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
     TX_INDEX_LENGTH,
 };
-use namada_core::validity_predicate::VpError;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
@@ -27,12 +26,6 @@ pub trait ShouldHaltVp {
     /// should be halted immediately. Generally, this means
     /// that a tx has run out of gas.
     fn should_halt_vp(&self) -> bool;
-}
-
-impl ShouldHaltVp for VpError {
-    fn should_halt_vp(&self) -> bool {
-        matches!(self, Self::OutOfGas)
-    }
 }
 
 impl ShouldHaltVp for RuntimeError {

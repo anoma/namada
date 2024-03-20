@@ -27,8 +27,6 @@ where
 pub enum VpError {
     #[error("Transaction rejected")]
     Unspecified,
-    #[error("Gas limit exceeded")]
-    OutOfGas,
     #[error("Found invalid transaction signature")]
     InvalidSignature,
     #[error("{0}")]
