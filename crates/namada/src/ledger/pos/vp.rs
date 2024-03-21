@@ -1,20 +1,25 @@
 //! Proof-of-Stake native validity predicate.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use namada_proof_of_stake;
 pub use namada_proof_of_stake::parameters::PosParams;
 // use namada_proof_of_stake::validation::validate;
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_proof_of_stake::storage_key::is_params_key;
+use namada_proof_of_stake::token;
 pub use namada_proof_of_stake::types;
+use namada_proof_of_stake::types::BondId;
 use namada_state::StateRead;
+use namada_tx::action::{
+    Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
+};
 use namada_tx::Tx;
 use thiserror::Error;
 
-use crate::address::{self, Address};
+use crate::address::Address;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::storage::{Key, KeySeg};
+use crate::storage::Key;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -22,6 +27,10 @@ use crate::vm::WasmCacheAccess;
 pub enum Error {
     #[error("Native VP error: {0}")]
     NativeVpError(native_vp::Error),
+    #[error(
+        "Action {0} not authorized by {1} which is not part of verifier set"
+    )]
+    Unauthorized(&'static str, Address),
 }
 
 /// PoS functions result
@@ -59,7 +68,7 @@ where
         &self,
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<bool> {
         // use validation::Data;
         // use validation::DataUpdate::{self, *};
@@ -70,49 +79,237 @@ where
 
         tracing::debug!("\nValidating PoS storage changes\n");
 
-        for key in keys_changed {
-            if is_params_key(key) {
-                let data = if let Some(data) = tx_data.data() {
-                    data
-                } else {
-                    return Ok(false);
-                };
-                if !namada_governance::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    &data,
-                )
-                .map_err(Error::NativeVpError)?
-                {
-                    return Ok(false);
+        let data = if let Some(data) = tx_data.data() {
+            data
+        } else {
+            return Ok(false);
+        };
+
+        // Check if this is a governance proposal first
+        if namada_governance::is_proposal_accepted(&self.ctx.pre(), &data)
+            .map_err(Error::NativeVpError)?
+        {
+            for key in keys_changed {
+                if is_params_key(key) {
+                    let params = read_pos_params(&self.ctx.post())?.owned;
+                    // If governance changes PoS params, the params have to be
+                    // valid
+                    if !params.validate().is_empty() {
+                        return Ok(false);
+                    }
                 }
-                let params = read_pos_params(&self.ctx.post())?.owned;
-                if !params.validate().is_empty() {
-                    return Ok(false);
-                }
-            } else if key.segments.first() == Some(&address::POS.to_db_key()) {
-                // No VP logic applied to all other PoS keys for now, as PoS txs
-                // are all whitelisted
-                tracing::debug!(
-                    "PoS key change {} - No action is taken currently.",
-                    key
-                );
-            } else {
-                // Unknown changes anywhere else are permitted
-                tracing::debug!("PoS unrecognized key change {}", key);
+                // Any other change from governance is allowed without further
+                // checks
+            }
+            return Ok(true);
+        }
+
+        // Find the actions applied in the tx
+        let actions = self.ctx.read_actions()?;
+
+        // There must be at least one action
+        if actions.is_empty() {
+            tracing::info!(
+                "Rejecting tx without any action written to temp storage"
+            );
+            return Ok(false);
+        }
+
+        let mut became_validator: BTreeSet<Address> = Default::default();
+        let mut deactivated: BTreeSet<Address> = Default::default();
+        let mut reactivated: BTreeSet<Address> = Default::default();
+        let mut unjailed: BTreeSet<Address> = Default::default();
+        let mut bonds: BTreeMap<BondId, token::Amount> = Default::default();
+        let mut unbonds: BTreeMap<BondId, token::Amount> = Default::default();
+        let mut withdrawals: BTreeSet<BondId> = Default::default();
+        // The key is src bond ID and value is pair of (dest_validator, amount)
+        let mut redelegations: BTreeMap<BondId, (Address, token::Amount)> =
+            Default::default();
+        let mut claimed_rewards: BTreeSet<BondId> = Default::default();
+        let mut changed_commission: BTreeSet<Address> = Default::default();
+        let mut changed_metadata: BTreeSet<Address> = Default::default();
+        let mut changed_consensus_key: BTreeSet<Address> = Default::default();
+
+        // Accumulate changes from the actions
+        for action in actions {
+            match action {
+                Action::Pos(pos_action) => match pos_action {
+                    PosAction::BecomeValidator(address) => {
+                        if !verifiers.contains(&address) {
+                            tracing::info!(
+                                "Unauthorized PosAction::BecomeValidator"
+                            );
+                            return Err(Error::Unauthorized(
+                                "BecomeValidator",
+                                address,
+                            ));
+                        }
+                        became_validator.insert(address);
+                    }
+                    PosAction::DeactivateValidator(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!(
+                                "Unauthorized PosAction::DeactivateValidator"
+                            );
+                            return Err(Error::Unauthorized(
+                                "DeactivateValidator",
+                                validator,
+                            ));
+                        }
+                        deactivated.insert(validator);
+                    }
+                    PosAction::ReactivateValidator(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!(
+                                "Unauthorized PosAction::ReactivateValidator"
+                            );
+                            return Err(Error::Unauthorized(
+                                "ReactivateValidator",
+                                validator,
+                            ));
+                        }
+                        reactivated.insert(validator);
+                    }
+                    PosAction::Unjail(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!("Unauthorized PosAction::Unjail");
+                            return Err(Error::Unauthorized(
+                                "Unjail", validator,
+                            ));
+                        }
+                        unjailed.insert(validator);
+                    }
+                    PosAction::Bond(Bond {
+                        validator,
+                        amount,
+                        source,
+                    }) => {
+                        let bond_id = BondId {
+                            source: source.unwrap_or_else(|| validator.clone()),
+                            validator,
+                        };
+                        if !verifiers.contains(&bond_id.source) {
+                            tracing::info!("Unauthorized PosAction::Bond");
+                            return Err(Error::Unauthorized(
+                                "Bond",
+                                bond_id.source,
+                            ));
+                        }
+                        bonds.insert(bond_id, amount);
+                    }
+                    PosAction::Unbond(Unbond {
+                        validator,
+                        amount,
+                        source,
+                    }) => {
+                        let bond_id = BondId {
+                            source: source.unwrap_or_else(|| validator.clone()),
+                            validator,
+                        };
+                        if !verifiers.contains(&bond_id.source) {
+                            tracing::info!("Unauthorized PosAction::Unbond");
+                            return Err(Error::Unauthorized(
+                                "Unbond",
+                                bond_id.source,
+                            ));
+                        }
+                        unbonds.insert(bond_id, amount);
+                    }
+                    PosAction::Withdraw(Withdraw { validator, source }) => {
+                        let bond_id = BondId {
+                            source: source.unwrap_or_else(|| validator.clone()),
+                            validator,
+                        };
+                        if !verifiers.contains(&bond_id.source) {
+                            tracing::info!("Unauthorized PosAction::Withdraw");
+                            return Err(Error::Unauthorized(
+                                "Withdraw",
+                                bond_id.source,
+                            ));
+                        }
+                        withdrawals.insert(bond_id);
+                    }
+                    PosAction::Redelegation(Redelegation {
+                        src_validator,
+                        dest_validator,
+                        owner,
+                        amount,
+                    }) => {
+                        if !verifiers.contains(&owner) {
+                            tracing::info!(
+                                "Unauthorized PosAction::Redelegation"
+                            );
+                            return Err(Error::Unauthorized(
+                                "Redelegation",
+                                owner,
+                            ));
+                        }
+                        let bond_id = BondId {
+                            source: owner,
+                            validator: src_validator,
+                        };
+                        redelegations.insert(bond_id, (dest_validator, amount));
+                    }
+                    PosAction::ClaimRewards(ClaimRewards {
+                        validator,
+                        source,
+                    }) => {
+                        let bond_id = BondId {
+                            source: source.unwrap_or_else(|| validator.clone()),
+                            validator,
+                        };
+                        if !verifiers.contains(&bond_id.source) {
+                            tracing::info!(
+                                "Unauthorized PosAction::ClaimRewards"
+                            );
+                            return Err(Error::Unauthorized(
+                                "ClaimRewards",
+                                bond_id.source,
+                            ));
+                        }
+                        claimed_rewards.insert(bond_id);
+                    }
+                    PosAction::CommissionChange(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!(
+                                "Unauthorized PosAction::CommissionChange"
+                            );
+                            return Err(Error::Unauthorized(
+                                "CommissionChange",
+                                validator,
+                            ));
+                        }
+                        changed_commission.insert(validator);
+                    }
+                    PosAction::MetadataChange(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!(
+                                "Unauthorized PosAction::MetadataChange"
+                            );
+                            return Err(Error::Unauthorized(
+                                "MetadataChange",
+                                validator,
+                            ));
+                        }
+                        changed_metadata.insert(validator);
+                    }
+                    PosAction::ConsensusKeyChange(validator) => {
+                        if !verifiers.contains(&validator) {
+                            tracing::info!(
+                                "Unauthorized PosAction::ConsensusKeyChange"
+                            );
+                            return Err(Error::Unauthorized(
+                                "ConsensusKeyChange",
+                                validator,
+                            ));
+                        }
+                        changed_consensus_key.insert(validator);
+                    }
+                },
             }
         }
 
-        // let _params = read_pos_params(&self.ctx.pre())?;
-        // let errors = validate(&params, changes, current_epoch);
-        // Ok(if errors.is_empty() {
-        //     true
-        // } else {
-        //     tracing::info!(
-        //         "PoS validation errors:\n - {}",
-        //         errors.iter().format("\n - ")
-        //     );
-        //     false
-        // })
+        // TODO: validate changes keys against the accumulated changes
         Ok(true)
     }
 }
