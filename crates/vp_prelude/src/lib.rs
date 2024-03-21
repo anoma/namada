@@ -86,7 +86,7 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let targets = [tx.raw_header_hash()].serialize_to_vec();
     let signer = owner.serialize_to_vec();
 
-    Ok(unsafe {
+    unsafe {
         namada_vp_verify_tx_section_signature(
             targets.as_ptr() as _,
             targets.len() as _,
@@ -97,8 +97,9 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
             threshold,
             max_signatures.as_ptr() as _,
             max_signatures.len() as _,
-        )
-    })
+        );
+    }
+    Ok(())
 }
 
 /// Utility to minimize signature verification ops.
