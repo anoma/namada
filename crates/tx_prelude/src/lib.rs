@@ -252,13 +252,14 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn write_temp<T: BorshSerialize>(
-        &mut self,
+    fn read_bytes_temp(
+        &self,
         key: &storage::Key,
-        val: T,
-    ) -> Result<(), Error> {
-        let buf = val.serialize_to_vec();
-        self.write_bytes_temp(key, buf)
+    ) -> Result<Option<Vec<u8>>, Error> {
+        let key = key.to_string();
+        let read_result =
+            unsafe { namada_tx_read_temp(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
     fn write_bytes_temp(

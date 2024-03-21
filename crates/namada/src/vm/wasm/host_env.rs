@@ -64,6 +64,7 @@ where
             // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
             "namada_tx_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
+            "namada_tx_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read_temp),
             "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
             "namada_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
             "namada_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),
