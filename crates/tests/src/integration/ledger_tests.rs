@@ -8,9 +8,7 @@ use namada::token;
 use namada::tx::data::ResultCode::InvalidTx;
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
-use namada_apps::node::ledger::shell::testing::utils::{
-    Bin, CapturedOutput,
-};
+use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
@@ -18,13 +16,14 @@ use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 
-
 use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, CHRISTEL, CHRISTEL_KEY, DAEWON,
     ESTER, GOVERNANCE_ADDRESS, NAM,
 };
-use crate::integration::helpers::{find_address, prepare_steward_commission_update_data};
+use crate::integration::helpers::{
+    find_address, prepare_steward_commission_update_data,
+};
 use crate::integration::setup;
 use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_REJECTED};
 use crate::tx::tx_host_env::gov_storage::proposal::{
