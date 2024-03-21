@@ -62,8 +62,8 @@ pub enum Error {
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
     FeeError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
     #[error(
         "The decrypted transaction {0} has already been applied in this block"
     )]
@@ -854,8 +854,8 @@ where
                     )
                     .map_err(|err| match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
-                        wasm::run::Error::InvalidTxSignature => {
-                            Error::InvalidTxSignature
+                        wasm::run::Error::InvalidSectionSignature(msg) => {
+                            Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
                     })
@@ -967,7 +967,7 @@ where
                         Error::GasError(_) => {
                             return Err(err);
                         }
-                        Error::InvalidTxSignature => {
+                        Error::InvalidSectionSignature(_) => {
                             // required by replay protection
                             result.invalid_sig = true;
                         }

@@ -84,8 +84,6 @@ pub enum RuntimeError {
     InvalidCodeHash,
     #[error("No value found in result buffer")]
     NoValueInResultBuffer,
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
     #[error("The section signature is invalid: {0}")]
     InvalidSectionSignature(String),
     #[error("{0}")]

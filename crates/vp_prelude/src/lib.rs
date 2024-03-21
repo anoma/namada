@@ -86,22 +86,19 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
     let targets = [tx.raw_header_hash()].serialize_to_vec();
     let signer = owner.serialize_to_vec();
 
-    HostEnvResult::success_or(
-        unsafe {
-            namada_vp_verify_tx_section_signature(
-                targets.as_ptr() as _,
-                targets.len() as _,
-                public_keys_map.as_ptr() as _,
-                public_keys_map.len() as _,
-                signer.as_ptr() as _,
-                signer.len() as _,
-                threshold,
-                max_signatures.as_ptr() as _,
-                max_signatures.len() as _,
-            )
-        },
-        VpError::InvalidSignature,
-    )
+    Ok(unsafe {
+        namada_vp_verify_tx_section_signature(
+            targets.as_ptr() as _,
+            targets.len() as _,
+            public_keys_map.as_ptr() as _,
+            public_keys_map.len() as _,
+            signer.as_ptr() as _,
+            signer.len() as _,
+            threshold,
+            max_signatures.as_ptr() as _,
+            max_signatures.len() as _,
+        )
+    })
 }
 
 /// Utility to minimize signature verification ops.

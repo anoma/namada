@@ -250,7 +250,7 @@ pub mod vp {
             threshold: u8,
             max_signatures_ptr: u64,
             max_signatures_len: u64,
-        ) -> i64;
+        );
 
         pub fn namada_vp_eval(
             vp_code_hash_ptr: u64,

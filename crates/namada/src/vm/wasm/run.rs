@@ -88,8 +88,8 @@ pub enum Error {
     GasError(String),
     #[error("Failed type conversion: {0}")]
     ConversionError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
 }
 
 /// Result for functions that may fail
@@ -356,8 +356,10 @@ fn run_vp(
                     vp_host_fns::RuntimeError::OutOfGas(_) => {
                         Some(Error::GasError(rt_error.to_string()))
                     }
-                    vp_host_fns::RuntimeError::InvalidTxSignature => {
-                        Some(Error::InvalidTxSignature)
+                    vp_host_fns::RuntimeError::InvalidSectionSignature(_) => {
+                        Some(Error::InvalidSectionSignature(
+                            rt_error.to_string(),
+                        ))
                     }
                     _ => None,
                 }

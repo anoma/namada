@@ -1996,6 +1996,11 @@ where
             namada_tx::VerifySigError::Gas(inner) => {
                 Err(vp_host_fns::RuntimeError::OutOfGas(inner))
             }
+            namada_tx::VerifySigError::InvalidWrapperSignature => {
+                Err(vp_host_fns::RuntimeError::InvalidSectionSignature(
+                    "The wrapper's signature is invalid".into(),
+                ))
+            }
             namada_tx::VerifySigError::InvalidSectionSignature(inner) => {
                 Err(vp_host_fns::RuntimeError::InvalidSectionSignature(inner))
             }
