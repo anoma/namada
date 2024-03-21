@@ -350,13 +350,10 @@ impl RocksDB {
             .get_column_family(STATE_CF)
             .expect("State column family should exist");
 
-        let last_height: BlockHeight = decode(
-            self.0
-                .get_cf(state_cf, "height")
-                .expect("Unable to read DB")
-                .expect("No block height found"),
-        )
-        .expect("Unable to decode block height");
+        let last_height = self
+            .read_value(state_cf, BLOCK_HEIGHT_KEY)
+            .expect("Unable to read DB")
+            .expect("No block height found");
 
         let height = height.unwrap_or(last_height);
 
@@ -515,8 +512,7 @@ impl RocksDB {
         }
 
         let mut batch = RocksDB::batch();
-        let previous_height =
-            BlockHeight::from(u64::from(last_block.height) - 1);
+        let previous_height = last_block.height.prev_height();
 
         let state_cf = self.get_column_family(STATE_CF)?;
         // Revert the non-height-prepended metadata storage keys which get
@@ -524,21 +520,26 @@ impl RocksDB {
         // three keys in storage we can only perform one rollback before
         // restarting the chain
         tracing::info!("Reverting non-height-prepended metadata keys");
-        batch.0.put_cf(state_cf, "height", encode(&previous_height));
+        batch
+            .0
+            .put_cf(state_cf, BLOCK_HEIGHT_KEY, encode(&previous_height));
         for metadata_key in [
-            "next_epoch_min_start_height",
-            "next_epoch_min_start_time",
-            "commit_only_data_commitment",
-            "update_epoch_blocks_delay",
+            NEXT_EPOCH_MIN_START_HEIGHT_KEY,
+            NEXT_EPOCH_MIN_START_TIME_KEY,
+            COMMIT_ONLY_DATA_KEY,
+            UPDATE_EPOCH_BLOCKS_DELAY_KEY,
         ] {
-            let previous_key = format!("pred/{}", metadata_key);
+            let previous_key = format!("{PRED_KEY_PREFIX}/{metadata_key}");
             let previous_value = self
-                .0
-                .get_cf(state_cf, previous_key.as_bytes())
-                .map_err(|e| Error::DBError(e.to_string()))?
+                .read_value_bytes(state_cf, &previous_key)?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
 
-            batch.0.put_cf(state_cf, metadata_key, previous_value);
+            self.add_value_bytes_to_batch(
+                state_cf,
+                metadata_key,
+                previous_value,
+                &mut batch,
+            );
             // NOTE: we cannot restore the "pred/" keys themselves since we
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
@@ -549,21 +550,26 @@ impl RocksDB {
         if last_block.pred_epochs.get_epoch(previous_height)
             != Some(last_block.epoch)
         {
-            let previous_key = "pred/conversion_state".to_string();
+            let previous_key =
+                format!("{PRED_KEY_PREFIX}/{CONVERSION_STATE_KEY}");
             let previous_value = self
-                .0
-                .get_cf(state_cf, previous_key.as_bytes())
-                .map_err(|e| Error::DBError(e.to_string()))?
+                .read_value_bytes(state_cf, &previous_key)?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
-            batch.0.put_cf(state_cf, "conversion_state", previous_value);
+            self.add_value_bytes_to_batch(
+                state_cf,
+                CONVERSION_STATE_KEY,
+                previous_value,
+                &mut batch,
+            );
         }
 
         // Delete block results for the last block
         let block_cf = self.get_column_family(BLOCK_CF)?;
         tracing::info!("Removing last block results");
-        batch
-            .0
-            .delete_cf(block_cf, format!("results/{}", last_block.height));
+        batch.0.delete_cf(
+            block_cf,
+            format!("{RESULTS_KEY_PREFIX}/{}", last_block.height),
+        );
 
         // Restore the state of replay protection to the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
