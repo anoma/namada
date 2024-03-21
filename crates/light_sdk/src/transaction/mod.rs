@@ -10,7 +10,7 @@ use namada_sdk::storage::Epoch;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::{Fee, GasLimit};
-use namada_sdk::tx::{Section, Signature, Signer, Tx};
+use namada_sdk::tx::{Authorization, Section, Signer, Tx};
 
 pub mod account;
 pub mod bridge;
@@ -53,7 +53,7 @@ pub(in crate::transaction) fn get_sign_bytes(tx: &Tx) -> Vec<Hash> {
 pub(in crate::transaction) fn get_wrapper_sign_bytes(tx: &Tx) -> Hash {
     let targets = tx.sechashes();
     // Commit to the given targets
-    let partial = Signature {
+    let partial = Authorization {
         targets,
         signer: Signer::PubKeys(vec![]),
         signatures: BTreeMap::new(),
@@ -67,7 +67,7 @@ pub(in crate::transaction) fn attach_raw_signatures(
     signature: common::Signature,
 ) -> Tx {
     tx.protocol_filter();
-    tx.add_section(Section::Signature(Signature {
+    tx.add_section(Section::Authorization(Authorization {
         targets: vec![tx.raw_header_hash()],
         signer: Signer::PubKeys(vec![signer]),
         signatures: [(0, signature)].into_iter().collect(),
@@ -102,7 +102,7 @@ pub(in crate::transaction) fn attach_fee_signature(
     signature: common::Signature,
 ) -> Tx {
     tx.protocol_filter();
-    tx.add_section(Section::Signature(Signature {
+    tx.add_section(Section::Authorization(Authorization {
         targets: tx.sechashes(),
         signer: Signer::PubKeys(vec![signer]),
         signatures: [(0, signature)].into_iter().collect(),

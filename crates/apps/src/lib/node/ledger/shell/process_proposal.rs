@@ -660,7 +660,7 @@ mod test_process_proposal {
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Signature, Signed};
+    use namada::tx::{Authorization, Code, Data, Signed};
     use namada::vote_ext::{bridge_pool_roots, ethereum_events};
 
     use super::*;
@@ -958,7 +958,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1032,7 +1032,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1100,7 +1100,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1380,7 +1380,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1450,7 +1450,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1504,7 +1504,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1565,7 +1565,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1581,7 +1581,7 @@ mod test_process_proposal {
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         ))));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
@@ -1621,7 +1621,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1683,7 +1683,7 @@ mod test_process_proposal {
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1726,7 +1726,7 @@ mod test_process_proposal {
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1777,7 +1777,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1819,7 +1819,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1867,7 +1867,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1910,7 +1910,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1955,7 +1955,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2000,7 +2000,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2046,7 +2046,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2116,7 +2116,7 @@ mod test_process_proposal {
             wrapper
                 .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
-            wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.add_section(Section::Authorization(Authorization::new(
                 wrapper.sechashes(),
                 [(0, keypair)].into_iter().collect(),
                 None,

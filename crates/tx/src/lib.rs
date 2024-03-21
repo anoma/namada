@@ -11,9 +11,9 @@ use namada_core::event::{Event, EventLevel, EventType};
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
-    standalone_signature, verify_standalone_sig, Code, Commitment,
-    CompressedSignature, Data, DecodeError, Header, MaspBuilder, Memo, Section,
-    Signature, Signed, Signer, Tx, TxError, VerifySigError,
+    standalone_signature, verify_standalone_sig, Authorization, Code,
+    Commitment, CompressedSignature, Data, DecodeError, Header, MaspBuilder,
+    Memo, Section, Signed, Signer, Tx, TxError, VerifySigError,
 };
 
 /// Creates a new event with the hash and height of the transaction
