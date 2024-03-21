@@ -474,7 +474,7 @@ impl DB for MockDB {
         MockDBWriteBatch
     }
 
-    fn exec_batch(&mut self, _batch: Self::WriteBatch) -> Result<()> {
+    fn exec_batch(&self, _batch: Self::WriteBatch) -> Result<()> {
         // Nothing to do - in MockDB, batch writes are committed directly from
         // `batch_write_subspace_val` and `batch_delete_subspace_val`.
         Ok(())

@@ -206,7 +206,7 @@ pub trait DB: Debug {
     fn batch() -> Self::WriteBatch;
 
     /// Execute write batch.
-    fn exec_batch(&mut self, batch: Self::WriteBatch) -> Result<()>;
+    fn exec_batch(&self, batch: Self::WriteBatch) -> Result<()>;
 
     /// Batch write the value with the given height and account subspace key to
     /// the DB. Returns the size difference from previous value, if any, or
