@@ -9,16 +9,14 @@ pub mod tendermint_node;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::thread;
 
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
 use futures::future::TryFutureExt;
-use namada::core::storage::{BlockHeight, Key};
+use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::governance::storage::keys as governance_storage;
 use namada::state::DB;
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
@@ -68,34 +66,6 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 //     }
 //```
 impl Shell {
-    fn load_proposals(&mut self) {
-        let proposals_key = governance_storage::get_commiting_proposals_prefix(
-            self.state.in_mem().last_epoch.0,
-        );
-
-        let (proposal_iter, _) = self.state.db_iter_prefix(&proposals_key);
-        for (key, _, _) in proposal_iter {
-            let key =
-                Key::from_str(key.as_str()).expect("Key should be parsable");
-            if governance_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.state.in_mem().last_epoch.0
-            {
-                // NOTE: `iter_prefix` iterate over the matching prefix. In this
-                // case  a proposal with grace_epoch 110 will be
-                // matched by prefixes  1, 11 and 110. Thus we
-                // have to skip to the next iteration of
-                //  the cycle for all the prefixes that don't actually match
-                //  the desired epoch.
-                continue;
-            }
-
-            let proposal_id = governance_storage::get_commit_proposal_id(&key);
-            if let Some(id) = proposal_id {
-                self.proposal_data.insert(id);
-            }
-        }
-    }
-
     fn call(&mut self, req: Request) -> Result<Response, Error> {
         match req {
             Request::InitChain(init) => {
@@ -131,7 +101,6 @@ impl Shell {
             }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
-                self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {

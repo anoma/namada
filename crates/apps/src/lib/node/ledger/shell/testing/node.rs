@@ -10,6 +10,7 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
+use namada::address::Address;
 use namada::control_flow::time::Duration;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
@@ -29,7 +30,9 @@ use namada::proof_of_stake::storage::{
     validator_consensus_key_handle,
 };
 use namada::proof_of_stake::types::WeightedValidator;
-use namada::state::{LastBlock, Sha256Hasher, EPOCH_SWITCH_BLOCKS_DELAY};
+use namada::state::{
+    LastBlock, Sha256Hasher, StorageRead, EPOCH_SWITCH_BLOCKS_DELAY,
+};
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
 use namada_sdk::queries::Client;
@@ -233,7 +236,7 @@ pub fn mock_services(cfg: MockServicesCfg) -> MockServicesPackage {
 }
 
 /// Status of tx
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NodeResults {
     /// Success
     Ok,
@@ -352,6 +355,11 @@ impl MockNode {
             .in_mem()
             .get_current_epoch()
             .0
+    }
+
+    pub fn native_token(&self) -> Address {
+        let locked = self.shell.lock().unwrap();
+        locked.state.get_native_token().unwrap()
     }
 
     /// Get the address of the block proposer and the votes for the block

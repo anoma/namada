@@ -1827,8 +1827,13 @@ fn propose_funding(
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     let epoch = get_epoch(test_a, &rpc_a)?;
     let start_epoch = (epoch.0 + 3) / 3 * 3;
-    let proposal_json_path =
-        prepare_proposal_data(test_a, 0, albert, pgf_funding, start_epoch);
+    let proposal_json_path = prepare_proposal_data(
+        test_a.test_dir.path(),
+        0,
+        albert,
+        pgf_funding,
+        start_epoch,
+    );
 
     let submit_proposal_args = vec![
         "init-proposal",
