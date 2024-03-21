@@ -887,11 +887,11 @@ fn to_ledger_decimal(amount: &str) -> String {
     if amount.contains('.') {
         let mut amount = amount.trim_end_matches('0').to_string();
         if amount.ends_with('.') {
-            amount.push('0')
+            amount.pop();
         }
         amount
     } else {
-        amount.to_string() + ".0"
+        amount.to_string()
     }
 }
 
