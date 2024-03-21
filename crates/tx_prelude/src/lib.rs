@@ -371,6 +371,27 @@ impl TxEnv for Ctx {
     }
 }
 
+impl namada_tx::action::Read for Ctx {
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        TxEnv::read_temp(self, key)
+    }
+}
+
+impl namada_tx::action::Write for Ctx {
+    fn write_temp<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<(), Self::Err> {
+        TxEnv::write_temp(self, key, val)
+    }
+}
+
 /// Execute IBC tx.
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
 pub fn tx_ibc_execute() {
