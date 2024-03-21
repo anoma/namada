@@ -1271,10 +1271,10 @@ impl DB for RocksDB {
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
-        let root_key = key_prefix.clone().with_segment("root".to_owned());
-        batch.0.delete_cf(block_cf, root_key.to_string());
-        let store_key = key_prefix.with_segment("store".to_owned());
-        batch.0.delete_cf(block_cf, store_key.to_string());
+        let root_key = format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+        batch.0.delete_cf(block_cf, root_key);
+        let store_key = format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+        batch.0.delete_cf(block_cf, store_key);
         Ok(())
     }
 
