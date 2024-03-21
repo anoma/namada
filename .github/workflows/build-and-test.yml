@@ -524,6 +524,10 @@ jobs:
         run: make build-release
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Build migration-scripts
+        run: cargo build --example make-db-migration
+        env:
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload target binaries (github)
         uses: actions/upload-artifact@v3
         with:
@@ -533,7 +537,13 @@ jobs:
             target/release/namadac
             target/release/namadaw
             target/release/namadan
-            target/release/namadar
+            target/release/namadar- name:
+      - name: Upload migration-script binaries (github)
+        uses: actions/upload-artifact@v3
+        with:
+          name: migration-scripts-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/debug/examples/make-db-migration
       - name: Upload namada binaries (minio)
         run: |
           unset AWS_SESSION_TOKEN
