@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::ops::Bound::{Excluded, Included};
 use std::path::Path;
-use std::str::FromStr;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
@@ -120,7 +119,6 @@ impl DB for MockDB {
         // Load data at the height
         let prefix = format!("{}/", height.raw());
         let upper_prefix = format!("{}/", height.next_height().raw());
-        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
         let mut hash = None;
         let mut time = None;
         let mut epoch: Option<Epoch> = None;
@@ -135,22 +133,7 @@ impl DB for MockDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
-                    "tree" => match segments.get(2) {
-                        Some(s) => {
-                            let st = StoreType::from_str(s)?;
-                            match segments.get(3) {
-                                Some(&"root") => merkle_tree_stores.set_root(
-                                    &st,
-                                    decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
-                                Some(&"store") => merkle_tree_stores
-                                    .set_store(st.decode_store(bytes)?),
-                                _ => unknown_key_error(path)?,
-                            }
-                        }
-                        None => unknown_key_error(path)?,
-                    },
+                    "tree" => {}
                     "header" => {
                         // the block header doesn't have to be restored
                     }
@@ -176,26 +159,6 @@ impl DB for MockDB {
                 None => unknown_key_error(path)?,
             }
         }
-        // Restore subtrees of Merkle tree
-        if let Some(epoch) = epoch {
-            for st in StoreType::iter_subtrees() {
-                let prefix_key = tree_key_prefix_with_epoch(st, epoch);
-                let root_key =
-                    prefix_key.clone().with_segment("root".to_owned());
-                if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
-                {
-                    merkle_tree_stores.set_root(
-                        st,
-                        decode(bytes).map_err(Error::CodingError)?,
-                    );
-                }
-                let store_key = prefix_key.with_segment("store".to_owned());
-                if let Some(bytes) = self.0.borrow().get(&store_key.to_string())
-                {
-                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
-                }
-            }
-        }
         match (hash, time, epoch, pred_epochs, address_gen) {
             (
                 Some(hash),
@@ -204,7 +167,6 @@ impl DB for MockDB {
                 Some(pred_epochs),
                 Some(address_gen),
             ) => Ok(Some(BlockStateRead {
-                merkle_tree_stores,
                 hash,
                 height,
                 time,

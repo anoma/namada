@@ -58,10 +58,9 @@ use itertools::Either;
 use namada::core::collections::HashSet;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
 };
 use namada::core::time::DateTimeUtc;
-use namada::core::{decode, encode, ethereum_events, ethereum_structs};
+use namada::core::{decode, encode, ethereum_events};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::replay_protection;
@@ -77,7 +76,6 @@ use namada::storage::{
     DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
     SUBSPACE_CF,
 };
-use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
 use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
@@ -95,6 +93,27 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
+
+const BLOCK_HEIGHT_KEY: &str = "height";
+const NEXT_EPOCH_MIN_START_HEIGHT_KEY: &str = "next_epoch_min_start_height";
+const NEXT_EPOCH_MIN_START_TIME_KEY: &str = "next_epoch_min_start_time";
+const UPDATE_EPOCH_BLOCKS_DELAY_KEY: &str = "update_epoch_blocks_delay";
+const COMMIT_ONLY_DATA_KEY: &str = "commit_only_data_commitment";
+const CONVERSION_STATE_KEY: &str = "conversion_state";
+const TX_QUEUE_KEY: &str = "tx_queue";
+const ETHEREUM_HEIGHT_KEY: &str = "ethereum_height";
+const ETH_EVENTS_QUEUE_KEY: &str = "eth_events_queue";
+const RESULTS_KEY_PREFIX: &str = "results";
+
+const MERKLE_TREE_KEY_SEGMENT: &str = "tree";
+const MERKLE_TREE_ROOT_KEY_SEGMENT: &str = "root";
+const MERKLE_TREE_STORE_KEY_SEGMENT: &str = "store";
+const BLOCK_HEADER_KEY_SEGMENT: &str = "header";
+const BLOCK_HASH_KEY_SEGMENT: &str = "hash";
+const BLOCK_TIME_KEY_SEGMENT: &str = "time";
+const EPOCH_KEY_SEGMENT: &str = "epoch";
+const PRED_EPOCHS_KEY_SEGMENT: &str = "pred_epochs";
+const ADDRESS_GEN_KEY_SEGMENT: &str = "address_gen";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -222,6 +241,21 @@ impl RocksDB {
         self.0
             .cf_handle(cf_name)
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))
+    }
+
+    fn read_value<T>(
+        &self,
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+    ) -> Result<Option<T>>
+    where
+        T: BorshDeserialize,
+    {
+        self.0
+            .get_cf(cf, key.as_ref())
+            .map_err(|e| Error::DBError(e.into_string()))?
+            .map(|bytes| decode(bytes).map_err(Error::CodingError))
+            .transpose()
     }
 
     /// Persist the diff of an account subspace key-val under the height where
@@ -680,259 +714,119 @@ impl DB for RocksDB {
     }
 
     fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
-        // Block height
         let state_cf = self.get_column_family(STATE_CF)?;
-        let height: BlockHeight = match self
-            .0
-            .get_cf(state_cf, "height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => {
-                // TODO if there's an issue decoding this height, should we try
-                // load its predecessor instead?
-                decode(bytes).map_err(Error::CodingError)?
-            }
-            None => return Ok(None),
-        };
-
-        // Block results
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let results_path = format!("results/{}", height.raw());
-        let results: BlockResults = match self
-            .0
-            .get_cf(block_cf, results_path)
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => return Ok(None),
-        };
+
+        // Block height
+        let height: BlockHeight =
+            match self.read_value(state_cf, BLOCK_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
+            };
 
         // Epoch start height and time
-        let next_epoch_min_start_height: BlockHeight = match self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load next epoch start height from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let next_epoch_min_start_time: DateTimeUtc = match self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_time")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load next epoch start time from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let update_epoch_blocks_delay: Option<u32> = match self
-            .0
-            .get_cf(state_cf, "update_epoch_blocks_delay")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load epoch update block delay from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let commit_only_data: CommitOnlyData = match self
-            .0
-            .get_cf(state_cf, "commit_only_data_commitment")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load commit only data commitment from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let conversion_state: ConversionState = match self
-            .0
-            .get_cf(state_cf, "conversion_state")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load conversion state from the DB");
-                return Ok(None);
-            }
-        };
-
-        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
-            .0
-            .get_cf(state_cf, "ethereum_height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load ethereum height from the DB");
-                return Ok(None);
-            }
-        };
-
-        let eth_events_queue: EthEventsQueue = match self
-            .0
-            .get_cf(state_cf, "eth_events_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the eth events queue from the DB"
-                );
-                return Ok(None);
-            }
-        };
-
-        // Load data at the height
-        let prefix = format!("{}/", height.raw());
-        let mut read_opts = ReadOptions::default();
-        read_opts.set_total_order_seek(false);
-        let next_height_prefix = format!("{}/", height.next_height().raw());
-        read_opts.set_iterate_upper_bound(next_height_prefix);
-        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        let mut hash = None;
-        let mut time = None;
-        let mut epoch: Option<Epoch> = None;
-        let mut pred_epochs = None;
-        let mut address_gen = None;
-        for value in self.0.iterator_cf_opt(
-            block_cf,
-            read_opts,
-            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-        ) {
-            let (key, bytes) = match value {
-                Ok(data) => data,
-                Err(e) => return Err(Error::DBError(e.into_string())),
+        let next_epoch_min_start_height =
+            match self.read_value(state_cf, NEXT_EPOCH_MIN_START_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
             };
-            let path = &String::from_utf8((*key).to_vec()).map_err(|e| {
-                Error::Temporary {
-                    error: format!(
-                        "Cannot convert path from utf8 bytes to string: {}",
-                        e
-                    ),
-                }
-            })?;
-            let segments: Vec<&str> =
-                path.split(KEY_SEGMENT_SEPARATOR).collect();
-            match segments.get(1) {
-                Some(prefix) => match *prefix {
-                    // Restore the base tree and the CommitData tree of Merkle
-                    // tree
-                    "tree" => match segments.get(2) {
-                        Some(s) => {
-                            let st = StoreType::from_str(s)?;
-                            match segments.get(3) {
-                                Some(&"root") => merkle_tree_stores.set_root(
-                                    &st,
-                                    decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
-                                Some(&"store") => merkle_tree_stores
-                                    .set_store(st.decode_store(bytes)?),
-                                _ => unknown_key_error(path)?,
-                            }
-                        }
-                        None => unknown_key_error(path)?,
-                    },
-                    "header" => {
-                        // the block header doesn't have to be restored
-                    }
-                    "hash" => {
-                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "time" => {
-                        time = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "epoch" => {
-                        epoch = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "pred_epochs" => {
-                        pred_epochs =
-                            Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "address_gen" => {
-                        address_gen =
-                            Some(decode(bytes).map_err(Error::CodingError)?);
-                    }
-                    _ => unknown_key_error(path)?,
-                },
-                None => unknown_key_error(path)?,
-            }
-        }
-        // Restore subtrees of Merkle tree
-        if let Some(epoch) = epoch {
-            for st in StoreType::iter_subtrees() {
-                if *st == StoreType::CommitData {
-                    // CommitData tree has been already restored
-                    continue;
-                }
-                let key_prefix = tree_key_prefix_with_epoch(st, epoch);
-                let root_key =
-                    key_prefix.clone().with_segment("root".to_owned());
-                if let Some(bytes) = self
-                    .0
-                    .get_cf(block_cf, &root_key.to_string())
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                {
-                    merkle_tree_stores.set_root(
-                        st,
-                        decode(bytes).map_err(Error::CodingError)?,
-                    );
-                }
-                let store_key = key_prefix.with_segment("store".to_owned());
-                if let Some(bytes) = self
-                    .0
-                    .get_cf(block_cf, &store_key.to_string())
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                {
-                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
-                }
-            }
-        }
-        match (hash, time, epoch, pred_epochs, address_gen) {
-            (
-                Some(hash),
-                Some(time),
-                Some(epoch),
-                Some(pred_epochs),
-                Some(address_gen),
-            ) => Ok(Some(BlockStateRead {
-                merkle_tree_stores,
-                hash,
-                height,
-                time,
-                epoch,
-                pred_epochs,
-                results,
-                conversion_state,
-                next_epoch_min_start_height,
-                next_epoch_min_start_time,
-                update_epoch_blocks_delay,
-                address_gen,
-                ethereum_height,
-                eth_events_queue,
-                commit_only_data,
-            })),
-            _ => Err(Error::Temporary {
-                error: "Essential data couldn't be read from the DB"
-                    .to_string(),
-            }),
-        }
+
+        let next_epoch_min_start_time =
+            match self.read_value(state_cf, NEXT_EPOCH_MIN_START_TIME_KEY)? {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+
+        let update_epoch_blocks_delay =
+            match self.read_value(state_cf, UPDATE_EPOCH_BLOCKS_DELAY_KEY)? {
+                Some(d) => d,
+                None => return Ok(None),
+            };
+
+        let commit_only_data =
+            match self.read_value(state_cf, COMMIT_ONLY_DATA_KEY)? {
+                Some(d) => d,
+                None => return Ok(None),
+            };
+
+        let conversion_state =
+            match self.read_value(state_cf, CONVERSION_STATE_KEY)? {
+                Some(c) => c,
+                None => return Ok(None),
+            };
+
+        let ethereum_height =
+            match self.read_value(state_cf, ETHEREUM_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
+            };
+
+        let eth_events_queue =
+            match self.read_value(state_cf, ETH_EVENTS_QUEUE_KEY)? {
+                Some(q) => q,
+                None => return Ok(None),
+            };
+
+        // Block results
+        let results_path = format!("{RESULTS_KEY_PREFIX}/{}", height.raw());
+        let results = match self.read_value(block_cf, results_path)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // Read the block state one by one for simplicity because we need only 5
+        // values for now. We can revert to use `iterator_cf_opt` with
+        // the prefix to read more state values.
+        let prefix = height.raw();
+
+        // Resotring the Mekle tree later
+
+        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
+        let hash = match self.read_value(block_cf, hash_key)? {
+            Some(h) => h,
+            None => return Ok(None),
+        };
+
+        let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
+        let time = match self.read_value(block_cf, time_key)? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        let epoch = match self.read_value(block_cf, epoch_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let pred_epochs_key = format!("{prefix}/{PRED_EPOCHS_KEY_SEGMENT}");
+        let pred_epochs = match self.read_value(block_cf, pred_epochs_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let address_gen_key = format!("{prefix}/{ADDRESS_GEN_KEY_SEGMENT}");
+        let address_gen = match self.read_value(block_cf, address_gen_key)? {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        Ok(Some(BlockStateRead {
+            hash,
+            height,
+            time,
+            epoch,
+            pred_epochs,
+            results,
+            conversion_state,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
+            update_epoch_blocks_delay,
+            address_gen,
+            ethereum_height,
+            eth_events_queue,
+            commit_only_data,
+        }))
     }
 
     fn add_block_to_batch(
@@ -2040,12 +1934,6 @@ fn old_and_new_diff_key(
     Ok((old.to_string(), new.to_string()))
 }
 
-fn unknown_key_error(key: &str) -> Result<()> {
-    Err(Error::UnknownKey {
-        key: key.to_owned(),
-    })
-}
-
 /// Try to increase NOFILE limit and set the `max_open_files` limit to it in
 /// RocksDB options.
 fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
@@ -2108,7 +1996,11 @@ mod test {
     use namada::core::address::EstablishedAddressGen;
     use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
+    use namada::ledger::storage::tx_queue::TxQueue;
+    use namada::ledger::storage::ConversionState;
     use namada::state::{MerkleTree, Sha256Hasher};
+    use namada::storage::{BlockResults, EthEventsQueue};
+    use namada::time::DateTimeUtc;
     use tempfile::tempdir;
     use test_log::test;
 

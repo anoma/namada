@@ -46,8 +46,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// The block's state as stored in the database.
 pub struct BlockStateRead {
-    /// Merkle tree stores
-    pub merkle_tree_stores: MerkleTreeStoresRead,
     /// Hash of the block
     pub hash: BlockHash,
     /// Height of the block
