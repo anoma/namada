@@ -204,7 +204,7 @@ pub fn dump_db(
 #[cfg(feature = "migrations")]
 pub fn query_db(
     config: config::Ledger,
-    key: &Key,
+    key: &namada::core::storage::Key,
     type_hash: &[u8; 32],
     cf: &DbColFam,
 ) {
