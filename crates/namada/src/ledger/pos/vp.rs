@@ -12,7 +12,7 @@ use namada_state::StateRead;
 use namada_tx::Tx;
 use thiserror::Error;
 
-use crate::address::{self, Address};
+use crate::address::Address;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::storage::Key;
 use crate::vm::WasmCacheAccess;
@@ -67,23 +67,22 @@ where
                 )
                 .map_err(Error::NativeVpError)?
                 .ok_or_else(|| {
-                    native_vp::Error::new_const(
+                    Error::NativeVpError(native_vp::Error::new_const(
                         "PoS parameter changes can only be performed by a \
                          governance proposal that has been accepted",
-                    )
-                    .into()
+                    ))
                 })?;
-                let validation_errors = read_pos_params(&self.ctx.post())
-                    .map_err(Error::NativeVpError)?
-                    .owned
-                    .validate();
-                let validation_err_msg =
-                    itertools::join(validation_errors, ", ");
-                let no_errs = validation_err_msg == "";
-                no_errs.ok_or_else(|| {
+                let validation_errors = itertools::join(
+                    read_pos_params(&self.ctx.post())
+                        .map_err(Error::NativeVpError)?
+                        .owned
+                        .validate(),
+                    ", ",
+                );
+                validation_errors.is_empty().ok_or_else(|| {
                     native_vp::Error::new_alloc(format!(
                         "PoS parameter changes were invalid: \
-                         {validation_err_msg}",
+                         {validation_errors}",
                     ))
                     .into()
                 })

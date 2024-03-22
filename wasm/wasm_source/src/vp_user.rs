@@ -854,7 +854,7 @@ mod tests {
                 keys_changed.clone(),
                 verifiers.clone()
             )
-            .unwrap()
+            .is_ok()
         );
     }
 
