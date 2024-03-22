@@ -787,7 +787,6 @@ pub mod testing {
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
-    use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
     use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
@@ -950,14 +949,12 @@ pub mod testing {
         // Generate an arbitrary wrapper transaction
         pub fn arb_wrapper_tx()(
             fee in arb_fee(),
-            epoch in arb_epoch(),
             pk in arb_common_pk(),
             gas_limit in arb_gas_limit(),
             unshield_section_hash in option::of(arb_hash()),
         ) -> WrapperTx {
             WrapperTx {
                 fee,
-                epoch,
                 pk,
                 gas_limit,
                 unshield_section_hash,
