@@ -537,9 +537,10 @@ pub async fn dry_run_tx<N: Namada>(
         )
     } else {
         format!(
-            "Transaction was rejected by VPs: {}.\nChanged key: {}",
+            "Transaction was rejected by VPs: {}\nErrors: {}\nChanged keys: {}",
             serde_json::to_string_pretty(&result.vps_result.rejected_vps)
                 .unwrap(),
+            serde_json::to_string_pretty(&result.vps_result.errors).unwrap(),
             serde_json::to_string_pretty(&result.changed_keys).unwrap(),
         )
     };
