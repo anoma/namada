@@ -447,6 +447,7 @@ pub mod cmds {
         // Ledger cmds
         TxCustom(TxCustom),
         TxTransfer(TxTransfer),
+        TxDisperse(TxDisperse),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
@@ -1262,6 +1263,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Send a signed transfer transaction.")
                 .add_args::<args::TxTransfer<crate::cli::args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxDisperse(pub args::TxDisperse<crate::cli::args::CliTypes>);
+
+    impl SubCmd for TxDisperse {
+        const CMD: &'static str = "disperse";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| TxDisperse(args::TxDisperse::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Send a multiple signed transfer transactions from a single address.")
+                .add_args::<args::TxDisperse<crate::cli::args::CliTypes>>()
         }
     }
 
@@ -3271,6 +3291,7 @@ pub mod args {
     pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
     pub const TRANSFER_TARGET: Arg<WalletTransferTarget> = arg("target");
+    pub const TRANSFER_TARGETS: ArgMulti<WalletTransferTarget, GlobStar> = arg_multi("targets");
     pub const TRANSPARENT: ArgFlag = flag("transparent");
     pub const TX_HASH: Arg<String> = arg("tx-hash");
     pub const THRESHOLD: ArgOpt<u8> = arg_opt("threshold");
@@ -4202,6 +4223,51 @@ pub mod args {
                 .arg(TRANSFER_TARGET.def().help(
                     "The target account address. The target's key may be used \
                      to produce the signature.",
+                ))
+                .arg(TOKEN.def().help("The transfer token."))
+                .arg(AMOUNT.def().help("The amount to transfer in decimal."))
+        }
+    }
+    impl CliToSdk<TxDisperse<SdkTypes>> for TxDisperse<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> TxDisperse<SdkTypes> {
+            let tx = self.tx.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            TxDisperse::<SdkTypes> {
+                tx,
+                source: chain_ctx.get_cached(&self.source),
+                targets: chain_ctx.get(&self.targets),
+                token: chain_ctx.get(&self.token),
+                amount: self.amount,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            }
+        }
+    }
+
+    impl Args for TxDisperse<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = TRANSFER_SOURCE.parse(matches);
+            let targets = TRANSFER_TARGETS.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            Self {
+                tx,
+                source,
+                targets,
+                token,
+                amount,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(TRANSFER_SOURCE.def().help(
+                    "The source account address. The source's key may be used \
+                     to produce the signature.",
+                ))
+                .arg(TRANSFER_TARGETS.def().help("The target accounts addresses.",
                 ))
                 .arg(TOKEN.def().help("The transfer token."))
                 .arg(AMOUNT.def().help("The amount to transfer in decimal."))
