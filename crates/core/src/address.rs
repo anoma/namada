@@ -8,7 +8,6 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -472,14 +471,14 @@ impl EstablishedAddressGen {
         &mut self,
         rng_source: impl AsRef<[u8]>,
     ) -> Address {
-        let gen_bytes = self.serialize_to_vec();
-        let bytes = [&gen_bytes, rng_source.as_ref()].concat();
-        let full_hash = Sha256::digest(&bytes);
-        // take first 20 bytes of the hash
-        let mut hash: [u8; HASH_LEN] = Default::default();
-        hash.copy_from_slice(&full_hash[..HASH_LEN]);
-        self.last_hash = full_hash.into();
-        Address::Established(EstablishedAddress { hash })
+        self.last_hash = {
+            let mut hasher_state = Sha256::new();
+            hasher_state.update(self.last_hash);
+            hasher_state.update(rng_source);
+            hasher_state.finalize()
+        }
+        .into();
+        Address::Established(self.last_hash.into())
     }
 }
 
@@ -600,6 +599,7 @@ impl InternalAddress {
 
 #[cfg(test)]
 pub mod tests {
+    use borsh_ext::BorshSerializeExt;
     use proptest::prelude::*;
 
     use super::*;
@@ -666,17 +666,13 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     use rand::prelude::ThreadRng;
     use rand::{thread_rng, RngCore};
 
-    let mut key_gen = EstablishedAddressGen::new(seed);
+    EstablishedAddressGen::new(seed).generate_address({
+        let mut thread_local_rng: ThreadRng = thread_rng();
+        let mut buffer = [0u8; 32];
 
-    let mut rng: ThreadRng = thread_rng();
-    let mut rng_bytes = [0u8; 32];
-    rng.fill_bytes(&mut rng_bytes[..]);
-    let rng_source = rng_bytes
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<Vec<String>>()
-        .join("");
-    key_gen.generate_address(rng_source)
+        thread_local_rng.fill_bytes(&mut buffer[..]);
+        buffer
+    })
 }
 
 /// Generate a new established address. Unlike `gen_established_address`, this

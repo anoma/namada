@@ -3,6 +3,8 @@
 
 use namada_tx_prelude::*;
 
+const HASH_LEN: usize = hash::HASH_LENGTH;
+
 #[transaction(gas = 885069)]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
@@ -28,8 +30,20 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
             err
         })?;
 
+    let entropy = {
+        let mut buffer = [0u8; HASH_LEN * 2];
+
+        // Add code hash as entropy
+        buffer[..HASH_LEN].copy_from_slice(&signed.code_sechash().0);
+
+        // Add data hash as entropy
+        buffer[HASH_LEN..].copy_from_slice(&signed.data_sechash().0);
+
+        buffer
+    };
+
     let address =
-        ctx.init_account(vp_code_sec.code.hash(), &vp_code_sec.tag)?;
+        ctx.init_account(vp_code_sec.code.hash(), &vp_code_sec.tag, &entropy)?;
 
     match account::init_account(ctx, &address, tx_data) {
         Ok(address) => {

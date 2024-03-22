@@ -38,6 +38,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
         &mut self,
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
+        entropy_source: &[u8],
     ) -> Result<Address>;
 
     /// Update a validity predicate

@@ -290,6 +290,7 @@ impl TxEnv for Ctx {
         &mut self,
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
+        entropy_source: &[u8],
     ) -> Result<Address, Error> {
         let code_hash = code_hash.as_ref();
         let code_tag = code_tag.serialize_to_vec();
@@ -300,6 +301,8 @@ impl TxEnv for Ctx {
                 code_hash.len() as _,
                 code_tag.as_ptr() as _,
                 code_tag.len() as _,
+                entropy_source.as_ptr() as _,
+                entropy_source.len() as _,
                 result.as_ptr() as _,
             )
         };

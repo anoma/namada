@@ -485,6 +485,8 @@ mod native_tx_host_env {
         code_hash_len: u64,
         code_tag_ptr: u64,
         code_tag_len: u64,
+        entropy_source_ptr: u64,
+        entropy_source_len: u64,
         result_ptr: u64
     ));
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));
