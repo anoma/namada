@@ -92,8 +92,9 @@ fn main() {
     se_migration()
 }
 
-// TODO: put in the correct hash
-const REMOVED_HASH: &str = "000000000000000000000000000000000000000";
+// The current vp_user hash to be replaced on the SE
+const REMOVED_HASH: &str =
+    "129EE7BEE68B02BFAE638DA2A634B8ECBFFA2CB3F46CFA8E172BAF009627EC78";
 fn se_migration() {
     // Get VP
     let wasm_path = "wasm";
