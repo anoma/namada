@@ -534,7 +534,6 @@ where
 #[cfg(test)]
 mod test_process_proposal {
     use namada::core::key::*;
-    use namada::core::storage::Epoch;
     use namada::eth_bridge::storage::eth_bridge_queries::{
         is_bridge_comptime_enabled, EthBridgeQueries,
     };
@@ -850,7 +849,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 public_key,
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -902,7 +900,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -976,7 +973,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1044,7 +1040,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1140,7 +1135,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1210,7 +1204,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1264,7 +1257,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1324,7 +1316,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1344,7 +1335,6 @@ mod test_process_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         ))));
@@ -1380,7 +1370,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1442,7 +1431,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1488,7 +1476,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 (block_gas_limit + 1).into(),
                 None,
             ))));
@@ -1530,7 +1517,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -1578,7 +1564,6 @@ mod test_process_proposal {
                     token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1621,7 +1606,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1666,7 +1650,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 150_000.into(),
                 None,
             ))));
@@ -1711,7 +1694,6 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -1767,7 +1749,6 @@ mod test_process_proposal {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    Epoch(0),
                     GAS_LIMIT_MULTIPLIER.into(),
                     None,
                 ))));

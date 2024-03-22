@@ -17,7 +17,6 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
 use namada_core::sign::SignatureIndex;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::token::Transfer;
 // use namada_core::storage::Key;
@@ -637,7 +636,6 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
 pub async fn wrap_tx(
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
-    epoch: Epoch,
     unshield: Option<Transaction>,
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
@@ -656,7 +654,6 @@ pub async fn wrap_tx(
             token: args.fee_token.clone(),
         },
         fee_payer,
-        epoch,
         // TODO: partially validate the gas limit in client
         args.gas_limit,
         unshield_section_hash,
@@ -1886,7 +1883,6 @@ pub async fn to_ledger_vector(
         tv.output_expert.extend(vec![
             format!("Timestamp : {}", tx.header.timestamp.0),
             format!("Pubkey : {}", wrapper.pk),
-            format!("Epoch : {}", wrapper.epoch),
             format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
         ]);
         if let Some(token) = tokens.get(&wrapper.fee.token) {
