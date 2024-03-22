@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.32.1
+
+Namada 0.32.1 is a patch release that permits state migration features in release builds.
+
 ## v0.32.0
 
 Namada 0.32.0 is a minor release that adds state migration capabilities, fixes the user VP, refactors the shielded token ConversionState, fixes the rollback, and includes various other minor improvements.
