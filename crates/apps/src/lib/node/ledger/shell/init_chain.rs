@@ -27,6 +27,7 @@ use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint_proto::google::protobuf;
+use crate::node::ledger;
 use crate::wasm_loader;
 
 /// Errors that represent panics in normal flow but get demoted to errors
@@ -93,6 +94,38 @@ where
                 "Current chain ID: {}, Tendermint chain ID: {}",
                 chain_id, init.chain_id
             )));
+        }
+        if ledger::migrating_state().is_some() {
+            let rsp = response::InitChain {
+                validators: self
+                    .get_abci_validator_updates(true, |pk, power| {
+                        let pub_key: crate::facade::tendermint::PublicKey =
+                            pk.into();
+                        let power =
+                            crate::facade::tendermint::vote::Power::try_from(
+                                power,
+                            )
+                            .unwrap();
+                        validator::Update { pub_key, power }
+                    })
+                    .expect("Must be able to set genesis validator set"),
+                app_hash: self
+                    .state
+                    .in_mem()
+                    .merkle_root()
+                    .0
+                    .to_vec()
+                    .try_into()
+                    .expect("Infallible"),
+                ..Default::default()
+            };
+            debug_assert!(!rsp.validators.is_empty());
+            debug_assert!(
+                !Vec::<u8>::from(rsp.app_hash.clone())
+                    .iter()
+                    .all(|&b| b == 0)
+            );
+            return Ok(rsp);
         }
 
         // Read the genesis files

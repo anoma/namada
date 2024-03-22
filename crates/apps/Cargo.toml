@@ -50,7 +50,7 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = []
+default = ["migrations"]
 mainnet = [
   "namada/mainnet",
 ]
@@ -59,11 +59,20 @@ testing = ["namada_test_utils"]
 benches = ["testing", "namada_test_utils"]
 integration = []
 jemalloc = ["rocksdb/jemalloc"]
+migrations = [
+  "namada_migrations",
+  "namada_sdk/migrations",
+  "namada/migrations",
+  "linkme",
+]
 
 [dependencies]
 namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_macros = {path = "../macros"}
+namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+
 
 ark-serialize.workspace = true
 ark-std.workspace = true
@@ -98,6 +107,7 @@ ledger-namada-rs.workspace = true
 ledger-transport-hid.workspace = true
 libc.workspace = true
 libloading.workspace = true
+linkme = { workspace = true, optional = true }
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
 masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
 num_cpus.workspace = true

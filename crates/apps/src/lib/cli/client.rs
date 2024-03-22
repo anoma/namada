@@ -1,7 +1,9 @@
+use std::io::Read;
+
 use color_eyre::eyre::Result;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::io::Io;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{display_line, Namada, NamadaImpl};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -806,6 +808,33 @@ impl CliApi {
                 }
                 Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
                     utils::sign_genesis_tx(global_args, args).await
+                }
+                Utils::ParseMigrationJson(MigrationJson(args)) => {
+                    #[cfg(feature = "migrations")]
+                    {
+                        let mut update_json = String::new();
+                        let mut file = std::fs::File::open(args.path).expect(
+                            "Could not fine updates file at the specified \
+                             path.",
+                        );
+                        file.read_to_string(&mut update_json)
+                            .expect("Unable to read the updates json file");
+                        let updates: namada_sdk::migrations::DbChanges =
+                            serde_json::from_str(&update_json).expect(
+                                "Could not parse the updates file as json",
+                            );
+                        for change in updates.changes {
+                            display_line!(io, "{}", change);
+                        }
+                    }
+                    #[cfg(not(feature = "migrations"))]
+                    {
+                        display_line!(
+                            io,
+                            "Can only use this function if compiled with \
+                             feature \"migrations\" enabled."
+                        )
+                    }
                 }
             },
         }

@@ -18,6 +18,9 @@ pub mod wrapper_tx {
     use namada_core::token::{Amount, DenominatedAmount, Transfer};
     use namada_core::uint::Uint;
     use namada_gas::Gas;
+    use namada_macros::BorshDeserializer;
+    #[cfg(feature = "migrations")]
+    use namada_migrations::*;
     use serde::{Deserialize, Serialize};
     use sha2::{Digest, Sha256};
     use thiserror::Error;
@@ -61,6 +64,7 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
         Serialize,
         Deserialize,
@@ -89,6 +93,7 @@ pub mod wrapper_tx {
         PartialEq,
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
         Serialize,
         Deserialize,
@@ -182,6 +187,7 @@ pub mod wrapper_tx {
         Clone,
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
         Serialize,
         Deserialize,

@@ -14,10 +14,15 @@ version.workspace = true
 
 [features]
 default = []
+migrations = [
+    "linkme"
+]
 
 [dependencies]
 namada_core = { path = "../core" }
 namada_storage = { path = "../storage" }
+
+linkme = {workspace =  true, optional = true}
 
 [dev-dependencies]
 namada_storage = { path = "../storage", features = ["testing"] }

@@ -9,6 +9,9 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -28,6 +31,7 @@ use crate::uint::{self, Uint, I256};
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -308,6 +312,7 @@ impl Display for Amount {
     Ord,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -337,6 +342,7 @@ impl From<Denomination> for u8 {
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct DenominatedAmount {
@@ -914,6 +920,7 @@ impl From<Amount> for Uint {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -982,6 +989,7 @@ impl From<DenominatedAmount> for IbcAmount {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,

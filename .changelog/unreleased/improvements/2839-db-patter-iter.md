@@ -1,0 +1,1 @@
+ - When iterating over key prefixes, we can additionally filter out keys based on a regex. ([\#2839](https://github.com/anoma/namada/pull/2839))

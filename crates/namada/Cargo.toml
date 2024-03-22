@@ -73,6 +73,10 @@ multicore = [
 # Download MASP params if they're not present
 download-params = ["namada_sdk/download-params"]
 rand = ["namada_sdk/rand"]
+migrations = [
+  "namada_migrations",
+  "linkme",
+]
 
 [dependencies]
 namada_account = { path = "../account" }
@@ -81,6 +85,8 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_replay_protection = { path = "../replay_protection" }
@@ -106,6 +112,7 @@ ethers.workspace = true
 eyre.workspace = true
 futures.workspace = true
 itertools.workspace = true
+linkme = {workspace = true, optional = true}
 loupe = { version = "0.1.3", optional = true }
 masp_primitives.workspace = true
 masp_proofs.workspace = true
@@ -121,6 +128,7 @@ prost.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 rayon = { version = "=1.5.3", optional = true }
+regex.workspace = true
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -61,10 +61,16 @@ use namada::replay_protection;
 use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
+    DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
+    StoreType, DB,
+};
+use namada::storage::{
+    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, STATE_CF, SUBSPACE_CF,
 };
 use namada::token::ConversionState;
+use namada_sdk::migrations::DBUpdateVisitor;
 use rayon::prelude::*;
+use regex::Regex;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
@@ -78,13 +84,6 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
-
-/// Column family names
-const SUBSPACE_CF: &str = "subspace";
-const DIFFS_CF: &str = "diffs";
-const STATE_CF: &str = "state";
-const BLOCK_CF: &str = "block";
-const REPLAY_PROTECTION_CF: &str = "replay_protection";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -1533,9 +1532,162 @@ impl DB for RocksDB {
 
         Ok(())
     }
+
+    #[inline]
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        cf: &DbColFam,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let last_height: BlockHeight = {
+            let state_cf = self.get_column_family(STATE_CF)?;
+
+            decode(
+                self.0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))?
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })?,
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })?
+        };
+        let desired_height = height.unwrap_or(last_height);
+
+        if desired_height != last_height {
+            todo!(
+                "Overwriting values at heights different than the last \
+                 committed height hast yet to be implemented"
+            );
+        }
+        // NB: the following code only updates values
+        // written to at the last committed height
+
+        let val = new_value.as_ref();
+
+        // Write the new key-val in the Db column family
+        let cf_name = self.get_column_family(cf.to_str())?;
+        batch.0.put_cf(cf_name, key.to_string(), val);
+
+        // If the CF is subspace, additionally update the diffs
+        if cf == &DbColFam::SUBSPACE {
+            let diffs_cf = self.get_column_family(DIFFS_CF)?;
+            let diffs_key = Key::from(last_height.to_db_key())
+                .with_segment("new".to_owned())
+                .join(key)
+                .to_string();
+
+            batch.0.put_cf(diffs_cf, diffs_key, val);
+        }
+
+        Ok(())
+    }
+}
+
+/// A struct that can visit a set of updates,
+/// registering them all in the batch
+pub struct RocksDBUpdateVisitor<'db> {
+    db: &'db RocksDB,
+    batch: RocksDBWriteBatch,
+}
+
+impl<'db> RocksDBUpdateVisitor<'db> {
+    pub fn new(db: &'db RocksDB) -> Self {
+        Self {
+            db,
+            batch: Default::default(),
+        }
+    }
+
+    pub fn take_batch(self) -> RocksDBWriteBatch {
+        self.batch
+    }
+}
+
+impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
+    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>> {
+        match cf {
+            DbColFam::SUBSPACE => self
+                .db
+                .read_subspace_val(key)
+                .expect("Failed to read from storage"),
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to read column family from storage");
+                self.db
+                    .0
+                    .get_cf(cf, key.to_string())
+                    .expect("Failed to get key from storage")
+            }
+        }
+    }
+
+    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
+        self.db
+            .overwrite_entry(&mut self.batch, None, cf, key, value)
+            .expect("Failed to overwrite a key in storage")
+    }
+
+    fn delete(&mut self, key: &Key, cf: &DbColFam) {
+        let last_height: BlockHeight = {
+            let state_cf = self.db.get_column_family(STATE_CF).unwrap();
+
+            decode(
+                self.db
+                    .0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))
+                    .unwrap()
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })
+                    .unwrap(),
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })
+            .unwrap()
+        };
+        match cf {
+            DbColFam::SUBSPACE => {
+                self.db
+                    .batch_delete_subspace_val(
+                        &mut self.batch,
+                        last_height,
+                        key,
+                        true,
+                    )
+                    .expect("Failed to delete key from storage");
+            }
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to get read column family from storage");
+                self.batch.0.delete_cf(cf, key.to_string());
+            }
+        };
+    }
+
+    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
+        self.db
+            .iter_pattern(None, pattern)
+            .map(|(k, v, _)| (k, v))
+            .collect()
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
+    type PatternIter = PersistentPatternIterator<'iter>;
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
     fn iter_prefix(
@@ -1543,6 +1695,14 @@ impl<'iter> DBIter<'iter> for RocksDB {
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
+    }
+
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> PersistentPatternIterator<'iter> {
+        iter_subspace_pattern(self, prefix, pattern)
     }
 
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
@@ -1598,6 +1758,18 @@ fn iter_subspace_prefix<'iter>(
     iter_prefix(db, subspace_cf, stripped_prefix, prefix)
 }
 
+fn iter_subspace_pattern<'iter>(
+    db: &'iter RocksDB,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'iter> {
+    let subspace_cf = db
+        .get_column_family(SUBSPACE_CF)
+        .expect("{SUBSPACE_CF} column family should exist");
+    let stripped_prefix = None;
+    iter_pattern(db, subspace_cf, stripped_prefix, prefix, pattern)
+}
+
 fn iter_diffs_prefix<'a>(
     db: &'a RocksDB,
     height: BlockHeight,
@@ -1650,6 +1822,23 @@ fn iter_prefix<'a>(
     PersistentPrefixIterator(PrefixIterator::new(iter, stripped_prefix))
 }
 
+/// Create an iterator over key-vals in the given CF matching the given
+/// pattern(s).
+fn iter_pattern<'a>(
+    db: &'a RocksDB,
+    cf: &'a ColumnFamily,
+    stripped_prefix: Option<&Key>,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'a> {
+    PersistentPatternIterator {
+        inner: PatternIterator {
+            iter: iter_prefix(db, cf, stripped_prefix, prefix),
+            pattern,
+        },
+    }
+}
+
 #[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
@@ -1679,6 +1868,25 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                     }
                 }
                 None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PersistentPatternIterator<'a> {
+    inner: PatternIterator<PersistentPrefixIterator<'a>>,
+}
+
+impl<'a> Iterator for PersistentPatternIterator<'a> {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        loop {
+            let next_result = self.inner.iter.next()?;
+            if self.inner.pattern.is_match(&next_result.0) {
+                return Some(next_result);
             }
         }
     }

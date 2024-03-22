@@ -21,6 +21,9 @@ use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -70,7 +73,14 @@ pub enum DecodeError {
 /// Because the signature is not checked by the ledger, we don't inline it into
 /// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
 /// which can then be checked by a validity predicate wasm.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+)]
 pub struct SignedTxData {
     /// The original tx data bytes, if any
     pub data: Option<Vec<u8>>,
@@ -208,6 +218,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -242,6 +253,7 @@ pub struct CommitmentError;
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -301,6 +313,7 @@ impl Commitment {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -353,6 +366,7 @@ pub type Memo = Vec<u8>;
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -370,6 +384,7 @@ pub enum Signer {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -515,6 +530,7 @@ impl Signature {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -561,6 +577,7 @@ impl CompressedSignature {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct Ciphertext {
@@ -704,6 +721,7 @@ impl borsh::BorshSchema for MaspBuilder {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -851,6 +869,7 @@ impl Section {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -943,6 +962,7 @@ pub enum TxError {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,

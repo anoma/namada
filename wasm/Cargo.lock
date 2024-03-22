@@ -236,13 +236,13 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 
 [[package]]
 name = "async-trait"
-version = "0.1.74"
+version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
+checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -516,7 +516,7 @@ dependencies = [
  "proc-macro-crate 2.0.1",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
  "syn_derive",
 ]
 
@@ -814,7 +814,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f76990911f2267d837d9d0ad060aa63aaad170af40904b29461734c339030d4d"
 dependencies = [
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1119,7 +1119,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1130,7 +1130,7 @@ checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
  "darling_core",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1244,7 +1244,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1423,7 +1423,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1607,7 +1607,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "syn 2.0.39",
+ "syn 2.0.52",
  "toml 0.8.2",
  "walkdir",
 ]
@@ -1625,7 +1625,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -1651,7 +1651,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum 0.25.0",
- "syn 2.0.39",
+ "syn 2.0.52",
  "tempfile",
  "thiserror",
  "tiny-keccak",
@@ -1934,7 +1934,7 @@ checksum = "53b153fd91e4b0147f4aced87be237c98248656bb01050b96bf3ee89220a8ddb"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -2708,7 +2708,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -3080,6 +3080,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkme"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb2cfee0de9bd869589fb9a015e155946d1be5ff415cb844c2caccc6cc4b5db9"
+dependencies = [
+ "linkme-impl",
+]
+
+[[package]]
+name = "linkme-impl"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adf157a4dc5a29b7b464aa8fe7edeff30076e07e13646a1c3874f58477dc99f8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3332,6 +3352,7 @@ dependencies = [
  "eyre",
  "futures",
  "itertools 0.10.5",
+ "linkme",
  "loupe",
  "masp_primitives",
  "masp_proofs",
@@ -3341,6 +3362,8 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
+ "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_replay_protection",
@@ -3363,6 +3386,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
+ "regex",
  "ripemd",
  "serde",
  "serde_json",
@@ -3393,8 +3417,10 @@ name = "namada_account"
 version = "0.31.9"
 dependencies = [
  "borsh",
+ "linkme",
  "namada_core",
  "namada_macros",
+ "namada_migrations",
  "namada_storage",
  "proptest",
  "serde",
@@ -3418,8 +3444,10 @@ dependencies = [
  "impl-num-traits",
  "index-set",
  "k256",
+ "linkme",
  "masp_primitives",
  "namada_macros",
+ "namada_migrations",
  "num-integer",
  "num-rational 0.4.1",
  "num-traits",
@@ -3453,9 +3481,11 @@ dependencies = [
  "ethers",
  "eyre",
  "itertools 0.10.5",
+ "linkme",
  "namada_account",
  "namada_core",
  "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
@@ -3479,6 +3509,7 @@ version = "0.31.9"
 dependencies = [
  "borsh",
  "namada_core",
+ "namada_macros",
  "serde",
  "thiserror",
 ]
@@ -3489,8 +3520,10 @@ version = "0.31.9"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
+ "linkme",
  "namada_core",
  "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
@@ -3530,8 +3563,12 @@ dependencies = [
 name = "namada_macros"
 version = "0.31.9"
 dependencies = [
+ "data-encoding",
+ "lazy_static",
+ "paste",
  "proc-macro2",
  "quote",
+ "sha2 0.9.9",
  "syn 1.0.109",
 ]
 
@@ -3543,9 +3580,22 @@ dependencies = [
  "eyre",
  "ics23",
  "namada_core",
+ "namada_macros",
  "prost 0.12.3",
  "sparse-merkle-tree",
  "thiserror",
+]
+
+[[package]]
+name = "namada_migrations"
+version = "0.31.9"
+dependencies = [
+ "borsh",
+ "data-encoding",
+ "lazy_static",
+ "linkme",
+ "namada_macros",
+ "serde",
 ]
 
 [[package]]
@@ -3566,9 +3616,12 @@ dependencies = [
  "borsh",
  "data-encoding",
  "derivative",
+ "linkme",
  "namada_account",
  "namada_core",
  "namada_governance",
+ "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
@@ -3601,11 +3654,13 @@ dependencies = [
  "derivation-path",
  "ethbridge-bridge-contract",
  "ethers",
+ "eyre",
  "fd-lock",
  "futures",
  "itertools 0.10.5",
  "jubjub",
  "lazy_static",
+ "linkme",
  "masp_primitives",
  "masp_proofs",
  "namada_account",
@@ -3613,6 +3668,8 @@ dependencies = [
  "namada_ethereum_bridge",
  "namada_governance",
  "namada_ibc",
+ "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
@@ -3630,6 +3687,7 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "regex",
  "ripemd",
  "serde",
  "serde_json",
@@ -3668,9 +3726,12 @@ dependencies = [
  "borsh",
  "ics23",
  "itertools 0.10.5",
+ "linkme",
  "namada_core",
  "namada_gas",
+ "namada_macros",
  "namada_merkle_tree",
+ "namada_migrations",
  "namada_parameters",
  "namada_replay_protection",
  "namada_storage",
@@ -3690,11 +3751,15 @@ version = "0.31.9"
 dependencies = [
  "borsh",
  "itertools 0.10.5",
+ "linkme",
  "namada_core",
  "namada_gas",
+ "namada_macros",
  "namada_merkle_tree",
+ "namada_migrations",
  "namada_replay_protection",
  "namada_tx",
+ "regex",
  "thiserror",
  "tracing",
 ]
@@ -3767,9 +3832,12 @@ dependencies = [
  "ark-bls12-381",
  "borsh",
  "data-encoding",
+ "linkme",
  "masp_primitives",
  "namada_core",
  "namada_gas",
+ "namada_macros",
+ "namada_migrations",
  "num-derive",
  "num-traits",
  "proptest",
@@ -3826,7 +3894,10 @@ name = "namada_vote_ext"
 version = "0.31.9"
 dependencies = [
  "borsh",
+ "linkme",
  "namada_core",
+ "namada_macros",
+ "namada_migrations",
  "namada_tx",
  "serde",
 ]
@@ -4065,7 +4136,7 @@ dependencies = [
  "proc-macro-crate 2.0.1",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -4389,7 +4460,7 @@ checksum = "4359fd9c9171ec6e8c62926d6faaf553a8dc3f64e1507e76da7911b4f6a04405"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -4454,7 +4525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae005bd773ab59b4725093fd7df83fd7892f7d8eafb48dbd7de6e024e4215f9d"
 dependencies = [
  "proc-macro2",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -4517,9 +4588,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.70"
+version = "1.0.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39278fbbf5fb4f646ce651690877f89d1c5811a3d4acb27700c1cb3cdb78fd3b"
+checksum = "e2422ad645d89c99f8f3e6b88a9fdeca7fabeac836b1002371c4367c8f984aae"
 dependencies = [
  "unicode-ident",
 ]
@@ -4609,7 +4680,7 @@ dependencies = [
  "itertools 0.11.0",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -4658,9 +4729,9 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quote"
-version = "1.0.33"
+version = "1.0.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5267fca4496028628a95160fc423a33e8b2e6af8a5302579e322e4b520293cae"
+checksum = "291ec9ab5efd934aaf503a6466c5d5251535d108ee747472c3977cc5acc868ef"
 dependencies = [
  "proc-macro2",
 ]
@@ -5361,7 +5432,7 @@ checksum = "43576ca501357b9b071ac53cdc7da8ef0cbd9493d8df094cd821777ea6e894d3"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -5383,7 +5454,7 @@ checksum = "3081f5ffbb02284dda55132aa26daecedd7372a42417bbbab6f14ab7d6bb9145"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -5651,7 +5722,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -5694,9 +5765,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.39"
+version = "2.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23e78b90f2fcf45d3e842032ce32e3f2d1545ba6636271dcbf24fa306d87be7a"
+checksum = "b699d15b36d1f02c3e7c69f8ffef53de37aefae075d8488d4ba1a7788d574a07"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5712,7 +5783,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -5928,7 +5999,7 @@ checksum = "7ba277e77219e9eea169e8508942db1bf5d8a41ff2db9b20aab5a5aadc9fa25d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -5948,7 +6019,7 @@ checksum = "266b2e40bc00e5a6c09c3584011e08b06f123c00362c92b975ba9843aaaa14b8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -6072,7 +6143,7 @@ checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -6192,7 +6263,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -6262,7 +6333,7 @@ checksum = "982ee4197351b5c9782847ef5ec1fdcaf50503fb19d68f9771adae314e72b492"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -6460,7 +6531,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
  "wasm-bindgen-shared",
 ]
 
@@ -6494,7 +6565,7 @@ checksum = "f0eb82fcb7930ae6219a7ecfd55b217f5f0893484b7a13022ebb2b2bf20b5283"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -7151,5 +7222,5 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.39",
+ "syn 2.0.52",
 ]

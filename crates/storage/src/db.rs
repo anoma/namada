@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key,
+    BlockHash, BlockHeight, BlockResults, DbColFam, Epoch, Epochs,
+    EthEventsQueue, Header, Key,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{ethereum_events, ethereum_structs};
@@ -12,6 +12,7 @@ use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
 };
+use regex::Regex;
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
@@ -260,12 +261,24 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         key: &Key,
     ) -> Result<()>;
+
+    /// Overwrite a new value in storage, taking into
+    /// account values stored at a previous height
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        cf: &DbColFam,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// WARNING: This only works for values that have been committed to DB.
     /// To be able to see values written or deleted, but not yet committed,
@@ -274,6 +287,18 @@ pub trait DBIter<'iter> {
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> Self::PrefixIter;
+
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Read account subspace key value pairs with the given pattern from the
+    /// DB, ordered by the storage keys.
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;

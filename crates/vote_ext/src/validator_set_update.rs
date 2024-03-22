@@ -13,6 +13,9 @@ use namada_core::key::common::{self, Signature};
 use namada_core::storage::Epoch;
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{ethereum_structs, token};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_tx::Signed;
 
 // the contract versions and namespaces plugged into validator set hashes
@@ -28,7 +31,14 @@ pub type VextDigest = ValidatorSetUpdateVextDigest;
 /// Contains the digest of all signatures from a quorum of
 /// validators for a [`Vext`].
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
 )]
 pub struct ValidatorSetUpdateVextDigest {
     /// A mapping from a consensus validator address to a [`Signature`].
@@ -76,7 +86,14 @@ impl VextDigest {
 /// Represents a [`Vext`] signed by some validator, with
 /// an Ethereum key.
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
+    Eq,
 )]
 pub struct SignedVext(pub Signed<Vext, SerializeWithAbiEncode>);
 
@@ -93,7 +110,14 @@ pub type Vext = ValidatorSetUpdateVext;
 
 /// Represents a validator set update, for some new [`Epoch`].
 #[derive(
-    Eq, PartialEq, Clone, Debug, BorshSerialize, BorshDeserialize, BorshSchema,
+    Eq,
+    PartialEq,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
 )]
 pub struct ValidatorSetUpdateVext {
     /// The addresses of the validators in the new [`Epoch`],
@@ -149,6 +173,7 @@ impl Vext {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct EthAddrBook {
@@ -330,6 +355,7 @@ fn encode_validator_data(
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 // TODO: find a new home for this type

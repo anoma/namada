@@ -1,0 +1,24 @@
+[package]
+name = "namada_migrations"
+description = "Namada DB migration tooling"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[lib]
+
+[dependencies]
+namada_macros = { path = "../macros" }
+
+data-encoding.workspace = true
+lazy_static.workspace = true
+linkme.workspace = true
+serde.workspace = true
+borsh.workspace = true
