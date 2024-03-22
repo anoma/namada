@@ -783,6 +783,10 @@ impl<'a> Client for &'a MockNode {
         if !self.success() {
             // TODO: submit_txs should return the correct error code + message
             resp.code = 1337.into();
+            let locked = self.results.lock().unwrap();
+            for result in locked {
+                println!("{:?}", result);
+            }
             return Ok(resp);
         } else {
             self.clear_results();
