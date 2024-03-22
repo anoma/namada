@@ -478,7 +478,6 @@ where
     /// Merkle root hash and the height of the committed block.
     fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
-            merkle_tree_stores,
             hash,
             height,
             time,
@@ -516,9 +515,9 @@ where
             }
 
             // Rebuild Merkle tree - requires the values above to be set first
-            let tree = MerkleTree::new(merkle_tree_stores)
-                .or_else(|_| self.rebuild_full_merkle_tree(height))
-                .unwrap();
+            let tree = self
+                .rebuild_full_merkle_tree(height)
+                .expect("Merkle tree should be restored");
 
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;

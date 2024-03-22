@@ -149,6 +149,11 @@ mod tests {
             .in_mem_mut()
             .begin_block(BlockHash::default(), BlockHeight(100))
             .expect("begin_block failed");
+        state
+            .in_mem_mut()
+            .block
+            .pred_epochs
+            .new_epoch(BlockHeight(1));
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
         let value_bytes = encode(&value);
