@@ -27,8 +27,6 @@ where
 pub enum VpError {
     #[error("Transaction rejected")]
     Unspecified,
-    #[error("Found invalid transaction signature")]
-    InvalidSignature,
     #[error("{0}")]
     Erased(String), // type erased error
 }
