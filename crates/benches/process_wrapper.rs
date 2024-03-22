@@ -39,7 +39,6 @@ fn process_tx(c: &mut Criterion) {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
             },
             defaults::albert_keypair().ref_to(),
-            0.into(),
             1_000_000.into(),
             // NOTE: The unshield operation has to be gas-free so don't include
             // it here

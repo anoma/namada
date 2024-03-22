@@ -80,7 +80,7 @@ pub(in crate::transaction) fn attach_fee(
     fee: DenominatedAmount,
     token: Address,
     fee_payer: common::PublicKey,
-    epoch: Epoch,
+    _epoch: Epoch,
     gas_limit: GasLimit,
 ) -> Tx {
     tx.add_wrapper(
@@ -89,7 +89,6 @@ pub(in crate::transaction) fn attach_fee(
             token,
         },
         fee_payer,
-        epoch,
         gas_limit,
         None,
     );

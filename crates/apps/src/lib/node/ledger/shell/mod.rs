@@ -1958,7 +1958,6 @@ mod test_utils {
                     token: native_token,
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 300_000.into(),
                 None,
             ))));
@@ -2404,7 +2403,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 Default::default(),
                 None,
             ))));
@@ -2443,7 +2441,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 Default::default(),
                 None,
             ))));
@@ -2515,7 +2512,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2668,7 +2664,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 (block_gas_limit + 1).into(),
                 None,
             ))));
@@ -2701,7 +2696,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -2740,7 +2734,6 @@ mod shell_tests {
                     token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2775,7 +2768,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2811,7 +2803,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 150_000.into(),
                 None,
             ))));
@@ -2847,7 +2838,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2894,7 +2884,6 @@ mod shell_tests {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    Epoch(0),
                     GAS_LIMIT_MULTIPLIER.into(),
                     None,
                 ))));
