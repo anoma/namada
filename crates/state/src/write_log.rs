@@ -378,12 +378,21 @@ impl WriteLog {
         len as u64 * MEMORY_ACCESS_GAS_PER_BYTE
     }
 
-    /// Get the storage keys changed and accounts keys initialized in the
-    /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts. The keys in the precommit are not
-    /// included in the result of this function.
+    /// Get the non-temporary storage keys changed and accounts keys initialized
+    /// in the current transaction. The account keys point to the validity
+    /// predicates of the newly created accounts. The keys in the precommit are
+    /// not included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
-        self.tx_write_log.keys().cloned().collect()
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, modification)| match modification {
+                StorageModification::Write { .. } => Some(key.clone()),
+                StorageModification::Delete => Some(key.clone()),
+                StorageModification::InitAccount { .. } => Some(key.clone()),
+                // Skip temporary storage changes - they are never committed
+                StorageModification::Temp { .. } => None,
+            })
+            .collect()
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
