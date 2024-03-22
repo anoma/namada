@@ -11,23 +11,21 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use core::ops::Deref;
+use core::cell::RefCell;
 
+use booleans::BoolResultUnitExt;
 use namada_vp_prelude::*;
-use once_cell::unsync::Lazy;
 use proof_of_stake::storage::{read_pos_params, validator_state_handle};
 use proof_of_stake::storage_key::{
-    is_below_capacity_validator_set_key, is_bond_epoched_meta_key, is_bond_key,
-    is_consensus_keys_key, is_consensus_validator_set_key,
-    is_delegator_redelegations_key, is_last_pos_reward_claim_epoch_key,
-    is_pos_key, is_rewards_counter_key, is_total_consensus_stake_key,
-    is_total_deltas_key, is_unbond_key, is_validator_address_raw_hash_key,
+    self, is_below_capacity_validator_set_key, is_consensus_keys_key,
+    is_consensus_validator_set_key, is_pos_key, is_total_consensus_stake_key,
+    is_total_deltas_key, is_validator_address_raw_hash_key,
     is_validator_addresses_key, is_validator_commission_rate_key,
     is_validator_deltas_key, is_validator_eth_cold_key_key,
     is_validator_eth_hot_key_key, is_validator_max_commission_rate_change_key,
-    is_validator_metadata_key, is_validator_redelegations_key,
-    is_validator_set_positions_key, is_validator_state_epoched_meta_key,
-    is_validator_state_key, is_validator_total_bond_or_unbond_key,
+    is_validator_metadata_key, is_validator_set_positions_key,
+    is_validator_state_epoched_meta_key, is_validator_state_key,
+    is_validator_total_bond_or_unbond_key,
 };
 
 enum KeyType<'a> {
@@ -92,32 +90,29 @@ fn validate_tx(
         verifiers
     );
 
-    let valid_sig = Lazy::new(|| {
-        matches!(verify_signatures(ctx, &tx_data, &addr), Ok(true))
-    });
+    let mut gadget = VerifySigGadget::new();
 
-    for key in keys_changed.iter() {
+    keys_changed.iter().try_for_each(|key| {
         let key_type: KeyType = key.into();
-        let is_valid = match key_type {
+        let mut validate_change = || match key_type {
             KeyType::TokenBalance { owner, .. } => {
                 if owner == &addr {
                     let pre: token::Amount =
-                        ctx.read_pre(key)?.unwrap_or_default();
+                        ctx.read_pre(key).into_vp_error()?.unwrap_or_default();
                     let post: token::Amount =
-                        ctx.read_post(key)?.unwrap_or_default();
+                        ctx.read_post(key).into_vp_error()?.unwrap_or_default();
                     let change = post.change() - pre.change();
-                    // debit has to signed, credit doesn't
-                    let valid = change.non_negative() || *valid_sig;
-                    debug_log!(
-                        "token key: {}, change: {:?}, valid_sig: {}, valid \
-                         modification: {}",
-                        key,
-                        change,
-                        *valid_sig,
-                        valid
-                    );
-                    valid
+                    gadget.verify_signatures_when(
+                        // NB: debit has to signed, credit doesn't
+                        || change.is_negative(),
+                        ctx,
+                        &tx_data,
+                        &addr,
+                    )?;
+                    let sign = if change.non_negative() { "" } else { "-" };
+                    debug_log!("token key: {key}, change: {sign}{change:?}");
                 } else {
+                    // If this is not the owner, allow any change
                     debug_log!(
                         "This address ({}) is not of owner ({}) of token key: \
                          {}",
@@ -125,74 +120,113 @@ fn validate_tx(
                         owner,
                         key
                     );
-                    // If this is not the owner, allow any change
-                    true
                 }
+                Ok(())
             }
-            KeyType::TokenMinted => verifiers.contains(&address::MULTITOKEN),
-            KeyType::TokenMinter(minter) => minter != &addr || *valid_sig,
-            KeyType::PoS => validate_pos_changes(ctx, &addr, key, &valid_sig)?,
-            KeyType::PgfSteward(address) => address != &addr || *valid_sig,
-            KeyType::GovernanceVote(voter) => voter != &addr || *valid_sig,
+            KeyType::TokenMinted => {
+                verifiers.contains(&address::MULTITOKEN).ok_or_else(|| {
+                    VpError::Erased(
+                        "The Multitoken VP should have been a verifier for \
+                         this transaction, since a token was minted"
+                            .into(),
+                    )
+                })
+            }
+            KeyType::TokenMinter(minter_addr) => gadget.verify_signatures_when(
+                || minter_addr == &addr,
+                ctx,
+                &tx_data,
+                &addr,
+            ),
+            KeyType::PoS => {
+                validate_pos_changes(ctx, &tx_data, &addr, key, &mut gadget)
+            }
+            KeyType::PgfSteward(pgf_steward_addr) => gadget
+                .verify_signatures_when(
+                    || pgf_steward_addr == &addr,
+                    ctx,
+                    &tx_data,
+                    &addr,
+                ),
+            KeyType::GovernanceVote(voter_addr) => gadget
+                .verify_signatures_when(
+                    || voter_addr == &addr,
+                    ctx,
+                    &tx_data,
+                    &addr,
+                ),
             KeyType::Vp(owner) => {
-                let has_post: bool = ctx.has_key_post(key)?;
-                if owner == &addr {
-                    has_post && *valid_sig
-                } else {
-                    true
-                }
+                let vp_overwritten: bool =
+                    ctx.has_key_post(key).into_vp_error()?;
+                gadget.verify_signatures_when(
+                    || owner == &addr && vp_overwritten,
+                    ctx,
+                    &tx_data,
+                    &addr,
+                )
             }
-            KeyType::Masp | KeyType::Ibc => true,
+            KeyType::Masp | KeyType::Ibc => Ok(()),
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
-                *valid_sig
+                gadget.verify_signatures(ctx, &tx_data, &addr)
             }
         };
-        if !is_valid {
-            log_string(format!("key {} modification failed vp_user", key));
-            return reject();
-        }
-    }
-
-    accept()
+        validate_change().inspect_err(|reason| {
+            log_string(format!(
+                "Modification on key {key} failed vp_user: {reason}"
+            ));
+        })
+    })
 }
 
 fn validate_pos_changes(
     ctx: &Ctx,
+    tx_data: &Tx,
     owner: &Address,
     key: &storage::Key,
-    valid_sig: &impl Deref<Target = bool>,
+    gadget: &mut VerifySigGadget,
 ) -> VpResult {
+    // Kinda silly to wrap this in a ref cell, but it's required
+    // for the mut borrow to be valid across all closures below
+    let gadget = RefCell::new(gadget);
+
     // Bond or unbond
     let is_valid_bond_or_unbond_change = || {
-        let bond_id = is_bond_key(key)
+        let bond_id = storage_key::is_bond_key(key)
             .map(|(bond_id, _)| bond_id)
-            .or_else(|| is_bond_epoched_meta_key(key))
-            .or_else(|| is_unbond_key(key).map(|(bond_id, _, _)| bond_id));
-        if let Some(bond_id) = bond_id {
+            .or_else(|| storage_key::is_bond_epoched_meta_key(key))
+            .or_else(|| {
+                storage_key::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
+            })
+            .ok_or(VpError::Unspecified)?;
+        gadget.borrow_mut().verify_signatures_when(
             // Bonds and unbonds changes for this address must be signed
-            return &bond_id.source != owner || **valid_sig;
-        };
-        // Unknown changes are not allowed
-        false
+            || &bond_id.source == owner,
+            ctx,
+            tx_data,
+            owner,
+        )
     };
 
     // Commission rate changes must be signed by the validator
     let is_valid_commission_rate_change = || {
-        if let Some(validator) = is_validator_commission_rate_key(key) {
-            return validator == owner && **valid_sig;
-        }
-        false
+        let validator = is_validator_commission_rate_key(key)
+            .ok_or(VpError::Unspecified)?;
+
+        (validator == owner).ok_or(VpError::Unspecified)?;
+
+        gadget.borrow_mut().verify_signatures(ctx, tx_data, owner)
     };
 
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
     let is_valid_metadata_change = || {
-        let metadata = is_validator_metadata_key(key);
-        match metadata {
-            Some(address) => address == owner && **valid_sig,
-            None => false,
-        }
+        let validator =
+            is_validator_metadata_key(key).ok_or(VpError::Unspecified)?;
+
+        (validator == owner).ok_or(VpError::Unspecified)?;
+
+        gadget.borrow_mut().verify_signatures(ctx, tx_data, owner)
     };
 
     // Changes in validator state
@@ -200,19 +234,16 @@ fn validate_pos_changes(
         let state_change = is_validator_state_key(key);
         let is_valid_state = match state_change {
             Some((address, epoch)) => {
-                let params_pre = read_pos_params(&ctx.pre())?;
-                let state_pre = validator_state_handle(address).get(
-                    &ctx.pre(),
-                    epoch,
-                    &params_pre,
-                )?;
+                let params_pre = read_pos_params(&ctx.pre()).into_vp_error()?;
+                let state_pre = validator_state_handle(address)
+                    .get(&ctx.pre(), epoch, &params_pre)
+                    .into_vp_error()?;
 
-                let params_post = read_pos_params(&ctx.post())?;
-                let state_post = validator_state_handle(address).get(
-                    &ctx.post(),
-                    epoch,
-                    &params_post,
-                )?;
+                let params_post =
+                    read_pos_params(&ctx.post()).into_vp_error()?;
+                let state_post = validator_state_handle(address)
+                    .get(&ctx.post(), epoch, &params_post)
+                    .into_vp_error()?;
 
                 match (state_pre, state_post) {
                     (Some(pre), Some(post)) => {
@@ -235,7 +266,12 @@ fn validate_pos_changes(
                                         | BelowThreshold
                                 ))
                         {
-                            if address == owner { **valid_sig } else { true }
+                            gadget.borrow_mut().verify_signatures_when(
+                                || address == owner,
+                                ctx,
+                                tx_data,
+                                owner,
+                            )
                         } else if
                         // Bonding and unbonding may affect validator sets
                         matches!(
@@ -245,88 +281,133 @@ fn validate_pos_changes(
                             post,
                             Consensus | BelowCapacity | BelowThreshold
                         ) {
-                            true
+                            Ok(())
                         } else {
                             // Unknown state changes are not allowed
-                            false
+                            Err(VpError::Unspecified)
                         }
                     }
                     (None, Some(_post)) => {
                         // Becoming a validator must be authorized
-                        address == owner && **valid_sig
+                        (address == owner).ok_or(VpError::Unspecified)?;
+                        gadget
+                            .borrow_mut()
+                            .verify_signatures(ctx, tx_data, owner)
                     }
                     (Some(_pre), None) => {
                         // Clearing of old epoched data
-                        true
+                        Ok(())
                     }
-                    _ => false,
+                    _ => Err(VpError::Unspecified),
                 }
             }
-            None => false,
-        };
+            None => Err(VpError::Unspecified),
+        }
+        .is_ok();
 
-        VpResult::Ok(
-            is_valid_state
-                || is_validator_state_epoched_meta_key(key)
-                || is_consensus_validator_set_key(key)
-                || is_below_capacity_validator_set_key(key),
-        )
+        (is_valid_state
+            || is_validator_state_epoched_meta_key(key)
+            || is_consensus_validator_set_key(key)
+            || is_below_capacity_validator_set_key(key))
+        .ok_or(VpError::Unspecified)
     };
 
     let is_valid_reward_claim = || {
-        if let Some(bond_id) = is_last_pos_reward_claim_epoch_key(key) {
-            // Claims for this address must be signed
-            return &bond_id.source != owner || **valid_sig;
+        if let Some(bond_id) =
+            storage_key::is_last_pos_reward_claim_epoch_key(key)
+        {
+            return gadget.borrow_mut().verify_signatures_when(
+                // Claims for this address must be signed
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
-        if let Some(bond_id) = is_rewards_counter_key(key) {
-            // Claims for this address must be signed
-            return &bond_id.source != owner || **valid_sig;
+        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations auto-claim rewards
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
-        false
+
+        Err(VpError::Unspecified)
     };
 
     let is_valid_redelegation = || {
-        if is_validator_redelegations_key(key) {
-            return true;
+        if storage_key::is_validator_redelegations_key(key) {
+            return Ok(());
         }
-        if let Some(delegator) = is_delegator_redelegations_key(key) {
-            // Redelegations for this address must be signed
-            return delegator != owner || **valid_sig;
+        if let Some(delegator) =
+            storage_key::is_delegator_redelegations_key(key)
+        {
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations for this address must be signed
+                || delegator == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
-        if let Some(bond_id) = is_rewards_counter_key(key) {
-            // Redelegations auto-claim rewards
-            return &bond_id.source != owner || **valid_sig;
+        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
+            return gadget.borrow_mut().verify_signatures_when(
+                // Redelegations auto-claim rewards
+                || &bond_id.source == owner,
+                ctx,
+                tx_data,
+                owner,
+            );
         }
-        false
+        Err(VpError::Unspecified)
     };
 
     let is_valid_become_validator = || {
-        if is_validator_addresses_key(key)
+        let become_validator = is_validator_addresses_key(key)
             || is_consensus_keys_key(key)
             || is_validator_eth_cold_key_key(key).is_some()
             || is_validator_eth_hot_key_key(key).is_some()
             || is_validator_max_commission_rate_change_key(key).is_some()
-            || is_validator_address_raw_hash_key(key).is_some()
-        {
+            || is_validator_address_raw_hash_key(key).is_some();
+
+        gadget.borrow_mut().verify_signatures_when(
             // A signature is required to become validator
-            return **valid_sig;
-        }
-        false
+            || become_validator,
+            ctx,
+            tx_data,
+            owner,
+        )
     };
 
-    Ok(is_valid_bond_or_unbond_change()
+    let pos_state_changes = is_valid_bond_or_unbond_change().is_ok()
         || is_total_deltas_key(key)
         || is_validator_deltas_key(key)
         || is_validator_total_bond_or_unbond_key(key)
         || is_validator_set_positions_key(key)
         || is_total_consensus_stake_key(key)
-        || is_valid_state_change()?
-        || is_valid_reward_claim()
-        || is_valid_redelegation()
-        || is_valid_commission_rate_change()
-        || is_valid_metadata_change()
-        || is_valid_become_validator()
-        || **valid_sig)
+        || is_valid_state_change().is_ok()
+        || is_valid_reward_claim().is_ok()
+        || is_valid_redelegation().is_ok()
+        || is_valid_commission_rate_change().is_ok()
+        || is_valid_metadata_change().is_ok()
+        || is_valid_become_validator().is_ok();
+    let unknown_state_changes = !pos_state_changes;
+
+    let result = gadget.borrow_mut().verify_signatures_when(
+        || unknown_state_changes,
+        ctx,
+        tx_data,
+        owner,
+    );
+
+    result.map_err(|err| match err {
+        VpError::Unspecified => {
+            VpError::Erased("Invalid PoS state changes".into())
+        }
+        err => err,
+    })
 }
 
 #[cfg(test)]
@@ -366,7 +447,7 @@ mod tests {
         vp_host_env::init();
 
         assert!(
-            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).unwrap()
+            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_ok()
         );
     }
 
@@ -421,7 +502,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -475,8 +556,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -545,7 +626,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -624,8 +705,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -773,7 +854,7 @@ mod tests {
                 keys_changed.clone(),
                 verifiers.clone()
             )
-            .unwrap()
+            .is_ok()
         );
     }
 
@@ -857,8 +938,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -948,8 +1029,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -1044,7 +1125,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -1139,7 +1220,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -1245,7 +1326,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, validator, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -1296,7 +1377,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -1350,7 +1431,7 @@ mod tests {
                 vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(!validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).unwrap());
+            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).is_err());
         }
     }
 
@@ -1402,7 +1483,7 @@ mod tests {
                 vp_env.all_touched_storage_keys();
                 let verifiers: BTreeSet<Address> = BTreeSet::default();
                 vp_host_env::set(vp_env);
-                assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).unwrap());
+                assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).is_ok());
             }
         }
 
@@ -1439,8 +1520,8 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            !validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .unwrap()
+            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                .is_err()
         );
     }
 
@@ -1491,7 +1572,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 
@@ -1547,7 +1628,7 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .unwrap()
+                .is_ok()
         );
     }
 }

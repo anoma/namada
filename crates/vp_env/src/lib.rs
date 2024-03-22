@@ -91,6 +91,9 @@ where
         event_type: String,
     ) -> Result<Vec<IbcEvent>, namada_storage::Error>;
 
+    /// Yield a byte array value back to the host environment.
+    fn yield_value<V: AsRef<[u8]>>(&self, value: V);
+
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.
     fn iter_prefix<'iter>(
@@ -108,7 +111,7 @@ where
         &self,
         vp_code: Hash,
         input_data: Tx,
-    ) -> Result<bool, namada_storage::Error>;
+    ) -> Result<(), namada_storage::Error>;
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;

@@ -28,7 +28,6 @@ mod tests {
     use namada::ledger::pos::{OwnedPosParams, PosVP};
     use namada::proof_of_stake::storage::validator_commission_rate_handle;
     use namada::proof_of_stake::types::GenesisValidator;
-    use namada::validity_predicate::VpSentinel;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
@@ -156,13 +155,10 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-        let result = vp_env.validate_tx(&gas_meter, &sentinel, PosVP::new);
-        let result =
-            result.expect("Validation of valid changes must not fail!");
+        let result = vp_env.validate_tx(&gas_meter, PosVP::new);
         assert!(
-            result,
+            result.is_ok(),
             "PoS Validity predicate must accept this transaction"
         );
 

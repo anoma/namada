@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter};
 use namada_tx::data::TxSentinel;
 
@@ -42,8 +41,6 @@ where
     pub in_mem: &'a InMemory<H>,
     /// VP gas meter
     pub gas_meter: &'a RefCell<VpGasMeter>,
-    /// Errors sentinel
-    pub sentinel: &'a RefCell<VpSentinel>,
 }
 
 impl<D, H> StateRead for TxHostEnvState<'_, D, H>
@@ -115,13 +112,6 @@ where
     }
 
     fn charge_gas(&self, gas: u64) -> Result<()> {
-        self.gas_meter.borrow_mut().consume(gas).map_err(|err| {
-            self.sentinel.borrow_mut().set_out_of_gas();
-            tracing::info!(
-                "Stopping VP execution because of gas error: {}",
-                err
-            );
-            Error::Gas(err)
-        })
+        self.gas_meter.borrow_mut().consume(gas).map_err(Error::Gas)
     }
 }
