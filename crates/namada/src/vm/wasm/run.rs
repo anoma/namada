@@ -41,8 +41,6 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Expected VP error, but found none")]
-    MissingVpError,
     #[error("VP error: {0}")]
     VpError(VpError),
     #[error("Missing tx section: {0}")]
@@ -380,7 +378,7 @@ fn run_vp(
         _ = (instance, vp_imports);
 
         unsafe { yielded_value.get() }.take().map_or_else(
-            || Err(Error::MissingVpError),
+            || Err(Error::VpError(VpError::Unspecified)),
             |borsh_encoded_err| {
                 let vp_err = VpError::try_from_slice(&borsh_encoded_err)
                     .map_err(|e| Error::ConversionError(e.to_string()))?;
