@@ -127,6 +127,12 @@ impl BridgePoolTree {
         self.root.clone()
     }
 
+    /// Recomputes the root and check if it matches the pre-computed root.
+    /// Used for checking if the underlying store is incorrect.
+    pub fn validate(&self) -> bool {
+        self.compute_root() == self.root
+    }
+
     /// Get a reference to the backing store
     pub fn store(&self) -> &BTreeMap<KeccakHash, BlockHeight> {
         &self.leaves
@@ -951,6 +957,17 @@ mod test_bridge_pool_tree {
             to_prove.sort_by_key(|t| t.keccak256());
             let proof = tree.get_membership_proof(to_prove).expect("Test failed");
             assert!(proof.verify(tree.root()));
+        }
+
+        /// Check that validate root passes when the tree is constructed correctly
+        #[test]
+        fn test_validate_root((transfers, _) in arb_transfers_and_subset()) {
+            let mut tree = BridgePoolTree::default();
+            for transfer in &transfers {
+                let key = Key::from(transfer);
+                let _ = tree.insert_key(&key, BlockHeight(1)).expect("Test failed");
+            }
+            assert!(tree.validate());
         }
     }
 }

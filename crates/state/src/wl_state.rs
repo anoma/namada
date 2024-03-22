@@ -520,6 +520,8 @@ where
                 .or_else(|_| self.rebuild_full_merkle_tree(height))
                 .unwrap();
 
+            tree.validate().map_err(Error::MerkleTreeError).unwrap();
+
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;
             in_mem.conversion_state = conversion_state;
