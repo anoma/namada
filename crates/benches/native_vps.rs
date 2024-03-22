@@ -190,12 +190,12 @@ fn governance(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -265,12 +265,12 @@ fn governance(c: &mut Criterion) {
 //          let mut shell = BenchShell::default();
 
 //          // Run the tx to validate
-//          shell.execute_tx(&tx);
+//          let verifiers_from_tx = shell.execute_tx(&tx);
 
 //          let (verifiers, keys_changed) = shell
 //              .state
 //              .write_log
-//              .verifiers_and_changed_keys(&BTreeSet::default());
+//              .verifiers_and_changed_keys(&verifiers_from_tx);
 
 //          let slash_fund = SlashFundVp {
 //              ctx: Ctx::new(
@@ -367,11 +367,11 @@ fn ibc(c: &mut Criterion) {
             _ => panic!("Unexpected bench test"),
         }
 
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -435,11 +435,11 @@ fn vp_multitoken(c: &mut Criterion) {
         .zip(["foreign_key_write", "transfer"])
     {
         let mut shell = BenchShell::default();
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -475,10 +475,11 @@ fn vp_multitoken(c: &mut Criterion) {
     }
 }
 
-// Generate and run masp transaction to be verified
+// Generate and run masp transaction to be verified. Returns the verifier set
+// from tx and the tx.
 fn setup_storage_for_masp_verification(
     bench_name: &str,
-) -> (BenchShieldedCtx, Tx) {
+) -> (BenchShieldedCtx, BTreeSet<Address>, Tx) {
     let amount = Amount::native_whole(500);
     let mut shielded_ctx = BenchShieldedCtx::default();
 
@@ -504,6 +505,7 @@ fn setup_storage_for_masp_verification(
         TransferSource::Address(defaults::albert_address()),
         TransferTarget::PaymentAddress(albert_payment_addr),
     );
+
     shielded_ctx.shell.execute_tx(&shield_tx);
     shielded_ctx.shell.commit_masp_tx(shield_tx);
 
@@ -535,9 +537,9 @@ fn setup_storage_for_masp_verification(
         ),
         _ => panic!("Unexpected bench test"),
     };
-    shielded_ctx.shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
 
-    (shielded_ctx, signed_tx)
+    (shielded_ctx, verifiers_from_tx, signed_tx)
 }
 
 fn masp(c: &mut Criterion) {
@@ -545,13 +547,13 @@ fn masp(c: &mut Criterion) {
 
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
-            let (shielded_ctx, signed_tx) =
+            let (shielded_ctx, verifiers_from_tx, signed_tx) =
                 setup_storage_for_masp_verification(bench_name);
             let (verifiers, keys_changed) = shielded_ctx
                 .shell
                 .state
                 .write_log()
-                .verifiers_and_changed_keys(&BTreeSet::default());
+                .verifiers_and_changed_keys(&verifiers_from_tx);
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -592,7 +594,7 @@ fn masp_verify_shielded_tx(c: &mut Criterion) {
 
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
-            let (_, signed_tx) =
+            let (_, _verifiers_from_tx, signed_tx) =
                 setup_storage_for_masp_verification(bench_name);
 
             let transaction = signed_tx
@@ -663,12 +665,12 @@ fn pgf(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -735,12 +737,12 @@ fn eth_bridge_nut(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address =
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
@@ -806,12 +808,12 @@ fn eth_bridge(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridge);
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -902,12 +904,12 @@ fn eth_bridge_pool(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridgePool);
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -949,12 +951,12 @@ fn parameters(c: &mut Criterion) {
     for bench_name in ["foreign_key_write", "parameter_change"] {
         let mut shell = BenchShell::default();
 
-        let signed_tx = match bench_name {
+        let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                shell.execute_tx(&tx);
-                tx
+                let verifiers_from_tx = shell.execute_tx(&tx);
+                (verifiers_from_tx, tx)
             }
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
@@ -971,7 +973,8 @@ fn parameters(c: &mut Criterion) {
                         namada::tx::data::DecryptedTx::Decrypted,
                     ));
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
-                tx
+                let verifiers_from_tx = BTreeSet::default();
+                (verifiers_from_tx, tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -979,7 +982,7 @@ fn parameters(c: &mut Criterion) {
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let vp_address = Address::Internal(InternalAddress::Parameters);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1024,12 +1027,12 @@ fn pos(c: &mut Criterion) {
     for bench_name in ["foreign_key_write", "parameter_change"] {
         let mut shell = BenchShell::default();
 
-        let signed_tx = match bench_name {
+        let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                shell.execute_tx(&tx);
-                tx
+                let verifiers_from_tx = shell.execute_tx(&tx);
+                (verifiers_from_tx, tx)
             }
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
@@ -1046,7 +1049,8 @@ fn pos(c: &mut Criterion) {
                         namada::tx::data::DecryptedTx::Decrypted,
                     ));
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
-                tx
+                let verifiers_from_tx = BTreeSet::default();
+                (verifiers_from_tx, tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -1054,7 +1058,7 @@ fn pos(c: &mut Criterion) {
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let vp_address = Address::Internal(InternalAddress::PoS);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1152,12 +1156,12 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             _ => panic!("Unexpected bench test"),
         }
 
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let tx_data = signed_tx.data().unwrap();
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1252,12 +1256,12 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             _ => panic!("Unexpected bench test"),
         }
 
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let tx_data = signed_tx.data().unwrap();
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
