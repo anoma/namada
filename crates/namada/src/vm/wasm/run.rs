@@ -1392,7 +1392,7 @@ mod tests {
                 (if
                 (result i64)
                 (i64.eqz (get_local 0))
-                (then (get_local 0))
+                (then (i64.const 1))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
                 (func $_validate_tx (type 0) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
