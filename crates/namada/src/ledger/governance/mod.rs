@@ -15,6 +15,7 @@ use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
+use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -38,8 +39,14 @@ pub const MAX_PGF_ACTIONS: usize = 20;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-#[error("Governance VP error: {0}")]
-pub struct Error(#[from] native_vp::Error);
+pub enum Error {
+    #[error("Governance VP error: {0}")]
+    NativeVpError(#[from] native_vp::Error),
+    #[error(
+        "Action {0} not authorized by {1} which is not part of verifier set"
+    )]
+    Unauthorized(&'static str, Address),
+}
 
 /// Governance VP
 pub struct GovernanceVp<'a, S, CA>
@@ -75,6 +82,56 @@ where
         };
 
         let native_token = self.ctx.pre().get_native_token()?;
+
+        // Find the actions applied in the tx
+        let actions = self.ctx.read_actions()?;
+
+        // There must be at least one action if any of the keys belong to gov
+        if actions.is_empty()
+            && keys_changed.iter().any(gov_storage::is_governance_key)
+        {
+            tracing::info!(
+                "Rejecting tx without any action written to temp storage"
+            );
+            return Err(native_vp::Error::new_const(
+                "Rejecting tx without any action written to temp storage",
+            )
+            .into());
+        }
+
+        // Check action authorization
+        for action in actions {
+            match action {
+                Action::Gov(gov_action) => match gov_action {
+                    GovAction::InitProposal { id: _, author } => {
+                        if !verifiers.contains(&author) {
+                            tracing::info!(
+                                "Unauthorized GovAction::InitProposal"
+                            );
+                            return Err(Error::Unauthorized(
+                                "InitProposal",
+                                author,
+                            ));
+                        }
+                    }
+                    GovAction::VoteProposal { id: _, voter } => {
+                        if !verifiers.contains(&voter) {
+                            tracing::info!(
+                                "Unauthorized GovAction::VoteProposal"
+                            );
+                            return Err(Error::Unauthorized(
+                                "VoteProposal",
+                                voter,
+                            ));
+                        }
+                    }
+                },
+                _ => {
+                    // Other actions are not relevant to PoS VP
+                    continue;
+                }
+            }
+        }
 
         keys_changed.iter().try_for_each(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
@@ -854,7 +911,7 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error(native_vp::Error::new_alloc(format!(
+                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
                         "Funds must be greater than the minimum funds of {}",
                         min_funds_parameter.native_denominated()
                     )))
@@ -876,7 +933,7 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error(native_vp::Error::new_alloc(format!(
+                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
                         "Funds {} must be greater than the minimum funds of {}",
                         post_funds.native_denominated(),
                         min_funds_parameter.native_denominated()
@@ -947,7 +1004,7 @@ where
 
         let author = self.force_read(&author_key, ReadType::Post)?;
         namada_account::exists(&self.ctx.pre(), &author)
-            .map_err(Error)
+            .map_err(Error::NativeVpError)
             .true_or_else(|| {
                 native_vp::Error::new_alloc(format!(
                     "No author account {author} could be found for the \
@@ -1017,7 +1074,7 @@ where
             },
             |data| {
                 is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error)?
+                    .map_err(Error::NativeVpError)?
                     .ok_or_else(|| {
                         native_vp::Error::new_const(
                             "Governance parameter changes can only be \

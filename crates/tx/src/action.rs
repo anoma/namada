@@ -20,6 +20,7 @@ pub type Actions = Vec<Action>;
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum Action {
     Pos(PosAction),
+    Gov(GovAction),
 }
 
 /// PoS tx actions.
@@ -37,6 +38,13 @@ pub enum PosAction {
     CommissionChange(Address),
     MetadataChange(Address),
     ConsensusKeyChange(Address),
+}
+
+/// Gov tx actions.
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+pub enum GovAction {
+    InitProposal { id: u64, author: Address },
+    VoteProposal { id: u64, voter: Address },
 }
 
 /// Read actions from temporary storage

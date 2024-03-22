@@ -293,6 +293,10 @@ where
                         changed_consensus_key.insert(validator);
                     }
                 },
+                _ => {
+                    // Other actions are not relevant to PoS VP
+                    continue;
+                }
             }
         }
 
