@@ -983,6 +983,26 @@ pub async fn submit_transfer(
 
     Ok(())
 }
+pub async fn submit_disperse(
+    namada: &impl Namada,
+    transfers: Vec<args::TxTransfer>,
+) -> Result<(), error::Error> {
+    for transfer in transfers {
+        loop {
+            let result = submit_transfer(namada, transfer.clone()).await;
+            match result {
+                Ok(_) => {
+                    break;
+                },
+                Err(e) => {
+                    eprintln!("Error submitting transfer: {:?}", e);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
 
 pub async fn submit_ibc_transfer<N: Namada>(
     namada: &N,

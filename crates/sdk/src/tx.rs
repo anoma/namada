@@ -52,7 +52,7 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Signature, *};
 
-use crate::args::{self, InputAmount};
+use crate::args::{self, InputAmount, TxTransfer};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
@@ -2644,6 +2644,28 @@ async fn construct_shielded_parts<N: Namada>(
         .unwrap_or_default();
 
     Ok(Some((shielded_parts, asset_types)))
+}
+
+pub async fn build_disperse<N: Namada>(
+    context: &N,
+    args: &mut args::TxDisperse,
+) -> Result<Vec<(Tx, SigningTxData, Option<Epoch>)>> {
+    let mut results = Vec::new();
+    for target in args.targets {
+        loop {
+            let transfer_args = args.clone();
+            let result = build_transfer(context, &mut args::TxTransfer {
+                tx: transfer_args.tx,
+                source: transfer_args.source,
+                target: target.clone(),
+                token: transfer_args.token,
+                amount: transfer_args.amount,
+                tx_code_path: transfer_args.tx_code_path,
+            });
+            results.push(result);
+        }
+    }
+    Ok(results)
 }
 
 /// Submit a transaction to initialize an account

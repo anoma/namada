@@ -296,6 +296,76 @@ impl TxTransfer {
     }
 }
 
+/// Disperse transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxDisperse<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer source address
+    pub source: C::TransferSource,
+    /// Transfer target address
+    pub targets: Vec<C::TransferTarget>,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxDisperse<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxDisperse {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxDisperse<C> {
+    /// Transfer source address
+    pub fn source(self, source: C::TransferSource) -> Self {
+        Self { source, ..self }
+    }
+
+    /// Transfer targets addresses
+    pub fn receivers(self, targets: Vec<C::TransferTarget>) -> Self {
+        Self { targets, ..self }
+    }
+
+    /// Transferred token address
+    pub fn token(self, token: C::Address) -> Self {
+        Self { token, ..self }
+    }
+
+    /// Transferred token amount
+    pub fn amount(self, amount: InputAmount) -> Self {
+        Self { amount, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxDisperse {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &mut self,
+        context: &impl Namada,
+    ) -> crate::error::Result<Vec<(namada_tx::Tx, SigningTxData, Option<Epoch>)>>
+    {
+        tx::build_disperse(context, self).await
+    }
+}
+
 /// IBC transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
