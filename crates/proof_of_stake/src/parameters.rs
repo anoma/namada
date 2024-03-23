@@ -135,6 +135,9 @@ pub enum ValidationError {
     UnbondingLenTooShort(u64, u64),
 }
 
+/// The maximum string length of any validator metadata
+pub const MAX_VALIDATOR_METADATA_LEN: u64 = 500;
+
 /// The number of fundamental units per whole token of the native staking token
 pub const TOKENS_PER_NAM: u64 = 1_000_000;
 
