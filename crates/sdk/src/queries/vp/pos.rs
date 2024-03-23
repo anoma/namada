@@ -18,7 +18,7 @@ use namada_proof_of_stake::storage::{
     bond_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_avatar, read_validator_description,
+    read_total_stake, read_validator_avatar, read_validator_alias, read_validator_description,
     read_validator_discord_handle, read_validator_email,
     read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
     read_validator_stake, read_validator_website, unbond_handle,
@@ -285,7 +285,8 @@ where
     let website = read_validator_website(ctx.state, &validator)?;
     let discord_handle = read_validator_discord_handle(ctx.state, &validator)?;
     let avatar = read_validator_avatar(ctx.state, &validator)?;
-
+    let validator_alias = read_validator_alias(ctx.state, &validator)?;
+    
     // Email is the only required field for a validator in storage
     match email {
         Some(email) => Ok(Some(ValidatorMetaData {
@@ -294,6 +295,7 @@ where
             website,
             discord_handle,
             avatar,
+            validator_alias,
         })),
         _ => Ok(None),
     }

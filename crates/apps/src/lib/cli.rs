@@ -3279,6 +3279,7 @@ pub mod args {
     pub const USE_DEVICE: ArgFlag = flag("use-device");
     pub const VALIDATOR: Arg<WalletAddress> = arg("validator");
     pub const VALIDATOR_OPT: ArgOpt<WalletAddress> = VALIDATOR.opt();
+    pub const VALIDATOR_ALIAS_OPT: ArgOpt<String> = arg_opt("validator-alias");
     pub const VALIDATOR_ACCOUNT_KEY: ArgOpt<WalletPublicKey> =
         arg_opt("account-key");
     pub const VALIDATOR_ACCOUNT_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
@@ -4360,6 +4361,7 @@ pub mod args {
                 website: self.website,
                 discord_handle: self.discord_handle,
                 avatar: self.avatar,
+                validator_alias: self.validator_alias,
                 unsafe_dont_encrypt: self.unsafe_dont_encrypt,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4383,6 +4385,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let avatar = AVATAR_OPT.parse(matches);
+            let validator_alias = VALIDATOR_ALIAS_OPT.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_BECOME_VALIDATOR_WASM);
             Self {
@@ -4400,6 +4403,7 @@ pub mod args {
                 website,
                 discord_handle,
                 avatar,
+                validator_alias,
                 unsafe_dont_encrypt,
                 tx_code_path,
             }
@@ -4449,6 +4453,7 @@ pub mod args {
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(AVATAR_OPT.def().help("The validator's avatar."))
+                .arg(VALIDATOR_ALIAS_OPT.def().help("The validator's alias."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
@@ -4485,6 +4490,7 @@ pub mod args {
                 website: self.website,
                 discord_handle: self.discord_handle,
                 avatar: self.avatar,
+                validator_alias: self.validator_alias,
                 validator_vp_code_path: self
                     .validator_vp_code_path
                     .to_path_buf(),
@@ -4516,6 +4522,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let avatar = AVATAR_OPT.parse(matches);
+            let validator_alias = VALIDATOR_ALIAS_OPT.parse(matches);
             let validator_vp_code_path = VALIDATOR_CODE_PATH
                 .parse(matches)
                 .unwrap_or_else(|| PathBuf::from(VP_USER_WASM));
@@ -4540,6 +4547,7 @@ pub mod args {
                 website,
                 discord_handle,
                 avatar,
+                validator_alias,
                 validator_vp_code_path,
                 unsafe_dont_encrypt,
                 tx_init_account_code_path,
@@ -5681,6 +5689,7 @@ pub mod args {
                 website: self.website,
                 discord_handle: self.discord_handle,
                 avatar: self.avatar,
+                validator_alias: self.validator_alias,
                 commission_rate: self.commission_rate,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -5696,6 +5705,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let avatar = AVATAR_OPT.parse(matches);
+            let validator_alias = VALIDATOR_ALIAS_OPT.parse(matches);
             let commission_rate = COMMISSION_RATE_OPT.parse(matches);
             let tx_code_path = PathBuf::from(TX_CHANGE_METADATA_WASM);
             Self {
@@ -5706,6 +5716,7 @@ pub mod args {
                 website,
                 discord_handle,
                 avatar,
+                validator_alias,
                 commission_rate,
                 tx_code_path,
             }
@@ -5737,6 +5748,10 @@ pub mod args {
                 .arg(AVATAR_OPT.def().help(
                     "The desired new validator avatar url. To remove the \
                      existing avatar, pass an empty string to this argument.",
+                ))
+                .arg(VALIDATOR_ALIAS_OPT.def().help(
+                    "The desired new validator alias. To remove the \
+                     existing validator alias, pass an empty string to this argument.",
                 ))
                 .arg(
                     COMMISSION_RATE_OPT
@@ -7243,6 +7258,7 @@ pub mod args {
         pub website: Option<String>,
         pub discord_handle: Option<String>,
         pub avatar: Option<String>,
+        pub validator_alias: Option<String>,
         pub address: EstablishedAddress,
         pub tx_path: PathBuf,
     }
@@ -7263,6 +7279,7 @@ pub mod args {
             let website = WEBSITE_OPT.parse(matches);
             let discord_handle = DISCORD_OPT.parse(matches);
             let avatar = AVATAR_OPT.parse(matches);
+            let validator_alias = VALIDATOR_ALIAS_OPT.parse(matches);
             let address = RAW_ADDRESS_ESTABLISHED.parse(matches);
             let tx_path = PATH.parse(matches);
             Self {
@@ -7278,6 +7295,7 @@ pub mod args {
                 website,
                 discord_handle,
                 avatar,
+                validator_alias,
                 tx_path,
                 address,
             }
@@ -7337,6 +7355,9 @@ pub mod args {
                 ))
                 .arg(AVATAR_OPT.def().help(
                     "The validator's avatar. This is an optional parameter.",
+                ))
+                .arg(VALIDATOR_ALIAS_OPT.def().help(
+                    "The validator's alias. This is an optional parameter.",
                 ))
         }
     }

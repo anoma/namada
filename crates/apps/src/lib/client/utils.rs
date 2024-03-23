@@ -804,6 +804,7 @@ pub fn init_genesis_validator(
         website,
         discord_handle,
         avatar,
+        validator_alias,
         tx_path,
         address,
     }: args::InitGenesisValidator,
@@ -883,6 +884,7 @@ pub fn init_genesis_validator(
             website,
             discord_handle,
             avatar,
+            validator_alias,
         },
         &validator_wallet,
     );

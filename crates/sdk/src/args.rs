@@ -747,6 +747,8 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// The validator's avatar
     pub avatar: Option<String>,
+    /// The validator's alias
+    pub validator_alias: Option<String>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
@@ -786,6 +788,8 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// The validator's avatar
     pub avatar: Option<String>,
+    /// The validator's alias
+    pub validator_alias: Option<String>,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -1460,6 +1464,8 @@ pub struct MetaDataChange<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// New validator avatar url
     pub avatar: Option<String>,
+    /// New validator alias
+    pub validator_alias: Option<String>,
     /// New validator commission rate
     pub commission_rate: Option<Dec>,
     /// Path to the TX WASM code file
@@ -1528,6 +1534,14 @@ impl<C: NamadaTypes> MetaDataChange<C> {
     pub fn avatar(self, avatar: String) -> Self {
         Self {
             avatar: Some(avatar),
+            ..self
+        }
+    }
+
+    /// New validator alias
+    pub fn validator_alias(self, validator_alias: String) -> Self {
+        Self {
+            validator_alias: Some(validator_alias),
             ..self
         }
     }
