@@ -20,7 +20,6 @@ impl InitProposal {
     /// Build a raw InitProposal transaction from the given parameters
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        id: u64,
         content: Hash,
         author: Address,
         r#type: ProposalType,
@@ -30,7 +29,6 @@ impl InitProposal {
         args: GlobalArgs,
     ) -> Self {
         let init_proposal = namada_sdk::governance::InitProposalData {
-            id,
             content,
             author,
             r#type,
