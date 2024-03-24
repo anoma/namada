@@ -4313,6 +4313,12 @@ pub mod args {
             let tx_code_path = PathBuf::from(TX_INIT_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
+
+            if threshold == Some(0) {
+                eprintln!("Threshold must be higher than 0.");
+                std::process::exit(1);
+            }
+
             Self {
                 tx,
                 vp_code_path,
@@ -4335,8 +4341,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
@@ -4524,6 +4530,12 @@ pub mod args {
             let tx_become_validator_code_path =
                 PathBuf::from(TX_BECOME_VALIDATOR_WASM);
             let threshold = THRESHOLD.parse(matches);
+
+            if threshold == Some(0) {
+                eprintln!("Threshold must be higher than 0.");
+                std::process::exit(1);
+            }
+
             Self {
                 tx,
                 scheme,
@@ -4604,8 +4616,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
@@ -4637,6 +4649,19 @@ pub mod args {
             let tx_code_path = PathBuf::from(TX_UPDATE_ACCOUNT_WASM);
             let public_keys = PUBLIC_KEYS.parse(matches);
             let threshold = THRESHOLD.parse(matches);
+
+            if threshold == Some(0) {
+                eprintln!("Threshold must be higher than 0.");
+                std::process::exit(1);
+            }
+            let num_keys = public_keys.len() as u8;
+            if let Some(threshold) = threshold {
+                if (num_keys >= 1) && (num_keys < threshold) {
+                    eprintln!("Threshold must be less than the number of public keys provided.");
+                    std::process::exit(1);
+                }
+            }
+
             Self {
                 tx,
                 vp_code_path,
@@ -4664,8 +4689,8 @@ pub mod args {
                 ))
                 .arg(THRESHOLD.def().help(
                     "The minimum number of signature to be provided for \
-                     authorization. Must be less then the maximum number of \
-                     public keys provided.",
+                     authorization. Must be greater than 0 and less than or equal \
+                     to the maximum number of public keys provided.",
                 ))
         }
     }
