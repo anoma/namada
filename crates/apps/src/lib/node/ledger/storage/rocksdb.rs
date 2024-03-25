@@ -512,8 +512,8 @@ impl RocksDB {
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
         tracing::info!("Restoring replay protection state");
         // Remove the "current" tx hashes
-        for (ref hash_str, _, _) in self.iter_current_replay_protection() {
-            batch.delete_cf(reprot_cf, hash_str);
+        for (ref current_key, _, _) in self.iter_current_replay_protection() {
+            batch.delete_cf(reprot_cf, current_key);
         }
 
         // Execute next step in parallel
@@ -1826,8 +1826,8 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .get_column_family(REPLAY_PROTECTION_CF)
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
-        let stripped_prefix = Some(replay_protection::current_prefix());
-        iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
+        let prefix = Some(replay_protection::current_prefix());
+        iter_prefix(self, replay_protection_cf, None, prefix.as_ref())
     }
 }
 
