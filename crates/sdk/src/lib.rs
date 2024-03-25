@@ -356,6 +356,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxBecomeValidator builder from the given minimum set of arguments
+    #[allow(clippy::too_many_arguments)]
     fn new_become_validator(
         &self,
         address: Address,

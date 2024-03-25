@@ -64,10 +64,7 @@ use crate::rpc::{
     self, query_wasm_code_hash, validate_amount, InnerTxResult,
     TxBroadcastData, TxResponse,
 };
-use crate::signing::{
-    self, validate_fee_and_gen_unshield,
-    SigningTxData,
-};
+use crate::signing::{self, validate_fee_and_gen_unshield, SigningTxData};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
@@ -2216,8 +2213,7 @@ pub async fn build_become_validator(
     all_pks.push(protocol_key.clone().unwrap().clone());
 
     let signing_data =
-        signing::init_validator_signing_data(context, tx_args, all_pks)
-            .await?;
+        signing::init_validator_signing_data(context, tx_args, all_pks).await?;
 
     let (fee_amount, _updated_balance, unshield) =
         validate_fee_and_gen_unshield(
