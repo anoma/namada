@@ -471,7 +471,7 @@ where
                             let header_hash = replay_protection_hashes
                                 .expect("This cannot fail")
                                 .header_hash;
-                            self.state.redundant_tx_hash(header_hash).expect(
+                            self.state.redundant_tx_hash(&header_hash).expect(
                                 "Error while marking tx hash as redundant",
                             );
                         }
@@ -656,7 +656,7 @@ where
                 .expect("Error while writing tx hash to storage");
 
             self.state
-                .redundant_tx_hash(header_hash)
+                .redundant_tx_hash(&header_hash)
                 .expect("Error while marking tx hash as redundant");
         }
     }
@@ -2560,7 +2560,7 @@ mod test_finalize_block {
                     .has_replay_protection_entry(&wrapper.raw_header_hash())
             );
             assert!(
-                shell
+                !shell
                     .state
                     .write_log()
                     .has_replay_protection_entry(&wrapper.header_hash())
@@ -2856,7 +2856,7 @@ mod test_finalize_block {
             )
         );
         assert!(
-            shell
+            !shell
                 .state
                 .write_log()
                 .has_replay_protection_entry(&failing_wrapper.header_hash())

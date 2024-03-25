@@ -12,9 +12,7 @@ use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 
 use crate::in_memory::InMemory;
-use crate::write_log::{
-    ReProtStorageModification, StorageModification, WriteLog,
-};
+use crate::write_log::{StorageModification, WriteLog};
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
     MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result, State,
@@ -218,18 +216,13 @@ where
         // hashes from the previous block to the general bucket
         self.move_current_replay_protection_entries(batch)?;
 
-        for (hash, entry) in
-            std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
+        for hash in
+            std::mem::take(&mut self.0.write_log.replay_protection).iter()
         {
-            match entry {
-                ReProtStorageModification::Write => self
-                    .write_replay_protection_entry(
-                        batch,
-                        &replay_protection::current_key(&hash),
-                    )?,
-                // Redundant hashes should not be committed to storage
-                ReProtStorageModification::Redundant => (),
-            }
+            self.write_replay_protection_entry(
+                batch,
+                &replay_protection::current_key(hash),
+            )?;
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
@@ -621,7 +614,7 @@ where
     /// it to storage.
     pub fn redundant_tx_hash(
         &mut self,
-        hash: Hash,
+        hash: &Hash,
     ) -> crate::write_log::Result<()> {
         self.write_log.redundant_tx_hash(hash)
     }
