@@ -791,6 +791,7 @@ impl<'a> Client for &'a MockNode {
         } else {
             self.clear_results();
         }
+        std::thread::sleep(std::time::Duration::from_secs(2));
         let (proposer_address, _) = self.prepare_request();
         let req = RequestPrepareProposal {
             proposer_address: proposer_address.into(),

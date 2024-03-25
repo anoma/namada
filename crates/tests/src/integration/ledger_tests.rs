@@ -1253,6 +1253,32 @@ fn implicit_account_reveal_pk() -> Result<()> {
     // 2. Some transactions that need signature authorization:
     #[allow(clippy::type_complexity)]
     let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
+        // Submit proposal
+        Box::new(|source| {
+            // Gen data for proposal tx
+            let author = find_address(&node, source).unwrap();
+            let valid_proposal_json_path = prepare_proposal_data(
+                node.test_dir.path(),
+                0,
+                author,
+                TestWasms::TxProposalCode.read_bytes(),
+                12,
+            );
+            vec![
+                "init-proposal",
+                "--data-path",
+                valid_proposal_json_path.to_str().unwrap(),
+                "--signing-keys",
+                source,
+                "--gas-limit",
+                "2000000",
+                "--node",
+                &validator_one_rpc,
+            ]
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect()
+        }),
         // A token transfer tx
         Box::new(|source| {
             [
@@ -1293,32 +1319,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             .map(|x| x.to_owned())
             .collect()
         }),
-        // Submit proposal
-        Box::new(|source| {
-            // Gen data for proposal tx
-            let author = find_address(&node, source).unwrap();
-            let valid_proposal_json_path = prepare_proposal_data(
-                node.test_dir.path(),
-                0,
-                author,
-                TestWasms::TxProposalCode.read_bytes(),
-                12,
-            );
-            vec![
-                "init-proposal",
-                "--data-path",
-                valid_proposal_json_path.to_str().unwrap(),
-                "--signing-keys",
-                source,
-                "--gas-limit",
-                "2000000",
-                "--node",
-                &validator_one_rpc,
-            ]
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect()
-        }),
+
     ];
 
     for (ix, tx_args) in txs_args.into_iter().enumerate() {
@@ -1335,6 +1336,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--raw",
             ],
         )?;
+        //std::thread::sleep(std::time::Duration::from_secs(2));
         // Apply the key_alias once the key is generated to obtain tx args
         let tx_args = tx_args(&key_alias);
         // 2b. Send some funds to the implicit account.
@@ -1347,13 +1349,15 @@ fn implicit_account_reveal_pk() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1000",
+            "2000",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
         ];
         run(&node, Bin::Client, credit_args)?;
+        node.assert_success();
+        //std::thread::sleep(std::time::Duration::from_secs(2));
 
         // 2c. Submit the tx with the implicit account as the source.
         let captured = CapturedOutput::of(|| {
@@ -1363,7 +1367,9 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 tx_args.iter().map(|arg| arg.as_ref()).collect(),
             )
         });
+        assert!(captured.result.is_ok());
         assert!(captured.contains("Submitting a tx to reveal the public key"));
+        //std::thread::sleep(std::time::Duration::from_secs(2));
 
         // 2d. Submit same tx again, this time the client shouldn't reveal
         // again.
@@ -1374,8 +1380,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 tx_args.iter().map(|arg| arg.as_ref()).collect(),
             )
         });
-        // assert!(captured.result.is_ok());
         assert!(!captured.contains("Submitting a tx to reveal the public key"));
+        node.assert_success();
     }
 
     Ok(())
