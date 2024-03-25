@@ -299,6 +299,9 @@ where
                 self.in_mem.block.tree.update(key, value)?;
             }
         }
+
+        tracing::info!("Write: {} - {}", key.to_string(), is_key_merklized);
+
         Ok(self.db.batch_write_subspace_val(
             batch,
             self.in_mem.block.height,

@@ -292,6 +292,9 @@ impl RocksDB {
         if !persist_diffs && height > BlockHeight::first() {
             let mut height = height.prev_height();
             while height >= BlockHeight::first() {
+
+                tracing::info!("Loooping {} -> {}", key, height);
+
                 let (old_diff_key, new_diff_key) =
                     old_and_new_diff_key(key, height)?;
                 let has_old_diff = self
