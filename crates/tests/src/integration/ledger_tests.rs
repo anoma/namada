@@ -1249,7 +1249,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
-
     // 2. Some transactions that need signature authorization:
     #[allow(clippy::type_complexity)]
     let txs_args: Vec<Box<dyn Fn(&str) -> Vec<String>>> = vec![
@@ -1275,9 +1274,9 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--node",
                 &validator_one_rpc,
             ]
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect()
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect()
         }),
         // A token transfer tx
         Box::new(|source| {
@@ -1319,7 +1318,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
             .map(|x| x.to_owned())
             .collect()
         }),
-
     ];
 
     for (ix, tx_args) in txs_args.into_iter().enumerate() {
@@ -1336,7 +1334,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--raw",
             ],
         )?;
-        //std::thread::sleep(std::time::Duration::from_secs(2));
         // Apply the key_alias once the key is generated to obtain tx args
         let tx_args = tx_args(&key_alias);
         // 2b. Send some funds to the implicit account.
@@ -1357,7 +1354,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
         ];
         run(&node, Bin::Client, credit_args)?;
         node.assert_success();
-        //std::thread::sleep(std::time::Duration::from_secs(2));
 
         // 2c. Submit the tx with the implicit account as the source.
         let captured = CapturedOutput::of(|| {
@@ -1369,7 +1365,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
         });
         assert!(captured.result.is_ok());
         assert!(captured.contains("Submitting a tx to reveal the public key"));
-        //std::thread::sleep(std::time::Duration::from_secs(2));
 
         // 2d. Submit same tx again, this time the client shouldn't reveal
         // again.

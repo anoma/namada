@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -254,6 +255,14 @@ pub struct MockNode {
     pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
+}
+
+impl Debug for MockNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockNode")
+            .field("shell", &self.shell)
+            .finish()
+    }
 }
 
 impl Drop for MockNode {
@@ -783,14 +792,13 @@ impl<'a> Client for &'a MockNode {
         if !self.success() {
             // TODO: submit_txs should return the correct error code + message
             resp.code = 1337.into();
-            let locked = self.results.lock().unwrap();
-            for result in locked.iter() {
-                println!("{:?}", result);
-            }
             return Ok(resp);
         } else {
             self.clear_results();
         }
+        // TODO: Figure out why this is necessary and fix it properly
+        // TODO: causes `implicit_account_reveal_pk` and
+        // `ledger_txs_and_queries` TODO: to fail if absent.
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (proposer_address, _) = self.prepare_request();
         let req = RequestPrepareProposal {
