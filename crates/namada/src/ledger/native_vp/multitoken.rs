@@ -145,6 +145,13 @@ where
         all_tokens.extend(dec_mints.keys().cloned());
 
         Ok(all_tokens.iter().all(|token| {
+            if token.is_internal() && !verifiers.contains(token) {
+                // Established address tokens do not have VPs themselves, their
+                // validation is handled by the `Multitoken` internal address,
+                // but internal token addresses have to verify the transfer
+                return false;
+            }
+
             let inc_change =
                 inc_changes.get(token).cloned().unwrap_or_default();
             let dec_change =

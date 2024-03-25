@@ -329,6 +329,17 @@ impl<'view> VpEnv<'view> for Ctx {
     }
 }
 
+impl namada_tx::action::Read for Ctx {
+    type Err = Error;
+
+    fn read_temp<T: BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        VpEnv::read_temp(self, key)
+    }
+}
+
 impl StorageRead for CtxPreStorageRead<'_> {
     type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)> where Self: 'iter;
 

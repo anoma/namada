@@ -4,15 +4,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
-use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
+use namada_core::address::{Address, EstablishedAddressGen};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
-use namada_trans_token::storage_key::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    is_any_token_parameter_key,
-};
 use thiserror::Error;
 
 #[allow(missing_docs)]
@@ -378,12 +374,21 @@ impl WriteLog {
         len as u64 * MEMORY_ACCESS_GAS_PER_BYTE
     }
 
-    /// Get the storage keys changed and accounts keys initialized in the
-    /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts. The keys in the precommit are not
-    /// included in the result of this function.
+    /// Get the non-temporary storage keys changed and accounts keys initialized
+    /// in the current transaction. The account keys point to the validity
+    /// predicates of the newly created accounts. The keys in the precommit are
+    /// not included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
-        self.tx_write_log.keys().cloned().collect()
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, modification)| match modification {
+                StorageModification::Write { .. } => Some(key.clone()),
+                StorageModification::Delete => Some(key.clone()),
+                StorageModification::InitAccount { .. } => Some(key.clone()),
+                // Skip temporary storage changes - they are never committed
+                StorageModification::Temp { .. } => None,
+            })
+            .collect()
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
@@ -506,39 +511,15 @@ impl WriteLog {
 
         // get changed keys grouped by the address
         for key in changed_keys.iter() {
-            // for token keys, trigger Multitoken VP and the owner's VP
-            //
-            // TODO: this should not be a special case, as it is error prone.
-            // any internal addresses corresponding to tokens which have
-            // native vp equivalents should be automatically added as verifiers
-            if let Some([token, owner]) = is_any_token_balance_key(key) {
-                if matches!(&token, Address::Internal(InternalAddress::Nut(_)))
+            if let Some(addr) = key.fst_address() {
+                // We can skip insert when the address has been added from the
+                // Tx above. Also skip if it's an address of a newly initialized
+                // account, because anything can be written into an account's
+                // storage in the same tx in which it's initialized (there is no
+                // VP in the state prior to tx execution).
+                if !verifiers_from_tx.contains(addr)
+                    && !initialized_accounts.contains(addr)
                 {
-                    verifiers.insert(token.clone());
-                }
-                verifiers
-                    .insert(Address::Internal(InternalAddress::Multitoken));
-                verifiers.insert(owner.clone());
-            } else if is_any_minted_balance_key(key).is_some()
-                || is_any_minter_key(key).is_some()
-                || is_any_token_parameter_key(key).is_some()
-            {
-                verifiers
-                    .insert(Address::Internal(InternalAddress::Multitoken));
-            } else {
-                for addr in key.iter_addresses() {
-                    if verifiers_from_tx.contains(addr)
-                        || initialized_accounts.contains(addr)
-                    {
-                        // We can skip this when the address has been added from
-                        // the Tx above.
-                        // Also skip if it's an address of a newly initialized
-                        // account, because anything can be written into an
-                        // account's storage in the same tx in which it's
-                        // initialized (there is no VP in the state prior to tx
-                        // execution).
-                        continue;
-                    }
                     // Add the address as a verifier
                     verifiers.insert(addr.clone());
                 }
@@ -976,8 +957,8 @@ mod tests {
         /// Test [`WriteLog::verifiers_changed_keys`] that:
         /// 1. Every address from `verifiers_from_tx` is included in the
         ///    verifiers set.
-        /// 2. Every address included in the changed storage keys is included in
-        ///    the verifiers set.
+        /// 2. Every address included in the first segment of changed storage
+        ///    keys is included in the verifiers set.
         /// 3. Addresses of newly initialized accounts are not verifiers, so
         ///    that anything can be written into an account's storage in the
         ///    same tx in which it's initialized.
@@ -999,12 +980,12 @@ mod tests {
 
             let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
             for key in changed_keys.iter() {
-                    for addr_from_key in &key.find_addresses() {
-                        if !initialized_accounts.contains(addr_from_key) {
-                            // Test for 2.
-                            assert!(verifiers.contains(addr_from_key));
-                        }
+                if let Some(addr_from_key) = key.fst_address() {
+                    if !initialized_accounts.contains(addr_from_key) {
+                        // Test for 2.
+                        assert!(verifiers.contains(addr_from_key));
                     }
+                }
             }
 
             println!("verifiers {:#?}", verifiers);

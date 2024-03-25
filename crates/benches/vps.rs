@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::BTreeSet;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::UpdateAccount;
@@ -136,11 +135,11 @@ fn vp_user(c: &mut Criterion) {
         "vp",
     ]) {
         let mut shell = BenchShell::default();
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -284,11 +283,11 @@ fn vp_implicit(c: &mut Criterion) {
         }
 
         // Run the tx to validate
-        shell.execute_tx(tx);
+        let verifiers_from_tx = shell.execute_tx(tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -436,11 +435,11 @@ fn vp_validator(c: &mut Criterion) {
     ]) {
         let mut shell = BenchShell::default();
 
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {

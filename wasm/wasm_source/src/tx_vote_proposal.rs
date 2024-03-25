@@ -1,5 +1,6 @@
 //! A tx to vote on a proposal
 
+use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction(gas = 840866)]
@@ -11,6 +12,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     })?;
     let tx_data = governance::VoteProposalData::try_from_slice(&data[..])
         .wrap_err("failed to decode VoteProposalData")?;
+
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(&tx_data.voter)?;
+
+    ctx.push_action(Action::Gov(GovAction::VoteProposal {
+        id: tx_data.id,
+        voter: tx_data.voter.clone(),
+    }))?;
 
     debug_log!("apply_tx called to vote a governance proposal");
 

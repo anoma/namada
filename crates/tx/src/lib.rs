@@ -1,5 +1,6 @@
 #![allow(missing_docs)]
 
+pub mod action;
 pub mod data;
 pub mod proto;
 mod types;

@@ -22,6 +22,13 @@ pub mod tx {
         // its size.
         pub fn namada_tx_read(key_ptr: u64, key_len: u64) -> i64;
 
+        // Read variable-length temporary state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if
+        // the key is not present. If a value is found, it will be placed in the
+        // result buffer, because we cannot allocate a buffer for it before
+        // we know its size.
+        pub fn namada_tx_read_temp(key_ptr: u64, key_len: u64) -> i64;
+
         // Read a value from result buffer.
         pub fn namada_tx_result_buffer(result_ptr: u64);
 

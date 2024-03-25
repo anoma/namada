@@ -14,6 +14,7 @@ use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
+use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -44,6 +45,10 @@ pub enum Error {
     EmptyProposalField(String),
     #[error("Vote key is not valid: {0}")]
     InvalidVoteKey(String),
+    #[error(
+        "Action {0} not authorized by {1} which is not part of verifier set"
+    )]
+    Unauthorized(&'static str, Address),
 }
 
 /// Governance VP
@@ -77,6 +82,51 @@ where
         };
 
         let native_token = self.ctx.pre().get_native_token()?;
+
+        // Find the actions applied in the tx
+        let actions = self.ctx.read_actions()?;
+
+        // There must be at least one action
+        if actions.is_empty() {
+            tracing::info!(
+                "Rejecting tx without any action written to temp storage"
+            );
+            return Ok(false);
+        }
+
+        // Check action authorization
+        for action in actions {
+            match action {
+                Action::Gov(gov_action) => match gov_action {
+                    GovAction::InitProposal { id: _, author } => {
+                        if !verifiers.contains(&author) {
+                            tracing::info!(
+                                "Unauthorized GovAction::InitProposal"
+                            );
+                            return Err(Error::Unauthorized(
+                                "InitProposal",
+                                author,
+                            ));
+                        }
+                    }
+                    GovAction::VoteProposal { id: _, voter } => {
+                        if !verifiers.contains(&voter) {
+                            tracing::info!(
+                                "Unauthorized GovAction::VoteProposal"
+                            );
+                            return Err(Error::Unauthorized(
+                                "VoteProposal",
+                                voter,
+                            ));
+                        }
+                    }
+                },
+                _ => {
+                    // Other actions are not relevant to PoS VP
+                    continue;
+                }
+            }
+        }
 
         Ok(keys_changed.iter().all(|key| {
             let proposal_id = gov_storage::get_proposal_id(key);
