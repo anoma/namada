@@ -753,6 +753,62 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     pub unsafe_dont_encrypt: bool,
 }
 
+impl<C: NamadaTypes> TxBuilder<C> for TxBecomeValidator<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxBecomeValidator {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxBecomeValidator<C> {
+    pub fn address(self, address: C::Address) -> Self {
+        Self { address, ..self }
+    }
+
+    pub fn commission_rate(self, commission_rate: Dec) -> Self {
+        Self {
+            commission_rate,
+            ..self
+        }
+    }
+
+    pub fn max_commission_rate_change(
+        self,
+        max_commission_rate_change: Dec,
+    ) -> Self {
+        Self {
+            max_commission_rate_change,
+            ..self
+        }
+    }
+
+    pub fn email(self, email: String) -> Self {
+        Self { email, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxBecomeValidator {
+    pub async fn build(
+        &self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_become_validator(context, self).await
+    }
+}
+
 /// Transaction to initialize a new account
 #[derive(Clone, Debug)]
 pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
