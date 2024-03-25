@@ -70,7 +70,7 @@ impl CliApi {
             cmds::NamadaWallet::PayAddrGen(cmds::WalletGenPaymentAddress(
                 args,
             )) => {
-                let args = args.to_sdk(&mut ctx);
+                let args = args.to_sdk(&mut ctx)?;
                 payment_address_gen(ctx, io, args)
             }
         }
