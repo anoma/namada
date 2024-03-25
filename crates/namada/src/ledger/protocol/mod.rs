@@ -100,6 +100,14 @@ pub enum Error {
     DisallowedTx,
 }
 
+impl Error {
+    /// Determine if the error originates from an invalid transaction
+    /// section signature.
+    fn is_invalid_section_signature(&self) -> bool {
+        matches!(self, Self::InvalidSectionSignature(_))
+    }
+}
+
 /// Shell parameters for running wasm transactions.
 #[allow(missing_docs)]
 #[derive(Debug)]
@@ -823,7 +831,7 @@ where
         .try_fold(VpsResult::default, |mut result, addr| {
             let gas_meter =
                 RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
-            let accept = match &addr {
+            let tx_accepted = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = state
                         .validity_predicate(addr)
@@ -951,34 +959,24 @@ where
                 }
             };
 
-            match accept {
-                Ok(()) => {
-                    result.accepted_vps.insert(addr.clone());
-                }
-                Err(err) => {
-                    match err {
-                        // Execution of VPs can (and must) be short-circuited
-                        // only in case of a gas overflow to prevent the
-                        // transaction from consuming resources that have not
-                        // been acquired in the corresponding wrapper tx. For
-                        // all the other errors we keep evaluating the vps. This
-                        // allows to display a consistent VpsResult across all
-                        // nodes and find any invalid signatures
-                        Error::GasError(_) => {
-                            return Err(err);
-                        }
-                        Error::InvalidSectionSignature(_) => {
-                            // required by replay protection
-                            result.invalid_sig = true;
-                        }
-                        _ => {}
-                    }
-
+            tx_accepted.map_or_else(
+                |err| {
+                    result.invalid_sig = err.is_invalid_section_signature(); // required by replay protection
                     result.rejected_vps.insert(addr.clone());
                     result.errors.push((addr.clone(), err.to_string()));
-                }
-            }
+                },
+                |()| {
+                    result.accepted_vps.insert(addr.clone());
+                },
+            );
 
+            // Execution of VPs can (and must) be short-circuited
+            // only in case of a gas overflow to prevent the
+            // transaction from consuming resources that have not
+            // been acquired in the corresponding wrapper tx. For
+            // all the other errors we keep evaluating the vps. This
+            // allows to display a consistent VpsResult across all
+            // nodes and find any invalid signatures
             result
                 .gas_used
                 .set(gas_meter.into_inner())
