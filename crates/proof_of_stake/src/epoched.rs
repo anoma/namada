@@ -372,7 +372,8 @@ where
             .unwrap()
     }
 
-    fn get_oldest_epoch<S>(
+    /// Get the oldest epoch at which data is stored
+    pub fn get_oldest_epoch<S>(
         &self,
         storage: &S,
     ) -> namada_storage::Result<Option<Epoch>>

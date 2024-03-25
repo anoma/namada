@@ -3,7 +3,9 @@ use std::ops::Range;
 
 use namada_core::address::testing::address_from_simple_seed;
 use namada_core::dec::Dec;
-use namada_core::key::testing::common_sk_from_simple_seed;
+use namada_core::key::testing::{
+    common_sk_from_simple_seed, keypair_1, keypair_3,
+};
 use namada_core::key::{self, RefTo};
 use namada_core::storage::Epoch;
 use namada_core::token;
@@ -178,4 +180,39 @@ pub fn arb_redelegation_amounts(
             amount_unbond,
         )
     })
+}
+
+pub fn get_genesis_validators(
+    num: u64,
+    init_stakes: Vec<token::Amount>,
+) -> Vec<GenesisValidator> {
+    if init_stakes.len() != num as usize {
+        panic!("init_stakes.len() != num");
+    }
+    let protocol_key = keypair_1().to_public();
+    let eth_cold_key = keypair_3().to_public();
+    let eth_hot_key = keypair_3().to_public();
+    let commission_rate = Dec::new(5, 2).expect("Test failed");
+    let max_commission_rate_change = Dec::new(1, 2).expect("Test failed");
+
+    let mut gen_vals = Vec::<GenesisValidator>::new();
+    for (seed, stake) in init_stakes.iter().enumerate() {
+        let address = address_from_simple_seed(seed as u64);
+        let consensus_sk = common_sk_from_simple_seed(seed as u64);
+        let consensus_key = consensus_sk.to_public();
+
+        gen_vals.push(GenesisValidator {
+            address,
+            tokens: *stake,
+            consensus_key,
+            protocol_key: protocol_key.clone(),
+            eth_hot_key: eth_hot_key.clone(),
+            eth_cold_key: eth_cold_key.clone(),
+            commission_rate,
+            max_commission_rate_change,
+            metadata: Default::default(),
+        });
+    }
+
+    gen_vals
 }

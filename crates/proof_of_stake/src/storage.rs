@@ -18,7 +18,7 @@ use num_traits::CheckedAdd;
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
     BelowCapacityValidatorSets, BondId, Bonds, CommissionRates,
-    ConsensusValidatorSets, DelegatorRedelegatedBonded,
+    ConsensusValidatorSets, DelegationTargets, DelegatorRedelegatedBonded,
     DelegatorRedelegatedUnbonded, EpochedSlashes, IncomingRedelegations,
     LivenessMissedVotes, LivenessSumMissedVotes, OutgoingRedelegations,
     ReverseOrdTokenAmount, RewardsAccumulator, RewardsProducts, Slashes,
@@ -242,6 +242,18 @@ pub fn liveness_missed_votes_handle() -> LivenessMissedVotes {
 pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
     let key = storage_key::liveness_sum_missed_votes_key();
     LivenessSumMissedVotes::open(key)
+}
+
+/// Get the storage handle to the delegation targets map
+pub fn delegation_targets_handle(delegator: &Address) -> DelegationTargets {
+    let key = storage_key::delegation_targets_key(delegator);
+    DelegationTargets::open(key)
+}
+
+/// Get the storage handle to the total active voting power
+pub fn total_active_voting_power_handle() -> TotalDeltas {
+    let key = storage_key::total_active_voting_power_key();
+    TotalDeltas::open(key)
 }
 
 // ---- Storage read + write ----
@@ -469,6 +481,26 @@ where
     Ok(amnt)
 }
 
+/// Read PoS total stake (sum of deltas).
+pub fn read_total_active_stake<S>(
+    storage: &S,
+    params: &PosParams,
+    epoch: namada_core::storage::Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let handle = total_active_voting_power_handle();
+    let amnt = handle
+        .get_sum(storage, epoch, params)?
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
+    Ok(amnt)
+}
+
 /// Read all addresses from consensus validator set.
 pub fn read_consensus_validator_set_addresses<S>(
     storage: &S,
@@ -617,22 +649,44 @@ pub fn update_total_deltas<S>(
     delta: token::Change,
     current_epoch: namada_core::storage::Epoch,
     offset_opt: Option<u64>,
+    update_active_voting_power: bool,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let handle = total_deltas_handle();
     let offset = offset_opt.unwrap_or(params.pipeline_len);
-    let val = handle
+    let total_deltas = total_deltas_handle();
+    let total_active_voting_power = total_active_voting_power_handle();
+
+    // Update total deltas
+    let total_deltas_val = total_deltas
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(
+    total_deltas.set(
         storage,
-        val.checked_add(&delta)
+        total_deltas_val
+            .checked_add(&delta)
             .expect("Total deltas updated amount should not overflow"),
         current_epoch,
         offset,
-    )
+    )?;
+
+    // Update total active voting power
+    if update_active_voting_power {
+        let active_val = total_active_voting_power
+            .get_delta_val(storage, current_epoch + offset)?
+            .unwrap_or_default();
+        total_active_voting_power.set(
+            storage,
+            active_val.checked_add(&delta).expect(
+                "Total active voting power updated amount should not overflow",
+            ),
+            current_epoch,
+            offset,
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Read PoS validator's email.

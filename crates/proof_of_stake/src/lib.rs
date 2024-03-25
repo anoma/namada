@@ -51,15 +51,15 @@ use crate::slashing::{
 };
 use crate::storage::{
     below_capacity_validator_set_handle, bond_handle,
-    consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    delegator_redelegated_unbonds_handle, get_last_reward_claim_epoch,
-    liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
-    read_consensus_validator_set_addresses, read_non_pos_owned_params,
-    read_pos_params, read_validator_last_slash_epoch,
-    read_validator_max_commission_rate_change, read_validator_stake,
-    total_bonded_handle, total_consensus_stake_handle, total_unbonded_handle,
-    try_insert_consensus_key, unbond_handle, update_total_deltas,
-    update_validator_deltas, validator_addresses_handle,
+    consensus_validator_set_handle, delegation_targets_handle,
+    delegator_redelegated_bonds_handle, delegator_redelegated_unbonds_handle,
+    get_last_reward_claim_epoch, liveness_missed_votes_handle,
+    liveness_sum_missed_votes_handle, read_consensus_validator_set_addresses,
+    read_non_pos_owned_params, read_pos_params,
+    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
+    read_validator_stake, total_bonded_handle, total_consensus_stake_handle,
+    total_unbonded_handle, try_insert_consensus_key, unbond_handle,
+    update_total_deltas, update_validator_deltas, validator_addresses_handle,
     validator_commission_rate_handle, validator_consensus_key_handle,
     validator_deltas_handle, validator_eth_cold_key_handle,
     validator_eth_hot_key_handle, validator_incoming_redelegations_handle,
@@ -160,7 +160,7 @@ where
 }
 
 /// Check if the provided address is a delegator address, optionally at a
-/// particular epoch
+/// particular epoch. Returns `false` if the address is a validator.
 pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
@@ -218,6 +218,7 @@ where
         "Bonding token amount {} at epoch {current_epoch}",
         amount.to_string_native()
     );
+    // No-op if the bond amount is 0
     if amount.is_zero() {
         return Ok(());
     }
@@ -264,14 +265,24 @@ where
         tracing::debug!("\nBonds after incrementing: {bonds:#?}");
     }
 
+    // Add the validator to the delegation targets
+    add_delegation_target(
+        storage,
+        &params,
+        source,
+        validator,
+        current_epoch + offset,
+        current_epoch,
+    )?;
+
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
-    let is_jailed_or_inactive_at_pipeline = matches!(
+    let is_jailed_or_inactive_at_offset = matches!(
         validator_state_handle.get(storage, offset_epoch, &params)?,
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_or_inactive_at_pipeline {
+    if !is_jailed_or_inactive_at_offset {
         update_validator_set(
             storage,
             &params,
@@ -298,6 +309,7 @@ where
         amount.change(),
         current_epoch,
         offset_opt,
+        !is_jailed_or_inactive_at_offset,
     )?;
 
     Ok(())
@@ -507,6 +519,17 @@ where
         bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
     }
 
+    // If the bond is now completely empty, remove the validator from the
+    // delegation targets
+    let bonds_total = bonds_handle
+        .get_sum(storage, pipeline_epoch, &params)?
+        .unwrap_or_default();
+    if bonds_total.is_zero() {
+        delegation_targets_handle(source)
+            .at(&pipeline_epoch)
+            .remove(storage, validator)?;
+    }
+
     // `updatedUnbonded`
     // Update the unbonds in storage using the eager map computed above
     if !is_redelegation {
@@ -680,6 +703,7 @@ where
         change_after_slashing,
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
@@ -1228,8 +1252,8 @@ where
         ));
     }
 
-    // If the address is not yet a validator, it cannot have self-bonds, but it
-    // may have delegations.
+    // The address may not have any bonds if it is going to be initialized as a
+    // validator
     if has_bonds(storage, address)? {
         return Err(namada_storage::Error::new_const(
             "The given address has delegations and therefore cannot become a \
@@ -2124,6 +2148,16 @@ where
         pipeline_epoch,
     )?;
 
+    // Add the dest validator to the delegation targets
+    add_delegation_target(
+        storage,
+        &params,
+        delegator,
+        dest_validator,
+        pipeline_epoch,
+        current_epoch,
+    )?;
+
     // Update validator set for dest validator
     let is_jailed_or_inactive_at_pipeline = matches!(
         validator_state_handle(dest_validator).get(
@@ -2159,6 +2193,7 @@ where
         amount_after_slashing.change(),
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     Ok(())
@@ -2485,6 +2520,10 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
+    use namada_core::chain::ProposalBytes;
+    use namada_core::hash::Hash;
+    use namada_core::time::DurationSecs;
+    use namada_parameters::{init_storage, EpochDuration};
     use namada_trans_token::credit_tokens;
 
     use super::*;
@@ -2568,6 +2607,27 @@ pub mod test_utils {
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;
         let params = read_non_pos_owned_params(storage, owned)?;
+        let chain_parameters = namada_parameters::Parameters {
+            max_tx_bytes: 123456789,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 2,
+                min_duration: DurationSecs(4),
+            },
+            max_expected_time_per_block: DurationSecs(2),
+            max_proposal_bytes: ProposalBytes::default(),
+            max_block_gas: 10000000,
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
+            implicit_vp_code_hash: Some(Hash::default()),
+            epochs_per_year: 10000000,
+            max_signatures_per_transaction: 15,
+            staked_ratio: Dec::new(2, 3).unwrap(),
+            pos_inflation_amount: token::Amount::from_u64(1000),
+            fee_unshielding_gas_limit: 10000,
+            fee_unshielding_descriptions_limit: 15,
+            minimum_gas_price: BTreeMap::new(),
+        };
+        init_storage(&chain_parameters, storage).unwrap();
         init_genesis_helper(storage, &params, validators, current_epoch)?;
         Ok(params)
     }
@@ -2869,5 +2929,25 @@ where
         prune_liveness_data(storage, current_epoch)?;
     }
 
+    Ok(())
+}
+
+fn add_delegation_target<S>(
+    storage: &mut S,
+    params: &PosParams,
+    delegator: &Address,
+    validator: &Address,
+    epoch: Epoch,
+    current_epoch: Epoch,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let bond_holders = delegation_targets_handle(delegator);
+    if bond_holders.get_data_handler().is_empty(storage)? {
+        bond_holders.init(storage, current_epoch)?;
+    }
+    bond_holders.update_data(storage, params, current_epoch)?;
+    bond_holders.at(&epoch).insert(storage, validator.clone())?;
     Ok(())
 }

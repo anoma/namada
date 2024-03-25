@@ -298,10 +298,13 @@ where
         // Update validator sets first because it needs to be able to read
         // validator stake before we make any changes to it
         for (&epoch, &slash_amount) in &slash_amounts {
-            let state = validator_state_handle(&validator)
-                .get(storage, epoch, &params)?
-                .unwrap();
-            if state != ValidatorState::Jailed {
+            let is_jailed_or_inactive = matches!(
+                validator_state_handle(&validator)
+                    .get(storage, epoch, &params)?
+                    .unwrap(),
+                ValidatorState::Jailed | ValidatorState::Inactive
+            );
+            if !is_jailed_or_inactive {
                 update_validator_set(
                     storage,
                     &params,
@@ -325,12 +328,20 @@ where
                 epoch,
                 Some(0),
             )?;
+
+            let is_jailed_or_inactive = matches!(
+                validator_state_handle(&validator)
+                    .get(storage, epoch, &params)?
+                    .unwrap(),
+                ValidatorState::Jailed | ValidatorState::Inactive
+            );
             update_total_deltas(
                 storage,
                 &params,
                 -slash_delta.change(),
                 epoch,
                 Some(0),
+                !is_jailed_or_inactive,
             )?;
         }
 

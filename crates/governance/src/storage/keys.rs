@@ -442,10 +442,10 @@ pub fn get_proposal_vote_prefix_key(id: u64) -> Key {
 pub fn get_vote_proposal_key(
     id: u64,
     voter_address: Address,
-    delegation_address: Address,
+    validator_address: Address,
 ) -> Key {
     get_proposal_vote_prefix_key(id)
-        .push(&delegation_address)
+        .push(&validator_address)
         .expect("Cannot obtain a storage key")
         .push(&voter_address)
         .expect("Cannot obtain a storage key")

@@ -83,7 +83,7 @@ router! {POS,
     ( "total_stake" / [epoch: opt Epoch] )
         -> token::Amount = total_stake,
 
-    ( "delegations" / [owner: Address] )
+    ( "delegations" / [owner: Address] / [epoch: opt Epoch] )
         -> HashSet<Address> = delegation_validators,
 
     ( "delegations_at" / [owner: Address] / [epoch: opt Epoch] )
@@ -570,12 +570,14 @@ where
 fn delegation_validators<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     owner: Address,
+    epoch: Option<Epoch>,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    find_delegation_validators(ctx.state, &owner)
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    find_delegation_validators(ctx.state, &owner, &epoch)
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
@@ -589,7 +591,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let epoch: Epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     find_delegations(ctx.state, &owner, &epoch)
 }
 

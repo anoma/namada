@@ -48,15 +48,14 @@ where
 
     let proposal_type_key = governance_keys::get_proposal_type_key(proposal_id);
     match data.r#type {
-        ProposalType::Default(Some(_)) => {
-            // Remove wasm code and write it under a different subkey
-            storage.write(&proposal_type_key, ProposalType::Default(None))?;
+        ProposalType::DefaultWithWasm(_) => {
+            storage.write(&proposal_type_key, data.r#type.clone())?;
             let proposal_code_key =
                 governance_keys::get_proposal_code_key(proposal_id);
-            let proposal_code = code
-                .clone()
-                .ok_or(Error::new_const("Missing proposal code"))?;
-            storage.write_bytes(&proposal_code_key, proposal_code)?
+
+            let proposal_code =
+                code.ok_or(Error::new_const("Missing proposal code"))?;
+            storage.write_bytes(&proposal_code_key, proposal_code)?;
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
     }
@@ -71,14 +70,6 @@ where
 
     let grace_epoch_key = governance_keys::get_grace_epoch_key(proposal_id);
     storage.write(&grace_epoch_key, data.grace_epoch)?;
-
-    if let ProposalType::Default(Some(_)) = data.r#type {
-        let proposal_code_key =
-            governance_keys::get_proposal_code_key(proposal_id);
-        let proposal_code =
-            code.ok_or(Error::new_const("Missing proposal code"))?;
-        storage.write_bytes(&proposal_code_key, proposal_code)?;
-    }
 
     storage.write(&counter_key, proposal_id + 1)?;
 
@@ -111,11 +102,11 @@ pub fn vote_proposal<S>(storage: &mut S, data: VoteProposalData) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    for delegation in data.delegations {
+    for validator in data.delegation_validators {
         let vote_key = governance_keys::get_vote_proposal_key(
             data.id,
             data.voter.clone(),
-            delegation,
+            validator,
         );
         storage.write(&vote_key, data.vote.clone())?;
     }
