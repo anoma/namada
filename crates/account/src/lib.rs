@@ -53,4 +53,9 @@ impl Account {
     ) -> Option<u8> {
         self.public_keys_map.get_index_from_public_key(public_key)
     }
+
+    /// Get all public keys of the account
+    pub fn get_all_public_keys(&self) -> Vec<common::PublicKey> {
+        self.public_keys_map.pk_to_idx.keys().cloned().collect()
+    }
 }
