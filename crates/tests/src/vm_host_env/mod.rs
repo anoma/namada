@@ -1327,13 +1327,21 @@ mod tests {
             .expect("sending a token failed");
 
         // Check
-        let env = tx_host_env::take();
+        let mut env = tx_host_env::take();
+        // The token must be part of the verifier set (checked by MultitokenVp)
+        env.verifiers.insert(ibc_token);
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check if the token was burned
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check the balance
         tx_host_env::set(env);
         let balance: Option<Amount> = tx_host_env::with(|env| {
@@ -1397,16 +1405,24 @@ mod tests {
             .expect("receiving the token failed");
 
         // Check
-        let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.is_ok());
-        // Check if the token was minted
+        let mut env = tx_host_env::take();
+        // The token must be part of the verifier set (checked by MultitokenVp)
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
+        env.verifiers.insert(ibc_token.clone());
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
+        // Check if the token was minted
         let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.is_ok());
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check the balance
         tx_host_env::set(env);
         let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);

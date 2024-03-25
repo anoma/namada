@@ -315,6 +315,11 @@ impl Address {
     pub fn is_implicit(&self) -> bool {
         matches!(self, Address::Implicit(_))
     }
+
+    /// If the address internal?
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Address::Internal(_))
+    }
 }
 
 impl string_encoding::Format for Address {
