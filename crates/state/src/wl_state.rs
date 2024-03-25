@@ -179,15 +179,23 @@ where
     /// to DB. Starts a new block write log.
     pub fn commit_block(&mut self) -> StorageResult<()> {
         if self.in_mem.last_epoch != self.in_mem.block.epoch {
+            tracing::info!("START `update_epoch_in_merkle_tree`");
             self.in_mem_mut()
                 .update_epoch_in_merkle_tree()
                 .into_storage_result()?;
+            tracing::info!("END `update_epoch_in_merkle_tree`");
         }
 
         let mut batch = D::batch();
+        tracing::info!("START `commit_write_log_block`");
         self.commit_write_log_block(&mut batch)
             .into_storage_result()?;
-        self.commit_block_from_batch(batch).into_storage_result()
+        tracing::info!("END `commit_write_log_block`");
+
+        tracing::info!("START `commit_block_from_batch`");
+        let res = self.commit_block_from_batch(batch).into_storage_result();
+        tracing::info!("END `commit_block_from_batch`");
+        res
     }
 
     /// Commit the current block's write log to the storage. Starts a new block
