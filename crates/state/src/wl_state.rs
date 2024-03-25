@@ -204,6 +204,7 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
+        tracing::info!("START FIRST LOOP `commit_write_log_block` len: {}", self.0.write_log.block_write_log.len());
         for (key, entry) in
             std::mem::take(&mut self.0.write_log.block_write_log).into_iter()
         {
@@ -221,8 +222,10 @@ where
                 StorageModification::Temp { .. } => {}
             }
         }
+        tracing::info!("DONE FIRST LOOP `commit_write_log_block` len: {}", self.0.write_log.block_write_log.len());
         debug_assert!(self.0.write_log.block_write_log.is_empty());
 
+        tracing::info!("START SECOND LOOP `commit_write_log_block` len: {}", self.0.write_log.replay_protection.len());
         // Replay protections specifically
         for (hash, entry) in
             std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
@@ -254,6 +257,7 @@ where
                 }
             }
         }
+        tracing::info!("DONE SECOND LOOP `commit_write_log_block` len: {}", self.0.write_log.replay_protection.len());
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
         if let Some(address_gen) = self.0.write_log.address_gen.take() {
