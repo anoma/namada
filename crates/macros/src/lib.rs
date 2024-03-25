@@ -142,7 +142,7 @@ pub fn validity_predicate(
 
         #(#attrs)* #vis #sig {
             // Consume the whitelisted gas
-            #ctx.charge_gas(#gas)?;
+            #ctx.charge_gas(#gas).into_vp_error()?;
             #(#stmts)*
         }
 
@@ -198,10 +198,11 @@ pub fn validity_predicate(
             // run validation with the concrete type(s)
             match #ident(&ctx, tx_data, addr, keys_changed, verifiers)
             {
-                Ok(true) => 1,
-                Ok(false) => 0,
+                Ok(()) => 1,
                 Err(err) => {
-                    namada_vp_prelude::debug_log!("Validity predicate error: {}", err);
+                    namada_vp_prelude::debug_log!("Validity predicate error: {err}");
+                    let err = err.serialize_to_vec();
+                    ctx.yield_value(err);
                     0
                 },
             }

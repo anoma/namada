@@ -6,9 +6,9 @@ use std::fmt::Debug;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
@@ -62,8 +62,8 @@ pub enum Error {
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
     FeeError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
     #[error(
         "The decrypted transaction {0} has already been applied in this block"
     )]
@@ -854,27 +854,25 @@ where
                     )
                     .map_err(|err| match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
-                        wasm::run::Error::InvalidTxSignature => {
-                            Error::InvalidTxSignature
+                        wasm::run::Error::InvalidSectionSignature(msg) => {
+                            Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
                     })
                 }
                 Address::Internal(internal_addr) => {
-                    let sentinel = RefCell::new(VpSentinel::default());
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
                         tx,
                         tx_index,
                         &gas_meter,
-                        &sentinel,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
 
-                    let accepted: Result<bool> = match internal_addr {
+                    match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
                             pos.validate_tx(tx, &keys_changed, &verifiers)
@@ -930,62 +928,55 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::NutNativeVpError)
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_) => {
+                        internal_addr @ (InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_)) => {
                             // The address should be a part of a multitoken
                             // key
-                            Ok(verifiers.contains(&Address::Internal(
-                                InternalAddress::Multitoken,
-                            )))
+                            verifiers
+                                .contains(&Address::Internal(
+                                    InternalAddress::Multitoken,
+                                ))
+                                .ok_or_else(|| {
+                                    Error::AccessForbidden(
+                                        internal_addr.clone(),
+                                    )
+                                })
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
-                    };
-
-                    accepted.map_err(|err| {
-                        // No need to check invalid sig because internal vps
-                        // don't check the signature
-                        if sentinel.borrow().is_out_of_gas() {
-                            Error::GasError(err.to_string())
-                        } else {
-                            err
-                        }
-                    })
+                    }
                 }
             };
 
             match accept {
-                Ok(accepted) => {
-                    if accepted {
-                        result.accepted_vps.insert(addr.clone());
-                    } else {
-                        result.rejected_vps.insert(addr.clone());
-                    }
+                Ok(()) => {
+                    result.accepted_vps.insert(addr.clone());
                 }
-                Err(err) => match err {
-                    // Execution of VPs can (and must) be short-circuited
-                    // only in case of a gas overflow to prevent the
-                    // transaction from consuming resources that have not
-                    // been acquired in the corresponding wrapper tx. For
-                    // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult across all
-                    // nodes and find any invalid signatures
-                    Error::GasError(_) => {
-                        return Err(err);
+                Err(err) => {
+                    match err {
+                        // Execution of VPs can (and must) be short-circuited
+                        // only in case of a gas overflow to prevent the
+                        // transaction from consuming resources that have not
+                        // been acquired in the corresponding wrapper tx. For
+                        // all the other errors we keep evaluating the vps. This
+                        // allows to display a consistent VpsResult across all
+                        // nodes and find any invalid signatures
+                        Error::GasError(_) => {
+                            return Err(err);
+                        }
+                        Error::InvalidSectionSignature(_) => {
+                            // required by replay protection
+                            result.invalid_sig = true;
+                        }
+                        _ => {}
                     }
-                    Error::InvalidTxSignature => {
-                        result.invalid_sig = true;
-                        result.rejected_vps.insert(addr.clone());
-                        // Don't push the error since this is just a flag error
-                    }
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                    }
-                },
+
+                    result.rejected_vps.insert(addr.clone());
+                    result.errors.push((addr.clone(), err.to_string()));
+                }
             }
 
             result

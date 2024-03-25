@@ -3946,7 +3946,6 @@ dependencies = [
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
- "once_cell",
  "proptest",
  "test-log",
  "tracing",

@@ -161,7 +161,7 @@ fn vp_user(c: &mut Criterion) {
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
                     )
-                    .unwrap(),
+                    .is_ok(),
                     "VP \"{bench_name}\" bench call failed"
                 );
             })
@@ -307,7 +307,7 @@ fn vp_implicit(c: &mut Criterion) {
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -459,7 +459,7 @@ fn vp_validator(c: &mut Criterion) {
                         &verifiers,
                         shell.vp_wasm_cache.clone(),
                     )
-                    .unwrap()
+                    .is_ok()
                 );
             })
         });
