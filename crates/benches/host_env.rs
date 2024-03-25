@@ -5,7 +5,7 @@ use namada::core::account::AccountPublicKeysMap;
 use namada::core::address;
 use namada::ledger::storage::DB;
 use namada::token::{Amount, Transfer};
-use namada::tx::Signature;
+use namada::tx::Authorization;
 use namada::vm::wasm::TxCache;
 use namada_apps::bench_utils::{
     BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
@@ -39,7 +39,7 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         defaults::albert_keypair().to_public()
     ]);
 
-    let multisig = Signature::new(
+    let multisig = Authorization::new(
         vec![section_hash],
         pkim.index_secret_keys(vec![defaults::albert_keypair()]),
         None,

@@ -50,7 +50,7 @@ use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::{pos, ResultCode, TxResult};
-pub use namada_tx::{Signature, *};
+pub use namada_tx::{Authorization, *};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;

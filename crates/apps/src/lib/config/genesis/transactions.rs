@@ -802,7 +802,7 @@ impl<T> Signed<T> {
             .sections
             .into_iter()
             .find_map(|sec| {
-                if let Section::Signature(signatures) = sec {
+                if let Section::Authorization(signatures) = sec {
                     if [raw_header_hash] == signatures.targets.as_slice() {
                         Some(signatures)
                     } else {

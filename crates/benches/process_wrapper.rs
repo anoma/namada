@@ -5,7 +5,7 @@ use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
-use namada::tx::Signature;
+use namada::tx::Authorization;
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
@@ -46,7 +46,7 @@ fn process_tx(c: &mut Criterion) {
             None,
         ),
     )));
-    tx.add_section(namada::tx::Section::Signature(Signature::new(
+    tx.add_section(namada::tx::Section::Authorization(Authorization::new(
         tx.sechashes(),
         [(0, defaults::albert_keypair())].into_iter().collect(),
         None,

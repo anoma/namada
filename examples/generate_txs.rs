@@ -31,7 +31,7 @@ async fn main() -> Result<(), Reason> {
     }
     let args: Vec<_> = std::env::args().collect();
     if args.len() < 3 {
-        eprintln!("Usage: namada-generator <vectors.json> <debugs.txt>");
+        eprintln!("Usage: generate-txs <vectors.json> <debugs.txt>");
         return Result::Err(Reason::from("Incorrect command line arguments."));
     }
     let json = serde_json::to_string(&test_vectors)

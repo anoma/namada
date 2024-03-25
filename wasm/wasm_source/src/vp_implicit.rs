@@ -290,7 +290,7 @@ mod tests {
     use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::TxType;
-    use namada::tx::{Code, Data, Signature};
+    use namada::tx::{Authorization, Code, Data};
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -638,7 +638,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
@@ -768,7 +768,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
@@ -933,7 +933,7 @@ mod tests {
             let mut tx = vp_env.tx.clone();
             tx.set_data(Data::new(vec![]));
             tx.set_code(Code::new(vec![], None));
-            tx.add_section(Section::Signature(Signature::new(
+            tx.add_section(Section::Authorization(Authorization::new(
                 vec![tx.raw_header_hash()],
                 pks_map.index_secret_keys(vec![secret_key]),
                 None,

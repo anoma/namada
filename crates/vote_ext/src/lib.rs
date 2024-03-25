@@ -14,7 +14,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
-use namada_tx::{Signature, Signed, Tx, TxError};
+use namada_tx::{Authorization, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
@@ -151,11 +151,13 @@ impl EthereumTxData {
             })));
         outer_tx.header.chain_id = chain_id;
         outer_tx.set_data(namada_tx::Data::new(tx_data));
-        outer_tx.add_section(namada_tx::Section::Signature(Signature::new(
-            outer_tx.sechashes(),
-            [(0, signing_key.clone())].into_iter().collect(),
-            None,
-        )));
+        outer_tx.add_section(namada_tx::Section::Authorization(
+            Authorization::new(
+                outer_tx.sechashes(),
+                [(0, signing_key.clone())].into_iter().collect(),
+                None,
+            ),
+        ));
         outer_tx
     }
 
