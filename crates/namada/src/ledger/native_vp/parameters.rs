@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use namada_core::address::Address;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_tx::Tx;
@@ -14,8 +15,8 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
+    #[error("Parameters VP error: Native VP error: {0}")]
+    NativeVpError(#[from] native_vp::Error),
 }
 
 /// Parameters functions result
@@ -43,13 +44,16 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
-        let result = keys_changed.iter().all(|key| {
+    ) -> Result<()> {
+        keys_changed.iter().try_for_each(|key| {
             let key_type: KeyType = key.into();
             let data = if let Some(data) = tx_data.data() {
                 data
             } else {
-                return false;
+                return Err(native_vp::Error::new_const(
+                    "Token parameter changes require tx data to be present",
+                )
+                .into());
             };
             match key_type {
                 KeyType::PARAMETER => {
@@ -57,19 +61,26 @@ where
                         &self.ctx.pre(),
                         &data,
                     )
-                    .unwrap_or(false)
+                    .map_err(Error::NativeVpError)?
+                    .ok_or_else(|| {
+                        native_vp::Error::new_alloc(format!(
+                            "Attempted to change a protocol parameter from \
+                             outside of a governance proposal, or from a \
+                             non-accepted governance proposal: {key}",
+                        ))
+                        .into()
+                    })
                 }
-                KeyType::UNKNOWN_PARAMETER => false,
-                KeyType::UNKNOWN => true,
+                KeyType::UNKNOWN_PARAMETER => {
+                    Err(native_vp::Error::new_alloc(format!(
+                        "Attempted to change an unknown protocol parameter: \
+                         {key}",
+                    ))
+                    .into())
+                }
+                KeyType::UNKNOWN => Ok(()),
             }
-        });
-        Ok(result)
-    }
-}
-
-impl From<native_vp::Error> for Error {
-    fn from(err: native_vp::Error) -> Self {
-        Self::NativeVpError(err)
+        })
     }
 }
 

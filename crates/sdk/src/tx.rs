@@ -481,9 +481,11 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
                 .collect();
             edisplay_line!(
                 context.io(),
-                "Transaction was rejected by VPs: {}.\nChanged keys: {}",
+                "Transaction was rejected by VPs: {}\nErrors: {}\nChanged \
+                 keys: {}",
                 serde_json::to_string_pretty(&inner.vps_result.rejected_vps)
                     .unwrap(),
+                serde_json::to_string_pretty(&inner.vps_result.errors).unwrap(),
                 serde_json::to_string_pretty(&changed_keys).unwrap(),
             );
         }

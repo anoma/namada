@@ -12,10 +12,8 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use borsh::BorshDeserialize;
-use eyre::WrapErr;
 use namada_core::storage;
 use namada_core::storage::Epochs;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::GasMetering;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
@@ -48,7 +46,7 @@ pub trait NativeVp {
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> std::result::Result<bool, Self::Error>;
+    ) -> std::result::Result<(), Self::Error>;
 }
 
 /// A validity predicate's host context.
@@ -68,8 +66,6 @@ where
     pub iterators: RefCell<PrefixIterators<'a, <S as StateRead>::D>>,
     /// VP gas meter.
     pub gas_meter: &'a RefCell<VpGasMeter>,
-    /// Errors sentinel
-    pub sentinel: &'a RefCell<VpSentinel>,
     /// Read-only state access.
     pub state: &'a S,
     /// The transaction code is used for signature verification
@@ -125,7 +121,6 @@ where
         tx: &'a Tx,
         tx_index: &'a TxIndex,
         gas_meter: &'a RefCell<VpGasMeter>,
-        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
         #[cfg(feature = "wasm-runtime")]
@@ -136,7 +131,6 @@ where
             state,
             iterators: RefCell::new(PrefixIterators::default()),
             gas_meter,
-            sentinel,
             tx,
             tx_index,
             keys_changed,
@@ -173,23 +167,13 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_pre(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
-        vp_host_fns::has_key_pre(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::has_key_pre(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -201,7 +185,6 @@ where
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -213,12 +196,8 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<<S as StateRead>::D>(
-            self.ctx.gas_meter,
-            iter,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
@@ -269,23 +248,13 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_post(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
-        vp_host_fns::has_key_post(
-            self.ctx.gas_meter,
-            self.ctx.state,
-            key,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::has_key_post(self.ctx.gas_meter, self.ctx.state, key)
+            .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -297,7 +266,6 @@ where
             self.ctx.state.write_log(),
             self.ctx.state.db(),
             prefix,
-            self.ctx.sentinel,
         )
         .into_storage_result()
     }
@@ -309,12 +277,8 @@ where
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
     ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
-        vp_host_fns::iter_next::<<S as StateRead>::D>(
-            self.ctx.gas_meter,
-            iter,
-            self.ctx.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
+            .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
@@ -374,7 +338,7 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<T>, state::StorageError> {
-        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+        vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
             .into_storage_result()
     }
@@ -383,17 +347,17 @@ where
         &self,
         key: &Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
-        vp_host_fns::read_temp(self.gas_meter, self.state, key, self.sentinel)
+        vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .into_storage_result()
     }
 
     fn get_chain_id(&self) -> Result<String, state::StorageError> {
-        vp_host_fns::get_chain_id(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_chain_id(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
-        vp_host_fns::get_block_height(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_height(self.gas_meter, self.state)
             .into_storage_result()
     }
 
@@ -401,37 +365,32 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<Option<Header>, state::StorageError> {
-        vp_host_fns::get_block_header(
-            self.gas_meter,
-            self.state,
-            height,
-            self.sentinel,
-        )
-        .into_storage_result()
+        vp_host_fns::get_block_header(self.gas_meter, self.state, height)
+            .into_storage_result()
     }
 
     fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        vp_host_fns::get_block_hash(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_hash(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
-        vp_host_fns::get_block_epoch(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_block_epoch(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
-        vp_host_fns::get_tx_index(self.gas_meter, self.tx_index, self.sentinel)
+        vp_host_fns::get_tx_index(self.gas_meter, self.tx_index)
             .into_storage_result()
     }
 
     fn get_native_token(&self) -> Result<Address, state::StorageError> {
-        vp_host_fns::get_native_token(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_native_token(self.gas_meter, self.state)
             .into_storage_result()
     }
 
     fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
-        vp_host_fns::get_pred_epochs(self.gas_meter, self.state, self.sentinel)
+        vp_host_fns::get_pred_epochs(self.gas_meter, self.state)
             .into_storage_result()
     }
 
@@ -452,7 +411,6 @@ where
             self.state.write_log(),
             self.state.db(),
             prefix,
-            self.sentinel,
         )
         .into_storage_result()
     }
@@ -461,7 +419,7 @@ where
         &self,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool, state::StorageError> {
+    ) -> Result<(), state::StorageError> {
         #[cfg(feature = "wasm-runtime")]
         {
             use std::marker::PhantomData;
@@ -478,6 +436,7 @@ where
             let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
                 PrefixIterators::default();
             let mut result_buffer: Option<Vec<u8>> = None;
+            let mut yielded_value: Option<Vec<u8>> = None;
             let mut vp_wasm_cache = self.vp_wasm_cache.clone();
 
             let ctx = VpCtx::new(
@@ -486,27 +445,24 @@ where
                 self.state.in_mem(),
                 self.state.db(),
                 self.gas_meter,
-                self.sentinel,
                 self.tx,
                 self.tx_index,
                 &mut iterators,
                 self.verifiers,
                 &mut result_buffer,
+                &mut yielded_value,
                 self.keys_changed,
                 &eval_runner,
                 &mut vp_wasm_cache,
             );
-            match eval_runner.eval_native_result(ctx, vp_code_hash, input_data)
-            {
-                Ok(result) => Ok(result),
-                Err(err) => {
+            eval_runner
+                .eval_native_result(ctx, vp_code_hash, input_data)
+                .inspect_err(|err| {
                     tracing::warn!(
-                        "VP eval from a native VP failed with: {}",
-                        err
+                        "VP eval from a native VP failed with: {err}",
                     );
-                    Ok(false)
-                }
-            }
+                })
+                .into_storage_result()
         }
 
         #[cfg(not(feature = "wasm-runtime"))]
@@ -527,7 +483,7 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
-        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx, self.sentinel)
+        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx)
             .into_storage_result()
     }
 
@@ -571,25 +527,12 @@ where
 /// A convenience trait for reading and automatically deserializing a value from
 /// storage
 pub trait StorageReader {
-    /// If `maybe_bytes` is not empty, return an `Option<T>` containing the
-    /// deserialization of the bytes inside `maybe_bytes`.
-    fn deserialize_if_present<T: BorshDeserialize>(
-        maybe_bytes: Option<Vec<u8>>,
-    ) -> eyre::Result<Option<T>> {
-        maybe_bytes
-            .map(|ref bytes| {
-                T::try_from_slice(bytes)
-                    .wrap_err_with(|| "couldn't deserialize".to_string())
-            })
-            .transpose()
-    }
-
     /// Storage read prior state (before tx execution). It will try to read from
     /// the storage.
     fn read_pre_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> eyre::Result<Option<T>>;
+    ) -> Result<Option<T>, state::StorageError>;
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
@@ -597,7 +540,35 @@ pub trait StorageReader {
     fn read_post_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> eyre::Result<Option<T>>;
+    ) -> Result<Option<T>, state::StorageError>;
+
+    /// Calls `read_pre_value`, and returns an error on `Ok(None)`.
+    fn must_read_pre_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> Result<T, state::StorageError> {
+        match self.read_pre_value(key) {
+            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+                "Expected a value to be present in the key {key}"
+            ))),
+            Ok(Some(x)) => Ok(x),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Calls `read_post_value`, and returns an error on `Ok(None)`.
+    fn must_read_post_value<T: BorshDeserialize>(
+        &self,
+        key: &Key,
+    ) -> Result<T, state::StorageError> {
+        match self.read_post_value(key) {
+            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+                "Expected a value to be present in the key {key}"
+            ))),
+            Ok(Some(x)) => Ok(x),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 impl<'a, S, CA> StorageReader for &Ctx<'a, S, CA>
@@ -607,24 +578,26 @@ where
 {
     /// Helper function. After reading posterior state,
     /// borsh deserialize to specified type
-    fn read_post_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    fn read_post_value<T>(
+        &self,
+        key: &Key,
+    ) -> Result<Option<T>, state::StorageError>
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_bytes_post(self, key)
-            .wrap_err_with(|| format!("couldn't read_bytes_post {}", key))?;
-        Self::deserialize_if_present(maybe_bytes)
+        Ctx::read_post(self, key)
     }
 
     /// Helper function. After reading prior state,
     /// borsh deserialize to specified type
-    fn read_pre_value<T>(&self, key: &Key) -> eyre::Result<Option<T>>
+    fn read_pre_value<T>(
+        &self,
+        key: &Key,
+    ) -> Result<Option<T>, state::StorageError>
     where
         T: BorshDeserialize,
     {
-        let maybe_bytes = Ctx::read_bytes_pre(self, key)
-            .wrap_err_with(|| format!("couldn't read_bytes_pre {}", key))?;
-        Self::deserialize_if_present(maybe_bytes)
+        Ctx::read_pre(self, key)
     }
 }
 
@@ -644,23 +617,21 @@ pub(super) mod testing {
         fn read_pre_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> eyre::Result<Option<T>> {
-            let bytes = match self.pre.get(key) {
-                Some(bytes) => bytes.to_owned(),
-                None => return Ok(None),
-            };
-            Self::deserialize_if_present(Some(bytes))
+        ) -> Result<Option<T>, state::StorageError> {
+            self.pre
+                .get(key)
+                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
+                .transpose()
         }
 
         fn read_post_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> eyre::Result<Option<T>> {
-            let bytes = match self.post.get(key) {
-                Some(bytes) => bytes.to_owned(),
-                None => return Ok(None),
-            };
-            Self::deserialize_if_present(Some(bytes))
+        ) -> Result<Option<T>, state::StorageError> {
+            self.post
+                .get(key)
+                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
+                .transpose()
         }
     }
 }

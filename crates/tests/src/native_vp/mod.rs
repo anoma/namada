@@ -10,7 +10,6 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::native_vp::{Ctx, NativeVp};
 use namada::state::testing::TestState;
 use namada::vm::WasmCacheRwAccess;
-use namada_core::validity_predicate::VpSentinel;
 
 use crate::tx::TestTxEnv;
 
@@ -45,9 +44,8 @@ impl TestNativeVpEnv {
     pub fn validate_tx<'a, T>(
         &'a self,
         gas_meter: &'a RefCell<VpGasMeter>,
-        sentinel: &'a RefCell<VpSentinel>,
         init_native_vp: impl Fn(NativeVpCtx<'a>) -> T,
-    ) -> Result<bool, <T as NativeVp>::Error>
+    ) -> Result<(), <T as NativeVp>::Error>
     where
         T: NativeVp,
     {
@@ -57,7 +55,6 @@ impl TestNativeVpEnv {
             &self.tx_env.tx,
             &self.tx_env.tx_index,
             gas_meter,
-            sentinel,
             &self.keys_changed,
             &self.verifiers,
             self.tx_env.vp_wasm_cache.clone(),

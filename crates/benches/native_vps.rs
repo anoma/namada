@@ -46,7 +46,6 @@ use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
-use namada::validity_predicate::VpSentinel;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -200,7 +199,6 @@ fn governance(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let governance = GovernanceVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Governance),
@@ -208,7 +206,6 @@ fn governance(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -224,7 +221,7 @@ fn governance(c: &mut Criterion) {
                             governance.ctx.keys_changed,
                             governance.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
@@ -376,7 +373,6 @@ fn ibc(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
@@ -384,7 +380,6 @@ fn ibc(c: &mut Criterion) {
                 signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -399,7 +394,7 @@ fn ibc(c: &mut Criterion) {
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -444,7 +439,6 @@ fn vp_multitoken(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let multitoken = MultitokenVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Multitoken),
@@ -452,7 +446,6 @@ fn vp_multitoken(c: &mut Criterion) {
                 signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -468,7 +461,7 @@ fn vp_multitoken(c: &mut Criterion) {
                             multitoken.ctx.keys_changed,
                             multitoken.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
@@ -558,7 +551,6 @@ fn masp(c: &mut Criterion) {
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
             ));
-            let sentinel = RefCell::new(VpSentinel::default());
             let masp = MaspVp {
                 ctx: Ctx::new(
                     &Address::Internal(InternalAddress::Masp),
@@ -566,7 +558,6 @@ fn masp(c: &mut Criterion) {
                     &signed_tx,
                     &TxIndex(0),
                     &gas_meter,
-                    &sentinel,
                     &keys_changed,
                     &verifiers,
                     shielded_ctx.shell.vp_wasm_cache.clone(),
@@ -580,7 +571,7 @@ fn masp(c: &mut Criterion) {
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 );
             })
         });
@@ -675,7 +666,6 @@ fn pgf(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let pgf = PgfVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Pgf),
@@ -683,7 +673,6 @@ fn pgf(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -698,7 +687,7 @@ fn pgf(c: &mut Criterion) {
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -749,7 +738,6 @@ fn eth_bridge_nut(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let nut = NonUsableTokens {
         ctx: Ctx::new(
             &vp_address,
@@ -757,7 +745,6 @@ fn eth_bridge_nut(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -772,7 +759,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .unwrap()
+                .is_ok()
             )
         })
     });
@@ -819,7 +806,6 @@ fn eth_bridge(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let eth_bridge = EthBridge {
         ctx: Ctx::new(
             &vp_address,
@@ -827,7 +813,6 @@ fn eth_bridge(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -843,7 +828,7 @@ fn eth_bridge(c: &mut Criterion) {
                         eth_bridge.ctx.keys_changed,
                         eth_bridge.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
             )
         })
     });
@@ -915,7 +900,6 @@ fn eth_bridge_pool(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let bridge_pool = BridgePoolVp {
         ctx: Ctx::new(
             &vp_address,
@@ -923,7 +907,6 @@ fn eth_bridge_pool(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -939,7 +922,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
                         bridge_pool.ctx.keys_changed,
                         bridge_pool.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
             )
         })
     });
@@ -988,7 +971,6 @@ fn parameters(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let parameters = ParametersVp {
             ctx: Ctx::new(
                 &vp_address,
@@ -996,7 +978,6 @@ fn parameters(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1012,7 +993,7 @@ fn parameters(c: &mut Criterion) {
                             parameters.ctx.keys_changed,
                             parameters.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
@@ -1064,7 +1045,6 @@ fn pos(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let pos = PosVP {
             ctx: Ctx::new(
                 &vp_address,
@@ -1072,7 +1052,6 @@ fn pos(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1087,7 +1066,7 @@ fn pos(c: &mut Criterion) {
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -1166,7 +1145,6 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
@@ -1174,7 +1152,6 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
                 signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1266,7 +1243,6 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
@@ -1274,7 +1250,6 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
                 signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
