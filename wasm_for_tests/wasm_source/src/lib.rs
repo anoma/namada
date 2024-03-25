@@ -59,10 +59,8 @@ pub mod main {
 
     #[transaction]
     fn apply_tx(_ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
-        let mut _a = 0u64;
-        loop {
-            _a += 1;
-        }
+        #[allow(clippy::empty_loop)]
+        loop {}
     }
 }
 
@@ -330,9 +328,7 @@ pub mod main {
         _keys_changed: BTreeSet<storage::Key>,
         _verifiers: BTreeSet<Address>,
     ) -> VpResult {
-        let mut _a = 0u64;
-        loop {
-            _a += 1;
-        }
+        #[allow(clippy::empty_loop)]
+        loop {}
     }
 }
