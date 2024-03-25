@@ -798,7 +798,7 @@ impl<'a> Client for &'a MockNode {
         }
         // TODO: Figure out why this is necessary and fix it properly
         // TODO: causes `implicit_account_reveal_pk` and
-        // `ledger_txs_and_queries` TODO: to fail if absent.
+        // TODO: `ledger_txs_and_queries` to fail if absent.
         std::thread::sleep(std::time::Duration::from_secs(2));
         let (proposer_address, _) = self.prepare_request();
         let req = RequestPrepareProposal {
