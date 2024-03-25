@@ -644,8 +644,8 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(empty_code, tx).unwrap();
-        assert!(!result);
+        let result = vp::CTX.eval(empty_code, tx);
+        assert!(result.is_err());
 
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
@@ -663,8 +663,8 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(code_hash, tx).unwrap();
-        assert!(result);
+        let result = vp::CTX.eval(code_hash, tx);
+        assert!(result.is_ok());
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
@@ -683,8 +683,8 @@ mod tests {
             .add_serialized_data(input_data)
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
-        let result = vp::CTX.eval(code_hash, tx).unwrap();
-        assert!(!result);
+        let result = vp::CTX.eval(code_hash, tx);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -717,7 +717,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -750,7 +750,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -790,7 +790,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -823,7 +823,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -864,7 +864,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -897,7 +897,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -940,7 +940,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -973,7 +973,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1016,7 +1016,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -1050,7 +1050,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1151,7 +1151,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1201,7 +1201,7 @@ mod tests {
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was escrowed
         let escrow = token::storage_key::balance_key(
             &token,
@@ -1209,7 +1209,7 @@ mod tests {
         );
         let token_vp_result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(token_vp_result.expect("token validation failed unexpectedly"));
+        assert!(token_vp_result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -1248,7 +1248,7 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let balance_key = token::storage_key::balance_key(&token, &sender);
@@ -1329,11 +1329,11 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was burned
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let balance: Option<Amount> = tx_host_env::with(|env| {
@@ -1399,14 +1399,14 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was minted
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
         let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
@@ -1474,7 +1474,7 @@ mod tests {
         // Check if the transaction is valid
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the ack has an error due to the invalid packet data
         tx_host_env::set(env);
         let ack_key = ibc_storage::ack_key(&port_id, &channel_id, sequence);
@@ -1566,11 +1566,11 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was unescrowed
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let key = token::storage_key::balance_key(&token, &receiver);
@@ -1664,11 +1664,11 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was unescrowed
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         // without the source trace path
@@ -1761,14 +1761,14 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
         let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1847,13 +1847,13 @@ mod tests {
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
         let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 }

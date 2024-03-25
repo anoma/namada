@@ -788,7 +788,6 @@ mod test_finalize_block {
         liveness_missed_votes_handle, liveness_sum_missed_votes_handle,
         read_consensus_validator_set_addresses,
     };
-    use namada_sdk::validity_predicate::VpSentinel;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
     use test_log::test;
@@ -4912,23 +4911,22 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),
             &tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
         );
         let parameters = ParametersVp { ctx };
-        let result = parameters
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("Test failed");
-        assert!(result);
+        assert!(
+            parameters
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .is_ok()
+        );
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
