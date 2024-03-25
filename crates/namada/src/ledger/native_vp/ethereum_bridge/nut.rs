@@ -2,14 +2,13 @@
 
 use std::collections::BTreeSet;
 
-use eyre::WrapErr;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::token::storage_key::is_any_token_balance_key;
 use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
@@ -17,7 +16,7 @@ use crate::vm::WasmCacheAccess;
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct Error(#[from] eyre::Report);
+pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for non-usable tokens.
 ///
@@ -72,13 +71,11 @@ where
             let pre: Amount = self
                 .ctx
                 .read_pre(changed_key)
-                .context("Reading pre amount failed")
                 .map_err(Error)?
                 .unwrap_or_default();
             let post: Amount = self
                 .ctx
                 .read_post(changed_key)
-                .context("Reading post amount failed")
                 .map_err(Error)?
                 .unwrap_or_default();
 

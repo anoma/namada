@@ -1,7 +1,6 @@
 //! Parameters for configuring the Ethereum bridge
 use std::num::NonZeroU64;
 
-use eyre::{eyre, Result};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ethereum_structs;
@@ -11,7 +10,7 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_storage::{StorageRead, StorageWrite};
+use namada_storage::{Error, Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
 use super::whitelist;
@@ -332,17 +331,10 @@ where
     S: StorageRead,
 {
     let native_erc20 = bridge_storage::native_erc20_key();
-    match StorageRead::read(storage, &native_erc20) {
-        Ok(Some(eth_address)) => Ok(eth_address),
-        Ok(None) => {
-            Err(eyre!("The Ethereum bridge storage is not initialized"))
-        }
-        Err(e) => Err(eyre!(
-            "Failed to read storage when fetching the native ERC20 address \
-             with: {}",
-            e.to_string()
-        )),
-    }
+
+    storage.read(&native_erc20)?.ok_or_else(|| {
+        Error::SimpleMessage("The Ethereum bridge storage is not initialized")
+    })
 }
 
 /// Reads the value of `key` from `storage` and deserializes it, or panics
@@ -371,6 +363,7 @@ where
 #[cfg(test)]
 mod tests {
     use namada_state::testing::TestState;
+    use namada_storage::ResultExt;
 
     use super::*;
 
@@ -391,8 +384,9 @@ mod tests {
                 },
             },
         };
-        let serialized = toml::to_string(&config)?;
-        let deserialized: EthereumBridgeParams = toml::from_str(&serialized)?;
+        let serialized = toml::to_string(&config).into_storage_result()?;
+        let deserialized: EthereumBridgeParams =
+            toml::from_str(&serialized).into_storage_result()?;
 
         assert_eq!(config, deserialized);
         Ok(())

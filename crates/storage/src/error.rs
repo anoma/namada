@@ -9,6 +9,8 @@ pub enum Error {
     #[error("{0}")]
     SimpleMessage(&'static str),
     #[error("{0}")]
+    AllocMessage(String),
+    #[error("{0}")]
     Custom(CustomError),
     #[error("{0}: {1}")]
     CustomWithMessage(&'static str, CustomError),
