@@ -15,7 +15,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     })?;
     let transfer = PendingTransfer::try_from_slice(&data[..])
         .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
-    log_string("Received transfer to add to pool.");
+    debug_log!("Received transfer to add to Bridge pool");
     // pay the gas fees
     let GasFee {
         token: ref fee_token_addr,
@@ -29,7 +29,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         fee_token_addr,
         amount,
     )?;
-    log_string("Token transfer succeeded.");
+    debug_log!("Bridge pool token transfer succeeded");
     let TransferToEthereum {
         asset,
         ref sender,
@@ -57,7 +57,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
             amount,
         )?;
     }
-    log_string("Escrow succeeded");
+    debug_log!("Bridge pool escrow succeeded");
     // add transfer into the pool
     let pending_key = get_pending_key(&transfer);
     ctx.write(&pending_key, transfer)
@@ -66,11 +66,11 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
 }
 
 fn native_erc20_address(ctx: &mut Ctx) -> EnvResult<EthAddress> {
-    log_string("Trying to get wnam key");
+    debug_log!("Trying to get wnam key for Bridge pool transfer");
     let addr = ctx
-        .read_bytes(&native_erc20_key())
-        .map_err(|e| Error::wrap("Could not read wNam key from storage", e))?
-        .unwrap();
-    log_string("Got wnam key");
-    Ok(BorshDeserialize::try_from_slice(addr.as_slice()).unwrap())
+        .read(&native_erc20_key())
+        .wrap_err("Could not read wrapped NAM address")?
+        .ok_or_err_msg("Wrapped NAM address must be present in storage")?;
+    debug_log!("Got wnam key for Bridge pool transfer: {addr}");
+    Ok(addr)
 }

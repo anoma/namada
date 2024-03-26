@@ -11,6 +11,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let validator = Address::try_from_slice(&data[..])
-        .wrap_err("failed to decode an Address")?;
+        .wrap_err("Failed to decode the address of the validator to unjail")?;
     ctx.unjail_validator(&validator)
+        .wrap_err("Failed to unjail validator")
 }

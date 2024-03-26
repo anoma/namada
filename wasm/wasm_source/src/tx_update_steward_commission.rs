@@ -11,9 +11,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let steward_commission = UpdateStewardCommission::try_from_slice(&data[..])
-        .wrap_err("failed to decode an UpdateStewardCommission")?;
+        .wrap_err("Failed to decode an UpdateStewardCommission tx data")?;
 
-    pgf::update_steward_commission(ctx, steward_commission)?;
+    pgf::update_steward_commission(ctx, steward_commission)
+        .wrap_err("Failed to update steward commission rate")?;
 
     Ok(())
 }

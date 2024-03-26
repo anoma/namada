@@ -14,8 +14,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         validator,
         new_rate,
     } = transaction::pos::CommissionChange::try_from_slice(&data[..])
-        .wrap_err("failed to decode Dec value")?;
+        .wrap_err("Failed to decode CommissionChange value")?;
     ctx.change_validator_commission_rate(&validator, &new_rate)
+        .wrap_err("Failed to change validator's commission rate")
 }
 
 #[cfg(test)]

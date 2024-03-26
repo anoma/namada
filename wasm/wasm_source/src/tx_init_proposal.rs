@@ -9,7 +9,7 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
         err
     })?;
     let tx_data = governance::InitProposalData::try_from_slice(&data[..])
-        .wrap_err("failed to decode InitProposalData")?;
+        .wrap_err("Failed to decode InitProposalData value")?;
 
     // Get the content from the referred to section
     let content = tx
@@ -27,9 +27,9 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
         })?;
 
     // Get the code from the referred to section
-    let code_hash = tx_data.get_section_code_hash();
-    let code = match code_hash {
-        Some(hash) => Some(
+    let code = tx_data
+        .get_section_code_hash()
+        .map(|hash| {
             tx.get_section(&hash)
                 .ok_or_err_msg("Missing proposal code")
                 .map_err(|err| {
@@ -41,12 +41,13 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
                 .map_err(|err| {
                     ctx.set_commitment_sentinel();
                     err
-                })?,
-        ),
-        None => None,
-    };
+                })
+        })
+        .transpose()
+        .wrap_err("Failed to retrieve proposal code")?;
 
     log_string("apply_tx called to create a new governance proposal");
 
     governance::init_proposal(ctx, tx_data, content, code)
+        .wrap_err("Failed to initialize new governance proposal")
 }

@@ -1,6 +1,7 @@
 //! A tx to initialize a new validator account with a given public keys and a
 //! validity predicates.
 
+use booleans::ResultBoolExt;
 use namada_tx_prelude::transaction::pos::BecomeValidator;
 use namada_tx_prelude::*;
 
@@ -12,7 +13,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let become_validator = BecomeValidator::try_from_slice(&data[..])
-        .wrap_err("failed to decode InitValidator")?;
+        .wrap_err("Failed to decode BecomeValidator tx data")?;
     debug_log!("apply_tx called to init a new validator account");
 
     // Check that the tx has been signed with all the keys to be used for the
@@ -25,20 +26,17 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         key::common::PublicKey::Secp256k1(become_validator.eth_hot_key.clone()),
         become_validator.protocol_key.clone(),
     ];
-    if !matches!(verify_signatures_of_pks(ctx, &signed, all_pks), Ok(true)) {
-        debug_log!("Keys ownership signature verification failed");
-        panic!()
-    }
+    verify_signatures_of_pks(ctx, &signed, all_pks).true_or_else(|| {
+        const ERR_MSG: &str = "Keys ownership signature verification failed";
+        debug_log!("{ERR_MSG}");
+        Error::new_const(ERR_MSG)
+    })?;
 
     // Register the validator in PoS
-    match ctx.become_validator(become_validator) {
-        Ok(validator_address) => {
-            debug_log!("Created validator {}", validator_address.encode(),)
-        }
-        Err(err) => {
-            debug_log!("Validator creation failed with: {}", err);
-            panic!()
-        }
-    }
+    let validator_address = ctx
+        .become_validator(become_validator)
+        .wrap_err("Validator creation failed")?;
+
+    debug_log!("Created validator {validator_address}");
     Ok(())
 }
