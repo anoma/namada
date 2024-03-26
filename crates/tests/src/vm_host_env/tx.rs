@@ -517,6 +517,10 @@ mod native_tx_host_env {
         max_signatures_ptr: u64,
         max_signatures_len: u64,
     ) -> i64);
+    native_host_fn!(tx_yield_value(
+        buf_ptr: u64,
+        buf_len: u64,
+    ));
 }
 
 #[cfg(test)]

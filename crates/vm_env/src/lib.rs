@@ -141,6 +141,9 @@ pub mod tx {
             transaction_ptr: u64,
             transaction_len: u64,
         ) -> i64;
+
+        // Yield a byte array value back to the host.
+        pub fn namada_tx_yield_value(buf_ptr: u64, buf_len: u64);
     }
 }
 

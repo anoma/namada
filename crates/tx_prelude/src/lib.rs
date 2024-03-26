@@ -102,6 +102,14 @@ impl Ctx {
     pub const unsafe fn new() -> Self {
         Self(())
     }
+
+    /// Yield a byte array value back to the host environment.
+    pub fn yield_value<V: AsRef<[u8]>>(&self, value: V) {
+        let value = value.as_ref();
+        unsafe {
+            namada_tx_yield_value(value.as_ptr() as _, value.len() as _);
+        }
+    }
 }
 
 /// Result of `TxEnv`, `namada_storage::StorageRead` or
