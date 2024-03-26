@@ -42,8 +42,8 @@
 //!     - `address_gen`: established address generator
 //!     - `header`: block's header
 //! - `replay_protection`: hashes of processed tx for replay protection purposes
-//!     - `current/{hash}`: an hash included in the current block
-//!     - `{hash}`: an hash included in previous blocks
+//!     - `current/{hash}`: a hash included in the current block
+//!     - `{hash}`: a hash included in previous blocks
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
