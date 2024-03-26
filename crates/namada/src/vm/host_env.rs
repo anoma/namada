@@ -2250,6 +2250,30 @@ where
     }
 }
 
+/// Yield a byte array value from the guest.
+pub fn tx_yield_value<MEM, D, H, CA>(
+    env: &TxVmEnv<MEM, D, H, CA>,
+    buf_ptr: u64,
+    buf_len: u64,
+) -> vp_host_fns::EnvResult<()>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    // NB: ignore gas costs, as this host fn is essentially
+    // only used to yield borsh encoded error values back
+    // to the host
+    let (value_to_yield, _gas) =
+        env.memory
+            .read_bytes(buf_ptr, buf_len as _)
+            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let host_buf = unsafe { env.ctx.yielded_value.get() };
+    host_buf.replace(value_to_yield);
+    Ok(())
+}
+
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<'static, MEM, D, H, EVAL, CA>,
