@@ -368,7 +368,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.359578"));
+    assert!(captured.contains("nam: 0.362747"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -388,7 +388,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.671183"));
+    assert!(captured.contains("nam: 0.674354"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -468,7 +468,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.725855"));
 
     node.next_epoch();
     // sync the shielded context
@@ -497,7 +497,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.58943"));
+    assert!(captured.contains("nam: 1.595775"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -588,7 +588,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.843775"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -640,7 +640,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.725855"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -660,7 +660,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.843775"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -685,7 +685,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "0.719514",
+            "0.725855",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -795,7 +795,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.004005"));
+    assert!(captured.contains("nam: 0.004009"));
 
     Ok(())
 }

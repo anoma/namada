@@ -38,6 +38,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if is_new_epoch {
+        shell.load_proposals();
         execute_governance_proposals(shell, events)?;
     }
     Ok(())
