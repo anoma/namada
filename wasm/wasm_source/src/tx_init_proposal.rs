@@ -11,6 +11,9 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let tx_data = governance::InitProposalData::try_from_slice(&data[..])
         .wrap_err("failed to decode InitProposalData")?;
 
+    // The tx must be authorized by the author address
+    ctx.insert_verifier(&tx_data.author)?;
+
     // Get the content from the referred to section
     let content = tx
         .get_section(&tx_data.content)

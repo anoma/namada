@@ -525,20 +525,17 @@ impl WriteLog {
             {
                 verifiers
                     .insert(Address::Internal(InternalAddress::Multitoken));
-            } else {
-                for addr in key.iter_addresses() {
-                    if verifiers_from_tx.contains(addr)
-                        || initialized_accounts.contains(addr)
-                    {
-                        // We can skip this when the address has been added from
-                        // the Tx above.
-                        // Also skip if it's an address of a newly initialized
-                        // account, because anything can be written into an
-                        // account's storage in the same tx in which it's
-                        // initialized (there is no VP in the state prior to tx
-                        // execution).
-                        continue;
-                    }
+            } else if let Some(addr) = key.fst_address() {
+                // We can skip insert when the address has been added from
+                // the Tx above.
+                // Also skip if it's an address of a newly initialized
+                // account, because anything can be written into an
+                // account's storage in the same tx in which it's
+                // initialized (there is no VP in the state prior to tx
+                // execution).
+                if !verifiers_from_tx.contains(addr)
+                    && !initialized_accounts.contains(addr)
+                {
                     // Add the address as a verifier
                     verifiers.insert(addr.clone());
                 }
@@ -976,8 +973,8 @@ mod tests {
         /// Test [`WriteLog::verifiers_changed_keys`] that:
         /// 1. Every address from `verifiers_from_tx` is included in the
         ///    verifiers set.
-        /// 2. Every address included in the changed storage keys is included in
-        ///    the verifiers set.
+        /// 2. Every address included in the first segment of changed storage
+        ///    keys is included in the verifiers set.
         /// 3. Addresses of newly initialized accounts are not verifiers, so
         ///    that anything can be written into an account's storage in the
         ///    same tx in which it's initialized.
@@ -999,12 +996,12 @@ mod tests {
 
             let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
             for key in changed_keys.iter() {
-                    for addr_from_key in &key.find_addresses() {
-                        if !initialized_accounts.contains(addr_from_key) {
-                            // Test for 2.
-                            assert!(verifiers.contains(addr_from_key));
-                        }
+                if let Some(addr_from_key) = key.fst_address() {
+                    if !initialized_accounts.contains(addr_from_key) {
+                        // Test for 2.
+                        assert!(verifiers.contains(addr_from_key));
                     }
+                }
             }
 
             println!("verifiers {:#?}", verifiers);

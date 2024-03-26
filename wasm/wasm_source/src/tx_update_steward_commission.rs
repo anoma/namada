@@ -13,6 +13,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let steward_commission = UpdateStewardCommission::try_from_slice(&data[..])
         .wrap_err("failed to decode an UpdateStewardCommission")?;
 
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(&steward_commission.steward)?;
+
     pgf::update_steward_commission(ctx, steward_commission)?;
 
     Ok(())

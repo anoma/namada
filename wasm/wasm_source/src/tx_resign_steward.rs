@@ -12,6 +12,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let steward_address = Address::try_from_slice(&data[..])
         .wrap_err("failed to decode an Address")?;
 
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(&steward_address)?;
+
     pgf::remove_steward(ctx, &steward_address)?;
 
     Ok(())
