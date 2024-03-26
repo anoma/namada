@@ -15,39 +15,6 @@ use booleans::BoolResultUnitExt;
 use namada_vp_prelude::tx::action::*;
 use namada_vp_prelude::*;
 
-enum KeyType<'a> {
-    TokenBalance { owner: &'a Address },
-    TokenMinted,
-    TokenMinter(&'a Address),
-    Vp(&'a Address),
-    Masp,
-    Ibc,
-    Unknown,
-}
-
-impl<'a> From<&'a storage::Key> for KeyType<'a> {
-    fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some([_, owner]) =
-            token::storage_key::is_any_token_balance_key(key)
-        {
-            Self::TokenBalance { owner }
-        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
-            Self::TokenMinted
-        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
-        {
-            Self::TokenMinter(minter)
-        } else if let Some(address) = key.is_validity_predicate() {
-            Self::Vp(address)
-        } else if token::storage_key::is_masp_key(key) {
-            Self::Masp
-        } else if ibc::is_ibc_key(key) {
-            Self::Ibc
-        } else {
-            Self::Unknown
-        }
-    }
-}
-
 #[validity_predicate(gas = 137325)]
 fn validate_tx(
     ctx: &Ctx,
@@ -204,6 +171,39 @@ fn validate_tx(
             ));
         })
     })
+}
+
+enum KeyType<'a> {
+    TokenBalance { owner: &'a Address },
+    TokenMinted,
+    TokenMinter(&'a Address),
+    Vp(&'a Address),
+    Masp,
+    Ibc,
+    Unknown,
+}
+
+impl<'a> From<&'a storage::Key> for KeyType<'a> {
+    fn from(key: &'a storage::Key) -> KeyType<'a> {
+        if let Some([_, owner]) =
+            token::storage_key::is_any_token_balance_key(key)
+        {
+            Self::TokenBalance { owner }
+        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
+            Self::TokenMinted
+        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
+        {
+            Self::TokenMinter(minter)
+        } else if let Some(address) = key.is_validity_predicate() {
+            Self::Vp(address)
+        } else if token::storage_key::is_masp_key(key) {
+            Self::Masp
+        } else if ibc::is_ibc_key(key) {
+            Self::Ibc
+        } else {
+            Self::Unknown
+        }
+    }
 }
 
 #[cfg(test)]
