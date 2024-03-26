@@ -161,10 +161,7 @@ pub mod main {
 #[cfg(feature = "tx_write")]
 pub mod main {
     use namada_test_utils::tx_data::TxWriteData;
-    use namada_tx_prelude::{
-        log_string, transaction, BorshDeserialize, Ctx, StorageRead,
-        StorageWrite, Tx, TxEnv, TxResult,
-    };
+    use namada_tx_prelude::*;
 
     const TX_NAME: &str = "tx_write";
 
