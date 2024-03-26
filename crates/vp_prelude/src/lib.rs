@@ -43,6 +43,7 @@ pub use sha2::{Digest, Sha256, Sha384, Sha512};
 pub use {
     namada_account as account, namada_parameters as parameters,
     namada_proof_of_stake as proof_of_stake, namada_token as token,
+    namada_tx as tx,
 };
 
 pub fn sha256(bytes: &[u8]) -> Hash {
