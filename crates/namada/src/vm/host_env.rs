@@ -130,6 +130,8 @@ where
     pub verifiers: MutHostRef<'a, &'a BTreeSet<Address>>,
     /// Cache for 2-step reads from host environment.
     pub result_buffer: MutHostRef<'a, &'a Option<Vec<u8>>>,
+    /// Storage for byte buffer values yielded from the guest.
+    pub yielded_value: MutHostRef<'a, &'a Option<Vec<u8>>>,
     /// VP WASM compilation cache (this is available in tx context, because
     /// we're pre-compiling VPs from [`tx_init_account`])
     #[cfg(feature = "wasm-runtime")]
@@ -169,6 +171,7 @@ where
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> Self {
@@ -182,6 +185,7 @@ where
         let tx_index = unsafe { HostRef::new(tx_index) };
         let verifiers = unsafe { MutHostRef::new(verifiers) };
         let result_buffer = unsafe { MutHostRef::new(result_buffer) };
+        let yielded_value = unsafe { MutHostRef::new(yielded_value) };
         #[cfg(feature = "wasm-runtime")]
         let vp_wasm_cache = unsafe { MutHostRef::new(vp_wasm_cache) };
         #[cfg(feature = "wasm-runtime")]
@@ -197,6 +201,7 @@ where
             tx_index,
             verifiers,
             result_buffer,
+            yielded_value,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
@@ -279,6 +284,7 @@ where
             tx_index: self.tx_index.clone(),
             verifiers: self.verifiers.clone(),
             result_buffer: self.result_buffer.clone(),
+            yielded_value: self.yielded_value.clone(),
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache: self.vp_wasm_cache.clone(),
             #[cfg(feature = "wasm-runtime")]
@@ -2379,6 +2385,7 @@ pub mod testing {
         tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<
@@ -2405,6 +2412,7 @@ pub mod testing {
             tx_index,
             verifiers,
             result_buffer,
+            yielded_value,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
@@ -2423,6 +2431,7 @@ pub mod testing {
         tx: &Tx,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
+        yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<
@@ -2455,6 +2464,7 @@ pub mod testing {
             tx_index,
             verifiers,
             result_buffer,
+            yielded_value,
             #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]

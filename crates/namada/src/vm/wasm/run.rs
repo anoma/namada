@@ -151,6 +151,7 @@ where
         PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
@@ -166,6 +167,7 @@ where
         tx_index,
         &mut verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         vp_wasm_cache,
         tx_wasm_cache,
     );
