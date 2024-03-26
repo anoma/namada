@@ -364,6 +364,8 @@ fn validate_pos_changes(
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     // Use this as `#[test]` annotation to enable logging
     use namada::core::dec::Dec;
     use namada::core::storage::Epoch;
@@ -635,8 +637,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -789,8 +796,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -977,7 +989,15 @@ mod tests {
                 vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).is_err());
+            assert!(
+                panic::catch_unwind(|| {
+                    validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("InvalidSectionSignature")
+            );
         }
 
     fn test_signed_arb_storage_write(
@@ -1061,8 +1081,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 }

@@ -412,6 +412,8 @@ fn validate_pos_changes(
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use address::testing::arb_non_internal_address;
     use namada::core::dec::Dec;
     use namada::core::storage::Epoch;
@@ -556,8 +558,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -705,8 +712,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -768,7 +780,7 @@ mod tests {
             GenesisValidator {
                 address: validator2.clone(),
                 tokens: stake2,
-                consensus_key: ck2,
+                consensus_key: ck2.clone(),
                 protocol_key,
                 commission_rate,
                 max_commission_rate_change,
@@ -938,8 +950,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -1029,8 +1046,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
@@ -1431,7 +1453,15 @@ mod tests {
                 vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers).is_err());
+            assert!(
+                panic::catch_unwind(|| {
+                    validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("InvalidSectionSignature")
+            );
         }
     }
 
@@ -1520,8 +1550,13 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_err()
+            panic::catch_unwind(|| {
+                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+            })
+            .err()
+            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+            .unwrap()
+            .contains("InvalidSectionSignature")
         );
     }
 
