@@ -526,7 +526,8 @@ impl DB for MockDB {
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
 
-        // Diffs
+        // Diffs - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
         let size_diff =
             match db.insert(subspace_key.to_string(), value.to_owned()) {
                 Some(prev_value) => {
@@ -585,6 +586,8 @@ impl DB for MockDB {
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
 
+        // Diffs - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
         let size_diff = match db.remove(&subspace_key.to_string()) {
             Some(value) => {
                 let old_key = diff_prefix
@@ -688,6 +691,16 @@ impl DB for MockDB {
             .borrow_mut()
             .retain(|key, _| !key.starts_with(&buffer_key.to_string()));
 
+        Ok(())
+    }
+
+    fn prune_non_persisted_diffs(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        _height: BlockHeight,
+    ) -> Result<()> {
+        // No-op - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
         Ok(())
     }
 

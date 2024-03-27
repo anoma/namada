@@ -268,6 +268,13 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
     ) -> Result<()>;
 
+    /// Prune non-persisted diffs that are only kept for one block for rollback
+    fn prune_non_persisted_diffs(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        height: BlockHeight,
+    ) -> Result<()>;
+
     /// Overwrite a new value in storage, taking into
     /// account values stored at a previous height
     fn overwrite_entry(

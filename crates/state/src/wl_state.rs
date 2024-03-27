@@ -598,6 +598,10 @@ where
             // prune old merkle tree stores
             self.prune_merkle_tree_stores(&mut batch)?;
         }
+        // If there's a previous block, prune non-persisted diffs from it
+        if let Some(height) = self.in_mem.block.height.checked_prev() {
+            self.db.prune_non_persisted_diffs(&mut batch, height)?;
+        }
         self.db.exec_batch(batch)?;
         Ok(())
     }
