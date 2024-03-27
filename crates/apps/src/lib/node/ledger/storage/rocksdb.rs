@@ -22,9 +22,15 @@
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
-//! - `diffs`: diffs in account subspaces' key-vals
-//!   - `new/{dyn}`: value set in block height `h`
-//!   - `old/{dyn}`: value from predecessor block height
+//! - `diffs`: diffs in account subspaces' key-vals modified with `persist_diff
+//!   == true`
+//!   - `{height}/new/{dyn}`: value set in block height `h`
+//!   - `{height}/old/{dyn}`: value from predecessor block height
+//! - `rollback`: diffs in account subspaces' key-vals for keys modified with
+//!   `persist_diff == false` which are only kept for 1 block to support
+//!   rollback
+//!   - `{height}/new/{dyn}`: value set in block height `h`
+//!   - `{height}/old/{dyn}`: value from predecessor block height
 //! - `block`: block state
 //!   - `results/{h}`: block results at height `h`
 //!   - `h`: for each block at height `h`:
@@ -40,6 +46,7 @@
 //!     - `all`: the hashes included up to the last block
 //!     - `last`: the hashes included in the last block
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -67,7 +74,8 @@ use namada::state::{
     StoreType, DB,
 };
 use namada::storage::{
-    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, STATE_CF, SUBSPACE_CF,
+    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
+    SUBSPACE_CF,
 };
 use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
@@ -160,6 +168,14 @@ pub fn open(
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
+    // for non-persisted diffs for rollback (read/update-intensive)
+    let mut rollback_cf_opts = Options::default();
+    rollback_cf_opts.set_compression_type(DBCompressionType::Zstd);
+    rollback_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
+    rollback_cf_opts.set_compaction_style(DBCompactionStyle::Level);
+    rollback_cf_opts.set_block_based_table_factory(&table_opts);
+    cfs.push(ColumnFamilyDescriptor::new(ROLLBACK_CF, rollback_cf_opts));
+
     // for the ledger state (update-intensive)
     let mut state_cf_opts = Options::default();
     // No compression since the size of the state is small
@@ -217,7 +233,11 @@ impl RocksDB {
         new_value: Option<&[u8]>,
         persist_diffs: bool,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = if persist_diffs {
+            self.get_column_family(DIFFS_CF)?
+        } else {
+            self.get_column_family(ROLLBACK_CF)?
+        };
         let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
@@ -230,39 +250,6 @@ impl RocksDB {
             self.0
                 .put_cf(cf, new_val_key, new_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
-        }
-
-        // If not persisting the diffs, remove the last diffs.
-        if !persist_diffs && height > BlockHeight::first() {
-            let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
-                let (old_diff_key, new_diff_key) =
-                    old_and_new_diff_key(key, height)?;
-                let has_old_diff = self
-                    .0
-                    .get_cf(cf, &old_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                let has_new_diff = self
-                    .0
-                    .get_cf(cf, &new_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                if has_old_diff {
-                    self.0
-                        .delete_cf(cf, old_diff_key)
-                        .map_err(|e| Error::DBError(e.into_string()))?;
-                }
-                if has_new_diff {
-                    self.0
-                        .delete_cf(cf, new_diff_key)
-                        .map_err(|e| Error::DBError(e.into_string()))?;
-                }
-                if has_old_diff || has_new_diff {
-                    break;
-                }
-                height = height.prev_height();
-            }
         }
         Ok(())
     }
@@ -278,7 +265,11 @@ impl RocksDB {
         new_value: Option<&[u8]>,
         persist_diffs: bool,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = if persist_diffs {
+            self.get_column_family(DIFFS_CF)?
+        } else {
+            self.get_column_family(ROLLBACK_CF)?
+        };
         let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
@@ -287,35 +278,6 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             batch.0.put_cf(cf, new_val_key, new_value);
-        }
-
-        // If not persisting the diffs, remove the last diffs.
-        if !persist_diffs && height > BlockHeight::first() {
-            let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
-                let (old_diff_key, new_diff_key) =
-                    old_and_new_diff_key(key, height)?;
-                let has_old_diff = self
-                    .0
-                    .get_cf(cf, &old_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                let has_new_diff = self
-                    .0
-                    .get_cf(cf, &new_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                if has_old_diff {
-                    batch.0.delete_cf(cf, old_diff_key);
-                }
-                if has_new_diff {
-                    batch.0.delete_cf(cf, new_diff_key);
-                }
-                if has_old_diff || has_new_diff {
-                    break;
-                }
-                height = height.prev_height();
-            }
         }
         Ok(())
     }
@@ -602,6 +564,10 @@ impl RocksDB {
             },
         )?;
 
+        let mut batch = batch.into_inner().unwrap();
+
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
         // Look for diffs in this block to find what has been deleted
         let diff_new_key_prefix = Key {
             segments: vec![
@@ -609,24 +575,42 @@ impl RocksDB {
                 NEW_DIFF_PREFIX.to_string().to_db_key(),
             ],
         };
+        for (key_str, val, _) in
+            iter_diffs_prefix(self, diffs_cf, last_block.height, None, true)
         {
-            let mut batch_guard = batch.lock().unwrap();
-            let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-            for (key, val, _) in
-                iter_diffs_prefix(self, last_block.height, None, true)
-            {
-                let key = Key::parse(key).unwrap();
-                let diff_new_key = diff_new_key_prefix.join(&key);
-                if self.read_subspace_val(&diff_new_key)?.is_none() {
-                    // If there is no new value, it has been deleted in this
-                    // block and we have to restore it
-                    batch_guard.put_cf(subspace_cf, key.to_string(), val)
-                }
+            let key = Key::parse(&key_str).unwrap();
+            let diff_new_key = diff_new_key_prefix.join(&key);
+            if self.read_subspace_val(&diff_new_key)?.is_none() {
+                // If there is no new value, it has been deleted in this
+                // block and we have to restore it
+                batch.put_cf(subspace_cf, key_str, val)
+            }
+        }
+
+        // Look for non-persisted diffs for rollback
+        let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+        // Iterate the old keys first and keep a set of keys that have old val
+        let mut keys_with_old_value = HashSet::<String>::new();
+        for (key_str, val, _) in
+            iter_diffs_prefix(self, rollback_cf, last_block.height, None, true)
+        {
+            // If there is no new value, it has been deleted in this
+            // block and we have to restore it
+            keys_with_old_value.insert(key_str.clone());
+            batch.put_cf(subspace_cf, key_str, val)
+        }
+        // Then the new keys
+        for (key_str, _val, _) in
+            iter_diffs_prefix(self, rollback_cf, last_block.height, None, false)
+        {
+            if !keys_with_old_value.contains(&key_str) {
+                // If there was no old value it means that the key was newly
+                // written in the last block and we have to delete it
+                batch.delete_cf(subspace_cf, key_str)
             }
         }
 
         tracing::info!("Deleting keys prepended with the last height");
-        let mut batch = batch.into_inner().unwrap();
         let prefix = last_block.height.to_string();
         let mut delete_keys = |cf: &ColumnFamily| {
             let read_opts = make_iter_read_opts(Some(prefix.clone()));
@@ -1765,7 +1749,10 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
         prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, prefix, true)
+        let diffs_cf = self
+            .get_column_family(DIFFS_CF)
+            .expect("{DIFFS_CF} column family should exist");
+        iter_diffs_prefix(self, diffs_cf, height, prefix, true)
     }
 
     fn iter_new_diffs(
@@ -1773,7 +1760,10 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
         prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, prefix, false)
+        let diffs_cf = self
+            .get_column_family(DIFFS_CF)
+            .expect("{DIFFS_CF} column family should exist");
+        iter_diffs_prefix(self, diffs_cf, height, prefix, false)
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
@@ -1820,13 +1810,11 @@ fn iter_subspace_pattern<'iter>(
 
 fn iter_diffs_prefix<'a>(
     db: &'a RocksDB,
+    cf: &'a ColumnFamily,
     height: BlockHeight,
     prefix: Option<&Key>,
     is_old: bool,
 ) -> PersistentPrefixIterator<'a> {
-    let diffs_cf = db
-        .get_column_family(DIFFS_CF)
-        .expect("{DIFFS_CF} column family should exist");
     let kind = if is_old {
         OLD_DIFF_PREFIX
     } else {
@@ -1838,7 +1826,7 @@ fn iter_diffs_prefix<'a>(
             .unwrap(),
     );
     // get keys without the `stripped_prefix`
-    iter_prefix(db, diffs_cf, stripped_prefix.as_ref(), prefix)
+    iter_prefix(db, cf, stripped_prefix.as_ref(), prefix)
 }
 
 /// Create an iterator over key-vals in the given CF matching the given

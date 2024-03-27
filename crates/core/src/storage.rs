@@ -95,6 +95,8 @@ pub enum DbColFam {
     STATE,
     /// Diffs
     DIFFS,
+    /// Diffs for rollback (only kept for 1 block)
+    ROLLBACK,
     /// Replay protection
     REPLAYPROT,
 }
@@ -103,6 +105,8 @@ pub enum DbColFam {
 pub const SUBSPACE_CF: &str = "subspace";
 /// Diffs column family name
 pub const DIFFS_CF: &str = "diffs";
+/// Diffs for rollback (only kept for 1 block) column family name
+pub const ROLLBACK_CF: &str = "rollback";
 /// State column family name
 pub const STATE_CF: &str = "state";
 /// Block column family name
@@ -118,6 +122,7 @@ impl DbColFam {
             DbColFam::BLOCK => BLOCK_CF,
             DbColFam::STATE => STATE_CF,
             DbColFam::DIFFS => DIFFS_CF,
+            DbColFam::ROLLBACK => ROLLBACK_CF,
             DbColFam::REPLAYPROT => REPLAY_PROTECTION_CF,
         }
     }
@@ -130,6 +135,7 @@ impl FromStr for DbColFam {
         match s.to_lowercase().as_str() {
             SUBSPACE_CF => Ok(Self::SUBSPACE),
             DIFFS_CF => Ok(Self::DIFFS),
+            ROLLBACK_CF => Ok(Self::ROLLBACK),
             STATE_CF => Ok(Self::STATE),
             REPLAY_PROTECTION_CF => Ok(Self::REPLAYPROT),
             BLOCK_CF => Ok(Self::BLOCK),
