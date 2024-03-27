@@ -376,6 +376,11 @@ impl BlockHeight {
     pub fn prev_height(&self) -> BlockHeight {
         BlockHeight(self.0 - 1)
     }
+
+    /// Get the height of the previous block if it won't underflow
+    pub fn checked_prev(&self) -> Option<BlockHeight> {
+        Some(BlockHeight(self.0.checked_sub(1)?))
+    }
 }
 
 impl TryFrom<&[u8]> for BlockHash {
