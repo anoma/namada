@@ -4,8 +4,12 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
+use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
-use namada::ledger::events::EventType;
+use namada::ledger::events::extend::{
+    ComposeEvent, Height, Info, Log, ValidMaspTx,
+};
+use namada::ledger::events::{EmitEvents, EventType};
 use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::WrapperArgs;
@@ -16,9 +20,10 @@ use namada::proof_of_stake::storage::{
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tx::data::protocol::ProtocolTxType;
+use namada::tx::event::{Code, InnerTx};
+use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
-use namada_sdk::tx::new_tx_event;
 
 use super::*;
 use crate::facade::tendermint::abci::types::VoteInfo;
@@ -156,12 +161,14 @@ where
                 );
                 continue;
             };
+
+            let result_code = ResultCode::from_u32(processed_tx.result.code)
+                .expect("Result code conversion should not fail");
+
             // If [`process_proposal`] rejected a Tx due to invalid signature,
             // emit an event here and move on to next tx.
-            if ResultCode::from_u32(processed_tx.result.code).unwrap()
-                == ResultCode::InvalidSig
-            {
-                let mut tx_event = match tx.header().tx_type {
+            if result_code == ResultCode::InvalidSig {
+                let base_event = match tx.header().tx_type {
                     TxType::Wrapper(_) | TxType::Protocol(_) => {
                         new_tx_event(&tx, height.0)
                     }
@@ -175,11 +182,15 @@ where
                         continue;
                     }
                 };
-                tx_event["code"] = processed_tx.result.code.to_string();
-                tx_event["info"] =
-                    format!("Tx rejected: {}", &processed_tx.result.info);
-                tx_event["gas_used"] = "0".into();
-                response.events.push(tx_event);
+                response.events.emit(
+                    base_event
+                        .with(Code(result_code))
+                        .with(Info(format!(
+                            "Tx rejected: {}",
+                            &processed_tx.result.info
+                        )))
+                        .with(WithGasUsed(0.into())),
+                );
                 continue;
             }
 
@@ -193,15 +204,16 @@ where
             let tx_header = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
-            if ResultCode::from_u32(processed_tx.result.code).unwrap()
-                != ResultCode::Ok
-            {
-                let mut tx_event = new_tx_event(&tx, height.0);
-                tx_event["code"] = processed_tx.result.code.to_string();
-                tx_event["info"] =
-                    format!("Tx rejected: {}", &processed_tx.result.info);
-                tx_event["gas_used"] = "0".into();
-                response.events.push(tx_event);
+            if result_code != ResultCode::Ok {
+                response.events.emit(
+                    new_tx_event(&tx, height.0)
+                        .with(Code(result_code))
+                        .with(Info(format!(
+                            "Tx rejected: {}",
+                            &processed_tx.result.info
+                        )))
+                        .with(WithGasUsed(0.into())),
+                );
                 // if the rejected tx was decrypted, remove it
                 // from the queue of txs to be processed
                 if let TxType::Decrypted(_) = &tx_header.tx_type {
@@ -245,7 +257,7 @@ where
                         .tx_queue
                         .pop()
                         .expect("Missing wrapper tx in queue");
-                    let mut event = new_tx_event(&tx, height.0);
+                    let event = new_tx_event(&tx, height.0);
 
                     match inner {
                         DecryptedTx::Decrypted => {
@@ -263,11 +275,16 @@ where
                                 "Tx with hash {} was un-decryptable",
                                 tx_in_queue.tx.header_hash()
                             );
-                            event["info"] = "Transaction is invalid.".into();
-                            event["log"] =
-                                "Transaction could not be decrypted.".into();
-                            event["code"] = ResultCode::Undecryptable.into();
-                            response.events.push(event);
+                            response.events.emit(
+                                event
+                                    .with(Info(
+                                        "Transaction is invalid.".into(),
+                                    ))
+                                    .with(Log("Transaction could not be \
+                                               decrypted."
+                                        .into()))
+                                    .with(Code(ResultCode::Undecryptable)),
+                            );
                             continue;
                         }
                     }
@@ -387,8 +404,7 @@ where
                                 .expect("Missing required wrapper arguments")
                                 .is_committed_fee_unshield
                             {
-                                tx_event["is_valid_masp_tx"] =
-                                    format!("{}", tx_index);
+                                tx_event.extend(ValidMaspTx(tx_index));
                             }
                             self.state.in_mem_mut().tx_queue.push(TxInQueue {
                                 tx: wrapper.expect("Missing expected wrapper"),
@@ -406,8 +422,7 @@ where
                                     address::InternalAddress::Masp,
                                 ),
                             ) {
-                                tx_event["is_valid_masp_tx"] =
-                                    format!("{}", tx_index);
+                                tx_event.extend(ValidMaspTx(tx_index));
                             }
                             changed_keys
                                 .extend(result.changed_keys.iter().cloned());
@@ -418,7 +433,7 @@ where
                         }
                         self.state.commit_tx();
                         if !tx_event.contains_key("code") {
-                            tx_event["code"] = ResultCode::Ok.into();
+                            tx_event.extend(Code(ResultCode::Ok));
                             self.state
                                 .in_mem_mut()
                                 .block
@@ -433,10 +448,7 @@ where
                                 .iter()
                                 .cloned()
                                 .map(|ibc_event| {
-                                    // Add the IBC event besides the tx_event
-                                    let mut event = Event::from(ibc_event);
-                                    event["height"] = height.to_string();
-                                    event
+                                    ibc_event.with(Height(height)).into()
                                 })
                                 // eth bridge events
                                 .chain(
@@ -465,11 +477,12 @@ where
 
                         stats.increment_rejected_txs();
                         self.state.drop_tx();
-                        tx_event["code"] = ResultCode::InvalidTx.into();
+                        tx_event.extend(Code(ResultCode::InvalidTx));
                     }
-                    tx_event["gas_used"] = result.gas_used.to_string();
-                    tx_event["info"] = "Check inner_tx for result.".to_string();
-                    tx_event["inner_tx"] = result.to_string();
+                    tx_event
+                        .extend(WithGasUsed(result.gas_used))
+                        .extend(Info("Check inner_tx for result.".to_string()))
+                        .extend(InnerTx(&result));
                 }
                 Err(msg) => {
                     tracing::info!(
@@ -512,27 +525,27 @@ where
                     stats.increment_errored_txs();
                     self.state.drop_tx();
 
-                    tx_event["gas_used"] =
-                        tx_gas_meter.get_tx_consumed_gas().to_string();
-                    tx_event["info"] = msg.to_string();
+                    tx_event
+                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(Info(msg.to_string()));
+
                     if let EventType::Accepted = tx_event.event_type {
                         // If wrapper, invalid tx error code
-                        tx_event["code"] = ResultCode::InvalidTx.into();
+                        tx_event.extend(Code(ResultCode::InvalidTx));
                         // The fee unshield operation could still have been
                         // committed
                         if wrapper_args
                             .expect("Missing required wrapper arguments")
                             .is_committed_fee_unshield
                         {
-                            tx_event["is_valid_masp_tx"] =
-                                format!("{}", tx_index);
+                            tx_event.extend(ValidMaspTx(tx_index));
                         }
                     } else {
-                        tx_event["code"] = ResultCode::WasmRuntimeError.into();
+                        tx_event.extend(Code(ResultCode::WasmRuntimeError));
                     }
                 }
             }
-            response.events.push(tx_event);
+            response.events.emit(tx_event);
         }
 
         stats.set_tx_cache_size(
@@ -572,7 +585,7 @@ where
             native_block_proposer_address,
         )?;
 
-        self.event_log_mut().log_events(response.events.clone());
+        self.event_log_mut().emit_many(response.events.clone());
         tracing::debug!("End finalize_block {height} of epoch {current_epoch}");
 
         Ok(response)

@@ -3,9 +3,10 @@
 //! The log can only hold `N` events at a time, where `N` is a configurable
 //! parameter. If the log is holding `N` events, and a new event is logged,
 //! old events are pruned.
+
 use circular_queue::CircularQueue;
 
-use crate::events::Event;
+use super::{EmitEvents, Event};
 
 pub mod dumb_queries;
 
@@ -38,6 +39,26 @@ pub struct EventLog {
 impl Default for EventLog {
     fn default() -> Self {
         Self::new(Default::default())
+    }
+}
+
+impl EmitEvents for EventLog {
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: Into<Event>,
+    {
+        self.log_events(core::iter::once(event.into()));
+    }
+
+    /// Emit a batch of [events](Event).
+    #[inline]
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: Into<Event>,
+    {
+        self.log_events(event_batch.into_iter().map(Into::into));
     }
 }
 
