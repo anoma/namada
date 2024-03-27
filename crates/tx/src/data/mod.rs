@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use bitflags::bitflags;
 pub use decrypted::*;
 use namada_core::address::Address;
 use namada_core::borsh::{
@@ -198,6 +199,44 @@ impl TxResult {
     }
 }
 
+bitflags! {
+    /// Validity predicate status flags.
+    #[derive(
+        Default, Debug, Clone, Copy, PartialEq, Eq,
+        PartialOrd, Ord, Hash, Serialize, Deserialize,
+    )]
+    pub struct VpStatusFlags: u64 {
+        /// The transaction had an invalid signature.
+        const INVALID_SIGNATURE = 0b0000_0001;
+    }
+}
+
+impl BorshSerialize for VpStatusFlags {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.bits(), writer)
+    }
+}
+
+impl BorshDeserialize for VpStatusFlags {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        let bits = <u64 as BorshDeserialize>::deserialize_reader(reader)?;
+        VpStatusFlags::from_bits(bits).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Unexpected VpStatusFlags flag in input",
+            )
+        })
+    }
+}
+
+#[cfg(feature = "migrations")]
+namada_macros::derive_borshdeserializer!(VpStatusFlags);
+
 /// Result of checking a transaction with validity predicates
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
@@ -219,8 +258,10 @@ pub struct VpsResult {
     pub gas_used: VpsGas,
     /// Errors occurred in any of the VPs, if any
     pub errors: Vec<(Address, String)>,
-    /// Sentinel to signal an invalid transaction signature
-    pub invalid_sig: bool,
+    /// Validity predicate status flags, containing info
+    /// about conditions that caused their evaluation to
+    /// fail.
+    pub status_flags: VpStatusFlags,
 }
 
 impl fmt::Display for TxResult {

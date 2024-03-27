@@ -16,6 +16,7 @@ use namada::proof_of_stake::storage::{
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tx::data::protocol::ProtocolTxType;
+use namada::tx::data::VpStatusFlags;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
 use namada_sdk::tx::new_tx_event;
@@ -458,7 +459,11 @@ where
                             // If decrypted tx failed for any reason but invalid
                             // signature, commit its hash to storage, otherwise
                             // allow for a replay
-                            if !result.vps_result.invalid_sig {
+                            if !result
+                                .vps_result
+                                .status_flags
+                                .contains(VpStatusFlags::INVALID_SIGNATURE)
+                            {
                                 self.commit_inner_tx_hash(wrapper);
                             }
                         }

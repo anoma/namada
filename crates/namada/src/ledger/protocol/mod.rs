@@ -14,7 +14,8 @@ use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
+    DecryptedTx, GasLimit, TxResult, TxType, VpStatusFlags, VpsResult,
+    WrapperTx,
 };
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -102,9 +103,13 @@ pub enum Error {
 
 impl Error {
     /// Determine if the error originates from an invalid transaction
-    /// section signature.
-    fn is_invalid_section_signature(&self) -> bool {
-        matches!(self, Self::InvalidSectionSignature(_))
+    /// section signature. This is required for replay protection.
+    const fn invalid_section_signature_flag(&self) -> VpStatusFlags {
+        if matches!(self, Self::InvalidSectionSignature(_)) {
+            VpStatusFlags::INVALID_SIGNATURE
+        } else {
+            VpStatusFlags::empty()
+        }
     }
 }
 
@@ -961,7 +966,9 @@ where
 
             tx_accepted.map_or_else(
                 |err| {
-                    result.invalid_sig = err.is_invalid_section_signature(); // required by replay protection
+                    result
+                        .status_flags
+                        .insert(err.invalid_section_signature_flag());
                     result.rejected_vps.insert(addr.clone());
                     result.errors.push((addr.clone(), err.to_string()));
                 },
@@ -1003,7 +1010,7 @@ fn merge_vp_results(
     rejected_vps.extend(b.rejected_vps);
     let mut errors = a.errors;
     errors.append(&mut b.errors);
-    let invalid_sig = a.invalid_sig || b.invalid_sig;
+    let status_flags = a.status_flags | b.status_flags;
     let mut gas_used = a.gas_used;
 
     gas_used
@@ -1015,7 +1022,7 @@ fn merge_vp_results(
         rejected_vps,
         gas_used,
         errors,
-        invalid_sig,
+        status_flags,
     })
 }
 
