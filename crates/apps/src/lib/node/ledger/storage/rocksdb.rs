@@ -90,6 +90,9 @@ const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
 
+/// Temporary limit to workaround proper fix for <https://github.com/anoma/namada/issues/2955>
+const TEMP_DIFF_PRUNE_HEIGHT_LIMIT: u64 = 100;
+
 /// RocksDB handle
 #[derive(Debug)]
 pub struct RocksDB(rocksdb::DB);
@@ -235,7 +238,10 @@ impl RocksDB {
         // If not persisting the diffs, remove the last diffs.
         if !persist_diffs && height > BlockHeight::first() {
             let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
+            let start_height = height;
+            while height >= BlockHeight::first()
+                && start_height <= height + TEMP_DIFF_PRUNE_HEIGHT_LIMIT
+            {
                 let (old_diff_key, new_diff_key) =
                     old_and_new_diff_key(key, height)?;
                 let has_old_diff = self
@@ -292,7 +298,10 @@ impl RocksDB {
         // If not persisting the diffs, remove the last diffs.
         if !persist_diffs && height > BlockHeight::first() {
             let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
+            let start_height = height;
+            while height >= BlockHeight::first()
+                && start_height <= height + TEMP_DIFF_PRUNE_HEIGHT_LIMIT
+            {
                 let (old_diff_key, new_diff_key) =
                     old_and_new_diff_key(key, height)?;
                 let has_old_diff = self
