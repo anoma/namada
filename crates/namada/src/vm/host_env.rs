@@ -2255,20 +2255,18 @@ pub fn tx_yield_value<MEM, D, H, CA>(
     env: &TxVmEnv<MEM, D, H, CA>,
     buf_ptr: u64,
     buf_len: u64,
-) -> vp_host_fns::EnvResult<()>
+) -> TxResult<()>
 where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    // NB: ignore gas costs, as this host fn is essentially
-    // only used to yield borsh encoded error values back
-    // to the host
-    let (value_to_yield, _gas) =
-        env.memory
-            .read_bytes(buf_ptr, buf_len as _)
-            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let (value_to_yield, gas) = env
+        .memory
+        .read_bytes(buf_ptr, buf_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let host_buf = unsafe { env.ctx.yielded_value.get() };
     host_buf.replace(value_to_yield);
     Ok(())
@@ -2379,13 +2377,11 @@ where
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
-    // NB: ignore gas costs, as this host fn is essentially
-    // only used to yield borsh encoded error values back
-    // to the host
-    let (value_to_yield, _gas) =
-        env.memory
-            .read_bytes(buf_ptr, buf_len as _)
-            .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    let (value_to_yield, gas) = env
+        .memory
+        .read_bytes(buf_ptr, buf_len as _)
+        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
+    vp_host_fns::add_gas(env.ctx.gas_meter(), gas)?;
     let host_buf = unsafe { env.ctx.yielded_value.get() };
     host_buf.replace(value_to_yield);
     Ok(())
