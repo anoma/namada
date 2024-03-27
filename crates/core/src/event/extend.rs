@@ -162,4 +162,21 @@ mod event_composition_tests {
 
         assert_eq!(base_event.attributes, expected_attrs);
     }
+
+    #[test]
+    fn test_event_compose_last_one_kept() {
+        let expected_attrs = {
+            let mut attrs = HashMap::new();
+            attrs.insert("log".to_string(), "last".to_string());
+            attrs
+        };
+
+        let base_event: Event = Event::applied_tx()
+            .with(Log("fist".to_string()))
+            .with(Log("second".to_string()))
+            .with(Log("last".to_string()))
+            .into();
+
+        assert_eq!(base_event.attributes, expected_attrs);
+    }
 }
