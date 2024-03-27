@@ -187,6 +187,8 @@ pub trait GasMetering {
 /// Gas metering in a transaction
 #[derive(Debug)]
 pub struct TxGasMeter {
+    /// Track gas overflow
+    gas_overflow: bool,
     /// The gas limit for a transaction
     pub tx_gas_limit: Gas,
     transaction_gas: Gas,
@@ -224,10 +226,19 @@ pub struct VpsGas {
 
 impl GasMetering for TxGasMeter {
     fn consume(&mut self, gas: u64) -> Result<()> {
+        if self.gas_overflow {
+            hints::cold();
+            return Err(Error::GasOverflow);
+        }
+
         self.transaction_gas = self
             .transaction_gas
             .checked_add(gas.into())
-            .ok_or(Error::GasOverflow)?;
+            .ok_or_else(|| {
+                hints::cold();
+                self.gas_overflow = true;
+                Error::GasOverflow
+            })?;
 
         if self.transaction_gas > self.tx_gas_limit {
             return Err(Error::TransactionGasExceededError);
@@ -237,7 +248,12 @@ impl GasMetering for TxGasMeter {
     }
 
     fn get_tx_consumed_gas(&self) -> Gas {
-        self.transaction_gas
+        if !self.gas_overflow {
+            self.transaction_gas
+        } else {
+            hints::cold();
+            u64::MAX.into()
+        }
     }
 
     fn get_gas_limit(&self) -> Gas {
@@ -250,6 +266,7 @@ impl TxGasMeter {
     /// wrapper transaction
     pub fn new(tx_gas_limit: impl Into<Gas>) -> Self {
         Self {
+            gas_overflow: false,
             tx_gas_limit: tx_gas_limit.into(),
             transaction_gas: Gas::default(),
         }
@@ -259,6 +276,7 @@ impl TxGasMeter {
     /// units
     pub fn new_from_sub_limit(tx_gas_limit: Gas) -> Self {
         Self {
+            gas_overflow: false,
             tx_gas_limit,
             transaction_gas: Gas::default(),
         }
@@ -415,10 +433,11 @@ mod tests {
     proptest! {
         #[test]
         fn test_vp_gas_meter_add(gas in 0..BLOCK_GAS_LIMIT) {
-        let tx_gas_meter = TxGasMeter {
-            tx_gas_limit: BLOCK_GAS_LIMIT.into(),
-            transaction_gas: Gas::default(),
-        };
+            let tx_gas_meter = TxGasMeter {
+                gas_overflow: false,
+                tx_gas_limit: BLOCK_GAS_LIMIT.into(),
+                transaction_gas: Gas::default(),
+            };
             let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
             meter.consume(gas).expect("cannot add the gas");
         }
@@ -428,6 +447,7 @@ mod tests {
     #[test]
     fn test_vp_gas_overflow() {
         let tx_gas_meter = TxGasMeter {
+            gas_overflow: false,
             tx_gas_limit: BLOCK_GAS_LIMIT.into(),
             transaction_gas: (TX_GAS_LIMIT - 1).into(),
         };
@@ -441,6 +461,7 @@ mod tests {
     #[test]
     fn test_vp_gas_limit() {
         let tx_gas_meter = TxGasMeter {
+            gas_overflow: false,
             tx_gas_limit: TX_GAS_LIMIT.into(),
             transaction_gas: (TX_GAS_LIMIT - 1).into(),
         };
