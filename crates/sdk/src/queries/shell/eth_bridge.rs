@@ -17,6 +17,7 @@ use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_core::token::Amount;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_core::{ethereum_structs, hints};
+use namada_ethereum_bridge::event::{BpTransferStatus, BridgePoolTxHash};
 use namada_ethereum_bridge::protocol::transactions::votes::{
     EpochedVotingPower, EpochedVotingPowerExt,
 };
@@ -296,13 +297,11 @@ where
     // been processed and therefore removed from the Bridge pool at the
     // time of this query
     let completed_transfers = ctx.event_log.iter().filter_map(|ev| {
-        let Ok(transfer_status) =
-            ethereum_structs::BpTransferStatus::try_from(ev.kind())
-        else {
+        let Ok(transfer_status) = BpTransferStatus::try_from(ev.kind()) else {
             return None;
         };
         let tx_hash: KeccakHash = ev
-            .read_attribute::<ethereum_structs::BridgePoolTxHash>()
+            .read_attribute::<BridgePoolTxHash>()
             .expect("The transfer hash must be available");
         if !transfer_hashes.swap_remove(&tx_hash) {
             return None;
@@ -310,10 +309,7 @@ where
         Some((tx_hash, transfer_status, transfer_hashes.is_empty()))
     });
     for (hash, transfer_status, early_exit) in completed_transfers {
-        if hints::likely(matches!(
-            transfer_status,
-            ethereum_structs::BpTransferStatus::Relayed
-        )) {
+        if hints::likely(matches!(transfer_status, BpTransferStatus::Relayed)) {
             status.relayed.insert(hash.clone());
         } else {
             status.expired.insert(hash.clone());
@@ -1682,14 +1678,14 @@ mod test_ethbridge_router {
         let mut transfer3 = transfer.clone();
         transfer3.transfer.amount = 2.into();
         client.event_log.log_events(vec![
-            ethereum_structs::EthBridgeEvent::BridgePool {
+            crate::eth_bridge::event::EthBridgeEvent::BridgePool {
                 tx_hash: transfer2.keccak256(),
-                status: ethereum_structs::BpTransferStatus::Expired,
+                status: crate::eth_bridge::event::BpTransferStatus::Expired,
             }
             .into(),
-            ethereum_structs::EthBridgeEvent::BridgePool {
+            crate::eth_bridge::event::EthBridgeEvent::BridgePool {
                 tx_hash: transfer3.keccak256(),
-                status: ethereum_structs::BpTransferStatus::Relayed,
+                status: crate::eth_bridge::event::BpTransferStatus::Relayed,
             }
             .into(),
         ]);

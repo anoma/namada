@@ -1,13 +1,13 @@
 //! Silly simple event matcher.
 
 use namada_core::collections::HashMap;
-use namada_core::ethereum_structs::event_types::{
-    BRIDGE_POOL_EXPIRED, BRIDGE_POOL_RELAYED,
-};
-use namada_core::ethereum_structs::BridgePoolTxHash;
 use namada_core::hash::Hash;
 use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
+use namada_ethereum_bridge::event::types::{
+    BRIDGE_POOL_EXPIRED, BRIDGE_POOL_RELAYED,
+};
+use namada_ethereum_bridge::event::BridgePoolTxHash;
 use namada_ibc::event::types::UPDATE_CLIENT;
 use namada_ibc::event::{
     ClientId as ClientIdAttr, ConsensusHeights, IbcEvent, IbcEventType,
@@ -169,7 +169,7 @@ impl QueryMatcher {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::ethereum_structs::EthBridgeEvent;
+    use namada_ethereum_bridge::event::EthBridgeEvent;
 
     use super::*;
     use crate::events::extend::ComposeEvent;

@@ -3650,6 +3650,7 @@ dependencies = [
  "ethers",
  "eyre",
  "itertools 0.10.5",
+ "konst",
  "namada_account",
  "namada_core",
  "namada_macros",

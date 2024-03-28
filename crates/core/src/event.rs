@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
-use crate::ethereum_structs::EthBridgeEvent;
 
 #[doc(hidden)]
 #[macro_export]
@@ -72,10 +71,6 @@ pub trait EventToEmit: Into<Event> {
 
 impl EventToEmit for Event {
     const DOMAIN: &'static str = "unknown";
-}
-
-impl EventToEmit for EthBridgeEvent {
-    const DOMAIN: &'static str = "eth-bridge";
 }
 
 /// Used in sub-systems that may emit events.
@@ -467,32 +462,6 @@ impl Event {
             .iter()
             .fold(0, |acc, (k, v)| acc + k.len() + v.len());
         len as u64 * cost_per_byte
-    }
-}
-
-impl From<EthBridgeEvent> for Event {
-    #[inline]
-    fn from(event: EthBridgeEvent) -> Event {
-        Self::from(&event)
-    }
-}
-
-impl From<&EthBridgeEvent> for Event {
-    fn from(event: &EthBridgeEvent) -> Event {
-        match event {
-            EthBridgeEvent::BridgePool { tx_hash, status } => Event {
-                event_type: status.into(),
-                level: EventLevel::Tx,
-                attributes: {
-                    use self::extend::ExtendAttributesMap;
-                    use crate::ethereum_structs::BridgePoolTxHash;
-
-                    let mut attributes = BTreeMap::new();
-                    attributes.with_attribute(BridgePoolTxHash(tx_hash));
-                    attributes
-                },
-            },
-        }
     }
 }
 

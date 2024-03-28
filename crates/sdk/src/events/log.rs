@@ -143,10 +143,10 @@ impl<'log> WithMatcher<'log> {
 
 #[cfg(test)]
 mod event_log_tests {
-    use namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED;
-    use namada_core::ethereum_structs::BridgePoolTxHash;
     use namada_core::hash::Hash;
     use namada_core::keccak::KeccakHash;
+    use namada_ethereum_bridge::event::types::BRIDGE_POOL_RELAYED;
+    use namada_ethereum_bridge::event::BridgePoolTxHash;
 
     use super::*;
     use crate::events::extend::{ComposeEvent, TxHash};

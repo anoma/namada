@@ -43,6 +43,7 @@ ethabi.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
+konst.workspace = true
 linkme = {workspace = true, optional = true}
 serde.workspace = true
 serde_json.workspace = true
