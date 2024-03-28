@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
-use namada_core::event::EventTypeBuilder;
 use namada_core::token::Amount;
+use namada_events::EventTypeBuilder;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{ibc_token, is_ibc_key};
 pub use namada_ibc::{

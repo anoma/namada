@@ -4339,6 +4339,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_events",
  "namada_gas",
  "namada_governance",
  "namada_ibc",
@@ -4554,7 +4555,6 @@ dependencies = [
  "index-set",
  "indexmap 2.2.4",
  "k256",
- "konst",
  "linkme",
  "masp_primitives",
  "namada_macros",
@@ -4613,6 +4613,7 @@ dependencies = [
  "linkme",
  "namada_account",
  "namada_core",
+ "namada_events",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -4631,6 +4632,19 @@ dependencies = [
  "thiserror",
  "toml 0.5.11",
  "tracing",
+]
+
+[[package]]
+name = "namada_events"
+version = "0.34.0"
+dependencies = [
+ "borsh 1.2.1",
+ "linkme",
+ "namada_core",
+ "namada_macros",
+ "namada_migrations",
+ "serde 1.0.193",
+ "thiserror",
 ]
 
 [[package]]
@@ -4661,6 +4675,7 @@ dependencies = [
  "borsh 1.2.1",
  "linkme",
  "namada_core",
+ "namada_events",
  "namada_macros",
  "namada_migrations",
  "proptest",
@@ -4677,6 +4692,7 @@ dependencies = [
  "konst",
  "linkme",
  "namada_core",
+ "namada_events",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -4702,6 +4718,7 @@ dependencies = [
  "linkme",
  "masp_primitives",
  "namada_core",
+ "namada_events",
  "namada_gas",
  "namada_governance",
  "namada_macros",
@@ -4803,6 +4820,7 @@ dependencies = [
  "namada_account",
  "namada_controller",
  "namada_core",
+ "namada_events",
  "namada_governance",
  "namada_macros",
  "namada_migrations",
@@ -4858,6 +4876,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_events",
  "namada_gas",
  "namada_governance",
  "namada_ibc",
@@ -4930,6 +4949,7 @@ dependencies = [
  "itertools 0.10.5",
  "linkme",
  "namada_core",
+ "namada_events",
  "namada_gas",
  "namada_macros",
  "namada_merkle_tree",
@@ -5037,6 +5057,7 @@ name = "namada_token"
 version = "0.34.0"
 dependencies = [
  "namada_core",
+ "namada_events",
  "namada_shielded_token",
  "namada_storage",
  "namada_trans_token",
@@ -5064,6 +5085,7 @@ dependencies = [
  "linkme",
  "masp_primitives",
  "namada_core",
+ "namada_events",
  "namada_gas",
  "namada_macros",
  "namada_migrations",
@@ -5085,6 +5107,7 @@ name = "namada_tx_env"
 version = "0.34.0"
 dependencies = [
  "namada_core",
+ "namada_events",
  "namada_storage",
 ]
 
@@ -5096,6 +5119,7 @@ dependencies = [
  "masp_primitives",
  "namada_account",
  "namada_core",
+ "namada_events",
  "namada_governance",
  "namada_ibc",
  "namada_macros",
@@ -5140,6 +5164,7 @@ dependencies = [
  "derivative",
  "masp_primitives",
  "namada_core",
+ "namada_events",
  "namada_ibc",
  "namada_storage",
  "namada_tx",
@@ -5153,6 +5178,7 @@ dependencies = [
  "borsh 1.2.1",
  "namada_account",
  "namada_core",
+ "namada_events",
  "namada_governance",
  "namada_ibc",
  "namada_macros",

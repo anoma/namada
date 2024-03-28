@@ -5,13 +5,6 @@ use std::str::FromStr;
 
 use namada_core::borsh::*;
 use namada_core::collections::HashMap;
-use namada_core::event::extend::{
-    event_domain_of, AttributesMap, EventAttributeEntry, ExtendAttributesMap,
-    ReadFromEventAttributes as _,
-};
-use namada_core::event::{
-    Event, EventError, EventLevel, EventToEmit, EventTypeBuilder,
-};
 use namada_core::ibc::core::channel::types::packet::Packet;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
 use namada_core::ibc::core::client::types::events::{
@@ -25,6 +18,13 @@ use namada_core::ibc::core::host::types::identifiers::{
 };
 use namada_core::ibc::primitives::Timestamp;
 use namada_core::tendermint::abci::Event as AbciEvent;
+use namada_events::extend::{
+    event_domain_of, AttributesMap, EventAttributeEntry, ExtendAttributesMap,
+    ReadFromEventAttributes as _,
+};
+use namada_events::{
+    Event, EventError, EventLevel, EventToEmit, EventTypeBuilder,
+};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -33,9 +33,8 @@ use serde::{Deserialize, Serialize};
 pub mod types {
     //! IBC event types.
 
-    use namada_core::event::EventType;
-    use namada_core::event_type;
     use namada_core::ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
+    use namada_events::{event_type, EventType};
 
     use super::IbcEvent;
 
@@ -473,12 +472,12 @@ pub fn packet_from_event_attributes<A: AttributesMap>(
 
 #[cfg(test)]
 mod tests {
-    use namada_core::event::extend::{
+    use namada_core::hash::Hash;
+    use namada_core::tendermint_proto::v0_37::abci::Event as AbciEventV037;
+    use namada_events::extend::{
         ComposeEvent as _, Domain, Height, Log,
         RawReadFromEventAttributes as _, TxHash,
     };
-    use namada_core::hash::Hash;
-    use namada_core::tendermint_proto::v0_37::abci::Event as AbciEventV037;
 
     use super::*;
 

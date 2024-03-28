@@ -10,9 +10,9 @@ use borsh_ext::BorshSerializeExt;
 use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
-use namada_core::event::{Event, EventTypeBuilder};
 use namada_core::internal::KeyVal;
 use namada_core::storage::TX_INDEX_LENGTH;
+use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,
     MEMORY_ACCESS_GAS_PER_BYTE,

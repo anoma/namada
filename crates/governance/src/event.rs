@@ -2,15 +2,15 @@
 
 use std::collections::BTreeMap;
 
-use namada_core::event::extend::{EventAttributeEntry, ExtendAttributesMap};
-use namada_core::event::{Event, EventLevel, EventToEmit};
+use namada_events::extend::{EventAttributeEntry, ExtendAttributesMap};
+use namada_events::{Event, EventLevel, EventToEmit};
 
 use crate::utils::TallyResult as GovTallyResult;
 
 pub mod types {
     //! Governance event types.
 
-    use namada_core::event::EventType;
+    use namada_events::EventType;
 
     use super::ProposalEvent;
 
@@ -18,22 +18,25 @@ pub mod types {
     const PROPOSAL_SUBDOMAIN: &str = "proposal";
 
     /// Proposal rejected.
-    pub const PROPOSAL_REJECTED: EventType =
-        namada_core::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "rejected");
+    pub const PROPOSAL_REJECTED: EventType = namada_events::event_type!(
+        ProposalEvent,
+        PROPOSAL_SUBDOMAIN,
+        "rejected"
+    );
 
     /// Proposal passed.
     pub const PROPOSAL_PASSED: EventType =
-        namada_core::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "passed");
+        namada_events::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "passed");
 
     /// PGF steward proposal.
-    pub const PROPOSAL_PGF_STEWARD: EventType = namada_core::event_type!(
+    pub const PROPOSAL_PGF_STEWARD: EventType = namada_events::event_type!(
         ProposalEvent,
         PROPOSAL_SUBDOMAIN,
         "pgf-steward"
     );
 
     /// PGF payments proposal.
-    pub const PROPOSAL_PGF_PAYMENTS: EventType = namada_core::event_type!(
+    pub const PROPOSAL_PGF_PAYMENTS: EventType = namada_events::event_type!(
         ProposalEvent,
         PROPOSAL_SUBDOMAIN,
         "pgf-payments"

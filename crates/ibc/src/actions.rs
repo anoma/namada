@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::BorshSerializeExt;
-use namada_core::event::EventTypeBuilder;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
@@ -14,6 +13,7 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::MsgTransfer;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
+use namada_events::EventTypeBuilder;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{

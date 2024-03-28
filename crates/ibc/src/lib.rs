@@ -23,9 +23,6 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
 use namada_core::address::{Address, MASP};
-use namada_core::event::extend::{
-    ReadFromEventAttributes, Success as SuccessAttr,
-};
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -59,6 +56,7 @@ use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
+use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
 use namada_token::Transfer;
 use prost::Message;
 use thiserror::Error;

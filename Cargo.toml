@@ -9,6 +9,7 @@ members = [
   "crates/core",
   "crates/encoding_spec",
   "crates/ethereum_bridge",
+  "crates/events",
   "crates/gas",
   "crates/governance",
   "crates/ibc",

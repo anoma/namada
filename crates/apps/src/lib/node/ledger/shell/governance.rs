@@ -1,6 +1,5 @@
 use namada::core::collections::HashMap;
 use namada::core::encode;
-use namada::core::event::EmitEvents;
 use namada::core::storage::Epoch;
 use namada::governance::event::ProposalEvent;
 use namada::governance::pgf::storage::keys as pgf_storage;
@@ -24,6 +23,7 @@ use namada::proof_of_stake::storage::{
     read_total_active_stake, validator_state_handle,
 };
 use namada::proof_of_stake::types::{BondId, ValidatorState};
+use namada::sdk::events::EmitEvents;
 use namada::state::StorageWrite;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;

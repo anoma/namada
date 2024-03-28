@@ -2,7 +2,7 @@
 pub mod log;
 
 use namada_core::collections::HashMap;
-pub use namada_core::event::*;
+pub use namada_events::*;
 use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;

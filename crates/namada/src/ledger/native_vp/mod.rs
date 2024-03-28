@@ -12,9 +12,9 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use borsh::BorshDeserialize;
-use namada_core::event::{Event, EventType};
 use namada_core::storage;
 use namada_core::storage::Epochs;
+use namada_events::{Event, EventType};
 use namada_gas::GasMetering;
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;

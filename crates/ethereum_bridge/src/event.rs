@@ -1,11 +1,9 @@
 //! Ethereum Bridge transaction events.
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::event::extend::{ComposeEvent, EventAttributeEntry};
-use namada_core::event::{
-    Event, EventError, EventLevel, EventToEmit, EventType,
-};
 use namada_core::keccak::KeccakHash;
+use namada_events::extend::{ComposeEvent, EventAttributeEntry};
+use namada_events::{Event, EventError, EventLevel, EventToEmit, EventType};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -14,8 +12,7 @@ use serde::{Deserialize, Serialize};
 pub mod types {
     //! Ethereum bridge event types.
 
-    use namada_core::event::EventType;
-    use namada_core::event_type;
+    use namada_events::{event_type, EventType};
 
     use super::EthBridgeEvent;
 

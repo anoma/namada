@@ -1,6 +1,6 @@
 //! Gas related events.
 
-use namada_core::event::extend::EventAttributeEntry;
+use namada_events::extend::EventAttributeEntry;
 
 use super::Gas;
 

@@ -24,7 +24,6 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::ethereum_events::EthAddress;
-use namada_core::event::{Event, EventToEmit, EventType};
 use namada_core::internal::HostEnvResult;
 use namada_core::key::common;
 use namada_core::storage::TxIndex;
@@ -32,6 +31,7 @@ pub use namada_core::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::{encode, eth_bridge_pool, *};
+use namada_events::{Event, EventToEmit, EventType};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
