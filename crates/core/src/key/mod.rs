@@ -487,7 +487,7 @@ impl SignableBytes for &crate::keccak::KeccakHash {
 }
 
 /// Helpers for testing with keys.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
     use proptest::prelude::*;
     use rand::prelude::{StdRng, ThreadRng};

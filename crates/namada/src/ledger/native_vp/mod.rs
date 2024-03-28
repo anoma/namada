@@ -98,7 +98,7 @@ where
     S: StateRead,
     CA: WasmCacheAccess,
 {
-    ctx: &'view Ctx<'a, S, CA>,
+    pub(crate) ctx: &'view Ctx<'a, S, CA>,
 }
 
 /// Read access to the posterior storage (state after tx execution) via

@@ -3,7 +3,7 @@
 use namada_tx_prelude::transaction::pgf::UpdateStewardCommission;
 use namada_tx_prelude::*;
 
-#[transaction(gas = 1222239)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let signed = tx_data;
     let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {

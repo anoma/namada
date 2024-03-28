@@ -815,11 +815,6 @@ where
                         return Err(Error::MissingAddress(addr.clone()));
                     };
 
-                    // NOTE: because of the whitelisted gas and the gas
-                    // metering for the exposed vm
-                    // env functions,    the first
-                    // signature verification (if any) is accounted
-                    // twice
                     wasm::run::vp(
                         vp_code_hash,
                         tx,
@@ -1163,5 +1158,86 @@ mod tests {
         assert_eq!(voting_power, expected);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_native_vp_out_of_gas() {
+        let (mut state, _validators) = test_utils::setup_default_storage();
+
+        // some random token address
+        let token_address = Address::Established([0xff; 20].into());
+
+        let src_address = Address::Established([0xab; 20].into());
+        let dst_address = Address::Established([0xba; 20].into());
+
+        // supply an address with 1000 of said token
+        namada_token::credit_tokens(
+            &mut state,
+            &token_address,
+            &src_address,
+            1000.into(),
+        )
+        .unwrap();
+
+        // commit storage changes. this will act as the
+        // initial state of the chain
+        state.commit_tx();
+        state.commit_block().unwrap();
+
+        // "execute" a dummy tx, by manually performing its state changes
+        let (dummy_tx, changed_keys, verifiers) = {
+            let mut tx = Tx::from_type(TxType::Raw);
+            tx.set_code(namada_tx::Code::new(vec![], None));
+            tx.set_data(namada_tx::Data::new(vec![]));
+
+            // transfer half of the supply of src to dst
+            namada_token::transfer(
+                &mut state,
+                &token_address,
+                &src_address,
+                &dst_address,
+                500.into(),
+            )
+            .unwrap();
+
+            let changed_keys = {
+                let mut set = BTreeSet::new();
+                set.insert(namada_token::storage_key::balance_key(
+                    &token_address,
+                    &src_address,
+                ));
+                set.insert(namada_token::storage_key::balance_key(
+                    &token_address,
+                    &dst_address,
+                ));
+                set
+            };
+
+            let verifiers = {
+                let mut set = BTreeSet::new();
+                set.insert(Address::Internal(InternalAddress::Multitoken));
+                set
+            };
+
+            (tx, changed_keys, verifiers)
+        };
+
+        // temp vp cache
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+
+        // gas meter with no gas left
+        let gas_meter = TxGasMeter::new(0);
+
+        let result = execute_vps(
+            verifiers,
+            changed_keys,
+            &dummy_tx,
+            &TxIndex::default(),
+            &state,
+            &gas_meter,
+            &mut vp_cache,
+        );
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
     }
 }

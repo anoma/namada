@@ -29,6 +29,7 @@ migrations = [
   "namada_migrations",
   "linkme",
 ]
+benches = ["proptest"]
 
 [dependencies]
 namada_macros = {path = "../macros"}

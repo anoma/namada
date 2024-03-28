@@ -4478,6 +4478,7 @@ dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
  "criterion",
+ "lazy_static",
  "masp_primitives",
  "namada",
  "namada_apps",
@@ -4486,6 +4487,10 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.9.9",
  "tempfile",
+ "wasm-instrument",
+ "wasmer",
+ "wasmer-compiler-singlepass",
+ "wasmer-engine-universal",
 ]
 
 [[package]]
@@ -4802,6 +4807,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_ethereum_bridge",
+ "namada_gas",
  "namada_governance",
  "namada_ibc",
  "namada_macros",
