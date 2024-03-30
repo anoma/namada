@@ -1,0 +1,1 @@
+- Upgrade docker base images to Debian 12 (Bookworm) ([#2975](https://github.com/anoma/namada/pull/2975)).
