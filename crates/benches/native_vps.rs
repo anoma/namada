@@ -323,9 +323,9 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
                 ),
             );
             let msg = MsgConnectionOpenInit {
-                client_id_on_a: ClientId::new("01-tendermint", 1).unwrap(),
+                client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
                 counterparty: Counterparty::new(
-                    ClientId::from_str("01-tendermint-1").unwrap(),
+                    ClientId::from_str("07-tendermint-1").unwrap(),
                     None,
                     CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
                 ),
@@ -364,6 +364,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
         "outgoing_transfer" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
             shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
             let outgoing_transfer =
                 shielded_ctx.shell.generate_ibc_transfer_tx();
 
@@ -372,6 +373,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
         "outgoing_shielded_action" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
             shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
 
             let albert_payment_addr = shielded_ctx
                 .wallet

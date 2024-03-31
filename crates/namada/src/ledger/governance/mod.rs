@@ -897,8 +897,6 @@ mod test {
     use crate::ledger::pos;
     use crate::vm::wasm;
 
-    const TX_GAS_LIMIT: u64 = 1_000_000;
-
     fn init_storage() -> TestState {
         let mut state = TestState::default();
 
@@ -928,7 +926,7 @@ mod test {
         let keys_changed = BTreeSet::new();
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1153,7 +1151,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1250,7 +1248,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1350,7 +1348,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1449,7 +1447,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1528,7 +1526,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1607,7 +1605,7 @@ mod test {
         let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1704,7 +1702,7 @@ mod test {
         ]);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1801,7 +1799,7 @@ mod test {
         ]);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -1880,7 +1878,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2004,7 +2002,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2128,7 +2126,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2252,7 +2250,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2393,7 +2391,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -2534,7 +2532,7 @@ mod test {
         let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
