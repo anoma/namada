@@ -32,8 +32,14 @@ pub enum Error {
     DeleteVp,
     #[error("Trying to write a temporary value after deleting")]
     WriteTempAfterDelete,
+    #[error("Trying to write a temporary value after writing")]
+    WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
+    #[error(
+        "Trying to cast a temporary write to a persistent storage modification"
+    )]
+    TempToPersistentModificationCast,
 }
 
 /// Result for functions that may fail
@@ -62,6 +68,51 @@ pub enum StorageModification {
         /// Value bytes
         value: Vec<u8>,
     },
+}
+
+/// A persistent storage modification. Associated data is present as a reference
+/// to the corresponding [`StorageModification`] present in the write log
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PersistentStorageModification<'wl> {
+    /// Write a new value
+    Write {
+        /// Value bytes
+        value: &'wl Vec<u8>,
+    },
+    /// Delete an existing key-value
+    Delete,
+    /// Initialize a new account with established address and a given validity
+    /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
+    /// point to its validity predicate.
+    InitAccount {
+        /// Validity predicate hash bytes
+        vp_code_hash: &'wl Hash,
+    },
+}
+
+impl<'wl> TryFrom<&'wl StorageModification>
+    for PersistentStorageModification<'wl>
+{
+    type Error = Error;
+
+    fn try_from(
+        value: &'wl StorageModification,
+    ) -> std::prelude::v1::Result<Self, Self::Error> {
+        match value {
+            StorageModification::Write { value } => {
+                Ok(PersistentStorageModification::Write { value })
+            }
+            StorageModification::Delete => {
+                Ok(PersistentStorageModification::Delete)
+            }
+            StorageModification::InitAccount { vp_code_hash } => {
+                Ok(PersistentStorageModification::InitAccount { vp_code_hash })
+            }
+            StorageModification::Temp { value: _ } => {
+                Err(Error::TempToPersistentModificationCast)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,6 +220,41 @@ impl WriteLog {
         }
     }
 
+    /// Read a non-temporary value at the given key and return the value and the
+    /// gas cost, returns [`None`] if the key is not present in the write
+    /// log
+    pub fn read_persistent(
+        &self,
+        key: &storage::Key,
+    ) -> (Option<PersistentStorageModification>, u64) {
+        for bucket in [
+            &self.tx_write_log,
+            &self.tx_precommit_write_log,
+            &self.block_write_log,
+        ] {
+            if let Some(modification) = bucket.get(key) {
+                let gas = match modification {
+                    StorageModification::Write { ref value } => {
+                        key.len() + value.len()
+                    }
+                    StorageModification::Delete => key.len(),
+                    StorageModification::InitAccount { ref vp_code_hash } => {
+                        key.len() + vp_code_hash.len()
+                    }
+                    StorageModification::Temp { .. } => continue,
+                };
+                return (
+                    Some(modification.try_into().expect(
+                        "Temporary value should have been filtered out",
+                    )),
+                    gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+                );
+            }
+        }
+
+        (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+    }
+
     /// Read a value before the latest tx execution at the given key and return
     /// the value and the gas cost, returns [`None`] if the key is not present
     /// in the write log
@@ -210,7 +296,8 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
@@ -233,6 +320,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Write { value });
+
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
@@ -265,6 +356,8 @@ impl WriteLog {
     }
 
     /// Write a key and a value and return the gas cost and the size difference
+    /// Fails with [`Error::WriteTempAfterWrite`] when attempting to update a
+    /// temporary value after writing.
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
     /// Fails with [`Error::WriteTempAfterDelete`] when attempting to update a
@@ -278,11 +371,13 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Temp { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
+                StorageModification::Write { .. } => {
+                    // Cannot overwrite a write request with a temporary one
+                    return Err(Error::WriteTempAfterWrite);
                 }
                 StorageModification::Delete => {
                     return Err(Error::WriteTempAfterDelete);
@@ -298,6 +393,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Temp { value });
+
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
         Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
@@ -313,7 +412,8 @@ impl WriteLog {
         }
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Delete)
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len() as i64,
@@ -327,6 +427,9 @@ impl WriteLog {
             // storage
             None => 0,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Delete);
         let gas = key.len() + size_diff as usize;
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
@@ -573,14 +676,15 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        for (key, modification) in &self.block_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
-            }
-        }
-        for (key, modification) in &self.tx_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
+        for bucket in [
+            &self.block_write_log,
+            &self.tx_precommit_write_log,
+            &self.tx_write_log,
+        ] {
+            for (key, modification) in bucket {
+                if key.split_prefix(prefix).is_some() {
+                    matches.insert(key.to_string(), modification.clone());
+                }
             }
         }
 
@@ -948,6 +1052,78 @@ mod tests {
                 .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
                 .expect("read failed")
         );
+    }
+
+    // Test that writing a value on top of a temporary write is not allowed
+    #[test]
+    fn test_write_after_temp_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write(&key1, val1.clone()),
+            Err(Error::UpdateTemporaryValue)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write(&key1, val1),
+            Err(Error::UpdateTemporaryValue)
+        ));
+    }
+
+    // Test that a temporary write on top of a write is not allowed
+    #[test]
+    fn test_write_temp_after_write_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterWrite)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterWrite)
+        ));
+    }
+
+    // Test that a temporary write on top of a delete is not allowed
+    #[test]
+    fn test_write_temp_after_delete_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.delete(&key1).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterDelete)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.delete(&key1).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterDelete)
+        ));
     }
 
     prop_compose! {
