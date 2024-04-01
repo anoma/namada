@@ -419,7 +419,7 @@ fn ibc(c: &mut Criterion) {
         // Initialize the state according to the target tx
         let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        let verifiers_from_tx = shielded_ctx.shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
         let (verifiers, keys_changed) = shielded_ctx
             .shell
             .state
@@ -696,7 +696,7 @@ fn masp_check_convert(c: &mut Criterion) {
     c.bench_function("vp_masp_check_convert", |b| {
         b.iter_batched_ref(
             || {
-                let (_, signed_tx) =
+                let (_, _verifiers_from_tx, signed_tx) =
                     setup_storage_for_masp_verification("shielded");
 
                 let transaction = signed_tx
@@ -735,7 +735,7 @@ fn masp_check_output(c: &mut Criterion) {
     c.bench_function("masp_vp_check_output", |b| {
         b.iter_batched_ref(
             || {
-                let (_, signed_tx) =
+                let (_, _verifiers_from_tx, signed_tx) =
                     setup_storage_for_masp_verification("shielded");
 
                 let transaction = signed_tx
@@ -775,7 +775,8 @@ fn masp_final_check(c: &mut Criterion) {
         output_vk,
     } = preload_verifying_keys();
 
-    let (_, signed_tx) = setup_storage_for_masp_verification("shielded");
+    let (_, _verifiers_from_tx, signed_tx) =
+        setup_storage_for_masp_verification("shielded");
 
     let transaction = signed_tx
         .sections
@@ -1308,7 +1309,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
     ] {
         let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        shielded_ctx.shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
         let tx_data = signed_tx.data().unwrap();
         let (verifiers, keys_changed) = shielded_ctx
             .shell
