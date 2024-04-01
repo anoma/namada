@@ -127,7 +127,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
         };
         // Expand out the signature before adding it to the
         // transaction
-        tx.add_section(Section::Signature(compressed.expand(&tx)));
+        tx.add_section(Section::Authorization(compressed.expand(&tx)));
     }
     // Sign the fee header if that is requested
     if parts.contains(&signing::Signable::FeeHeader) {
@@ -145,7 +145,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
         };
         // Expand out the signature before adding it to the
         // transaction
-        tx.add_section(Section::Signature(compressed.expand(&tx)));
+        tx.add_section(Section::Authorization(compressed.expand(&tx)));
     }
     Ok(tx)
 }

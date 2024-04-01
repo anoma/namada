@@ -344,7 +344,7 @@ mod tests {
     use namada::core::storage::Epoch;
     use namada::ledger::pos::{GenesisValidator, PosParams};
     use namada::tx::data::{self, TxType};
-    use namada::tx::{Code, Data, Signature};
+    use namada::tx::{Authorization, Code, Data};
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
@@ -540,7 +540,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
@@ -746,7 +746,7 @@ mod tests {
         let mut tx_data = Tx::from_type(TxType::Raw);
         tx_data.set_data(Data::new(vec![]));
         tx_data.set_code(Code::new(vec![], None));
-        tx_data.add_section(Section::Signature(Signature::new(
+        tx_data.add_section(Section::Authorization(Authorization::new(
             vec![tx_data.raw_header_hash()],
             pks_map.index_secret_keys(vec![sk3]),
             None,
@@ -1039,7 +1039,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
@@ -1134,7 +1134,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
@@ -1240,7 +1240,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![secret_key]),
             None,
@@ -1399,7 +1399,7 @@ mod tests {
                 let mut tx = vp_env.tx.clone();
                 tx.set_code(Code::new(vec![], None));
                 tx.set_data(Data::new(vec![]));
-                tx.add_section(Section::Signature(Signature::new(
+                tx.add_section(Section::Authorization(Authorization::new(
     vec![                tx.raw_header_hash()],
                     pks_map.index_secret_keys(vec![keypair]),
                     None,
@@ -1486,7 +1486,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,
@@ -1542,7 +1542,7 @@ mod tests {
         let mut tx = vp_env.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             pks_map.index_secret_keys(vec![keypair]),
             None,

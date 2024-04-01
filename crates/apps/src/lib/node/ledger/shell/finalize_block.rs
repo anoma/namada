@@ -746,7 +746,7 @@ mod test_finalize_block {
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Signature};
+    use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
@@ -792,7 +792,7 @@ mod test_finalize_block {
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
         wrapper_tx.set_code(Code::new(tx_code, None));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
             None,
@@ -2477,12 +2477,12 @@ mod test_finalize_block {
             WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
         )));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2745,7 +2745,7 @@ mod test_finalize_block {
         wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2915,7 +2915,7 @@ mod test_finalize_block {
         wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
             None,
@@ -3004,7 +3004,7 @@ mod test_finalize_block {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));
         wrapper.set_data(Data::new("Transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()

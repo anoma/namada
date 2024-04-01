@@ -36,12 +36,15 @@ use crate::{impl_display_and_from_str_via_format, string_encoding};
     BorshDeserializer,
     BorshSchema,
 )]
-pub enum PublicKey {
+pub enum CommonPublicKey {
     /// Encapsulate Ed25519 public keys
     Ed25519(ed25519::PublicKey),
     /// Encapsulate Secp256k1 public keys
     Secp256k1(secp256k1::PublicKey),
 }
+
+/// Public key
+pub type PublicKey = CommonPublicKey;
 
 const ED25519_PK_PREFIX: &str = "ED25519_PK_PREFIX";
 const SECP256K1_PK_PREFIX: &str = "SECP256K1_PK_PREFIX";
@@ -311,12 +314,15 @@ impl FromStr for SecretKey {
     BorshDeserializer,
     BorshSchema,
 )]
-pub enum Signature {
+pub enum CommonSignature {
     /// Encapsulate Ed25519 signatures
     Ed25519(ed25519::Signature),
     /// Encapsulate Secp256k1 signatures
     Secp256k1(secp256k1::Signature),
 }
+
+/// Signature
+pub type Signature = CommonSignature;
 
 impl string_encoding::Format for Signature {
     type EncodedBytes<'a> = Vec<u8>;
