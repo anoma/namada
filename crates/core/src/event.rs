@@ -2,8 +2,9 @@
 
 pub mod extend;
 
+use std::borrow::Cow;
 use std::fmt::{self, Display};
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, Index, IndexMut};
 use std::str::FromStr;
 
 use namada_macros::BorshDeserializer;
@@ -103,6 +104,50 @@ impl Display for EventLevel {
                 EventLevel::Tx => "tx",
             }
         )
+    }
+}
+
+/// The domain of an [`Event`]. This represents the most general
+/// category an event can fit into (e.g. IBC, Ethereum Bridge).
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
+pub struct EventDomain {
+    inner: Cow<'static, str>,
+}
+
+impl EventDomain {
+    /// Instantiate a new [`EventDomain`].
+    #[inline]
+    pub fn new<D>(domain: D) -> Self
+    where
+        D: Into<Cow<'static, str>>,
+    {
+        Self {
+            inner: domain.into(),
+        }
+    }
+
+    /// Instantiate a new [`EventDomain`] from a static string.
+    pub const fn new_static(domain: &'static str) -> Self {
+        Self {
+            inner: Cow::Borrowed(domain),
+        }
+    }
+}
+
+impl Deref for EventDomain {
+    type Target = str;
+
+    #[inline(always)]
+    fn deref(&self) -> &str {
+        &self.inner
     }
 }
 
