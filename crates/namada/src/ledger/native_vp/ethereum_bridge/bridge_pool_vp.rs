@@ -17,7 +17,6 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use eyre::eyre;
 use namada_core::eth_bridge_pool::erc20_token_address;
 use namada_core::hints;
 use namada_ethereum_bridge::storage::bridge_pool::{
@@ -26,13 +25,13 @@ use namada_ethereum_bridge::storage::bridge_pool::{
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
 use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
-use namada_state::StateRead;
+use namada_state::{ResultExt, StateRead};
 use namada_tx::Tx;
 
 use crate::address::{Address, InternalAddress};
 use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::ethereum_events::EthAddress;
-use crate::ledger::native_vp::{Ctx, NativeVp, StorageReader};
+use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::storage::Key;
 use crate::token::storage_key::balance_key;
 use crate::token::Amount;
@@ -41,7 +40,7 @@ use crate::vm::WasmCacheAccess;
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 /// Generic error that may be returned by the validity predicate
-pub struct Error(#[from] eyre::Error);
+pub struct Error(#[from] native_vp::Error);
 
 /// A positive or negative amount
 #[derive(Copy, Clone)]
@@ -195,10 +194,13 @@ where
             }
             // some other error occurred while calculating
             // balance deltas
-            (None, _) | (_, None) => Err(Error(eyre!(
-                "Could not calculate the balance delta for {}",
-                payer_account
-            ))),
+            (None, _) | (_, None) => {
+                Err(native_vp::Error::AllocMessage(format!(
+                    "Could not calculate the balance delta for {}",
+                    payer_account
+                ))
+                .into())
+            }
         }
     }
 
@@ -269,7 +271,10 @@ where
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            (&self.ctx).read_pre_value(&key)?.unwrap_or(false)
+            (&self.ctx)
+                .read_pre_value(&key)
+                .map_err(Error)?
+                .unwrap_or(false)
         };
         if !wnam_whitelisted {
             tracing::debug!(
@@ -294,7 +299,10 @@ where
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            (&self.ctx).read_pre_value(&key)?.unwrap_or_default()
+            (&self.ctx)
+                .read_pre_value(&key)
+                .map_err(Error)?
+                .unwrap_or_default()
         };
         if escrowed_balance > wnam_cap {
             tracing::debug!(
@@ -511,8 +519,8 @@ fn sum_gas_and_token_amounts(
         .amount
         .checked_add(transfer.transfer.amount)
         .ok_or_else(|| {
-            Error(eyre!(
-                "Addition overflowed adding gas fee + transfer amount."
+            Error(native_vp::Error::SimpleMessage(
+                "Addition overflowed adding gas fee + transfer amount.",
             ))
         })
 }
@@ -536,11 +544,15 @@ where
             "Ethereum Bridge Pool VP triggered",
         );
         let Some(tx_data) = tx.data() else {
-            return Err(eyre!("No transaction data found").into());
+            return Err(native_vp::Error::SimpleMessage(
+                "No transaction data found",
+            )
+            .into());
         };
         let transfer: PendingTransfer =
             BorshDeserialize::try_from_slice(&tx_data[..])
-                .map_err(|e| Error(e.into()))?;
+                .into_storage_result()
+                .map_err(Error)?;
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
@@ -553,11 +565,11 @@ where
                 return Ok(false);
             }
             Err(e) => {
-                return Err(eyre!(
+                return Err(native_vp::Error::AllocMessage(format!(
                     "Could not read the storage key associated with the \
                      transfer: {:?}",
                     e
-                )
+                ))
                 .into());
             }
             _ => {}
@@ -575,10 +587,12 @@ where
             }
         }
         let pending: PendingTransfer =
-            (&self.ctx).read_post_value(&pending_key)?.ok_or(eyre!(
-                "Rejecting transaction as the transfer wasn't added to the \
-                 pool of pending transfers"
-            ))?;
+            (&self.ctx).read_post_value(&pending_key)?.ok_or_else(|| {
+                Error(native_vp::Error::SimpleMessage(
+                    "Rejecting transaction as the transfer wasn't added to \
+                     the pool of pending transfers",
+                ))
+            })?;
         if pending != transfer {
             tracing::debug!(
                 "An incorrect transfer was added to the Ethereum bridge pool: \
