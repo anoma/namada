@@ -2106,10 +2106,29 @@ where
         TxRuntimeError::MissingTxData
     })?;
     let state = Rc::new(RefCell::new(env.state()));
-    let mut actions = IbcActions::new(state.clone());
-    let module = TransferModule::new(state);
-    actions.add_transfer_module(module.module_id(), module);
-    actions.execute(&tx_data)?;
+    // Verifier set populated in tx execution
+    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+    // Scoped to drop `verifiers.clone`s after `actions.execute`
+    {
+        let mut actions = IbcActions::new(state.clone(), verifiers.clone());
+        let module = TransferModule::new(state, verifiers.clone());
+        actions.add_transfer_module(module.module_id(), module);
+        actions.execute(&tx_data)?;
+    }
+    // NB: There must be no other strong references to this Rc
+    let verifiers = Rc::into_inner(verifiers)
+        .expect("There must be only one strong ref to verifiers set")
+        .into_inner();
+
+    // Insert all the verifiers from the tx into the verifier set in env
+    let verifiers_in_env = unsafe { env.ctx.verifiers.get() };
+    for addr in verifiers.into_iter() {
+        tx_charge_gas::<MEM, D, H, CA>(
+            env,
+            ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )?;
+        verifiers_in_env.insert(addr);
+    }
 
     Ok(())
 }

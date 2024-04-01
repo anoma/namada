@@ -1,9 +1,11 @@
 //! IBC module for token transfer
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
 
+use namada_core::address::Address;
 use namada_core::ibc::apps::transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
@@ -58,9 +60,12 @@ where
     C: IbcCommonContext,
 {
     /// Make a new module
-    pub fn new(ctx: Rc<RefCell<C>>) -> Self {
+    pub fn new(
+        ctx: Rc<RefCell<C>>,
+        verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    ) -> Self {
         Self {
-            ctx: TokenTransferContext::new(ctx),
+            ctx: TokenTransferContext::new(ctx, verifiers),
         }
     }
 

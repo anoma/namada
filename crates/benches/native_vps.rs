@@ -1157,12 +1157,16 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
                 shell.vp_wasm_cache.clone(),
             ),
         };
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone());
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
+        let module = TransferModule::new(ctx, verifiers);
         actions.add_transfer_module(module.module_id(), module);
 
         group.bench_function(bench_name, |b| {
@@ -1255,12 +1259,17 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
                 shell.vp_wasm_cache.clone(),
             ),
         };
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone());
+
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
+        let module = TransferModule::new(ctx, verifiers);
         actions.add_transfer_module(module.module_id(), module);
 
         group.bench_function(bench_name, |b| {

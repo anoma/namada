@@ -1,6 +1,7 @@
 //! IBC lower-level functions for transactions.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
@@ -16,13 +17,18 @@ use namada_tx_env::TxEnv;
 use crate::token::{burn, mint, transfer};
 use crate::{Ctx, Error};
 
-/// IBC actions to handle an IBC message
-pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
+/// IBC actions to handle an IBC message. The `verifiers` inserted into the set
+/// must be inserted into the tx context with `Ctx::insert_verifier` after tx
+/// execution.
+pub fn ibc_actions(
+    ctx: &mut Ctx,
+    verifiers: Rc<RefCell<BTreeSet<Address>>>,
+) -> Result<IbcActions<Ctx>, Error> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
-    let mut actions = IbcActions::new(ctx.clone());
-    let module = TransferModule::new(ctx);
+    let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+    let module = TransferModule::new(ctx.clone(), verifiers);
     actions.add_transfer_module(module.module_id(), module);
-    actions
+    Ok(actions)
 }
 
 impl IbcStorageContext for Ctx {

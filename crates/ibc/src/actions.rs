@@ -1,6 +1,7 @@
 //! Implementation of `IbcActions` with the protocol storage
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
@@ -306,6 +307,9 @@ where
     prost::Message::encode(&any_msg, &mut data).into_storage_result()?;
 
     let ctx = IbcProtocolContext { state };
-    let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)));
+    // Use an empty verifiers set placeholder for validation, this is only
+    // needed in txs and not protocol
+    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+    let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)), verifiers);
     actions.execute(&data).into_storage_result()
 }

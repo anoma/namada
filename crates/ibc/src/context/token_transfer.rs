@@ -1,6 +1,7 @@
 //! IBC token transfer context
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
@@ -26,6 +27,7 @@ where
     C: IbcCommonContext,
 {
     inner: Rc<RefCell<C>>,
+    verifiers: Rc<RefCell<BTreeSet<Address>>>,
 }
 
 impl<C> TokenTransferContext<C>
@@ -33,8 +35,16 @@ where
     C: IbcCommonContext,
 {
     /// Make new token transfer context
-    pub fn new(inner: Rc<RefCell<C>>) -> Self {
-        Self { inner }
+    pub fn new(
+        inner: Rc<RefCell<C>>,
+        verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    ) -> Self {
+        Self { inner, verifiers }
+    }
+
+    /// Insert a verifier address whose VP will verify the tx.
+    fn insert_verifier(&mut self, addr: &Address) {
+        self.verifiers.borrow_mut().insert(addr.clone());
     }
 
     /// Get the token address and the amount from PrefixedCoin. If the base
@@ -143,6 +153,13 @@ where
         // has no prefix
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        // A transfer of NUT tokens must be verified by their VP
+        if ibc_token.is_internal()
+            && matches!(ibc_token, Address::Internal(InternalAddress::Nut(_)))
+        {
+            self.insert_verifier(&ibc_token);
+        }
+
         self.inner
             .borrow_mut()
             .transfer_token(from, to, &ibc_token, amount)
@@ -157,6 +174,13 @@ where
         // The trace path of the denom is already updated if receiving the token
         let (ibc_token, amount) = self.get_token_amount(coin)?;
 
+        // A transfer of NUT tokens must be verified by their VP
+        if ibc_token.is_internal()
+            && matches!(ibc_token, Address::Internal(InternalAddress::Nut(_)))
+        {
+            self.insert_verifier(&ibc_token);
+        }
+
         self.inner
             .borrow_mut()
             .mint_token(account, &ibc_token, amount)
@@ -169,6 +193,13 @@ where
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         let (ibc_token, amount) = self.get_token_amount(coin)?;
+
+        // A transfer of NUT tokens must be verified by their VP
+        if ibc_token.is_internal()
+            && matches!(ibc_token, Address::Internal(InternalAddress::Nut(_)))
+        {
+            self.insert_verifier(&ibc_token);
+        }
 
         // The burn is "unminting" from the minted balance
         self.inner
