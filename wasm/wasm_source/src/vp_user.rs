@@ -189,15 +189,16 @@ fn validate_pos_changes(
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
     let is_valid_metadata_change = || {
-        let validator = is_validator_metadata_key(key);
-        let metadata = ctx.post().read::<String>(key)?;
-        let valid_len = if let Some(metadata) = metadata {
-            (metadata.len() as u64) <= MAX_VALIDATOR_METADATA_LEN
-        } else {
-            true
-        };
-        let is_valid = match validator {
-            Some(address) => valid_len && address == owner && **valid_sig,
+        let is_valid = match is_validator_metadata_key(key) {
+            Some(address) => {
+                let metadata = ctx.post().read::<String>(key)?;
+                let valid_len = if let Some(metadata) = metadata {
+                    (metadata.len() as u64) <= MAX_VALIDATOR_METADATA_LEN
+                } else {
+                    true
+                };
+                valid_len && address == owner && **valid_sig
+            }
             None => false,
         };
         VpResult::Ok(is_valid)
