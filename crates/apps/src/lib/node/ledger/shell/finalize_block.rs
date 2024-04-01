@@ -2815,7 +2815,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
