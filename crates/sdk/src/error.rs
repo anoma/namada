@@ -309,6 +309,9 @@ pub enum TxSubmitError {
     /// An empty string was provided as a new email
     #[error("An empty string cannot be provided as a new email")]
     InvalidEmail,
+    /// The metadata string is too long
+    #[error("The provided metadata string is too long")]
+    MetadataTooLong,
     /// The consensus key is not Ed25519
     #[error("The consensus key must be an ed25519 key")]
     ConsensusKeyNotEd25519,

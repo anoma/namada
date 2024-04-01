@@ -15,6 +15,7 @@ use core::ops::Deref;
 
 use namada_vp_prelude::*;
 use once_cell::unsync::Lazy;
+use proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use proof_of_stake::storage::{read_pos_params, validator_state_handle};
 use proof_of_stake::storage_key::{
     is_below_capacity_validator_set_key, is_bond_epoched_meta_key, is_bond_key,
@@ -188,11 +189,18 @@ fn validate_pos_changes(
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
     let is_valid_metadata_change = || {
-        let metadata = is_validator_metadata_key(key);
-        match metadata {
-            Some(address) => address == owner && **valid_sig,
+        let validator = is_validator_metadata_key(key);
+        let metadata = ctx.post().read::<String>(key)?;
+        let valid_len = if let Some(metadata) = metadata {
+            (metadata.len() as u64) <= MAX_VALIDATOR_METADATA_LEN
+        } else {
+            true
+        };
+        let is_valid = match validator {
+            Some(address) => valid_len && address == owner && **valid_sig,
             None => false,
-        }
+        };
+        VpResult::Ok(is_valid)
     };
 
     // Changes in validator state
@@ -324,7 +332,7 @@ fn validate_pos_changes(
         || is_valid_reward_claim()
         || is_valid_redelegation()
         || is_valid_commission_rate_change()
-        || is_valid_metadata_change()
+        || is_valid_metadata_change()?
         || is_valid_become_validator()
         || **valid_sig)
 }
