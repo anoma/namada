@@ -107,23 +107,26 @@ impl Display for EventLevel {
     }
 }
 
-/// The domain of an [`Event`]. This represents the most general
-/// category an event can fit into (e.g. IBC, Ethereum Bridge).
+/// Logical segmentation of an ABCI event kind.
 #[derive(
     Clone,
     Debug,
     Eq,
     PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
 )]
-pub struct EventDomain {
+#[repr(transparent)]
+pub struct EventSegment {
     inner: Cow<'static, str>,
 }
 
-impl EventDomain {
-    /// Instantiate a new [`EventDomain`].
+impl EventSegment {
+    /// Instantiate a new [`EventSegment`].
     #[inline]
     pub fn new<D>(domain: D) -> Self
     where
@@ -134,11 +137,46 @@ impl EventDomain {
         }
     }
 
-    /// Instantiate a new [`EventDomain`] from a static string.
+    /// Instantiate a new [`EventSegment`] from a static string.
     pub const fn new_static(domain: &'static str) -> Self {
         Self {
             inner: Cow::Borrowed(domain),
         }
+    }
+}
+
+impl Deref for EventSegment {
+    type Target = str;
+
+    #[inline(always)]
+    fn deref(&self) -> &str {
+        &self.inner
+    }
+}
+
+/// The domain of an [`Event`]. This represents the most general
+/// category an event can fit into (e.g. IBC, Ethereum Bridge).
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
+#[repr(transparent)]
+pub struct EventDomain {
+    inner: EventSegment,
+}
+
+impl From<EventSegment> for EventDomain {
+    #[inline(always)]
+    fn from(inner: EventSegment) -> Self {
+        Self { inner }
     }
 }
 
