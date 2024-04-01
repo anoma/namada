@@ -987,7 +987,6 @@ mod test {
         state.write_log_mut().commit_tx();
     }
 
-    #[cfg(test)]
     fn update_epoch_to(
         state: &mut FullAccessState<MockDB, Sha256Hasher>,
         total_epochs: u64,
@@ -1142,7 +1141,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_proposal_accepted() {
+    fn test_governance_proposal_accepted() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -1869,7 +1868,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_validator_success() {
+    fn test_governance_vote_validator_success() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -1993,7 +1992,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_validator_out_of_voting_window_fail() {
+    fn test_governance_vote_validator_out_of_voting_window_fail() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -2117,7 +2116,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_validator_fail() {
+    fn test_governance_vote_validator_fail() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -2241,7 +2240,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_delegator_success() {
+    fn test_governance_vote_delegator_success() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -2382,7 +2381,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_delegator_fail() {
+    fn test_governance_vote_delegator_fail() {
         let mut state = init_storage();
 
         let proposal_id = 0;
@@ -2523,7 +2522,7 @@ mod test {
     }
 
     #[test]
-    fn test_goverance_vote_invalid_verifier_fail() {
+    fn test_governance_vote_invalid_verifier_fail() {
         let mut state = init_storage();
 
         let proposal_id = 0;
