@@ -2566,7 +2566,7 @@ mod test_finalize_block {
                 "Encrypted transaction data".as_bytes().to_owned(),
             ));
             wrapper_tx.set_code(Code::new(tx_code, None));
-            wrapper_tx.add_section(Section::Signature(Signature::new(
+            wrapper_tx.add_section(Section::Authorization(Authorization::new(
                 wrapper_tx.sechashes(),
                 [(0, keypair.clone())].into_iter().collect(),
                 None,
@@ -2820,7 +2820,7 @@ mod test_finalize_block {
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         // Set no code to let the inner tx fail
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
             None,
