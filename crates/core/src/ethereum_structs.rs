@@ -1,4 +1,5 @@
 //! Ethereum bridge struct re-exports and types to do with ethereum.
+
 use std::fmt;
 use std::io::Read;
 use std::num::NonZeroU64;
@@ -12,6 +13,8 @@ use namada_migrations::*;
 use num256::Uint256;
 use serde::{Deserialize, Serialize};
 
+use crate::event::extend::EventAttributeEntry;
+use crate::event::{EventError, EventType};
 use crate::keccak::KeccakHash;
 
 /// Status of some Bridge pool transfer.
@@ -29,11 +32,58 @@ use crate::keccak::KeccakHash;
     Serialize,
     Deserialize,
 )]
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
 pub enum BpTransferStatus {
     /// The transfer has been relayed.
     Relayed,
     /// The transfer has expired.
     Expired,
+}
+
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
+impl From<BpTransferStatus> for EventType {
+    fn from(transfer_status: BpTransferStatus) -> Self {
+        (&transfer_status).into()
+    }
+}
+
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
+impl From<&BpTransferStatus> for EventType {
+    fn from(transfer_status: &BpTransferStatus) -> Self {
+        match transfer_status {
+            BpTransferStatus::Relayed => event_types::BRIDGE_POOL_RELAYED,
+            BpTransferStatus::Expired => event_types::BRIDGE_POOL_EXPIRED,
+        }
+    }
+}
+
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
+impl TryFrom<EventType> for BpTransferStatus {
+    type Error = EventError;
+
+    fn try_from(event_type: EventType) -> Result<Self, Self::Error> {
+        (&event_type).try_into()
+    }
+}
+
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
+impl TryFrom<&EventType> for BpTransferStatus {
+    type Error = EventError;
+
+    fn try_from(event_type: &EventType) -> Result<Self, Self::Error> {
+        if *event_type == event_types::BRIDGE_POOL_RELAYED {
+            Ok(BpTransferStatus::Relayed)
+        } else if *event_type == event_types::BRIDGE_POOL_EXPIRED {
+            Ok(BpTransferStatus::Expired)
+        } else {
+            Err(EventError::InvalidEventType)
+        }
+    }
 }
 
 /// Ethereum bridge events on Namada's event log.
@@ -51,6 +101,8 @@ pub enum BpTransferStatus {
     Serialize,
     Deserialize,
 )]
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
 pub enum EthBridgeEvent {
     /// Bridge pool transfer status update event.
     BridgePool {
@@ -76,6 +128,53 @@ impl EthBridgeEvent {
             tx_hash,
             status: BpTransferStatus::Relayed,
         }
+    }
+}
+
+// TODO: move to `namada_ethereum_bridge::event::types` or
+// some similar path in the namada eth bridge crate
+pub mod event_types {
+    //! Ethereum bridge event types.
+
+    use std::borrow::Cow;
+
+    use super::EthBridgeEvent;
+    use crate::event::{new_event_type_of, EventSegment, EventType};
+
+    /// Bridge pool relay event.
+    pub const BRIDGE_POOL_RELAYED: EventType =
+        new_event_type_of::<EthBridgeEvent>(Cow::Borrowed({
+            const SEGMENTS: &[EventSegment] = &[
+                EventSegment::new_static("bridge-pool"),
+                EventSegment::new_static("relayed"),
+            ];
+            SEGMENTS
+        }));
+
+    /// Bridge pool expiration event.
+    pub const BRIDGE_POOL_EXPIRED: EventType =
+        new_event_type_of::<EthBridgeEvent>(Cow::Borrowed({
+            const SEGMENTS: &[EventSegment] = &[
+                EventSegment::new_static("bridge-pool"),
+                EventSegment::new_static("expired"),
+            ];
+            SEGMENTS
+        }));
+}
+
+// TODO: move to `namada_ethereum_bridge::event` or
+// some similar path in the namada eth bridge crate
+/// Extend an [`Event`](crate::event::Event) with Bridge pool tx hash data.
+pub struct BridgePoolTxHash<'tx>(pub &'tx KeccakHash);
+
+impl<'tx> EventAttributeEntry<'tx> for BridgePoolTxHash<'tx> {
+    type Value = &'tx KeccakHash;
+    type ValueOwned = KeccakHash;
+
+    const KEY: &'static str = "bridge_pool_tx_hash";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 

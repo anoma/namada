@@ -14,33 +14,53 @@ use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
 use crate::collections::HashMap;
-use crate::ethereum_structs::{BpTransferStatus, EthBridgeEvent};
+use crate::ethereum_structs::EthBridgeEvent;
 use crate::ibc::IbcEvent;
+
+// TODO: remove this
+macro_rules! event_type {
+    ($domain:expr, $($subdomain:expr),*) => {
+        EventType {
+            domain: EventSegment::new($domain),
+            sub_domain: Cow::Owned(vec![$(EventSegment::new($subdomain)),*]),
+        }
+    };
+    ($domain:expr) => {
+        event_type!($domain,)
+    };
+}
 
 /// An event to be emitted in Namada.
 pub trait EventToEmit: Into<Event> {
     /// The domain of the event to emit.
     ///
     /// This may be used to group events of a certain kind.
-    const DOMAIN: &'static str;
+    const DOMAIN: EventSegment;
+}
 
-    /// Utility method to return the value of [`Self::DOMAIN`].
-    #[inline(always)]
-    fn domain(&self) -> &'static str {
-        Self::DOMAIN
+/// Create a new constant event type.
+pub const fn new_event_type_of<E>(
+    sub_domain: Cow<'static, [EventSegment]>,
+) -> EventType
+where
+    E: EventToEmit,
+{
+    EventType {
+        domain: E::DOMAIN,
+        sub_domain,
     }
 }
 
 impl EventToEmit for Event {
-    const DOMAIN: &'static str = "generic";
+    const DOMAIN: EventSegment = EventSegment::new_static("unknown");
 }
 
 impl EventToEmit for IbcEvent {
-    const DOMAIN: &'static str = "ibc";
+    const DOMAIN: EventSegment = EventSegment::new_static("ibc");
 }
 
 impl EventToEmit for EthBridgeEvent {
-    const DOMAIN: &'static str = "eth-bridge";
+    const DOMAIN: EventSegment = EventSegment::new_static("eth-bridge");
 }
 
 /// Used in sub-systems that may emit events.
@@ -83,6 +103,7 @@ impl EmitEvents for Vec<Event> {
     Debug,
     Eq,
     PartialEq,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -128,12 +149,12 @@ pub struct EventSegment {
 impl EventSegment {
     /// Instantiate a new [`EventSegment`].
     #[inline]
-    pub fn new<D>(domain: D) -> Self
+    pub fn new<S>(segment: S) -> Self
     where
-        D: Into<Cow<'static, str>>,
+        S: Into<Cow<'static, str>>,
     {
         Self {
-            inner: domain.into(),
+            inner: segment.into(),
         }
     }
 
@@ -154,8 +175,17 @@ impl Deref for EventSegment {
     }
 }
 
-/// The domain of an [`Event`]. This represents the most general
-/// category an event can fit into (e.g. IBC, Ethereum Bridge).
+impl Display for EventSegment {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+/// ABCI event type.
+///
+/// It is comprised of an event domain and sub-domain, plus any other
+/// specifiers.
 #[derive(
     Clone,
     Debug,
@@ -168,24 +198,65 @@ impl Deref for EventSegment {
     BorshDeserialize,
     BorshDeserializer,
 )]
-#[repr(transparent)]
-pub struct EventDomain {
-    inner: EventSegment,
+pub struct EventType {
+    /// The domain of an [`Event`]. Usually, this is equivalent to the
+    /// protocol subsystem the event originated from (e.g. IBC, Ethereum
+    /// Bridge).
+    pub domain: EventSegment,
+    /// Further describes the event with a sub-domain.
+    pub sub_domain: Cow<'static, [EventSegment]>,
 }
 
-impl From<EventSegment> for EventDomain {
-    #[inline(always)]
-    fn from(inner: EventSegment) -> Self {
-        Self { inner }
+impl EventType {
+    /// Retrieve the sub-domain of some event.
+    pub fn sub_domain(&self) -> String {
+        let mut output = String::new();
+        let mut segments = self.sub_domain.iter();
+
+        if let Some(segment) = segments.next() {
+            output.push_str(segment);
+        } else {
+            return output;
+        }
+
+        for segment in segments {
+            output.push('/');
+            output.push_str(segment);
+        }
+
+        output
     }
 }
 
-impl Deref for EventDomain {
-    type Target = str;
+impl Display for EventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { domain, sub_domain } = self;
+        write!(f, "{domain}")?;
+        for segment in sub_domain.iter() {
+            write!(f, "/{segment}")?;
+        }
+        Ok(())
+    }
+}
 
-    #[inline(always)]
-    fn deref(&self) -> &str {
-        &self.inner
+impl FromStr for EventType {
+    type Err = EventError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut segments = s.split('/');
+
+        let domain = segments
+            .next()
+            .map(String::from)
+            .map(EventSegment::new)
+            .ok_or(EventError::MissingDomain)?;
+        let sub_domain = segments
+            .map(String::from)
+            .map(EventSegment::new)
+            .collect::<Vec<_>>()
+            .into();
+
+        Ok(Self { domain, sub_domain })
     }
 }
 
@@ -201,11 +272,11 @@ impl Deref for EventDomain {
     BorshDeserializer,
 )]
 pub struct Event {
-    /// The type of event.
-    pub event_type: EventType,
     /// The level of the event - whether it relates to a block or an individual
     /// transaction.
     pub level: EventLevel,
+    /// The type of event.
+    pub event_type: EventType,
     /// Key-value attributes of the event.
     pub attributes: HashMap<String, String>,
 }
@@ -217,67 +288,15 @@ impl Display for Event {
     }
 }
 
-/// The two types of custom events we currently use
-#[derive(
-    Clone,
-    Debug,
-    Eq,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-)]
-pub enum EventType {
-    /// The transaction was applied during block finalization
-    Applied,
-    /// The IBC transaction was applied during block finalization
-    // TODO: create type-safe wrapper for all ibc event kinds
-    Ibc(String),
-    /// The proposal that has been executed
-    Proposal,
-    /// The pgf payment
-    PgfPayment,
-    /// Ethereum Bridge event
-    EthereumBridge,
-}
-
-impl Display for EventType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EventType::Applied => write!(f, "applied"),
-            EventType::Ibc(t) => write!(f, "{}", t),
-            EventType::Proposal => write!(f, "proposal"),
-            EventType::PgfPayment => write!(f, "pgf_payment"),
-            EventType::EthereumBridge => write!(f, "ethereum_bridge"),
-        }?;
-        Ok(())
-    }
-}
-
-impl FromStr for EventType {
-    type Err = EventError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "applied" => Ok(EventType::Applied),
-            "proposal" => Ok(EventType::Proposal),
-            "pgf_payments" => Ok(EventType::PgfPayment),
-            // <IBC>
-            "update_client" => Ok(EventType::Ibc("update_client".to_string())),
-            "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),
-            "write_acknowledgement" => {
-                Ok(EventType::Ibc("write_acknowledgement".to_string()))
-            }
-            // </IBC>
-            "ethereum_bridge" => Ok(EventType::EthereumBridge),
-            _ => Err(EventError::InvalidEventType),
-        }
-    }
-}
-
 /// Errors to do with emitting events.
 #[derive(Error, Debug, Clone)]
 pub enum EventError {
+    /// Missing event domain.
+    #[error("Missing the domain of the event")]
+    MissingDomain,
+    /// Failed to retrieve an event attribute.
+    #[error("Failed to retrieve event attribute: {0}")]
+    AttributeRetrieval(String),
     /// Error when parsing an event type
     #[error("Invalid event type")]
     InvalidEventType,
@@ -296,7 +315,7 @@ impl Event {
     /// Create an applied tx event with empty attributes.
     pub fn applied_tx() -> Self {
         Self {
-            event_type: EventType::Applied,
+            event_type: event_type!("tx", "applied"),
             level: EventLevel::Tx,
             attributes: HashMap::new(),
         }
@@ -335,20 +354,15 @@ impl From<&EthBridgeEvent> for Event {
     fn from(event: &EthBridgeEvent) -> Event {
         match event {
             EthBridgeEvent::BridgePool { tx_hash, status } => Event {
-                event_type: EventType::EthereumBridge,
+                event_type: status.into(),
                 level: EventLevel::Tx,
                 attributes: {
-                    let mut attrs = HashMap::new();
-                    attrs.insert(
-                        "kind".into(),
-                        match status {
-                            BpTransferStatus::Relayed => "bridge_pool_relayed",
-                            BpTransferStatus::Expired => "bridge_pool_expired",
-                        }
-                        .into(),
-                    );
-                    attrs.insert("tx_hash".into(), tx_hash.to_string());
-                    attrs
+                    use self::extend::ExtendAttributesMap;
+                    use crate::ethereum_structs::BridgePoolTxHash;
+
+                    let mut attributes = HashMap::new();
+                    attributes.with_attribute(BridgePoolTxHash(tx_hash));
+                    attributes
                 },
             },
         }
@@ -373,7 +387,7 @@ impl IndexMut<&str> for Event {
 impl From<IbcEvent> for Event {
     fn from(ibc_event: IbcEvent) -> Self {
         Self {
-            event_type: EventType::Ibc(ibc_event.event_type),
+            event_type: event_type!("ibc", ibc_event.event_type),
             level: EventLevel::Tx,
             attributes: ibc_event.attributes,
         }
@@ -395,6 +409,13 @@ impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
                         index: true,
                     }
                 })
+                .chain(std::iter::once_with(|| {
+                    crate::tendermint_proto::v0_37::abci::EventAttribute {
+                        key: "event-level".to_string(),
+                        value: event.level.to_string(),
+                        index: true,
+                    }
+                }))
                 .collect(),
         }
     }

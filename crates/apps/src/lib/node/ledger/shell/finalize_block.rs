@@ -4,11 +4,10 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockResults, Epoch, Header};
-use namada::gas::event::WithGasUsed;
+use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
 use namada::ledger::events::extend::{ComposeEvent, Height, Info, ValidMaspTx};
-use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
@@ -17,6 +16,7 @@ use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
+use namada::sdk::events::EmitEvents;
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::token::utils::is_masp_tx;
@@ -179,7 +179,7 @@ where
                             "Tx rejected: {}",
                             &processed_tx.result.info
                         )))
-                        .with(WithGasUsed(0.into())),
+                        .with(GasUsed(0.into())),
                 );
                 continue;
             }
@@ -202,7 +202,7 @@ where
                             "Tx rejected: {}",
                             &processed_tx.result.info
                         )))
-                        .with(WithGasUsed(0.into())),
+                        .with(GasUsed(0.into())),
                 );
                 continue;
             }
@@ -417,7 +417,7 @@ where
                         tx_event.extend(Code(ResultCode::InvalidTx));
                     }
                     tx_event
-                        .extend(WithGasUsed(result.gas_used))
+                        .extend(GasUsed(result.gas_used))
                         .extend(Info("Check inner_tx for result.".to_string()))
                         .extend(InnerTx(&result));
                 }
@@ -430,7 +430,7 @@ where
                         msg,
                     );
                     tx_event
-                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
                         .extend(Code(ResultCode::InvalidTx));
                 }
@@ -478,7 +478,7 @@ where
                     self.state.drop_tx();
 
                     tx_event
-                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()));
 
                     // If wrapper, invalid tx error code

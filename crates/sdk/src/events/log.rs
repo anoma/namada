@@ -106,12 +106,13 @@ mod tests {
     use namada_core::hash::Hash;
 
     use super::*;
-    use crate::events::{EventLevel, EventType};
+    use crate::events::EventLevel;
+    use crate::tx::event::types::APPLIED as APPLIED_TX;
 
     const HASH: &str =
         "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
-    /// An accepted tx hash query.
+    /// An applied tx hash query.
     macro_rules! applied {
         ($hash:expr) => {
             dumb_queries::QueryMatcher::applied(Hash::try_from($hash).unwrap())
@@ -121,7 +122,7 @@ mod tests {
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
         let event_1 = Event {
-            event_type: EventType::Applied,
+            event_type: APPLIED_TX,
             level: EventLevel::Block,
             attributes: {
                 let mut attrs = namada_core::collections::HashMap::new();
@@ -130,7 +131,7 @@ mod tests {
             },
         };
         let event_2 = Event {
-            event_type: EventType::Proposal,
+            event_type: APPLIED_TX,
             level: EventLevel::Block,
             attributes: {
                 let mut attrs = namada_core::collections::HashMap::new();

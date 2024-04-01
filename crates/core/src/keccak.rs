@@ -1,7 +1,9 @@
 //! This module is for hashing Namada types using the keccak256
 //! hash function in a way that is compatible with smart contracts
 //! on Ethereum.
+
 use std::fmt;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
@@ -103,6 +105,14 @@ impl TryFrom<&str> for KeccakHash {
             .decode(string.as_bytes())
             .map_err(TryFromError::FromStringError)?;
         Self::try_from(bytes.as_slice())
+    }
+}
+
+impl FromStr for KeccakHash {
+    type Err = TryFromError;
+
+    fn from_str(s: &str) -> Result<Self, TryFromError> {
+        s.try_into()
     }
 }
 
