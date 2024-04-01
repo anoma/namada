@@ -2723,8 +2723,8 @@ mod test_finalize_block {
 
     #[test]
     /// Test that the hash of the wrapper transaction is committed to storage
-    /// even if the wrapper tx fails. The inner transaction hash must instead be
-    /// removed
+    /// even if the wrapper tx fails. The inner transaction hash must not be
+    /// inserted
     fn test_commits_hash_if_wrapper_failure() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
@@ -2800,6 +2800,79 @@ mod test_finalize_block {
         );
     }
 
+    // Test that the fees are paid even if the inner transaction fails and its
+    // modifications are dropped
+    #[test]
+    fn test_fee_payment_if_invalid_inner_tx() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = crate::wallet::defaults::albert_keypair();
+
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                GAS_LIMIT_MULTIPLIER.into(),
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        // Set no code to let the inner tx fail
+        wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.sechashes(),
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
+        )));
+
+        let fee_amount =
+            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+        let fee_amount = namada::token::denom_to_amount(
+            fee_amount,
+            &wrapper.header().wrapper().unwrap().fee.token,
+            &shell.state,
+        )
+        .unwrap();
+        let signer_balance = namada::token::read_balance(
+            &shell.state,
+            &shell.state.in_mem().native_token,
+            &wrapper.header().wrapper().unwrap().fee_payer(),
+        )
+        .unwrap();
+
+        let processed_tx = ProcessedTx {
+            tx: wrapper.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check balance of fee payer
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed").as_str();
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+
+        let new_signer_balance = namada::token::read_balance(
+            &shell.state,
+            &shell.state.in_mem().native_token,
+            &wrapper.header().wrapper().unwrap().fee_payer(),
+        )
+        .unwrap();
+        assert_eq!(
+            new_signer_balance,
+            signer_balance.checked_sub(fee_amount).unwrap()
+        )
+    }
+
     // Test that if the fee payer doesn't have enough funds for fee payment the
     // ledger drains their balance. Note that because of the checks in process
     // proposal this scenario should never happen
@@ -2807,12 +2880,30 @@ mod test_finalize_block {
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
+        let native_token = shell.state.in_mem().native_token.clone();
+
+        // Credit some tokens for fee payment
+        let initial_balance = token::Amount::native_whole(1);
+        namada::token::credit_tokens(
+            &mut shell.state,
+            &native_token,
+            &Address::from(&keypair.to_public()),
+            initial_balance,
+        )
+        .unwrap();
+        let balance_key = token::storage_key::balance_key(
+            &native_token,
+            &Address::from(&keypair.to_public()),
+        );
+        let balance: Amount =
+            shell.state.read(&balance_key).unwrap().unwrap_or_default();
+        assert_eq!(balance, initial_balance);
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
                     amount_per_gas_unit: DenominatedAmount::native(100.into()),
-                    token: shell.state.in_mem().native_token.clone(),
+                    token: native_token.clone(),
                 },
                 keypair.ref_to(),
                 Epoch(0),
@@ -2829,6 +2920,18 @@ mod test_finalize_block {
             [(0, keypair.clone())].into_iter().collect(),
             None,
         )));
+
+        // Check that the fees are higher than the initial balance of the fee
+        // payer
+        let fee_amount =
+            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+        let fee_amount = namada::token::denom_to_amount(
+            fee_amount,
+            &wrapper.header().wrapper().unwrap().fee.token,
+            &shell.state,
+        )
+        .unwrap();
+        assert!(fee_amount > initial_balance);
 
         let processed_tx = ProcessedTx {
             tx: wrapper.to_bytes().into(),
@@ -2849,10 +2952,6 @@ mod test_finalize_block {
         assert_eq!(event.event_type.to_string(), String::from("applied"));
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        let balance_key = token::storage_key::balance_key(
-            &shell.state.in_mem().native_token,
-            &Address::from(&keypair.to_public()),
-        );
         let balance: Amount =
             shell.state.read(&balance_key).unwrap().unwrap_or_default();
 
