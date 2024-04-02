@@ -779,10 +779,6 @@ mod tests {
         Key::parse("testing2").unwrap()
     }
 
-    fn merkle_tree_key_filter(key: &Key) -> bool {
-        key == &test_key_1()
-    }
-
     #[test]
     fn test_persistent_storage_writing_without_merklizing_or_diffs() {
         let db_path =
@@ -793,7 +789,8 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            merkle_tree_key_filter,
+            // Only merkelize and persist diffs for `test_key_1`
+            |key: &Key| -> bool { key == &test_key_1() },
         );
         // Start the first block
         let first_height = BlockHeight::first();
@@ -869,12 +866,12 @@ mod tests {
         // need to have diffs for at least 1 block for rollback purposes
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, true)
+            .read_rollback_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, false)
+            .read_rollback_val(&key2, first_height, false)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
@@ -932,12 +929,12 @@ mod tests {
         // Check that key-val-2 diffs don't exist for block 0 anymore
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, true)
+            .read_rollback_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, false)
+            .read_rollback_val(&key2, first_height, false)
             .unwrap();
         assert!(res2.is_none());
 
@@ -945,14 +942,14 @@ mod tests {
         // val2 and no "new" value
         let res2 = state
             .db()
-            .read_diffs_val(&key2, second_height, true)
+            .read_rollback_val(&key2, second_height, true)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
         assert_eq!(res2, val2);
         let res2 = state
             .db()
-            .read_diffs_val(&key2, second_height, false)
+            .read_rollback_val(&key2, second_height, false)
             .unwrap();
         assert!(res2.is_none());
     }

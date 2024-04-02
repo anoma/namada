@@ -636,6 +636,27 @@ impl RocksDB {
         tracing::info!("Flushing restored state to disk");
         self.exec_batch(batch)
     }
+
+    /// Read diffs of non-persisted key-vals that are only kept for rollback of
+    /// one block height.
+    #[cfg(test)]
+    pub fn read_rollback_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+        let key = if is_old {
+            old_and_new_diff_key(key, height)?.0
+        } else {
+            old_and_new_diff_key(key, height)?.1
+        };
+
+        self.0
+            .get_cf(rollback_cf, key)
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
 }
 
 impl DB for RocksDB {
@@ -2258,174 +2279,191 @@ mod test {
 
     #[test]
     fn test_rollback() {
-        let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        for persist_diffs in [true, false] {
+            println!("Running with persist_diffs: {persist_diffs}");
 
-        // A key that's gonna be added on a second block
-        let add_key = Key::parse("add").unwrap();
-        // A key that's gonna be deleted on a second block
-        let delete_key = Key::parse("delete").unwrap();
-        // A key that's gonna be overwritten on a second block
-        let overwrite_key = Key::parse("overwrite").unwrap();
+            let dir = tempdir().unwrap();
+            let mut db = open(dir.path(), None).unwrap();
 
-        // Write first block
-        let mut batch = RocksDB::batch();
-        let height_0 = BlockHeight(100);
-        let mut pred_epochs = Epochs::default();
-        pred_epochs.new_epoch(height_0);
-        let conversion_state_0 = ConversionState::default();
-        let to_delete_val = vec![1_u8, 1, 0, 0];
-        let to_overwrite_val = vec![1_u8, 1, 1, 0];
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_0,
-            &delete_key,
-            &to_delete_val,
-            true,
-        )
-        .unwrap();
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_0,
-            &overwrite_key,
-            &to_overwrite_val,
-            true,
-        )
-        .unwrap();
-        for tx in [b"tx1", b"tx2"] {
-            db.write_replay_protection_entry(
+            // A key that's gonna be added on a second block
+            let add_key = Key::parse("add").unwrap();
+            // A key that's gonna be deleted on a second block
+            let delete_key = Key::parse("delete").unwrap();
+            // A key that's gonna be overwritten on a second block
+            let overwrite_key = Key::parse("overwrite").unwrap();
+
+            // Write first block
+            let mut batch = RocksDB::batch();
+            let height_0 = BlockHeight(100);
+            let mut pred_epochs = Epochs::default();
+            pred_epochs.new_epoch(height_0);
+            let conversion_state_0 = ConversionState::default();
+            let to_delete_val = vec![1_u8, 1, 0, 0];
+            let to_overwrite_val = vec![1_u8, 1, 1, 0];
+            db.batch_write_subspace_val(
                 &mut batch,
-                &replay_protection::all_key(&Hash::sha256(tx)),
+                height_0,
+                &delete_key,
+                &to_delete_val,
+                persist_diffs,
             )
             .unwrap();
-            db.write_replay_protection_entry(
+            db.batch_write_subspace_val(
                 &mut batch,
-                &replay_protection::buffer_key(&Hash::sha256(tx)),
+                height_0,
+                &overwrite_key,
+                &to_overwrite_val,
+                persist_diffs,
             )
             .unwrap();
-        }
-
-        for tx in [b"tx3", b"tx4"] {
-            db.write_replay_protection_entry(
-                &mut batch,
-                &replay_protection::last_key(&Hash::sha256(tx)),
-            )
-            .unwrap();
-        }
-
-        add_block_to_batch(
-            &db,
-            &mut batch,
-            height_0,
-            Epoch(1),
-            pred_epochs.clone(),
-            &conversion_state_0,
-        )
-        .unwrap();
-        db.exec_batch(batch.0).unwrap();
-
-        // Write second block
-        let mut batch = RocksDB::batch();
-        let height_1 = BlockHeight(101);
-        pred_epochs.new_epoch(height_1);
-        let conversion_state_1 = ConversionState::default();
-        let add_val = vec![1_u8, 0, 0, 0];
-        let overwrite_val = vec![1_u8, 1, 1, 1];
-        db.batch_write_subspace_val(
-            &mut batch, height_1, &add_key, &add_val, true,
-        )
-        .unwrap();
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_1,
-            &overwrite_key,
-            &overwrite_val,
-            true,
-        )
-        .unwrap();
-        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key, true)
-            .unwrap();
-
-        db.prune_replay_protection_buffer(&mut batch).unwrap();
-        db.write_replay_protection_entry(
-            &mut batch,
-            &replay_protection::all_key(&Hash::sha256(b"tx3")),
-        )
-        .unwrap();
-
-        for tx in [b"tx3", b"tx4"] {
-            db.delete_replay_protection_entry(
-                &mut batch,
-                &replay_protection::last_key(&Hash::sha256(tx)),
-            )
-            .unwrap();
-            db.write_replay_protection_entry(
-                &mut batch,
-                &replay_protection::buffer_key(&Hash::sha256(tx)),
-            )
-            .unwrap();
-        }
-
-        for tx in [b"tx5", b"tx6"] {
-            db.write_replay_protection_entry(
-                &mut batch,
-                &replay_protection::last_key(&Hash::sha256(tx)),
-            )
-            .unwrap();
-        }
-
-        add_block_to_batch(
-            &db,
-            &mut batch,
-            height_1,
-            Epoch(2),
-            pred_epochs,
-            &conversion_state_1,
-        )
-        .unwrap();
-        db.exec_batch(batch.0).unwrap();
-
-        // Check that the values are as expected from second block
-        let added = db.read_subspace_val(&add_key).unwrap();
-        assert_eq!(added, Some(add_val));
-        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
-        assert_eq!(overwritten, Some(overwrite_val));
-        let deleted = db.read_subspace_val(&delete_key).unwrap();
-        assert_eq!(deleted, None);
-
-        for tx in [b"tx1", b"tx2", b"tx3", b"tx5", b"tx6"] {
-            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
-        }
-        assert!(
-            !db.has_replay_protection_entry(&Hash::sha256(b"tx4"))
-                .unwrap()
-        );
-
-        // Rollback to the first block height
-        db.rollback(height_0).unwrap();
-
-        // Check that the values are back to the state at the first block
-        let added = db.read_subspace_val(&add_key).unwrap();
-        assert_eq!(added, None);
-        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
-        assert_eq!(overwritten, Some(to_overwrite_val));
-        let deleted = db.read_subspace_val(&delete_key).unwrap();
-        assert_eq!(deleted, Some(to_delete_val));
-        // Check the conversion state
-        let state_cf = db.get_column_family(STATE_CF).unwrap();
-        let conversion_state =
-            db.0.get_cf(state_cf, "conversion_state".as_bytes())
-                .unwrap()
+            for tx in [b"tx1", b"tx2"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::all_key(&Hash::sha256(tx)),
+                )
                 .unwrap();
-        assert_eq!(conversion_state, encode(&conversion_state_0));
-        for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
-            assert!(db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap());
-        }
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::buffer_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
 
-        for tx in [b"tx5", b"tx6"] {
+            for tx in [b"tx3", b"tx4"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            add_block_to_batch(
+                &db,
+                &mut batch,
+                height_0,
+                Epoch(1),
+                pred_epochs.clone(),
+                &conversion_state_0,
+            )
+            .unwrap();
+            db.exec_batch(batch.0).unwrap();
+
+            // Write second block
+            let mut batch = RocksDB::batch();
+            let height_1 = BlockHeight(101);
+            pred_epochs.new_epoch(height_1);
+            let conversion_state_1 = ConversionState::default();
+            let add_val = vec![1_u8, 0, 0, 0];
+            let overwrite_val = vec![1_u8, 1, 1, 1];
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_1,
+                &add_key,
+                &add_val,
+                persist_diffs,
+            )
+            .unwrap();
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_1,
+                &overwrite_key,
+                &overwrite_val,
+                persist_diffs,
+            )
+            .unwrap();
+            db.batch_delete_subspace_val(
+                &mut batch,
+                height_1,
+                &delete_key,
+                persist_diffs,
+            )
+            .unwrap();
+
+            db.prune_replay_protection_buffer(&mut batch).unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::all_key(&Hash::sha256(b"tx3")),
+            )
+            .unwrap();
+
+            for tx in [b"tx3", b"tx4"] {
+                db.delete_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::buffer_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            for tx in [b"tx5", b"tx6"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            add_block_to_batch(
+                &db,
+                &mut batch,
+                height_1,
+                Epoch(2),
+                pred_epochs,
+                &conversion_state_1,
+            )
+            .unwrap();
+            db.exec_batch(batch.0).unwrap();
+
+            // Check that the values are as expected from second block
+            let added = db.read_subspace_val(&add_key).unwrap();
+            assert_eq!(added, Some(add_val));
+            let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+            assert_eq!(overwritten, Some(overwrite_val));
+            let deleted = db.read_subspace_val(&delete_key).unwrap();
+            assert_eq!(deleted, None);
+
+            for tx in [b"tx1", b"tx2", b"tx3", b"tx5", b"tx6"] {
+                assert!(
+                    db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
             assert!(
-                !db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                !db.has_replay_protection_entry(&Hash::sha256(b"tx4"))
+                    .unwrap()
             );
+
+            // Rollback to the first block height
+            db.rollback(height_0).unwrap();
+
+            // Check that the values are back to the state at the first block
+            let added = db.read_subspace_val(&add_key).unwrap();
+            assert_eq!(added, None);
+            let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+            assert_eq!(overwritten, Some(to_overwrite_val));
+            let deleted = db.read_subspace_val(&delete_key).unwrap();
+            assert_eq!(deleted, Some(to_delete_val));
+            // Check the conversion state
+            let state_cf = db.get_column_family(STATE_CF).unwrap();
+            let conversion_state =
+                db.0.get_cf(state_cf, "conversion_state".as_bytes())
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(conversion_state, encode(&conversion_state_0));
+            for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
+                assert!(
+                    db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
+
+            for tx in [b"tx5", b"tx6"] {
+                assert!(
+                    !db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
         }
     }
 
@@ -2463,18 +2501,21 @@ mod test {
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
-            // Diffs new key for `key_with_diffs` at height_0 must be present
+            // Diffs new key for `key_with_diffs` at height_0 must be
+            // present
             let (old_with_h0, new_with_h0) =
                 old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
             assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
             assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
 
-            // Diffs new key for `key_without_diffs` at height_0 must be present
+            // Diffs new key for `key_without_diffs` at height_0 must be
+            // present
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_some());
         }
 
         // Write second block
@@ -2496,10 +2537,12 @@ mod test {
             false,
         )
         .unwrap();
+        db.prune_non_persisted_diffs(&mut batch, height_0).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
             // Diffs keys for `key_with_diffs` at height_0 must be present
             let (old_with_h0, new_with_h0) =
@@ -2510,8 +2553,8 @@ mod test {
             // Diffs keys for `key_without_diffs` at height_0 must be gone
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
@@ -2519,11 +2562,12 @@ mod test {
             assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
             assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
 
-            // Diffs keys for `key_without_diffs` at height_1 must be present
+            // Diffs keys for `key_without_diffs` at height_1 must be
+            // present
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_some());
         }
 
         // Write third block
@@ -2545,10 +2589,12 @@ mod test {
             false,
         )
         .unwrap();
+        db.prune_non_persisted_diffs(&mut batch, height_1).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
@@ -2559,8 +2605,8 @@ mod test {
             // Diffs keys for `key_without_diffs` at height_1 must be gone
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_2 must be present
             let (old_with_h2, new_with_h2) =
@@ -2568,11 +2614,12 @@ mod test {
             assert!(db.0.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
             assert!(db.0.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
 
-            // Diffs keys for `key_without_diffs` at height_2 must be present
+            // Diffs keys for `key_without_diffs` at height_2 must be
+            // present
             let (old_wo_h2, new_wo_h2) =
                 old_and_new_diff_key(&key_without_diffs, height_2).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h2).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h2).unwrap().is_some());
         }
     }
 
