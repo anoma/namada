@@ -2593,6 +2593,7 @@ pub mod test_utils {
             fee_unshielding_gas_limit: 10000,
             fee_unshielding_descriptions_limit: 15,
             minimum_gas_price: BTreeMap::new(),
+            is_native_token_transferable: true,
         };
         init_storage(&chain_parameters, storage).unwrap();
         init_genesis_helper(storage, &params, validators, current_epoch)?;
