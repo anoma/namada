@@ -738,6 +738,7 @@ mod tests {
                 fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
                 minimum_gas_price: BTreeMap::default(),
+                is_native_token_transferable: true,
             };
             namada_parameters::init_storage(&parameters, &mut state).unwrap();
             // Initialize pred_epochs to the current height
