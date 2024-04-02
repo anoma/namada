@@ -9,7 +9,6 @@ use std::num::NonZeroU32;
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpSentinel;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
-use namada_state::write_log::StorageModification;
 use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
 use namada_tx::data::TxSentinel;
 use namada_tx::{Commitment, Section, Tx};
@@ -505,75 +504,23 @@ where
 {
     match code_or_hash {
         Commitment::Hash(code_hash) => {
-            let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
-                Some((module, store)) => {
-                    // Gas accounting even if the compiled module is in cache
-                    let key = Key::wasm_code_len(code_hash);
-                    let tx_len = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            u64::try_from_slice(value).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            })
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code length failed from \
-                                     storage: key {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            }),
-                            None => Err(Error::LoadWasmCode(format!(
-                                "No wasm code length in storage: key {}",
-                                key
-                            ))),
-                        },
-                    }?;
+            let code_len_key = Key::wasm_code_len(code_hash);
+            let tx_len = state
+                .read::<u64>(&code_len_key)
+                .map_err(|e| {
+                    Error::LoadWasmCode(format!(
+                        "Read wasm code length failed: key {code_len_key}, \
+                         error {e}"
+                    ))
+                })?
+                .ok_or_else(|| {
+                    Error::LoadWasmCode(format!(
+                        "No wasm code length in storage: key {code_len_key}"
+                    ))
+                })?;
 
-                    (module, store, tx_len)
-                }
-                None => {
-                    let key = Key::wasm_code(code_hash);
-                    let code = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            value.clone()
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code failed from storage: key \
-                                     {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => v,
-                            None => {
-                                return Err(Error::LoadWasmCode(format!(
-                                    "No wasm code in storage: key {}",
-                                    key
-                                )));
-                            }
-                        },
-                    };
-                    let tx_len = u64::try_from(code.len())
-                        .map_err(|e| Error::ConversionError(e.to_string()))?;
-
-                    match wasm_cache.compile_or_fetch(code)? {
-                        Some((module, store)) => (module, store, tx_len),
-                        None => return Err(Error::NoCompiledWasmCode),
-                    }
-                }
-            };
-
+            // Gas accounting in any case, even if the compiled module is in
+            // cache
             gas_meter
                 .borrow_mut()
                 .add_wasm_load_from_storage_gas(tx_len)
@@ -582,6 +529,31 @@ where
                 .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
+
+            let (module, store) = match wasm_cache.fetch(code_hash)? {
+                Some((module, store)) => (module, store),
+                None => {
+                    let key = Key::wasm_code(code_hash);
+                    let code = state
+                        .read_bytes(&key)
+                        .map_err(|e| {
+                            Error::LoadWasmCode(format!(
+                                "Read wasm code failed: key {key}, error {e}"
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::LoadWasmCode(format!(
+                                "No wasm code in storage: key {key}"
+                            ))
+                        })?;
+
+                    match wasm_cache.compile_or_fetch(code)? {
+                        Some((module, store)) => (module, store),
+                        None => return Err(Error::NoCompiledWasmCode),
+                    }
+                }
+            };
+
             Ok((module, store))
         }
         Commitment::Id(code) => {
