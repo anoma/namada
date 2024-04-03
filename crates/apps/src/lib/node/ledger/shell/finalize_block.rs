@@ -7,7 +7,9 @@ use namada::core::storage::{BlockResults, Epoch, Header};
 use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
-use namada::ledger::events::extend::{ComposeEvent, Height, Info, ValidMaspTx};
+use namada::ledger::events::extend::{
+    ComposeEvent, Height, Info, RawReadFromEventAttributes, TxHash, ValidMaspTx,
+};
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
@@ -345,7 +347,10 @@ where
                         tracing::trace!(
                             "all VPs accepted transaction {} storage \
                              modification {:#?}",
-                            tx_event["hash"],
+                            TxHash::raw_read_from_event_attributes(
+                                &tx_event.attributes
+                            )
+                            .unwrap_or("<unknown>"),
                             result
                         );
 
@@ -389,7 +394,10 @@ where
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
                              modification {:#?}",
-                            tx_event["hash"],
+                            TxHash::raw_read_from_event_attributes(
+                                &tx_event.attributes
+                            )
+                            .unwrap_or("<unknown>"),
                             result.vps_result.rejected_vps
                         );
                         // The fee unshield operation could still have been
@@ -426,7 +434,10 @@ where
                 ))) => {
                     tracing::info!(
                         "Wrapper transaction {} failed with: {}",
-                        tx_event["hash"],
+                        TxHash::raw_read_from_event_attributes(
+                            &tx_event.attributes
+                        )
+                        .unwrap_or("<unknown>"),
                         msg,
                     );
                     tx_event
@@ -437,7 +448,10 @@ where
                 Err(msg) => {
                     tracing::info!(
                         "Transaction {} failed with: {}",
-                        tx_event["hash"],
+                        TxHash::raw_read_from_event_attributes(
+                            &tx_event.attributes
+                        )
+                        .unwrap_or("<unknown>"),
                         msg
                     );
 

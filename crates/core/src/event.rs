@@ -4,7 +4,7 @@ pub mod extend;
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
-use std::ops::{Deref, Index, IndexMut};
+use std::ops::Deref;
 use std::str::FromStr;
 
 use namada_macros::BorshDeserializer;
@@ -366,21 +366,6 @@ impl From<&EthBridgeEvent> for Event {
                 },
             },
         }
-    }
-}
-
-impl Index<&str> for Event {
-    type Output = String;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        &self.attributes[index]
-    }
-}
-
-impl IndexMut<&str> for Event {
-    fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        let entry = self.attributes.entry(index.into()).or_default();
-        &mut *entry
     }
 }
 
