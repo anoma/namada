@@ -35,7 +35,7 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
-use namada_core::key::*;
+use namada_core::key::{self, *};
 use namada_core::masp::{
     AssetData, PaymentAddress, TransferSource, TransferTarget,
 };
@@ -58,6 +58,7 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
+use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
 use rand_core::{OsRng, RngCore};
@@ -2085,6 +2086,196 @@ pub async fn build_vote_proposal(
     build(
         context,
         tx,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        unshield,
+        fee_amount,
+        &signing_data.fee_payer,
+    )
+    .await
+    .map(|tx| (tx, signing_data))
+}
+
+/// Build a pgf funding proposal governance
+pub async fn build_become_validator(
+    context: &impl Namada,
+    args::TxBecomeValidator {
+        tx: tx_args,
+        address,
+        scheme: _,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        protocol_key,
+        commission_rate,
+        max_commission_rate_change,
+        email,
+        website,
+        description,
+        discord_handle,
+        avatar,
+        unsafe_dont_encrypt: _,
+        tx_code_path,
+    }: &args::TxBecomeValidator,
+) -> Result<(Tx, SigningTxData)> {
+    // Check that the address is established
+    if !address.is_established() {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must be enstablished".to_string(),
+            ));
+        }
+    };
+
+    // Check that the address is not already a validator
+    if rpc::is_validator(context.client(), address).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} is already a validator",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must not be a validator already".to_string(),
+            ));
+        }
+    };
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations. It has to unbond those before it can become a
+    // validator.
+    if rpc::has_bonds(context.client(), address).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} has delegations and therefore cannot \
+             become a validator. To become a validator, you have to unbond \
+             your delegations first.",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must not have delegations".to_string(),
+            ));
+        }
+    }
+
+    // Validate the commission rate data
+    if *commission_rate > Dec::one() || *commission_rate < Dec::zero() {
+        edisplay_line!(
+            context.io(),
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Invalid validator commission rate".to_string(),
+            ));
+        }
+    }
+
+    if *max_commission_rate_change > Dec::one()
+        || *max_commission_rate_change < Dec::zero()
+    {
+        edisplay_line!(
+            context.io(),
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%, and it must be 0 or positive."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Invalid validator maximum change".to_string(),
+            ));
+        }
+    }
+
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            context.io(),
+            "The validator email must not be an empty string."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Validator email must not be empty".to_string(),
+            ));
+        }
+    }
+
+    // check that all keys have been supplied correctly
+    if [
+        consensus_key.clone(),
+        eth_cold_key.clone(),
+        eth_hot_key.clone(),
+        protocol_key.clone(),
+    ]
+    .iter()
+    .any(|key| key.is_none())
+    {
+        edisplay_line!(
+            context.io(),
+            "All validator keys must be supplied to create a validator."
+        );
+        return Err(Error::Other("Validator key must be present".to_string()));
+    }
+
+    let data = BecomeValidator {
+        address: address.clone(),
+        consensus_key: consensus_key.clone().unwrap(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_cold_key.clone().unwrap(),
+        )
+        .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_hot_key.clone().unwrap(),
+        )
+        .unwrap(),
+        protocol_key: protocol_key.clone().unwrap(),
+        commission_rate: *commission_rate,
+        max_commission_rate_change: *max_commission_rate_change,
+        email: email.to_owned(),
+        description: description.clone(),
+        website: website.clone(),
+        discord_handle: discord_handle.clone(),
+        avatar: avatar.clone(),
+    };
+
+    // Put together all the PKs that we have to sign with to verify ownership
+    let account = if let Some(account) =
+        rpc::get_account_info(context.client(), address).await?
+    {
+        account
+    } else {
+        edisplay_line!(
+            context.io(),
+            "Unable to query account keys for address {address}."
+        );
+        return Err(Error::Other("Invalid address".to_string()));
+    };
+
+    let mut all_pks = account.get_all_public_keys();
+    all_pks.push(consensus_key.clone().unwrap().clone());
+    all_pks.push(eth_cold_key.clone().unwrap());
+    all_pks.push(eth_hot_key.clone().unwrap());
+    all_pks.push(protocol_key.clone().unwrap().clone());
+
+    let signing_data =
+        signing::init_validator_signing_data(context, tx_args, all_pks).await?;
+
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            tx_args,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
+    build(
+        context,
+        tx_args,
         tx_code_path.clone(),
         data,
         do_nothing,
