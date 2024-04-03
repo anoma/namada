@@ -8,7 +8,6 @@ use namada_migrations::*;
 
 use super::address::Address;
 use super::chain::ProposalBytes;
-use super::dec::Dec;
 use super::hash::Hash;
 use super::time::DurationSecs;
 use super::token;
@@ -49,10 +48,6 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
-    /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Dec,
-    /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: token::Amount,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
     /// Fee unshielding descriptions limit
