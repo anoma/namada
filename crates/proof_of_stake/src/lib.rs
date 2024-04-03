@@ -2595,8 +2595,6 @@ pub mod test_utils {
             implicit_vp_code_hash: Some(Hash::default()),
             epochs_per_year: 10000000,
             max_signatures_per_transaction: 15,
-            staked_ratio: Dec::new(2, 3).unwrap(),
-            pos_inflation_amount: token::Amount::from_u64(1000),
             fee_unshielding_gas_limit: 10000,
             fee_unshielding_descriptions_limit: 15,
             minimum_gas_price: BTreeMap::new(),
