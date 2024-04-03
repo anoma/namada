@@ -10,6 +10,7 @@ use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_trans_token::get_effective_total_native_supply;
 use thiserror::Error;
 
 use crate::storage::{
@@ -18,7 +19,6 @@ use crate::storage::{
     rewards_accumulator_handle, validator_commission_rate_handle,
     validator_rewards_products_handle, validator_state_handle,
 };
-use crate::token::storage_key::minted_balance_key;
 use crate::token::{credit_tokens, inflation};
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
@@ -323,9 +323,7 @@ where
     let pos_p_gain_nom = params.rewards_gain_p;
     let pos_d_gain_nom = params.rewards_gain_d;
 
-    let total_tokens: token::Amount = storage
-        .read(&minted_balance_key(&staking_token))?
-        .expect("Total NAM balance should exist in storage");
+    let total_tokens = get_effective_total_native_supply(storage)?;
     let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
     let pos_locked_ratio_target = params.target_staked_ratio;
     let pos_max_inflation_rate = params.max_inflation_rate;

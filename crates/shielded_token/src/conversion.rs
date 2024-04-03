@@ -64,11 +64,8 @@ where
 
     // Query the storage for information -------------------------
 
-    let native_token = storage.get_native_token()?;
     //// information about the amount of native tokens on the chain
-    let total_native_tokens: Amount = storage
-        .read(&minted_balance_key(&native_token))?
-        .expect("the total supply key should be here");
+    let total_native_tokens = get_effective_total_native_supply(storage)?;
 
     // total locked amount in the Shielded pool
     let total_tokens_in_masp: Amount = storage
