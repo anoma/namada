@@ -44,7 +44,6 @@
 //!     - `all`: the hashes included up to the last block
 //!     - `last`: the hashes included in the last block
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -585,8 +584,12 @@ impl RocksDB {
 
         // Look for non-persisted diffs for rollback
         let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+
+        // We don't need deterministic iter order
+        #[allow(clippy::disallowed_types)]
         // Iterate the old keys first and keep a set of keys that have old val
-        let mut keys_with_old_value = HashSet::<String>::new();
+        let mut keys_with_old_value =
+            std::collections::HashSet::<String>::new();
         for (key_str, val, _) in
             iter_diffs_prefix(self, rollback_cf, last_block.height, None, true)
         {
