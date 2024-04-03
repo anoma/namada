@@ -46,11 +46,13 @@ impl GlobalConfig {
         let mut config = config::Config::default();
         if file_path.exists() {
             config = config::Config::builder()
-            .add_source(config::File::with_name(file_name))
-            .build()
-            .map_err(Error::ReadError)?;
+                .add_source(config::File::with_name(file_name))
+                .build()
+                .map_err(Error::ReadError)?;
         }
-        config.try_deserialize().map_err(|e: config::ConfigError| Error::DeserializationError(e))
+        config
+            .try_deserialize()
+            .map_err(|e: config::ConfigError| Error::DeserializationError(e))
     }
 
     /// Write configuration to a file.
