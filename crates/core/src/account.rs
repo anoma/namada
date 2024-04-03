@@ -37,7 +37,8 @@ impl FromIterator<common::PublicKey> for AccountPublicKeysMap {
         for (index, public_key) in iter.into_iter().enumerate() {
             if hints::unlikely(index > u8::MAX as usize) {
                 panic!(
-                    "Only up to 255 signers are allowed in a multisig account"
+                    "Only up to 255 signers are allowed in a multisig account. Requested index: {}",
+        index
                 );
             }
             pk_to_idx.insert(public_key.to_owned(), index as u8);
