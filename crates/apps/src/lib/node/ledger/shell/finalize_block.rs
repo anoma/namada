@@ -768,6 +768,7 @@ mod test_finalize_block {
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::Fee;
+    use namada::tx::event::types::APPLIED as APPLIED_TX;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
     use namada_sdk::eth_bridge::storage::vote_tallies::BridgePoolRoot;
@@ -868,7 +869,7 @@ mod test_finalize_block {
             .iter()
             .enumerate()
         {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
+            assert_eq!(event.event_type, APPLIED_TX);
             let code = event.attributes.get("code").expect("Test failed");
             assert_eq!(code, &index.rem_euclid(2).to_string());
         }
@@ -903,7 +904,7 @@ mod test_finalize_block {
         let mut resp = shell.finalize_block(req).expect("Test failed");
         assert_eq!(resp.len(), 1);
         let event = resp.remove(0);
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        assert_eq!(event.event_type, APPLIED_TX);
         let code = event.attributes.get("code").expect("Test failed");
         assert_eq!(code, &String::from(ResultCode::InvalidTx));
     }
@@ -979,7 +980,7 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        assert_eq!(result.event_type, APPLIED_TX);
         let code = result.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
@@ -1038,7 +1039,7 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type.to_string(), String::from("applied"));
+        assert_eq!(result.event_type, APPLIED_TX);
         let code = result.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
@@ -2438,7 +2439,7 @@ mod test_finalize_block {
                 ..Default::default()
             })
             .expect("Test failed")[0];
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        assert_eq!(event.event_type, APPLIED_TX);
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
@@ -2596,10 +2597,10 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[0].event_type, APPLIED_TX);
         let code = event[0].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[1].event_type, APPLIED_TX);
         let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
@@ -2871,16 +2872,16 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[0].event_type, APPLIED_TX);
         let code = event[0].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[1].event_type, APPLIED_TX);
         let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[2].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[2].event_type, APPLIED_TX);
         let code = event[2].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
-        assert_eq!(event[3].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[3].event_type, APPLIED_TX);
         let code = event[3].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
@@ -3004,7 +3005,7 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        assert_eq!(event[0].event_type, APPLIED_TX);
         let code = event[0]
             .attributes
             .get("code")
@@ -3175,7 +3176,7 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer is 0
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        assert_eq!(event.event_type, APPLIED_TX);
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         let balance: Amount =
@@ -3270,7 +3271,7 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check fee payment
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        assert_eq!(event.event_type, APPLIED_TX);
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
