@@ -1237,7 +1237,7 @@ mod test_finalize_block {
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
                 activation_epoch: Epoch::default().next(),
-                r#type: ProposalType::Default(None),
+                r#type: ProposalType::Default,
             };
 
             namada::governance::init_proposal(
