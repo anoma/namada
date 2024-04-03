@@ -26,7 +26,7 @@ The section should either be one of the following choices:
 - `testing`
 - `SDK`
 
-To add a change log entry using `unclog`, you can fill in the following command (prefer to use the issue number, for which the `--pull-request` argument may be omitted):
+To add a change log entry using `unclog`, you can use in the following command (prefer to use the issue number, for which the `--pull-request` argument may be omitted):
 
 ```shell
 unclog add \
@@ -42,7 +42,7 @@ The message should be a high-level description of the changes that should explai
 
 Aim to make the changelog description readable and understandable for people using Namada in plain English, assuming no familiarity with the code, dependencies and other low-level details, and explain not just *what* has changed, but also *why* it's changed.
 
-If none of the sections fit, new sections may be added. To find the existing section names, you can use e.g.:
+If none of the sections fits, new sections may be added. To find the existing section names, you can use e.g.:
 
 ```shell
 for i in $(ls -d .changelog/*/*/); do basename "$i"; done | sort | uniq
