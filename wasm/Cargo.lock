@@ -3574,6 +3574,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_controller"
+version = "0.32.1"
+dependencies = [
+ "namada_core",
+]
+
+[[package]]
 name = "namada_core"
 version = "0.32.1"
 dependencies = [
@@ -3767,6 +3774,7 @@ dependencies = [
  "derivative",
  "linkme",
  "namada_account",
+ "namada_controller",
  "namada_core",
  "namada_governance",
  "namada_macros",
@@ -3861,6 +3869,7 @@ version = "0.32.1"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
+ "namada_controller",
  "namada_core",
  "namada_parameters",
  "namada_storage",
