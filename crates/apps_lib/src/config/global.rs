@@ -43,13 +43,16 @@ impl GlobalConfig {
     pub fn read(base_dir: impl AsRef<Path>) -> Result<Self> {
         let file_path = Self::file_path(base_dir.as_ref());
         let file_name = file_path.to_str().expect("Expected UTF-8 file path");
-        let mut config = config::Config::new();
+        let mut config = config::Config::default();
         if file_path.exists() {
-            config
-                .merge(config::File::with_name(file_name))
+            config = config::Config::builder()
+                .add_source(config::File::with_name(file_name))
+                .build()
                 .map_err(Error::ReadError)?;
         }
-        config.try_into().map_err(Error::DeserializationError)
+        config
+            .try_deserialize()
+            .map_err(|e: config::ConfigError| Error::DeserializationError(e))
     }
 
     /// Write configuration to a file.
