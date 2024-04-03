@@ -5,8 +5,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-use std::mem::ManuallyDrop;
-
 use borsh::BorshDeserialize;
 use namada_core::internal::{HostEnvResult, KeyVal};
 
@@ -278,16 +276,10 @@ pub fn read_from_buffer(
     if HostEnvResult::is_fail(read_result) {
         None
     } else {
-        let result: Vec<u8> = Vec::with_capacity(read_result as _);
-        // The `result` will be dropped from the `target`, which is
-        // reconstructed from the same memory
-        let result = ManuallyDrop::new(result);
+        let result = vec![0u8; read_result as _];
         let offset = result.as_slice().as_ptr() as u64;
         unsafe { result_buffer(offset) };
-        let target = unsafe {
-            Vec::from_raw_parts(offset as _, read_result as _, read_result as _)
-        };
-        Some(target)
+        Some(result)
     }
 }
 
