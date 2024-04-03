@@ -25,6 +25,40 @@ use namada_vote_ext::validator_set_update::{
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::{active_key, bridge_pool, vote_tallies, whitelist};
 
+/// Check if the Ethereum Bridge has been enabled at compile time.
+pub const fn is_bridge_comptime_enabled() -> bool {
+    cfg!(feature = "namada-eth-bridge")
+}
+
+/// Check if the bridge is disabled, enabled, or scheduled to be
+/// enabled at a specified [`Epoch`].
+pub fn check_bridge_status<S: StorageRead>(
+    storage: &S,
+) -> namada_storage::Result<EthBridgeStatus> {
+    if !is_bridge_comptime_enabled() {
+        return Ok(EthBridgeStatus::Disabled);
+    }
+    let status = storage
+        .read(&active_key())?
+        .expect("The Ethereum bridge active key should be in storage");
+    Ok(status)
+}
+
+/// Returns a boolean indicating whether the bridge is
+/// currently active at the specified [`Epoch`].
+pub fn is_bridge_active_at<S: StorageRead>(
+    storage: &S,
+    queried_epoch: Epoch,
+) -> namada_storage::Result<bool> {
+    Ok(match check_bridge_status(storage)? {
+        EthBridgeStatus::Disabled => false,
+        EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis) => true,
+        EthBridgeStatus::Enabled(EthBridgeEnabled::AtEpoch(enabled_epoch)) => {
+            queried_epoch >= enabled_epoch
+        }
+    })
+}
+
 /// This enum is used as a parameter to
 /// [`EthBridgeQueriesHook::must_send_valset_upd`].
 pub enum SendValsetUpd {
@@ -145,36 +179,31 @@ where
 
     /// Check if the bridge is disabled, enabled, or
     /// scheduled to be enabled at a specified epoch.
+    #[inline]
     pub fn check_bridge_status(self) -> EthBridgeStatus {
-        BorshDeserialize::try_from_slice(
-            self.state
-                .read_bytes(&active_key())
-                .expect(
-                    "Reading the Ethereum bridge active key shouldn't fail.",
-                )
-                .expect("The Ethereum bridge active key should be in storage")
-                .as_slice(),
+        check_bridge_status(self.state).expect(
+            "Failed to read Ethereum bridge activation status from storage",
         )
-        .expect("Deserializing the Ethereum bridge active key shouldn't fail.")
     }
 
     /// Returns a boolean indicating whether the bridge is
     /// currently active.
     #[inline]
     pub fn is_bridge_active(self) -> bool {
-        self.is_bridge_active_at(self.state.in_mem().get_current_epoch().0)
+        is_bridge_active_at(
+            self.state,
+            self.state.in_mem().get_current_epoch().0,
+        )
+        .expect("Failed to read Ethereum bridge activation status from storage")
     }
 
     /// Behaves exactly like [`Self::is_bridge_active`], but performs
     /// the check at the given [`Epoch`].
+    #[inline]
     pub fn is_bridge_active_at(self, queried_epoch: Epoch) -> bool {
-        match self.check_bridge_status() {
-            EthBridgeStatus::Disabled => false,
-            EthBridgeStatus::Enabled(EthBridgeEnabled::AtGenesis) => true,
-            EthBridgeStatus::Enabled(EthBridgeEnabled::AtEpoch(
-                enabled_epoch,
-            )) => queried_epoch >= enabled_epoch,
-        }
+        is_bridge_active_at(self.state, queried_epoch).expect(
+            "Failed to read Ethereum bridge activation status from storage",
+        )
     }
 
     /// Get the nonce of the next transfers to Namada event to be processed.
@@ -267,7 +296,11 @@ where
     /// extension at the provided [`BlockHeight`] in [`SendValsetUpd`].
     #[inline]
     pub fn must_send_valset_upd(self, can_send: SendValsetUpd) -> bool {
-        if matches!(can_send, SendValsetUpd::AtPrevHeight) {
+        if !is_bridge_comptime_enabled() {
+            // the bridge is disabled at compile time, therefore
+            // we must never submit validator set updates
+            false
+        } else if matches!(can_send, SendValsetUpd::AtPrevHeight) {
             // when checking vote extensions in Prepare
             // and ProcessProposal, we simply return true
             true

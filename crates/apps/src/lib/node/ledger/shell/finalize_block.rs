@@ -724,6 +724,7 @@ mod test_finalize_block {
     use namada::eth_bridge::storage::bridge_pool::{
         self, get_key_from_hash, get_nonce_key, get_signed_root_key,
     };
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::eth_bridge::storage::min_confirmations_key;
     use namada::ethereum_bridge::storage::wrapped_erc20s;
     use namada::governance::storage::keys::get_proposal_execution_key;
@@ -1043,6 +1044,11 @@ mod test_finalize_block {
     where
         F: FnOnce(&mut TestShell) -> (Tx, TestBpAction),
     {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _, _, _) = setup_at_height(1u64);
         namada::eth_bridge::test_utils::commit_bridge_pool_root_at_height(
             &mut shell.state,
@@ -4673,6 +4679,11 @@ mod test_finalize_block {
     /// Test that updating the ethereum bridge params via governance works.
     #[tokio::test]
     async fn test_eth_bridge_param_updates() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _broadcaster, _, mut control_receiver) =
             setup_at_height(3u64);
         let proposal_execution_key = get_proposal_execution_key(0);

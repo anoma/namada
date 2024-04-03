@@ -366,6 +366,7 @@ mod tests {
     use namada_storage::ResultExt;
 
     use super::*;
+    use crate::storage::eth_bridge_queries::is_bridge_comptime_enabled;
 
     /// Ensure we can serialize and deserialize a [`Config`] struct to and from
     /// TOML. This can fail if complex fields are ordered before simple fields
@@ -394,6 +395,12 @@ mod tests {
 
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let mut state = TestState::default();
         let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
@@ -424,6 +431,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "namada-eth-bridge"), ignore)]
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut state = TestState::default();
@@ -450,6 +458,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "namada-eth-bridge"), ignore)]
     #[should_panic(
         expected = "Ethereum bridge appears to be only partially configured!"
     )]
