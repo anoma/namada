@@ -368,8 +368,6 @@ impl CliApi {
                     }
                     #[cfg(not(feature = "namada-eth-bridge"))]
                     Sub::AddToEthBridgePool(_) => {
-                        use namada_sdk::display_line;
-
                         display_line!(
                             &io,
                             "The Namada Ethereum bridge is disabled"

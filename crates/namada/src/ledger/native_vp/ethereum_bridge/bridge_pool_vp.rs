@@ -548,7 +548,7 @@ where
             &self.ctx.pre(),
             self.ctx.state.in_mem().get_current_epoch().0,
         )
-        .map_err(|e| Error(e.into()))?
+        .map_err(Error)?
         {
             tracing::debug!(
                 "Rejecting transaction, since the Ethereum bridge is disabled."
