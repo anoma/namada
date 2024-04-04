@@ -326,7 +326,7 @@ async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
         };
 
     tracing::info!("Loading MASP verifying keys.");
-    let _ = namada_sdk::masp::preload_verifying_keys();
+    let _ = namada_sdk::masp::utils::preload_verifying_keys();
     tracing::info!("Done loading MASP verifying keys.");
 
     // Start ABCI server and broadcaster (the latter only if we are a validator

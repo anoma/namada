@@ -350,7 +350,7 @@ dependencies = [
  "pin-project-lite",
  "rustversion",
  "serde 1.0.193",
- "sync_wrapper",
+ "sync_wrapper 0.1.2",
  "tower",
  "tower-layer",
  "tower-service",
@@ -2355,6 +2355,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flume"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55ac459de2512911e4b674ce33cf20befaba382d05b62b008afc1c8b57cbf181"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "nanorand",
+ "spin 0.9.8",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2466,6 +2478,7 @@ checksum = "45ec6fe3675af967e67c5536c0b9d44e34e6c52f86bedc4ea49c5317b8e94d06"
 dependencies = [
  "futures-channel",
  "futures-task",
+ "tokio",
 ]
 
 [[package]]
@@ -4813,7 +4826,9 @@ dependencies = [
  "ethers",
  "eyre",
  "fd-lock",
+ "flume",
  "futures",
+ "futures-locks",
  "itertools 0.10.5",
  "jubjub",
  "lazy_static",
@@ -4846,12 +4861,14 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "regex",
  "ripemd",
  "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "sync_wrapper 1.0.0",
  "tempfile",
  "tendermint-config",
  "tendermint-rpc",
@@ -5127,6 +5144,15 @@ dependencies = [
  "namada_vp_env",
  "sha2 0.9.9",
  "thiserror",
+]
+
+[[package]]
+name = "nanorand"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
+dependencies = [
+ "getrandom 0.2.11",
 ]
 
 [[package]]
@@ -7227,6 +7253,9 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "spki"
@@ -7366,6 +7395,12 @@ name = "sync_wrapper"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
+
+[[package]]
+name = "sync_wrapper"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "384595c11a4e2969895cad5a8c4029115f5ab956a9e5ef4de79d11a426e5f20c"
 
 [[package]]
 name = "sysinfo"

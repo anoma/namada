@@ -38,7 +38,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use tokio::sync::RwLock;
 
-use super::masp::{ShieldedContext, ShieldedTransfer};
+use super::masp::types::ShieldedTransfer;
+use super::masp::ShieldedContext;
 use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;

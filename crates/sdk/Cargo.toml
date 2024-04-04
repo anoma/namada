@@ -98,7 +98,9 @@ ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
+flume = "0.11.0"
 futures.workspace = true
+futures-locks = "0.7.1"
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
 lazy_static.workspace = true
@@ -115,11 +117,13 @@ proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand = { workspace = true, optional = true }
 rand_core = { workspace = true, optional = true }
+rayon.workspace = true
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
+sync_wrapper = "1.0.0"
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, optional = true }
 thiserror.workspace = true
