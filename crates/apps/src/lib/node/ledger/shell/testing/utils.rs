@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -172,15 +173,29 @@ impl<T> CapturedOutput<T> {
         CapturedOutput::of(func)
     }
 
-    /// Check if the captured output contains the regex.
-    pub fn matches(&self, needle: regex::Regex) -> bool {
-        needle.captures(&self.output).is_some()
+    /// Return the first capture of the regex from the output.
+    pub fn matches(&self, needle: &str) -> Option<&str> {
+        let needle = regex::Regex::new(needle).unwrap();
+        needle.find(&self.output).map(|x| x.as_str())
     }
 
     /// Check if the captured output contains the string.
     pub fn contains(&self, needle: &str) -> bool {
+        self.matches(needle).is_some()
+    }
+}
+
+impl<U, E: Display> CapturedOutput<Result<U, E>> {
+    pub fn err_contains(&self, needle: &str) -> bool {
+        if self.result.is_ok() {
+            return false;
+        }
+        let err_str = match self.result.as_ref() {
+            Ok(_) => unreachable!(),
+            Err(e) => e.to_string(),
+        };
         let needle = regex::Regex::new(needle).unwrap();
-        self.matches(needle)
+        needle.find(&err_str).is_some()
     }
 }
 

@@ -211,7 +211,8 @@ pub async fn submit_reveal_aux(
         if tx::is_reveal_pk_needed(context.client(), address, args.force)
             .await?
         {
-            println!(
+            display_line!(
+                context.io(),
                 "Submitting a tx to reveal the public key for address \
                  {address}..."
             );
