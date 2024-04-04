@@ -107,6 +107,11 @@ impl ResultCode {
         ToPrimitive::to_u32(self).unwrap()
     }
 
+    /// Convert to `usize`.
+    pub fn to_usize(&self) -> usize {
+        ToPrimitive::to_usize(self).unwrap()
+    }
+
     /// Convert from `u32`.
     pub fn from_u32(raw: u32) -> Option<Self> {
         FromPrimitive::from_u32(raw)
