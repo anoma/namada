@@ -2,7 +2,9 @@
 pub mod log;
 
 use namada_core::collections::HashMap;
-pub use namada_core::event::{Event, EventError, EventLevel, EventType};
+pub use namada_core::event::{
+    extend, EmitEvents, Event, EventError, EventLevel, EventType,
+};
 use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;

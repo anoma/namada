@@ -154,7 +154,6 @@ where
                             proposal_code.is_some(),
                             result,
                         )
-                        .into()
                     }
                     ProposalType::PGFSteward(stewards) => {
                         let result = execute_pgf_steward_proposal(
@@ -168,7 +167,6 @@ where
                         );
 
                         ProposalEvent::pgf_steward_proposal_event(id, result)
-                            .into()
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
@@ -197,7 +195,6 @@ where
                         }
 
                         ProposalEvent::pgf_payments_proposal_event(id, result)
-                            .into()
                     }
                 };
                 events.emit(proposal_event);
@@ -223,8 +220,7 @@ where
                         );
                     }
                 }
-                let proposal_event =
-                    ProposalEvent::rejected_proposal_event(id).into();
+                let proposal_event = ProposalEvent::rejected_proposal_event(id);
                 events.emit(proposal_event);
                 proposals_result.rejected.push(id);
 
