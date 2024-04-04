@@ -76,9 +76,8 @@ use namada::tx::data::{Fee, TxResult, VpsResult};
 use namada::tx::{Authorization, Code, Data, Section, Tx};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
-use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
+use namada_sdk::masp::types::{ContextSyncStatus, ShieldedTransfer};
+use namada_sdk::masp::{self, ShieldedContext, ShieldedUtils};
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM as TX_CHANGE_VALIDATOR_COMMISSION_WASM,
@@ -987,7 +986,7 @@ impl Default for BenchShieldedCtx {
             .fvk
             .vk;
             let (div, _g_d) =
-                namada_sdk::masp::find_valid_diversifier(&mut OsRng);
+                namada_sdk::masp::utils::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = chain_ctx
                 .wallet

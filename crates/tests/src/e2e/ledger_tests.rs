@@ -239,7 +239,6 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
         ethereum_bridge::ledger::Mode::Off,
         None,
     );
-
     // 1. Run the ledger node
     let mut ledger =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
@@ -255,7 +254,6 @@ fn test_namada_shuts_down_if_tendermint_dies() -> Result<()> {
 
     // 3. Check that namada detects that the tendermint node is dead
     ledger.exp_string("Tendermint node is no longer running.")?;
-
     // 4. Check that the ledger node shuts down
     ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
