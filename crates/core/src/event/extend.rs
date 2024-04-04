@@ -123,8 +123,6 @@ impl ExtendEvent for ValidMaspTx {
 
 #[cfg(test)]
 mod event_composition_tests {
-    use std::collections::HashMap;
-
     use super::*;
 
     #[test]

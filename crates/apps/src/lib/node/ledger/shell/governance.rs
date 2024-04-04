@@ -16,6 +16,7 @@ use namada::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
 use namada::ibc;
+use namada::ledger::events::extend::{ComposeEvent, Height};
 use namada::ledger::governance::utils::ProposalEvent;
 use namada::ledger::pos::BondId;
 use namada::proof_of_stake::bond_amount;
@@ -132,7 +133,6 @@ where
                             proposal_code.is_some(),
                             result,
                         )
-                        .into()
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =
@@ -182,23 +182,19 @@ where
                             id
                         );
 
-                        for ibc_event in
-                            shell.state.write_log_mut().take_ibc_events()
-                        {
-                            let mut event = Event::from(ibc_event.clone());
-                            // Add the height for IBC event query
-                            let height =
-                                shell.state.in_mem().get_last_block_height()
-                                    + 1;
-                            event["height"] = height.to_string();
-                            events.emit(event);
-                        }
-
                         ProposalEvent::pgf_payments_proposal_event(id, result)
                     }
                 };
                 events.emit(proposal_event);
                 proposals_result.passed.push(id);
+
+                // Take events that could have been emitted by PGF
+                // over IBC, governance proposal execution, etc
+                for event in shell.state.write_log_mut().take_ibc_events() {
+                    events.emit(event.with(Height(
+                        shell.state.in_mem().get_last_block_height() + 1,
+                    )));
+                }
 
                 gov_api::get_proposal_author(&shell.state, id)?
             }
