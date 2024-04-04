@@ -1,13 +1,13 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
+use assert_matches::assert_matches;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::core::collections::HashMap;
 use namada::token;
-use namada::tx::data::ResultCode::InvalidTx;
 use namada_apps::node::ledger::shell::testing::client::run;
-use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults;
 use namada_core::dec::Dec;
@@ -15,6 +15,7 @@ use namada_core::storage::Epoch;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
+use test_log::test;
 
 use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::constants::{
@@ -25,7 +26,7 @@ use crate::integration::helpers::{
     find_address, prepare_steward_commission_update_data,
 };
 use crate::integration::setup;
-use crate::strings::{TX_ACCEPTED, TX_APPLIED_SUCCESS, TX_REJECTED};
+use crate::strings::{TX_APPLIED_SUCCESS, TX_FAILED, TX_REJECTED};
 use crate::tx::tx_host_env::gov_storage::proposal::{
     PGFInternalTarget, PGFTarget,
 };
@@ -189,10 +190,7 @@ fn ledger_txs_and_queries() -> Result<()> {
             };
             let captured =
                 CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-            assert!(captured.result.is_ok());
-            if !dry_run {
-                assert!(captured.contains(TX_ACCEPTED));
-            }
+            assert_matches!(captured.result, Ok(_));
             assert!(captured.contains(TX_APPLIED_SUCCESS));
         }
     }
@@ -241,7 +239,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         // Run as a non-validator
         let captured =
             CapturedOutput::of(|| run(&node, Bin::Client, query_args));
-        assert!(captured.result.is_ok());
+        assert_matches!(captured.result, Ok(_));
         for pattern in expected {
             assert!(captured.contains(pattern));
         }
@@ -270,7 +268,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     for (query_args, expected) in query_args_and_expected_response {
         let captured =
             CapturedOutput::of(|| run(&node, Bin::Client, query_args));
-        assert!(captured.result.is_ok());
+        assert_matches!(captured.result, Ok(_));
         assert!(captured.contains(&expected));
     }
 
@@ -309,8 +307,7 @@ fn invalid_transactions() -> Result<()> {
     ];
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
-    assert!(captured.contains(TX_ACCEPTED));
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_REJECTED));
 
     node.finalize_and_commit();
@@ -340,15 +337,7 @@ fn invalid_transactions() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_err());
-    let results: HashSet<NodeResults> = {
-        let locked = node.results.lock().unwrap();
-        locked.iter().cloned().collect()
-    };
-    assert_eq!(
-        results,
-        HashSet::from([NodeResults::Ok, NodeResults::Failed(InvalidTx)])
-    );
+    assert!(captured.contains(TX_FAILED));
 
     Ok(())
 }
@@ -375,7 +364,7 @@ fn pos_rewards() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     let res = captured
         .matches(r"Current rewards available for claim: [0-9\.]+ NAM")
         .expect("Test failed");
@@ -400,7 +389,7 @@ fn pos_rewards() -> Result<()> {
             &validator_one_rpc,
         ];
         let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-        assert!(captured.result.is_ok());
+        assert_matches!(captured.result, Ok(_));
         let res = captured
             .matches(r"Current rewards available for claim: [0-9\.]+ NAM")
             .expect("Test failed");
@@ -429,7 +418,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_pre = token::Amount::from_str(
         res.split(' ').last().unwrap(),
@@ -449,7 +438,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     println!("{:?}", captured.result);
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // Query the validator balance again and check that the balance has grown
@@ -465,7 +454,7 @@ fn pos_rewards() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     let res = captured.matches(r"nam: [0-9\.]+").expect("Test failed");
     let amount_post = token::Amount::from_str(
         res.split(' ').last().unwrap(),
@@ -505,7 +494,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 3. Submit a delegation to the genesis validator
@@ -524,7 +513,7 @@ fn test_bond_queries() -> Result<()> {
     ];
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 3. Wait for epoch 4
@@ -547,7 +536,7 @@ fn test_bond_queries() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 5. Submit an unbond of the delegation
@@ -566,7 +555,7 @@ fn test_bond_queries() -> Result<()> {
     ];
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     let res = captured
@@ -587,7 +576,7 @@ fn test_bond_queries() -> Result<()> {
     // 7. Check the output of the bonds query
     let tx_args = vec!["bonds", "--ledger-address", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(
         "All bonds total active: 120188.000000
 All bonds total: 120188.000000
@@ -615,6 +604,10 @@ All unbonds total slashed: 0.000000",
 /// 11. Query the proposal and check the result
 /// 12. Wait proposal grace and check proposal author funds
 /// 13. Check governance address funds are 0
+/// 14. Query the new parameters
+/// 15. Try to initialize a new account which should fail
+/// 16. Submit a tx that triggers an already existing account which should
+///     succeed
 #[test]
 fn proposal_submission() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -635,7 +628,7 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 2. Submit valid proposal
@@ -659,7 +652,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 3. Query the proposal
@@ -673,7 +666,7 @@ fn proposal_submission() -> Result<()> {
 
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Proposal Id: 0"));
 
     // 4. Query token balance proposal author (submitted funds)
@@ -688,7 +681,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1979500"));
 
     // 5. Query token balance governance
@@ -703,7 +696,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 500"));
 
     // 6. Submit an invalid proposal
@@ -743,7 +736,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("No proposal found with id: 1"));
 
     // 8. Query token balance (funds shall not be submitted)
@@ -758,7 +751,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1979500"));
 
     // 9. Send a yay vote from a validator
@@ -780,7 +773,7 @@ fn proposal_submission() -> Result<()> {
 
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     let submit_proposal_vote_delegator = vec![
@@ -798,7 +791,7 @@ fn proposal_submission() -> Result<()> {
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, submit_proposal_vote_delegator)
     });
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 10. Send a yay vote from a non-validator/non-delegator user
@@ -835,7 +828,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_proposal));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Proposal Id: 0"));
     let expected = regex::escape(
         "passed with 120000.000000 yay votes, 900.000000 nay votes and \
@@ -861,7 +854,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1980000"));
 
     // 13. Check if governance funds are 0
@@ -876,7 +869,7 @@ fn proposal_submission() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 0"));
 
     // 14. Query parameters
@@ -885,8 +878,53 @@ fn proposal_submission() -> Result<()> {
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, query_protocol_parameters)
     });
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(".*Min. proposal grace epochs: 9.*"));
+
+    // 15. Try to initialize a new account with the no more allowlisted vp
+    let init_account = vec![
+        "init-account",
+        "--public-keys",
+        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
+        "--threshold",
+        "1",
+        "--code-path",
+        VP_USER_WASM,
+        "--alias",
+        "Test-Account",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, init_account));
+    assert_matches!(captured.result, Ok(_));
+    assert!(
+        captured.contains(".*VP code is not allowed in allowlist parameter.*")
+    );
+
+    // 16. Submit a tx touching a previous account with the no more allowlisted
+    //     vp and verify that the transaction succeeds, i.e. the non allowlisted
+    //     vp can still run
+    let transfer = vec![
+        "transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, transfer));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     Ok(())
 }
@@ -924,7 +962,7 @@ fn pgf_governance_proposal() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 1. Submit proposal
@@ -951,7 +989,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 2. Query the proposal
@@ -964,7 +1002,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Proposal Id: 0"));
 
     // Query token balance proposal author (submitted funds)
@@ -979,7 +1017,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1979500"));
 
     // Query token balance governance
@@ -994,7 +1032,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 500"));
 
     // 3. Send a yay vote from a validator
@@ -1015,7 +1053,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // Send different yay vote from delegator to check majority on 1/3
@@ -1033,7 +1071,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, submit_proposal_vote_delegator)
     });
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 4. Query the proposal and check the result is the one voted by the
@@ -1051,7 +1089,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_proposal));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("passed"));
 
     // 5. Wait proposals grace and check proposal author funds
@@ -1069,7 +1107,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1980000"));
 
     // 6. Check if governance funds are 0
@@ -1084,13 +1122,13 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 0"));
 
     // 7. Query pgf stewards
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Pgf stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
@@ -1127,7 +1165,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 9. Query the funding proposal
@@ -1140,7 +1178,7 @@ fn pgf_governance_proposal() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Proposal Id: 1"));
 
     // 10. Wait proposals grace and check proposal author funds
@@ -1151,7 +1189,7 @@ fn pgf_governance_proposal() -> Result<()> {
     // 11. Query pgf fundings
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Pgf fundings"));
     assert!(captured.contains(&format!(
         "{} for {}",
@@ -1179,7 +1217,7 @@ fn pgf_steward_change_commission() -> Result<()> {
     // Query pgf stewards
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Pgf stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
@@ -1210,13 +1248,13 @@ fn pgf_steward_change_commission() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 14. Query pgf stewards
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_pgf));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Pgf stewards:"));
     assert!(captured.contains(&format!("- {}", defaults::albert_address())));
     assert!(captured.contains("Reward distribution:"));
@@ -1363,7 +1401,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 tx_args.iter().map(|arg| arg.as_ref()).collect(),
             )
         });
-        assert!(captured.result.is_ok());
+        assert_matches!(captured.result, Ok(_));
         assert!(captured.contains("Submitting a tx to reveal the public key"));
 
         // 2d. Submit same tx again, this time the client shouldn't reveal
@@ -1401,7 +1439,7 @@ fn change_validator_metadata() -> Result<()> {
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Email:"));
     assert!(captured.contains("No description"));
     assert!(captured.contains("No website"));
@@ -1426,14 +1464,14 @@ fn change_validator_metadata() -> Result<()> {
 
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_change_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 4. Query the metadata after the change
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"
@@ -1455,13 +1493,13 @@ fn change_validator_metadata() -> Result<()> {
     ];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_change_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 6. Query the metadata to see that the validator website is removed
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_query_args));
-    assert!(captured.result.is_ok());
+    assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"

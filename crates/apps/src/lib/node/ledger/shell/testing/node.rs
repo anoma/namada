@@ -655,6 +655,14 @@ impl MockNode {
             .all(|r| *r == NodeResults::Ok)
     }
 
+    /// Return a tx result if the tx failed in mempool
+    pub fn is_broadcast_err(&self) -> Option<TxResult> {
+        self.results.lock().unwrap().iter().find_map(|r| match r {
+            NodeResults::Ok | NodeResults::Failed(_) => None,
+            NodeResults::Rejected(tx_result) => Some(tx_result.clone()),
+        })
+    }
+
     pub fn clear_results(&self) {
         self.results.lock().unwrap().clear();
     }
@@ -778,13 +786,15 @@ impl<'a> Client for &'a MockNode {
         };
         let tx_bytes: Vec<u8> = tx.into();
         self.submit_txs(vec![tx_bytes]);
-        if !self.success() {
-            // TODO: submit_txs should return the correct error code + message
-            resp.code = 1337.into();
-            return Ok(resp);
-        } else {
-            self.clear_results();
+
+        // If the error happened during broadcasting, attach its result to
+        // response
+        if let Some(TxResult { code, info }) = self.is_broadcast_err() {
+            resp.code = code.into();
+            resp.log = info;
         }
+
+        self.clear_results();
         Ok(resp)
     }
 
