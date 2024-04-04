@@ -7,8 +7,6 @@ mod types;
 
 use data::TxType;
 pub use event::new_tx_event;
-use namada_core::collections::HashMap;
-use namada_core::event::{Event, EventLevel, EventType};
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{

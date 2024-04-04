@@ -132,7 +132,6 @@ where
                             proposal_code.is_some(),
                             result,
                         )
-                        .into()
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =

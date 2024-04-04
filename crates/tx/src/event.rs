@@ -13,10 +13,7 @@ use crate::TxType;
 /// already filled in
 pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
     let base_event = match tx.header().tx_type {
-        TxType::Wrapper(_) => {
-            Event::accepted_tx().with(TxHash(tx.header_hash()))
-        }
-        TxType::Decrypted(_) => Event::applied_tx()
+        TxType::Wrapper(_) => Event::applied_tx()
             .with(TxHash(tx.clone().update_header(TxType::Raw).header_hash())),
         TxType::Protocol(_) => {
             Event::applied_tx().with(TxHash(tx.header_hash()))

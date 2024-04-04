@@ -7,10 +7,8 @@ use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
-use namada::ledger::events::extend::{
-    ComposeEvent, Height, Info, Log, ValidMaspTx,
-};
-use namada::ledger::events::{EmitEvents, EventType};
+use namada::ledger::events::extend::{ComposeEvent, Height, Info, ValidMaspTx};
+use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
