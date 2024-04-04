@@ -84,14 +84,32 @@ pub const WASM_MEMORY_PAGE_GAS: u32 =
 pub const IBC_ACTION_VALIDATE_GAS: u64 = 1_472_023;
 /// The cost to execute an Ibc action
 pub const IBC_ACTION_EXECUTE_GAS: u64 = 3_678_745;
-/// The cost to verify a masp spend note
-pub const MASP_VERIFY_SPEND_GAS: u64 = 66_822_000;
-/// The cost to verify a masp convert note
-pub const MASP_VERIFY_CONVERT_GAS: u64 = 45_240_000;
-/// The cost to verify a masp output note
-pub const MASP_VERIFY_OUTPUT_GAS: u64 = 55_023_000;
-/// The cost to run the final masp verification
-pub const MASP_VERIFY_FINAL_GAS: u64 = 3_475_200;
+// FIXME: update costs
+/// The cost of masp sig verification
+pub const MASP_VERIFY_SIG_GAS: u64 = 1;
+/// The fixed cost of spend note verification
+pub const MASP_FIXED_SPEND_GAS: u64 = 1;
+/// The variable cost of spend note verification
+pub const MASP_VARIABLE_SPEND_GAS: u64 = 1;
+/// The fixed cost of convert note verification
+pub const MASP_FIXED_CONVERT_GAS: u64 = 1;
+/// The variable cost of convert note verification
+pub const MASP_VARIABLE_CONVERT_GAS: u64 = 1;
+/// The fixed cost of output note verification
+pub const MASP_FIXED_OUTPUT_GAS: u64 = 1;
+/// The variable cost of output note verification
+pub const MASP_VARIABLE_OUTPUT_GAS: u64 = 1;
+/// The cost to process a masp spend note in the bundle
+pub const MASP_SPEND_CHECK_GAS: u64 = 1;
+/// The cost to process a masp convert note in the bundle
+pub const MASP_CONVERT_CHECK_GAS: u64 = 1;
+/// The cost to process a masp output note in the bundle
+pub const MASP_OUTPUT_CHECK_GAS: u64 = 1;
+/// The cost to run the final masp check in the bundle
+pub const MASP_FINAL_CHECK_GAS: u64 = 1;
+/// Gas divider specific for the masp vp. Only allocates half of the cores to
+/// the masp vp since we can expect the other half to be busy with other vps
+pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
