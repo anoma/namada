@@ -90,7 +90,7 @@ if args.params:
 if args.max_validator_slots:
     params['pos_params'] = {'max_validator_slots': args.max_validator_slots}
 if args.epoch_length:
-    epochs_per_year = 365 * 24 * 60 * 60 / args.epoch_length
+    epochs_per_year = int(365 * 24 * 60 * 60 / args.epoch_length)
     params['parameters'] = {'epochs_per_year': epochs_per_year }
 if len(params.keys())>0:
     edit_parameters(localnet_dir + '/parameters.toml', **params)
@@ -145,7 +145,7 @@ if not os.path.isdir(WASM_PATH) or not os.listdir(WASM_PATH):
     print(f"Cannot find wasm directory that is not empty at {WASM_PATH}")
     sys.exit(1)
 
-system(f"{namadac_bin} --base-dir='{BASE_DIR}' utils init-network --chain-prefix {CHAIN_PREFIX} --genesis-time {GENESIS_TIME} --templates-path {TEMPLATES_PATH} --wasm-checksums-path {WASM_CHECKSUMS_PATH}")
+system(f"{namadac_bin} --base-dir='{BASE_DIR}' utils init-network --chain-prefix {CHAIN_PREFIX} --genesis-time {GENESIS_TIME} --templates-path {TEMPLATES_PATH} --wasm-checksums-path {WASM_CHECKSUMS_PATH} --consensus-timeout-commit 5s")
 
 base_dir_files = os.listdir(BASE_DIR)
 CHAIN_ID=""

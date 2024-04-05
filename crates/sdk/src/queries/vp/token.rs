@@ -65,10 +65,21 @@ pub mod client_only_methods {
                 .await?;
 
             let balance = if response.data.is_empty() {
+                tracing::error!("Balance error empty: {:?}", response);
                 token::Amount::zero()
             } else {
-                token::Amount::try_from_slice(&response.data)
-                    .unwrap_or_default()
+                match token::Amount::try_from_slice(&response.data) {
+                    Ok(balance) => {
+                        tracing::info!("Balance ok: {:?}", balance);
+                        balance
+                    }
+                    Err(e) => {
+                        tracing::error!("Balance error inner: {:?}", response);
+                        tracing::error!("Error inner: {}", e.to_string());
+                        token::Amount::zero()
+                    },
+                }
+                    
             };
             Ok(balance)
         }

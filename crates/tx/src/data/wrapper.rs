@@ -34,7 +34,7 @@ pub mod wrapper_tx {
     /// Errors relating to decrypting a wrapper tx and its
     /// encrypted payload from a Tx type
     #[allow(missing_docs)]
-    #[derive(Error, Debug)]
+    #[derive(Error, Debug, Clone)]
     pub enum WrapperTxErr {
         #[error(
             "The hash of the decrypted tx does not match the hash commitment"
