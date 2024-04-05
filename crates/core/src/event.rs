@@ -321,18 +321,8 @@ impl Event {
         }
     }
 
-    /// Check if the events keys contains a given string
-    pub fn contains_key(&self, key: &str) -> bool {
-        self.attributes.contains_key(key)
-    }
-
-    /// Get the value corresponding to a given key, if it exists.
-    /// Else return None.
-    pub fn get(&self, key: &str) -> Option<&String> {
-        self.attributes.get(key)
-    }
-
-    /// Get the value corresponding to a given key, if it exists.
+    /// Get the value corresponding to a given attribute, if it exists.
+    #[inline]
     pub fn read_attribute<'value, DATA>(
         &self,
     ) -> Result<
@@ -343,6 +333,15 @@ impl Event {
         DATA: extend::ReadFromEventAttributes<'value>,
     {
         DATA::read_from_event_attributes(&self.attributes)
+    }
+
+    /// Check if a certain attribute is present in the event.
+    #[inline]
+    pub fn has_attribute<'value, DATA>(&self) -> bool
+    where
+        DATA: extend::RawReadFromEventAttributes<'value>,
+    {
+        DATA::check_if_attribute_present(&self.attributes)
     }
 
     /// Extend this [`Event`] with additional data.
