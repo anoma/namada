@@ -881,6 +881,29 @@ impl Section {
     }
 }
 
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+)]
+pub struct Commitments {
+    /// The SHA-256 hash of the transaction's code section
+    pub code_hash: namada_core::hash::Hash,
+    /// The SHA-256 hash of the transaction's data section
+    pub data_hash: namada_core::hash::Hash,
+    /// The SHA-256 hash of the transaction's memo section
+    ///
+    /// In case a memo is not present in the transaction, a
+    /// byte array filled with zeroes is present instead
+    pub memo_hash: namada_core::hash::Hash,
+}
+
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
 #[derive(
@@ -900,15 +923,11 @@ pub struct Header {
     pub expiration: Option<DateTimeUtc>,
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
-    /// The SHA-256 hash of the transaction's code section
-    pub code_hash: namada_core::hash::Hash,
-    /// The SHA-256 hash of the transaction's data section
-    pub data_hash: namada_core::hash::Hash,
-    /// The SHA-256 hash of the transaction's memo section
-    ///
-    /// In case a memo is not present in the transaction, a
-    /// byte array filled with zeroes is present instead
-    pub memo_hash: namada_core::hash::Hash,
+    // FIXME: this could be empty, is this a problem?
+    /// The commitments to the transaction's sections
+    pub commitments: Vec<Commitments>,
+    /// Whether the inner txs should be executed atomically
+    pub atomic: bool,
     /// The type of this transaction
     pub tx_type: TxType,
 }
@@ -922,9 +941,8 @@ impl Header {
             expiration: None,
             #[allow(clippy::disallowed_methods)]
             timestamp: DateTimeUtc::now(),
-            code_hash: namada_core::hash::Hash::default(),
-            data_hash: namada_core::hash::Hash::default(),
-            memo_hash: namada_core::hash::Hash::default(),
+            commitments: Default::default(),
+            atomic: Default::default(),
         }
     }
 
@@ -1101,27 +1119,33 @@ impl Tx {
         None
     }
 
-    /// Set the transaction memo hash stored in the header
+    /// Set the last transaction memo hash stored in the header
     pub fn set_memo_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.memo_hash = hash;
-    }
-
-    /// Get the hash of this transaction's memo from the heeader
-    pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.memo_hash
-    }
-
-    /// Get the memo designated by the memo hash in the header
-    pub fn memo(&self) -> Option<Vec<u8>> {
-        if self.memo_sechash() == &namada_core::hash::Hash::default() {
-            return None;
+        match self.header.commitments.last_mut() {
+            Some(last) => last.memo_hash = hash,
+            None => self.header.commitments.push(Commitments {
+                memo_hash: hash,
+                ..Default::default()
+            }),
         }
-        match self
-            .get_section(self.memo_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
-            Some(Section::ExtraData(section)) => section.code.id(),
+    }
+
+    /// Get the hash of this transaction's memo from the header at the specified
+    /// index, if present
+    pub fn memo_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
+        self.header.commitments.get(idx).map(|cmt| &cmt.memo_hash)
+    }
+
+    /// Get the memo designated by the memo hash in the header for the specified
+    /// index
+    pub fn memo(&self, idx: usize) -> Option<Vec<u8>> {
+        match self.memo_sechash(idx) {
+            Some(memo) if memo != &namada_core::hash::Hash::default() => {
+                match self.get_section(memo).as_ref().map(Cow::as_ref) {
+                    Some(Section::ExtraData(section)) => section.code.id(),
+                    _ => None,
+                }
+            }
             _ => None,
         }
     }
@@ -1132,26 +1156,32 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the hash of this transaction's code from the heeader
-    pub fn code_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.code_hash
+    /// Get the hash of this transaction's code from the header at the specified
+    /// index, if present
+    pub fn code_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
+        self.header.commitments.get(idx).map(|cmt| &cmt.code_hash)
     }
 
-    /// Set the transaction code hash stored in the header
+    /// Set the last transaction code hash stored in the header
     pub fn set_code_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.code_hash = hash
+        match self.header.commitments.last_mut() {
+            Some(last) => last.code_hash = hash,
+            None => self.header.commitments.push(Commitments {
+                code_hash: hash,
+                ..Default::default()
+            }),
+        }
     }
 
-    /// Get the code designated by the transaction code hash in the header
-    pub fn code(&self) -> Option<Vec<u8>> {
-        match self
-            .get_section(self.code_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
-            Some(Section::Code(section)) => section.code.id(),
-            _ => None,
-        }
+    /// Get the code designated by the transaction code hash in the header at
+    /// the specified index, if present
+    pub fn code(&self, idx: usize) -> Option<Vec<u8>> {
+        self.code_sechash(idx).and_then(|code| {
+            match self.get_section(code).as_ref().map(Cow::as_ref) {
+                Some(Section::Code(section)) => section.code.id(),
+                _ => None,
+            }
+        })
     }
 
     /// Add the given code to the transaction and set code hash in the header
@@ -1162,14 +1192,21 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the transaction data hash stored in the header
-    pub fn data_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.data_hash
+    /// Get the transaction data hash stored in the header at the specified
+    /// index, if present
+    pub fn data_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
+        self.header.commitments.get(idx).map(|cmt| &cmt.data_hash)
     }
 
-    /// Set the transaction data hash stored in the header
+    /// Set the last transaction data hash stored in the header
     pub fn set_data_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.data_hash = hash
+        match self.header.commitments.last_mut() {
+            Some(last) => last.data_hash = hash,
+            None => self.header.commitments.push(Commitments {
+                data_hash: hash,
+                ..Default::default()
+            }),
+        }
     }
 
     /// Add the given code to the transaction and set the hash in the header
@@ -1180,16 +1217,15 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the data designated by the transaction data hash in the header
-    pub fn data(&self) -> Option<Vec<u8>> {
-        match self
-            .get_section(self.data_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
-            Some(Section::Data(data)) => Some(data.data.clone()),
-            _ => None,
-        }
+    /// Get the data designated by the transaction data hash in the header at
+    /// the specified index, id present
+    pub fn data(&self, idx: usize) -> Option<Vec<u8>> {
+        self.data_sechash(idx).and_then(|data| {
+            match self.get_section(data).as_ref().map(Cow::as_ref) {
+                Some(Section::Data(data)) => Some(data.data.clone()),
+                _ => None,
+            }
+        })
     }
 
     /// Convert this transaction into protobufs bytes
