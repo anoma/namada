@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use super::*;
 use crate::hash::Hash;
-use crate::storage::BlockHeight;
+use crate::storage::{BlockHeight, TxIndex};
 
 /// Map of event attributes.
 pub trait AttributesMap {
@@ -385,10 +385,10 @@ impl EventAttributeEntry<'static> for Info {
 }
 
 /// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct ValidMaspTx(pub usize);
+pub struct ValidMaspTx(pub TxIndex);
 
 impl EventAttributeEntry<'static> for ValidMaspTx {
-    type Value = usize;
+    type Value = TxIndex;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "is_valid_masp_tx";

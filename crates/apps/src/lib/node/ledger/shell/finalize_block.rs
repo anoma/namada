@@ -313,11 +313,7 @@ where
             let tx_result = protocol::dispatch_tx(
                 tx.clone(),
                 processed_tx.tx.as_ref(),
-                TxIndex(
-                    tx_index
-                        .try_into()
-                        .expect("transaction index out of bounds"),
-                ),
+                TxIndex::must_from_usize(tx_index),
                 &tx_gas_meter,
                 &mut self.state,
                 &mut self.vp_wasm_cache,
