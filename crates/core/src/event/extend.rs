@@ -8,7 +8,40 @@ use crate::hash::Hash;
 use crate::storage::BlockHeight;
 
 /// Map of event attributes.
-pub type Attributes = HashMap<String, String>;
+pub trait AttributesMap {
+    /// Insert a new attribute.
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>;
+
+    /// Retrieve an attribute.
+    fn retrieve_attribute(&self, key: &str) -> Option<&str>;
+
+    /// Check for the existence of an attribute.
+    fn is_attribute(&self, key: &str) -> bool;
+}
+
+impl AttributesMap for HashMap<String, String> {
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.insert(key.into(), value.into());
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.get(key).map(String::as_ref)
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.contains_key(key)
+    }
+}
 
 /// Provides event composition routines.
 pub trait ComposeEvent {
@@ -75,7 +108,7 @@ pub trait ExtendAttributesMap: Sized {
         DATA: ExtendEventAttributes;
 }
 
-impl ExtendAttributesMap for Attributes {
+impl<A: AttributesMap> ExtendAttributesMap for A {
     #[inline(always)]
     fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
     where
@@ -105,7 +138,9 @@ pub trait EventAttributeEntry<'a> {
 /// Extend an [event](Event) with additional attributes.
 pub trait ExtendEventAttributes {
     /// Add additional attributes to some `event`.
-    fn extend_event_attributes(self, attributes: &mut Attributes);
+    fn extend_event_attributes<A>(self, attributes: &mut A)
+    where
+        A: AttributesMap;
 }
 
 impl<'value, DATA> ExtendEventAttributes for DATA
@@ -114,8 +149,14 @@ where
     DATA::Value: ToString,
 {
     #[inline]
-    fn extend_event_attributes(self, attributes: &mut Attributes) {
-        attributes.insert(DATA::KEY.to_string(), self.into_value().to_string());
+    fn extend_event_attributes<A>(self, attributes: &mut A)
+    where
+        A: AttributesMap,
+    {
+        attributes.insert_attribute(
+            DATA::KEY.to_string(),
+            self.into_value().to_string(),
+        );
     }
 }
 
@@ -125,9 +166,11 @@ pub trait ReadFromEventAttributes<'value>: Sized {
     type Value;
 
     /// Read an attribute from the provided event attributes.
-    fn read_from_event_attributes(
-        attributes: &Attributes,
-    ) -> Result<Self::Value, EventError>;
+    fn read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Self::Value, EventError>
+    where
+        A: AttributesMap;
 }
 
 // NB: some domain specific types take references instead of owned
@@ -143,15 +186,19 @@ where
     type Value = <DATA as EventAttributeEntry<'value>>::ValueOwned;
 
     #[inline]
-    fn read_from_event_attributes(
-        attributes: &Attributes,
-    ) -> Result<Self::Value, EventError> {
-        let encoded_value = attributes.get(DATA::KEY).ok_or_else(|| {
-            EventError::AttributeRetrieval(format!(
-                "Attribute {} not present",
-                DATA::KEY
-            ))
-        })?;
+    fn read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Self::Value, EventError>
+    where
+        A: AttributesMap,
+    {
+        let encoded_value =
+            attributes.retrieve_attribute(DATA::KEY).ok_or_else(|| {
+                EventError::AttributeRetrieval(format!(
+                    "Attribute {} not present",
+                    DATA::KEY
+                ))
+            })?;
         encoded_value
             .parse()
             .map_err(|err: <Self::Value as FromStr>::Err| {
@@ -164,12 +211,16 @@ where
 pub trait RawReadFromEventAttributes<'value>: Sized {
     /// Check if the associated attribute is present in the provided event
     /// attributes.
-    fn check_if_attribute_present(attributes: &Attributes) -> bool;
+    fn check_if_attribute_present<A>(attributes: &A) -> bool
+    where
+        A: AttributesMap;
 
     /// Read a string encoded attribute from the provided event attributes.
-    fn raw_read_from_event_attributes(
-        attributes: &Attributes,
-    ) -> Result<&str, EventError>;
+    fn raw_read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<&str, EventError>
+    where
+        A: AttributesMap;
 }
 
 impl<'value, DATA> RawReadFromEventAttributes<'value> for DATA
@@ -177,21 +228,26 @@ where
     DATA: EventAttributeEntry<'value>,
 {
     #[inline]
-    fn check_if_attribute_present(attributes: &Attributes) -> bool {
-        attributes.contains_key(DATA::KEY)
+    fn check_if_attribute_present<A>(attributes: &A) -> bool
+    where
+        A: AttributesMap,
+    {
+        attributes.is_attribute(DATA::KEY)
     }
 
     #[inline]
-    fn raw_read_from_event_attributes(
-        attributes: &Attributes,
-    ) -> Result<&str, EventError> {
-        let encoded_value = attributes.get(DATA::KEY).ok_or_else(|| {
+    fn raw_read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<&str, EventError>
+    where
+        A: AttributesMap,
+    {
+        attributes.retrieve_attribute(DATA::KEY).ok_or_else(|| {
             EventError::AttributeRetrieval(format!(
                 "Attribute {} not present",
                 DATA::KEY
             ))
-        })?;
-        Ok(encoded_value.as_str())
+        })
     }
 }
 
