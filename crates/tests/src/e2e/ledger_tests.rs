@@ -2078,7 +2078,7 @@ fn proposal_submission() -> Result<()> {
     client.exp_string("nam: 1999500")?;
     client.assert_success();
 
-    // 9. Send a yay vote from a validator
+    // 9.1. Send a yay vote from a validator
     let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
     while epoch.0 <= 13 {
         sleep(10);
@@ -2107,6 +2107,7 @@ fn proposal_submission() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
+    // 9.2. Send a valid yay vote from a delegator with bonds
     let submit_proposal_vote_delagator = vec![
         "vote-proposal",
         "--proposal-id",
@@ -2137,10 +2138,9 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    // this is valid because the client filter ALBERT delegation and there are
-    // none
+    // Expect a client failure here
     let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(15))?;
-    client.exp_string("Voter address must have delegations")?;
+    client.exp_regex("Voter address .* does not have any delegations")?;
     client.assert_failure();
 
     // 11. Query the proposal and check the result
