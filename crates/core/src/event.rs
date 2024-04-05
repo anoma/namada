@@ -332,6 +332,19 @@ impl Event {
         self.attributes.get(key)
     }
 
+    /// Get the value corresponding to a given key, if it exists.
+    pub fn read_attribute<'value, DATA>(
+        &self,
+    ) -> Result<
+        <DATA as extend::ReadFromEventAttributes<'value>>::Value,
+        EventError,
+    >
+    where
+        DATA: extend::ReadFromEventAttributes<'value>,
+    {
+        DATA::read_from_event_attributes(&self.attributes)
+    }
+
     /// Extend this [`Event`] with additional data.
     #[inline]
     pub fn extend<DATA>(&mut self, data: DATA) -> &mut Self
