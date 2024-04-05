@@ -20,7 +20,6 @@ use crate::{
     MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result, State,
     StateRead, StorageHasher, StorageResult, StoreType, DB,
     EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
-    STORAGE_WRITE_GAS_PER_BYTE,
 };
 
 /// Owned state with full R/W access.
@@ -727,7 +726,7 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_write(
         &mut self,
         key: &Key,
@@ -752,7 +751,8 @@ where
         }
 
         let len = value.len();
-        let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
+        let gas =
+            (key.len() + len) as u64 * namada_gas::STORAGE_WRITE_GAS_PER_BYTE;
         let size_diff = self.db.write_subspace_val(
             self.in_mem.block.height,
             key,
@@ -764,7 +764,7 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
@@ -781,7 +781,7 @@ where
             )?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
-            * STORAGE_WRITE_GAS_PER_BYTE;
+            * namada_gas::STORAGE_WRITE_GAS_PER_BYTE;
         Ok((gas, deleted_bytes_len))
     }
 

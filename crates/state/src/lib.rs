@@ -20,10 +20,7 @@ pub use namada_core::storage::{
     EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_gas::{
-    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
-    STORAGE_WRITE_GAS_PER_BYTE,
-};
+use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
 use namada_merkle_tree::Error as MerkleTreeError;
 pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
