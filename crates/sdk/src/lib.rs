@@ -6,8 +6,9 @@ pub use namada_core::*;
 pub use tendermint_rpc;
 pub use {
     bip39, masp_primitives, masp_proofs, namada_account as account,
-    namada_governance as governance, namada_proof_of_stake as proof_of_stake,
-    namada_state as state, namada_storage as storage, zeroize,
+    namada_gas as gas, namada_governance as governance,
+    namada_proof_of_stake as proof_of_stake, namada_state as state,
+    namada_storage as storage, zeroize,
 };
 
 pub mod eth_bridge;

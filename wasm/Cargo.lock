@@ -3674,9 +3674,11 @@ dependencies = [
 name = "namada_gas"
 version = "0.34.0"
 dependencies = [
- "borsh 1.4.0",
+ "borsh",
+ "linkme",
  "namada_core",
  "namada_macros",
+ "namada_migrations",
  "serde",
  "thiserror",
 ]

@@ -66,6 +66,7 @@ migrations = [
   "namada_storage/migrations",
   "namada_tx/migrations",
   "namada_vote_ext/migrations",
+  "namada_gas/migrations",
   "linkme",
 ]
 
