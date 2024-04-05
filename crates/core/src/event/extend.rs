@@ -162,6 +162,10 @@ where
 
 /// Read a raw (string encoded) attribute from an [event](Event)'s attributes.
 pub trait RawReadFromEventAttributes<'value>: Sized {
+    /// Check if the associated attribute is present in the provided event
+    /// attributes.
+    fn check_if_attribute_present(attributes: &Attributes) -> bool;
+
     /// Read a string encoded attribute from the provided event attributes.
     fn raw_read_from_event_attributes(
         attributes: &Attributes,
@@ -172,6 +176,11 @@ impl<'value, DATA> RawReadFromEventAttributes<'value> for DATA
 where
     DATA: EventAttributeEntry<'value>,
 {
+    #[inline]
+    fn check_if_attribute_present(attributes: &Attributes) -> bool {
+        attributes.contains_key(DATA::KEY)
+    }
+
     #[inline]
     fn raw_read_from_event_attributes(
         attributes: &Attributes,
