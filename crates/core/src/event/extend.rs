@@ -225,7 +225,7 @@ where
 }
 
 /// Read an attribute from an [event](Event)'s attributes.
-pub trait ReadFromEventAttributes<'value>: Sized {
+pub trait ReadFromEventAttributes<'value> {
     /// The attribute to be read.
     type Value;
 
@@ -272,10 +272,10 @@ where
 }
 
 /// Read a raw (string encoded) attribute from an [event](Event)'s attributes.
-pub trait RawReadFromEventAttributes<'value>: Sized {
+pub trait RawReadFromEventAttributes<'value> {
     /// Check if the associated attribute is present in the provided event
     /// attributes.
-    fn check_if_attribute_present<A>(attributes: &A) -> bool
+    fn check_if_present_in<A>(attributes: &A) -> bool
     where
         A: AttributesMap;
 
@@ -292,7 +292,7 @@ where
     DATA: EventAttributeEntry<'value>,
 {
     #[inline]
-    fn check_if_attribute_present<A>(attributes: &A) -> bool
+    fn check_if_present_in<A>(attributes: &A) -> bool
     where
         A: AttributesMap,
     {

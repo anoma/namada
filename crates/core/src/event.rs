@@ -341,7 +341,7 @@ impl Event {
     where
         DATA: extend::RawReadFromEventAttributes<'value>,
     {
-        DATA::check_if_attribute_present(&self.attributes)
+        DATA::check_if_present_in(&self.attributes)
     }
 
     /// Extend this [`Event`] with additional data.
