@@ -6,7 +6,6 @@ use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -53,6 +52,9 @@ use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::{Address, MASP};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
+use namada_core::event::extend::{
+    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
+};
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
@@ -66,7 +68,8 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::data::{TxResult, WrapperTx};
+use namada_tx::data::WrapperTx;
+use namada_tx::event::InnerTx as InnerTxAttr;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -1993,8 +1996,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .and_then(|seed| {
                 let exp_str =
                     format!("Env var {ENV_VAR_MASP_TEST_SEED} must be a u64.");
-                let parsed_seed: u64 = FromStr::from_str(&seed)
-                    .map_err(|_| Error::Other(exp_str))?;
+                let parsed_seed: u64 =
+                    seed.parse().map_err(|_| Error::Other(exp_str))?;
                 Ok(parsed_seed)
             }) {
             tracing::warn!(
@@ -2622,25 +2625,15 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let tx_index =
-                        event.attributes.iter().find_map(|attribute| {
-                            if attribute.key == "is_valid_masp_tx" {
-                                Some(TxIndex(
-                                    u32::from_str(&attribute.value).unwrap(),
-                                ))
-                            } else {
-                                None
-                            }
-                        });
-                    match tx_index {
-                        Some(idx) => {
-                            if idx >= first_idx_to_query {
-                                Some((idx, event))
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
+                    let tx_index = ValidMaspTxAttr::read_from_event_attributes(
+                        &event.attributes,
+                    )
+                    .ok()?;
+
+                    if tx_index >= first_idx_to_query {
+                        Some((tx_index, event))
+                    } else {
+                        None
                     }
                 })
                 .collect::<Vec<_>>()
