@@ -17,7 +17,8 @@ use crate::ibc::core::client::types::events::{
 use crate::ibc::core::client::types::Height as IbcHeight;
 use crate::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
 use crate::ibc::core::host::types::identifiers::{
-    ChannelId, ClientId as IbcClientId, PortId, Sequence,
+    ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId,
+    PortId, Sequence,
 };
 use crate::tendermint::abci::Event as AbciEvent;
 
@@ -224,6 +225,20 @@ impl EventAttributeEntry<'static> for ConsensusHeights {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = CONSENSUS_HEIGHTS_ATTRIBUTE_KEY;
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with connection id data.
+pub struct ConnectionId(pub IbcConnectionId);
+
+impl EventAttributeEntry<'static> for ConnectionId {
+    type Value = IbcConnectionId;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "connection_id";
 
     fn into_value(self) -> Self::Value {
         self.0
