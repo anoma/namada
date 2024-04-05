@@ -43,6 +43,70 @@ impl AttributesMap for HashMap<String, String> {
     }
 }
 
+impl AttributesMap for Vec<crate::tendermint::abci::EventAttribute> {
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.push(crate::tendermint::abci::EventAttribute {
+            key: key.into(),
+            value: value.into(),
+            index: true,
+        });
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.iter().find_map(|attr| {
+            if attr.key == key {
+                Some(attr.value.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.iter().any(|attr| attr.key == key)
+    }
+}
+
+impl AttributesMap
+    for Vec<crate::tendermint_proto::v0_37::abci::EventAttribute>
+{
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.push(crate::tendermint_proto::v0_37::abci::EventAttribute {
+            key: key.into(),
+            value: value.into(),
+            index: true,
+        });
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.iter().find_map(|attr| {
+            if attr.key == key {
+                Some(attr.value.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.iter().any(|attr| attr.key == key)
+    }
+}
+
 /// Provides event composition routines.
 pub trait ComposeEvent {
     /// Compose an [event](Event) with new data.
