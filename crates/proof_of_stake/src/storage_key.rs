@@ -1053,3 +1053,17 @@ pub fn total_active_voting_power_key() -> Key {
         .push(&TOTAL_ACTIVE_VOTING_POWER_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
+
+/// Is storage key for total active voting power?
+pub fn is_total_active_voting_power_key(key: &Key) -> bool {
+    if key.segments.len() >= 2 {
+        match &key.segments[..2] {
+            [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
+                addr == &ADDRESS && prefix == TOTAL_ACTIVE_VOTING_POWER_KEY
+            }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
