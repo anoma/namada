@@ -2087,11 +2087,12 @@ pub async fn build_vote_proposal(
                 validator,
                 Some(current_epoch),
             )
-            .await
+            .await?
             .expect("Expected to find the state of the validator");
-            if !matches!(
+
+            if matches!(
                 val_state,
-                Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
+                ValidatorState::Jailed | ValidatorState::Inactive
             ) {
                 continue;
             }
