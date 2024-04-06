@@ -21,14 +21,15 @@ use proof_of_stake::storage_key::{
     is_below_capacity_validator_set_key, is_bond_epoched_meta_key, is_bond_key,
     is_consensus_keys_key, is_consensus_validator_set_key,
     is_delegator_redelegations_key, is_last_pos_reward_claim_epoch_key,
-    is_pos_key, is_rewards_counter_key, is_total_consensus_stake_key,
-    is_total_deltas_key, is_unbond_key, is_validator_address_raw_hash_key,
-    is_validator_addresses_key, is_validator_commission_rate_key,
-    is_validator_deltas_key, is_validator_eth_cold_key_key,
-    is_validator_eth_hot_key_key, is_validator_max_commission_rate_change_key,
-    is_validator_metadata_key, is_validator_redelegations_key,
-    is_validator_set_positions_key, is_validator_state_epoched_meta_key,
-    is_validator_state_key, is_validator_total_bond_or_unbond_key,
+    is_pos_key, is_rewards_counter_key, is_total_active_voting_power_key,
+    is_total_consensus_stake_key, is_total_deltas_key, is_unbond_key,
+    is_validator_address_raw_hash_key, is_validator_addresses_key,
+    is_validator_commission_rate_key, is_validator_deltas_key,
+    is_validator_eth_cold_key_key, is_validator_eth_hot_key_key,
+    is_validator_max_commission_rate_change_key, is_validator_metadata_key,
+    is_validator_redelegations_key, is_validator_set_positions_key,
+    is_validator_state_epoched_meta_key, is_validator_state_key,
+    is_validator_total_bond_or_unbond_key,
 };
 
 enum KeyType<'a> {
@@ -325,6 +326,7 @@ fn validate_pos_changes(
 
     Ok(is_valid_bond_or_unbond_change()
         || is_total_deltas_key(key)
+        || is_total_active_voting_power_key(key)
         || is_validator_deltas_key(key)
         || is_validator_total_bond_or_unbond_key(key)
         || is_validator_set_positions_key(key)
