@@ -1,11 +1,9 @@
 //! PGF lib code.
 
 use namada_core::address::Address;
-use namada_core::token;
 use namada_parameters::storage as params_storage;
 use namada_storage::{Result, StorageRead, StorageWrite};
-use namada_trans_token::credit_tokens;
-use namada_trans_token::storage_key::minted_balance_key;
+use namada_trans_token::{credit_tokens, get_effective_total_native_supply};
 
 use crate::pgf::storage::{get_parameters, get_payments, get_stewards};
 use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
@@ -25,9 +23,7 @@ where
     let epochs_per_year: u64 = storage
         .read(&params_storage::get_epochs_per_year_key())?
         .expect("Epochs per year should exist in storage");
-    let total_supply: token::Amount = storage
-        .read(&minted_balance_key(&staking_token))?
-        .expect("Total native token balance should exist in storage");
+    let total_supply = get_effective_total_native_supply(storage)?;
 
     let pgf_inflation_amount =
         (pgf_parameters.pgf_inflation_rate * total_supply) / epochs_per_year;

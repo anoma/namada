@@ -10,6 +10,7 @@ use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_trans_token::get_effective_total_native_supply;
 use thiserror::Error;
 
 use crate::storage::{
@@ -20,8 +21,7 @@ use crate::storage::{
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
 };
-use crate::token::credit_tokens;
-use crate::token::storage_key::minted_balance_key;
+use crate::token::{credit_tokens, inflation};
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
@@ -344,9 +344,7 @@ where
         .expect("Epochs per year should exist in parameters storage");
 
     let staking_token = staking_token_address(storage);
-    let total_amount: token::Amount = storage
-        .read(&minted_balance_key(&staking_token))?
-        .expect("Total NAM balance should exist in storage");
+    let total_tokens = get_effective_total_native_supply(storage)?;
 
     // Read from PoS storage
     let params = read_pos_params(storage)?;
