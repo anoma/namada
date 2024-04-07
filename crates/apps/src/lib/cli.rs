@@ -56,7 +56,7 @@ pub mod cmds {
         EthBridgePool(EthBridgePool),
 
         // Inlined commands from the client.
-        TxCustom(TxCustom),
+        // TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         TxUpdateAccount(TxUpdateAccount),
@@ -73,7 +73,7 @@ pub mod cmds {
                 .subcommand(NamadaWallet::def())
                 .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
-                .subcommand(TxCustom::def())
+                // .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
                 .subcommand(TxIbcTransfer::def())
                 .subcommand(TxUpdateAccount::def())
@@ -90,7 +90,7 @@ pub mod cmds {
                 SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
-            let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
+            // let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
             let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
@@ -106,7 +106,7 @@ pub mod cmds {
                 .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
-                .or(tx_custom)
+                // .or(tx_custom)
                 .or(tx_transfer)
                 .or(tx_ibc_transfer)
                 .or(tx_update_account)
@@ -213,7 +213,7 @@ pub mod cmds {
         fn add_sub(app: App) -> App {
             app
                 // Simple transactions
-                .subcommand(TxCustom::def().display_order(1))
+                // .subcommand(TxCustom::def().display_order(1))
                 .subcommand(TxTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateAccount::def().display_order(1))
@@ -277,7 +277,7 @@ pub mod cmds {
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             use NamadaClientWithContext::*;
-            let tx_custom = Self::parse_with_ctx(matches, TxCustom);
+            // let tx_custom = Self::parse_with_ctx(matches, TxCustom);
             let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
             let tx_update_account =
@@ -356,8 +356,7 @@ pub mod cmds {
             let gen_ibc_shielded =
                 Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
-            tx_custom
-                .or(tx_transfer)
+            tx_transfer
                 .or(tx_ibc_transfer)
                 .or(tx_update_account)
                 .or(tx_init_account)
@@ -445,7 +444,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum NamadaClientWithContext {
         // Ledger cmds
-        TxCustom(TxCustom),
+        // TxCustom(TxCustom),
         TxTransfer(TxTransfer),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
@@ -1227,24 +1226,24 @@ pub mod cmds {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct TxCustom(pub args::TxCustom<args::CliTypes>);
+    // #[derive(Clone, Debug)]
+    // pub struct TxCustom(pub args::TxCustom<args::CliTypes>);
 
-    impl SubCmd for TxCustom {
-        const CMD: &'static str = "tx";
+    // impl SubCmd for TxCustom {
+    //     const CMD: &'static str = "tx";
 
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxCustom(args::TxCustom::parse(matches)))
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self> {
+    //         matches
+    //             .subcommand_matches(Self::CMD)
+    //             .map(|matches| TxCustom(args::TxCustom::parse(matches)))
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Send a transaction with custom WASM code.")
-                .add_args::<args::TxCustom<args::CliTypes>>()
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about("Send a transaction with custom WASM code.")
+    //             .add_args::<args::TxCustom<args::CliTypes>>()
+    //     }
+    // }
 
     #[derive(Clone, Debug)]
     pub struct TxTransfer(pub args::TxTransfer<crate::cli::args::CliTypes>);
@@ -4092,73 +4091,73 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxCustom<SdkTypes>> for TxCustom<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
-            TxCustom::<SdkTypes> {
-                tx: self.tx.to_sdk(ctx),
-                code_path: self.code_path,
-                data_path: self.data_path.map(|data_path| {
-                    std::fs::read(data_path)
-                        .expect("Expected a file at given path")
-                }),
-                serialized_tx: self.serialized_tx.map(|path| {
-                    std::fs::read(path).expect("Expected a file at given path")
-                }),
-                owner: ctx.borrow_chain_or_exit().get(&self.owner),
-            }
-        }
-    }
+    // impl CliToSdk<TxCustom<SdkTypes>> for TxCustom<CliTypes> {
+    //     fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+    //         TxCustom::<SdkTypes> {
+    //             tx: self.tx.to_sdk(ctx),
+    //             code_path: self.code_path,
+    //             data_path: self.data_path.map(|data_path| {
+    //                 std::fs::read(data_path)
+    //                     .expect("Expected a file at given path")
+    //             }),
+    //             serialized_tx: self.serialized_tx.map(|path| {
+    //                 std::fs::read(path).expect("Expected a file at given
+    // path")             }),
+    //             owner: ctx.borrow_chain_or_exit().get(&self.owner),
+    //         }
+    //     }
+    // }
 
-    impl Args for TxCustom<CliTypes> {
-        fn parse(matches: &ArgMatches) -> Self {
-            let tx = Tx::parse(matches);
-            let code_path = CODE_PATH_OPT.parse(matches);
-            let data_path = DATA_PATH_OPT.parse(matches);
-            let serialized_tx = TX_PATH_OPT.parse(matches);
-            let owner = OWNER.parse(matches);
-            Self {
-                tx,
-                code_path,
-                data_path,
-                serialized_tx,
-                owner,
-            }
-        }
+    // impl Args for TxCustom<CliTypes> {
+    //     fn parse(matches: &ArgMatches) -> Self {
+    //         let tx = Tx::parse(matches);
+    //         let code_path = CODE_PATH_OPT.parse(matches);
+    //         let data_path = DATA_PATH_OPT.parse(matches);
+    //         let serialized_tx = TX_PATH_OPT.parse(matches);
+    //         let owner = OWNER.parse(matches);
+    //         Self {
+    //             tx,
+    //             code_path,
+    //             data_path,
+    //             serialized_tx,
+    //             owner,
+    //         }
+    //     }
 
-        fn def(app: App) -> App {
-            app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    CODE_PATH_OPT
-                        .def()
-                        .help("The path to the transaction's WASM code.")
-                        .conflicts_with(TX_PATH_OPT.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .help(
-                            "The data file at this path containing arbitrary \
-                             bytes will be passed to the transaction code \
-                             when it's executed.",
-                        )
-                        .requires(CODE_PATH_OPT.name)
-                        .conflicts_with(TX_PATH_OPT.name),
-                )
-                .arg(
-                    TX_PATH_OPT
-                        .def()
-                        .help("The path to a serialized transaction.")
-                        .conflicts_with_all([
-                            CODE_PATH_OPT.name,
-                            DATA_PATH_OPT.name,
-                        ]),
-                )
-                .arg(OWNER.def().help(
-                    "The address corresponding to the signatures or signing \
-                     keys.",
-                ))
-        }
-    }
+    //     fn def(app: App) -> App {
+    //         app.add_args::<Tx<CliTypes>>()
+    //             .arg(
+    //                 CODE_PATH_OPT
+    //                     .def()
+    //                     .help("The path to the transaction's WASM code.")
+    //                     .conflicts_with(TX_PATH_OPT.name),
+    //             )
+    //             .arg(
+    //                 DATA_PATH_OPT
+    //                     .def()
+    //                     .help(
+    //                         "The data file at this path containing arbitrary
+    // \                          bytes will be passed to the transaction
+    // code \                          when it's executed.",
+    //                     )
+    //                     .requires(CODE_PATH_OPT.name)
+    //                     .conflicts_with(TX_PATH_OPT.name),
+    //             )
+    //             .arg(
+    //                 TX_PATH_OPT
+    //                     .def()
+    //                     .help("The path to a serialized transaction.")
+    //                     .conflicts_with_all([
+    //                         CODE_PATH_OPT.name,
+    //                         DATA_PATH_OPT.name,
+    //                     ]),
+    //             )
+    //             .arg(OWNER.def().help(
+    //                 "The address corresponding to the signatures or signing \
+    //                  keys.",
+    //             ))
+    //     }
+    // }
 
     impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {

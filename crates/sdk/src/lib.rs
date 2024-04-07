@@ -525,15 +525,15 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&self, owner: Address) -> args::TxCustom {
-        args::TxCustom {
-            owner,
-            tx: self.tx_builder(),
-            code_path: None,
-            data_path: None,
-            serialized_tx: None,
-        }
-    }
+    // fn new_custom(&self, owner: Address) -> args::TxCustom {
+    //     args::TxCustom {
+    //         owner,
+    //         tx: self.tx_builder(),
+    //         code_path: None,
+    //         data_path: None,
+    //         serialized_tx: None,
+    //     }
+    // }
 
     /// Sign the given transaction using the given signing data
     async fn sign<D, F>(

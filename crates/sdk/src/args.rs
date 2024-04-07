@@ -133,72 +133,72 @@ pub struct QueryResult<C: NamadaTypes = SdkTypes> {
 }
 
 /// Custom transaction arguments
-#[derive(Clone, Debug)]
-pub struct TxCustom<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
-    /// Path to the tx WASM code file
-    pub code_path: Option<PathBuf>,
-    /// Path to the data file
-    pub data_path: Option<C::Data>,
-    /// Path to the serialized transaction
-    pub serialized_tx: Option<C::Data>,
-    /// The address that correspond to the signatures/signing-keys
-    pub owner: C::Address,
-}
+// #[derive(Clone, Debug)]
+// pub struct TxCustom<C: NamadaTypes = SdkTypes> {
+//     /// Common tx arguments
+//     pub tx: Tx<C>,
+//     /// Path to the tx WASM code file
+//     pub code_path: Option<PathBuf>,
+//     /// Path to the data file
+//     pub data_path: Option<C::Data>,
+//     /// Path to the serialized transaction
+//     pub serialized_tx: Option<C::Data>,
+//     /// The address that correspond to the signatures/signing-keys
+//     pub owner: C::Address,
+// }
 
-impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
-    fn tx<F>(self, func: F) -> Self
-    where
-        F: FnOnce(Tx<C>) -> Tx<C>,
-    {
-        TxCustom {
-            tx: func(self.tx),
-            ..self
-        }
-    }
-}
+// impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
+//     fn tx<F>(self, func: F) -> Self
+//     where
+//         F: FnOnce(Tx<C>) -> Tx<C>,
+//     {
+//         TxCustom {
+//             tx: func(self.tx),
+//             ..self
+//         }
+//     }
+// }
 
-impl<C: NamadaTypes> TxCustom<C> {
-    /// Path to the tx WASM code file
-    pub fn code_path(self, code_path: PathBuf) -> Self {
-        Self {
-            code_path: Some(code_path),
-            ..self
-        }
-    }
+// impl<C: NamadaTypes> TxCustom<C> {
+//     /// Path to the tx WASM code file
+//     pub fn code_path(self, code_path: PathBuf) -> Self {
+//         Self {
+//             code_path: Some(code_path),
+//             ..self
+//         }
+//     }
 
-    /// Path to the data file
-    pub fn data_path(self, data_path: C::Data) -> Self {
-        Self {
-            data_path: Some(data_path),
-            ..self
-        }
-    }
+//     /// Path to the data file
+//     pub fn data_path(self, data_path: C::Data) -> Self {
+//         Self {
+//             data_path: Some(data_path),
+//             ..self
+//         }
+//     }
 
-    /// Path to the serialized transaction
-    pub fn serialized_tx(self, serialized_tx: C::Data) -> Self {
-        Self {
-            serialized_tx: Some(serialized_tx),
-            ..self
-        }
-    }
+//     /// Path to the serialized transaction
+//     pub fn serialized_tx(self, serialized_tx: C::Data) -> Self {
+//         Self {
+//             serialized_tx: Some(serialized_tx),
+//             ..self
+//         }
+//     }
 
-    /// The address that correspond to the signatures/signing-keys
-    pub fn owner(self, owner: C::Address) -> Self {
-        Self { owner, ..self }
-    }
-}
+//     /// The address that correspond to the signatures/signing-keys
+//     pub fn owner(self, owner: C::Address) -> Self {
+//         Self { owner, ..self }
+//     }
+// }
 
-impl TxCustom {
-    /// Build a transaction from this builder
-    pub async fn build(
-        &self,
-        context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_custom(context, self).await
-    }
-}
+// impl TxCustom {
+//     /// Build a transaction from this builder
+//     pub async fn build(
+//         &self,
+//         context: &impl Namada,
+//     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+//         tx::build_custom(context, self).await
+//     }
+// }
 
 /// An amount read in by the cli
 #[derive(Copy, Clone, Debug)]

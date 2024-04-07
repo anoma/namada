@@ -26,33 +26,33 @@ impl CliApi {
                 use NamadaClientWithContext as Sub;
                 match cmd {
                     // Ledger cmds
-                    Sub::TxCustom(TxCustom(args)) => {
-                        // TODO: too much boilerplate to setup client
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        let ledger_address =
-                            chain_ctx.get(&args.tx.ledger_address);
-                        let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&ledger_address)
-                        });
-                        client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
-                        let dry_run =
-                            args.tx.dry_run || args.tx.dry_run_wrapper;
-                        tx::submit_custom(&namada, args).await?;
-                        if !dry_run {
-                            namada
-                                .wallet()
-                                .await
-                                .save()
-                                .unwrap_or_else(|err| eprintln!("{}", err));
-                        } else {
-                            namada.io().println(
-                                "Transaction dry run. No addresses have been \
-                                 saved.",
-                            )
-                        }
-                    }
+                    // Sub::TxCustom(TxCustom(args)) => {
+                    //     // TODO: too much boilerplate to setup client
+                    //     let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                    //     let ledger_address =
+                    //         chain_ctx.get(&args.tx.ledger_address);
+                    //     let client = client.unwrap_or_else(|| {
+                    //         C::from_tendermint_address(&ledger_address)
+                    //     });
+                    //     client.wait_until_node_is_synced(&io).await?;
+                    //     let args = args.to_sdk(&mut ctx);
+                    //     let namada = ctx.to_sdk(client, io);
+                    //     let dry_run =
+                    //         args.tx.dry_run || args.tx.dry_run_wrapper;
+                    //     tx::submit_custom(&namada, args).await?;
+                    //     if !dry_run {
+                    //         namada
+                    //             .wallet()
+                    //             .await
+                    //             .save()
+                    //             .unwrap_or_else(|err| eprintln!("{}", err));
+                    //     } else {
+                    //         namada.io().println(
+                    //             "Transaction dry run. No addresses have been
+                    // \              saved.",
+                    //         )
+                    //     }
+                    // }
                     Sub::TxTransfer(TxTransfer(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =

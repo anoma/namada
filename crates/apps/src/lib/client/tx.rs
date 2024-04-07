@@ -253,27 +253,27 @@ pub async fn submit_bridge_pool_tx<N: Namada>(
     Ok(())
 }
 
-pub async fn submit_custom<N: Namada>(
-    namada: &N,
-    args: args::TxCustom,
-) -> Result<(), error::Error>
-where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
-{
-    submit_reveal_aux(namada, args.tx.clone(), &args.owner).await?;
+// pub async fn submit_custom<N: Namada>(
+//     namada: &N,
+//     args: args::TxCustom,
+// ) -> Result<(), error::Error>
+// where
+//     <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+// {
+//     submit_reveal_aux(namada, args.tx.clone(), &args.owner).await?;
 
-    let (mut tx, signing_data) = args.build(namada).await?;
+//     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
-    } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
+//     if args.tx.dump_tx {
+//         tx::dump_tx(namada.io(), &args.tx, tx);
+//     } else {
+//         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
-        namada.submit(tx, &args.tx).await?;
-    }
+//         namada.submit(tx, &args.tx).await?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub async fn submit_update_account<N: Namada>(
     namada: &N,

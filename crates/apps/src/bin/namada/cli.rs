@@ -44,7 +44,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
             handle_subcommand("namadan", sub_args)
         }
         cli::cmds::Namada::Client(_)
-        | cli::cmds::Namada::TxCustom(_)
+        // | cli::cmds::Namada::TxCustom(_)
         | cli::cmds::Namada::TxTransfer(_)
         | cli::cmds::Namada::TxIbcTransfer(_)
         | cli::cmds::Namada::TxUpdateAccount(_)

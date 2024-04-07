@@ -2805,65 +2805,65 @@ pub async fn build_update_account(
 }
 
 /// Submit a custom transaction
-pub async fn build_custom(
-    context: &impl Namada,
-    args::TxCustom {
-        tx: tx_args,
-        code_path,
-        data_path,
-        serialized_tx,
-        owner,
-    }: &args::TxCustom,
-) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(owner.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        tx_args,
-        Some(owner.clone()),
-        default_signer,
-    )
-    .await?;
-    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
-        context,
-        tx_args,
-        &signing_data.fee_payer,
-    )
-    .await?;
+// pub async fn build_custom(
+//     context: &impl Namada,
+//     args::TxCustom {
+//         tx: tx_args,
+//         code_path,
+//         data_path,
+//         serialized_tx,
+//         owner,
+//     }: &args::TxCustom,
+// ) -> Result<(Tx, SigningTxData)> {
+//     let default_signer = Some(owner.clone());
+//     let signing_data = signing::aux_signing_data(
+//         context,
+//         tx_args,
+//         Some(owner.clone()),
+//         default_signer,
+//     )
+//     .await?;
+//     let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
+//         context,
+//         tx_args,
+//         &signing_data.fee_payer,
+//     )
+//     .await?;
 
-    let mut tx = if let Some(serialized_tx) = serialized_tx {
-        Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
-            Error::Other("Invalid tx deserialization.".to_string())
-        })?
-    } else {
-        let code_path = code_path
-            .as_ref()
-            .ok_or(Error::Other("No code path supplied".to_string()))?;
-        let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
-        let chain_id = tx_args.chain_id.clone().unwrap();
-        let mut tx = Tx::new(chain_id, tx_args.expiration);
-        if let Some(memo) = &tx_args.memo {
-            tx.add_memo(memo);
-        }
-        tx.add_code_from_hash(
-            tx_code_hash,
-            Some(code_path.to_string_lossy().into_owned()),
-        );
-        data_path.clone().map(|data| tx.add_serialized_data(data));
-        tx
-    };
+//     let mut tx = if let Some(serialized_tx) = serialized_tx {
+//         Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
+//             Error::Other("Invalid tx deserialization.".to_string())
+//         })?
+//     } else {
+//         let code_path = code_path
+//             .as_ref()
+//             .ok_or(Error::Other("No code path supplied".to_string()))?;
+//         let tx_code_hash = query_wasm_code_hash_buf(context,
+// code_path).await?;         let chain_id = tx_args.chain_id.clone().unwrap();
+//         let mut tx = Tx::new(chain_id, tx_args.expiration);
+//         if let Some(memo) = &tx_args.memo {
+//             tx.add_memo(memo);
+//         }
+//         tx.add_code_from_hash(
+//             tx_code_hash,
+//             Some(code_path.to_string_lossy().into_owned()),
+//         );
+//         data_path.clone().map(|data| tx.add_serialized_data(data));
+//         tx
+//     };
 
-    prepare_tx(
-        context.client(),
-        tx_args,
-        &mut tx,
-        unshield,
-        fee_amount,
-        signing_data.fee_payer.clone(),
-    )
-    .await?;
+//     prepare_tx(
+//         context.client(),
+//         tx_args,
+//         &mut tx,
+//         unshield,
+//         fee_amount,
+//         signing_data.fee_payer.clone(),
+//     )
+//     .await?;
 
-    Ok((tx, signing_data))
-}
+//     Ok((tx, signing_data))
+// }
 
 /// Generate IBC shielded transfer
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
