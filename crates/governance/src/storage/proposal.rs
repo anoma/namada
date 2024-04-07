@@ -575,7 +575,7 @@ impl StorageProposal {
         if self.voting_start_epoch > current_epoch {
             ProposalStatus::Pending
         } else if self.voting_start_epoch <= current_epoch
-            && current_epoch <= self.voting_end_epoch
+            && current_epoch < self.voting_end_epoch
         {
             ProposalStatus::OnGoing
         } else {
