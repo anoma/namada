@@ -22,8 +22,8 @@ use crate::ibc::core::client::types::events::{
 use crate::ibc::core::client::types::{Height as IbcHeight, HeightError};
 use crate::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
 use crate::ibc::core::host::types::identifiers::{
-    ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId,
-    PortId, Sequence,
+    ChannelId as IbcChannelId, ClientId as IbcClientId,
+    ConnectionId as IbcConnectionId, PortId, Sequence,
 };
 use crate::ibc::primitives::Timestamp;
 use crate::tendermint::abci::Event as AbciEvent;
@@ -168,10 +168,10 @@ impl EventAttributeEntry<'static> for PacketSrcPort {
 }
 
 /// Extend an [`Event`] with packet source channel data.
-pub struct PacketSrcChannel(pub ChannelId);
+pub struct PacketSrcChannel(pub IbcChannelId);
 
 impl EventAttributeEntry<'static> for PacketSrcChannel {
-    type Value = ChannelId;
+    type Value = IbcChannelId;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "packet_src_channel";
@@ -196,10 +196,10 @@ impl EventAttributeEntry<'static> for PacketDstPort {
 }
 
 /// Extend an [`Event`] with packet destination channel data.
-pub struct PacketDstChannel(pub ChannelId);
+pub struct PacketDstChannel(pub IbcChannelId);
 
 impl EventAttributeEntry<'static> for PacketDstChannel {
-    type Value = ChannelId;
+    type Value = IbcChannelId;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "packet_dst_channel";
@@ -316,6 +316,34 @@ impl EventAttributeEntry<'static> for PacketTimeoutTimestamp {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "packet_timeout_timestamp";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with channel id data.
+pub struct ChannelId(pub IbcChannelId);
+
+impl EventAttributeEntry<'static> for ChannelId {
+    type Value = IbcChannelId;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "channel_id";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with packet ack data.
+pub struct PacketAck<'ack>(pub &'ack str);
+
+impl<'ack> EventAttributeEntry<'ack> for PacketAck<'ack> {
+    type Value = &'ack str;
+    type ValueOwned = String;
+
+    const KEY: &'static str = "packet_ack";
 
     fn into_value(self) -> Self::Value {
         self.0
