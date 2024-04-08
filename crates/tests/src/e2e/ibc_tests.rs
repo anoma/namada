@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use namada::core::address::{Address, InternalAddress};
+use namada::core::event::extend::ReadFromEventAttributes;
 use namada::core::key::PublicKey;
 use namada::core::storage::{BlockHeight, Epoch, Key};
 use namada::core::token::Amount;
@@ -2342,51 +2343,38 @@ fn signer() -> Signer {
     "signer".to_string().into()
 }
 
-fn get_client_id_from_events(events: &Vec<AbciEvent>) -> Option<ClientId> {
-    get_attribute_from_events(events, "client_id").map(|v| v.parse().unwrap())
+fn get_client_id_from_events(events: &[AbciEvent]) -> Option<ClientId> {
+    get_attribute_from_events::<ibc_events::ClientId>(events)
 }
 
-fn get_connection_id_from_events(
-    events: &Vec<AbciEvent>,
-) -> Option<ConnectionId> {
-    get_attribute_from_events(events, "connection_id")
-        .map(|v| v.parse().unwrap())
+fn get_connection_id_from_events(events: &[AbciEvent]) -> Option<ConnectionId> {
+    get_attribute_from_events::<ibc_events::ConnectionId>(events)
 }
 
-fn get_channel_id_from_events(events: &Vec<AbciEvent>) -> Option<ChannelId> {
-    get_attribute_from_events(events, "channel_id").map(|v| v.parse().unwrap())
+fn get_channel_id_from_events(events: &[AbciEvent]) -> Option<ChannelId> {
+    get_attribute_from_events::<ibc_events::ChannelId>(events)
 }
 
-fn get_ack_from_events(events: &Vec<AbciEvent>) -> Option<Vec<u8>> {
-    get_attribute_from_events(events, "packet_ack")
-        .map(|v| Vec::from(v.as_bytes()))
+fn get_ack_from_events(events: &[AbciEvent]) -> Option<Vec<u8>> {
+    get_attribute_from_events::<ibc_events::PacketAck>(events)
+        .map(String::into_bytes)
 }
 
-fn get_attribute_from_events(
-    events: &Vec<AbciEvent>,
-    key: &str,
-) -> Option<String> {
-    for event in events {
-        let attributes = get_attributes_from_event(event);
-        if let Some(value) = attributes.get(key) {
-            return Some(value.clone());
-        }
-    }
-    None
+fn get_attribute_from_events<'value, DATA>(
+    events: &[AbciEvent],
+) -> Option<<DATA as ReadFromEventAttributes<'value>>::Value>
+where
+    DATA: ReadFromEventAttributes<'value>,
+{
+    events.iter().find_map(|event| {
+        DATA::read_from_event_attributes(&event.attributes).ok()
+    })
 }
 
 fn get_packet_from_events(events: &[AbciEvent]) -> Option<Packet> {
     events.iter().find_map(|event| {
         ibc_events::packet_from_event_attributes(&event.attributes).ok()
     })
-}
-
-fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
-    event
-        .attributes
-        .iter()
-        .map(|tag| (tag.key.to_string(), tag.value.to_string()))
-        .collect()
 }
 
 fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {
