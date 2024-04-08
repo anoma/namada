@@ -18,7 +18,7 @@ use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
-use token::storage_key::minted_balance_key;
+use token::get_effective_total_native_supply;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
@@ -1416,10 +1416,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
             .unwrap();
     }
 
-    let total_native_tokens: token::Amount = s
-        .read(&minted_balance_key(&staking_token))
-        .unwrap()
-        .expect("Total NAM balance should exist in storage");
+    let total_native_tokens = get_effective_total_native_supply(&s).unwrap();
 
     // Distribute inflation into rewards
     let last_epoch = current_epoch.prev();
