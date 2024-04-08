@@ -554,7 +554,10 @@ where
             tracing::debug!(
                 "Rejecting transaction, since the Ethereum bridge is disabled."
             );
-            return Ok(false);
+            return Err(native_vp::Error::SimpleMessage(
+                "Rejecting transaction, since the Ethereum bridge is disabled.",
+            )
+            .into());
         }
         let Some(tx_data) = tx.data() else {
             return Err(native_vp::Error::SimpleMessage(

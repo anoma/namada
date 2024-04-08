@@ -632,8 +632,8 @@ where
         if !is_valid_activation_epoch {
             let error = native_vp::Error::new_alloc(format!(
                 "Expected min duration between the end and grace epoch \
-                 {min_grace_epoch}, but got grace = {grace_epoch}, end = \
-                 {end_epoch}",
+                 {min_grace_epochs}, but got activation = {activation_epoch}, \
+                 end = {end_epoch}",
             ))
             .into();
             tracing::info!("{error}");
@@ -644,8 +644,8 @@ where
         if !is_valid_max_proposal_period {
             let error = native_vp::Error::new_alloc(format!(
                 "Expected max duration between the start and grace epoch \
-                 {max_proposal_period}, but got grace = {grace_epoch}, start \
-                 = {start_epoch}",
+                 {max_proposal_period}, but got activation = \
+                 {activation_epoch}, start = {start_epoch}",
             ))
             .into();
             tracing::info!("{error}");
@@ -1206,7 +1206,6 @@ mod test {
     use namada_sdk::key::RefTo;
     use namada_sdk::time::DateTimeUtc;
     use namada_sdk::token;
-    use namada_sdk::validity_predicate::VpSentinel;
     use namada_state::mockdb::MockDB;
     use namada_state::testing::TestState;
     use namada_state::{
@@ -1261,7 +1260,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1286,7 +1284,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1294,10 +1291,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1488,7 +1484,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1536,7 +1531,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1544,10 +1538,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -1585,7 +1578,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1633,20 +1625,17 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let governance_vp = GovernanceVp { ctx };
-        // this should return true because state has been stored
-        let vp_result = governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed");
-        assert!(!vp_result);
+        let result = governance_vp.validate_tx(&tx, &keys_changed, &verifiers);
+        // this should fail
+        assert_matches!(&result, Err(_));
 
-        if !vp_result {
+        if result.is_err() {
             state.write_log_mut().drop_tx();
         } else {
             state.write_log_mut().commit_tx();
@@ -1685,7 +1674,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1733,19 +1721,16 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let governance_vp = GovernanceVp { ctx };
-        let vp_result = governance_vp
-            .validate_tx(&tx, &keys_changed, &verifiers)
-            .expect("validation failed");
-        assert!(vp_result);
+        let result = governance_vp.validate_tx(&tx, &keys_changed, &verifiers);
+        assert_matches!(&result, Ok(_));
 
-        if !vp_result {
+        if result.is_err() {
             state.write_log_mut().drop_tx();
         } else {
             state.write_log_mut().commit_tx();
@@ -1784,7 +1769,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1832,7 +1816,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1840,10 +1823,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -1863,7 +1845,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1911,7 +1892,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1919,10 +1899,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -1942,7 +1921,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -1990,7 +1968,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1998,10 +1975,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2039,7 +2015,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2087,7 +2062,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2095,10 +2069,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2136,7 +2109,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2184,7 +2156,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2192,10 +2163,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2215,7 +2185,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2263,7 +2232,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2271,10 +2239,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2308,7 +2275,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2316,10 +2282,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -2339,7 +2304,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2387,7 +2351,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2395,10 +2358,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2432,7 +2394,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2440,10 +2401,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2463,7 +2423,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2511,7 +2470,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2519,10 +2477,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2556,7 +2513,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2564,10 +2520,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2587,7 +2542,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2635,7 +2589,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2643,10 +2596,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2697,7 +2649,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2705,10 +2656,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -2728,7 +2678,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2776,7 +2725,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2784,10 +2732,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2838,7 +2785,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2846,10 +2792,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 
@@ -2869,7 +2814,6 @@ mod test {
             wasm::compilation_cache::common::testing::cache();
 
         let tx_index = TxIndex::default();
-        let sentinel = RefCell::new(VpSentinel::default());
 
         let signer = keypair_1();
         let signer_address = Address::from(&signer.clone().ref_to());
@@ -2917,7 +2861,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache.clone(),
@@ -2925,10 +2868,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Ok(_)
         );
 
         state.write_log_mut().commit_tx();
@@ -2979,7 +2921,6 @@ mod test {
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2987,10 +2928,9 @@ mod test {
 
         let governance_vp = GovernanceVp { ctx };
 
-        assert!(
-            !governance_vp
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+        assert_matches!(
+            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            Err(_)
         );
     }
 }

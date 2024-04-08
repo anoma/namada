@@ -810,13 +810,8 @@ where
             _ => {}
         }
 
-        // TODO: propagate errors inside of `verify_shielded_tx`
-        // up to the client
-        verify_shielded_tx(&shielded_tx).ok_or_else(|| {
-            native_vp::Error::new_const(
-                "Verification failed on the shielded tx",
-            )
-            .into()
-        })
+        // Verify the proofs
+        verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
+            .map_err(Error::NativeVpError)
     }
 }

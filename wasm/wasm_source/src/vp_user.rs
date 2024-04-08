@@ -221,30 +221,27 @@ fn validate_pos_changes(
 
     // Metadata changes must be signed by the validator whose
     // metadata is manipulated
-    let is_valid_metadata_change = || {
-        let is_valid = match is_validator_metadata_key(key) {
-            Some(address) => {
-                let metadata = ctx.post().read::<String>(key)?;
-                let valid_len = if let Some(metadata) = metadata {
-                    (metadata.len() as u64) <= MAX_VALIDATOR_METADATA_LEN
-                } else {
-                    true
-                };
-                if !valid_len {
-                    return VpError::Erased(
-                        "The metadata exceeds the maximum length".into(),
-                    );
-                }
-                gadget.borrow_mut().verify_signatures_when(
-                    address == owner,
-                    ctx,
-                    tx_data,
-                    owner,
-                )
+    let is_valid_metadata_change = || match is_validator_metadata_key(key) {
+        Some(address) => {
+            let metadata = ctx.post().read::<String>(key).into_vp_error()?;
+            let valid_len = if let Some(metadata) = metadata {
+                (metadata.len() as u64) <= MAX_VALIDATOR_METADATA_LEN
+            } else {
+                true
+            };
+            if !valid_len {
+                return Err(VpError::Erased(
+                    "The metadata exceeds the maximum length".into(),
+                ));
             }
-            None => VpError::Unspecified,
-        };
-        VpResult::Ok(is_valid)
+            gadget.borrow_mut().verify_signatures_when(
+                || address == owner,
+                ctx,
+                tx_data,
+                owner,
+            )
+        }
+        None => Err(VpError::Unspecified),
     };
 
     // Changes in validator state

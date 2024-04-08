@@ -909,9 +909,9 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1110,7 +1110,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -1432,7 +1432,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -1539,9 +1539,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1635,9 +1635,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1759,9 +1759,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1882,9 +1882,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -1990,9 +1990,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .is_ok()
+        assert_matches!(
+            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 
@@ -2093,7 +2093,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     // skip test_close_init_channel() and test_close_confirm_channel() since it
@@ -2247,7 +2247,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -2456,7 +2456,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -2599,7 +2599,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -2759,7 +2759,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -2920,7 +2920,7 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -3079,23 +3079,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -3316,22 +3311,17 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 }

@@ -86,7 +86,11 @@ where
                             tracing::debug!(
                                 "Native token deposit isn't allowed"
                             );
-                            return Ok(false);
+                            return Err(Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Native token deposit isn't allowed",
+                                ),
+                            ));
                         }
                         let change =
                             inc_changes.entry(token.clone()).or_default();
@@ -104,7 +108,11 @@ where
                             tracing::debug!(
                                 "Native token withdraw isn't allowed"
                             );
-                            return Ok(false);
+                            return Err(Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Native token deposit isn't allowed",
+                                ),
+                            ));
                         }
                         let diff = pre
                             .checked_sub(post)
@@ -126,7 +134,11 @@ where
                     tracing::debug!(
                         "Minting/Burning native token isn't allowed"
                     );
-                    return Ok(false);
+                    return Err(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage(
+                            "Minting/Burning native token isn't allowed",
+                        ),
+                    ));
                 }
 
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
@@ -281,6 +293,7 @@ where
 mod tests {
     use std::cell::RefCell;
 
+    use assert_matches::assert_matches;
     use borsh_ext::BorshSerializeExt;
     use namada_gas::TxGasMeter;
     use namada_parameters::storage::get_native_token_transferable_key;
@@ -739,24 +752,19 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
     }
 
     #[test]
@@ -778,24 +786,19 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -817,23 +820,18 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
     }
 }
