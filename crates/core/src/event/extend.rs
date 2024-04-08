@@ -400,6 +400,20 @@ impl EventAttributeEntry<'static> for ValidMaspTx {
     }
 }
 
+/// Extend an [`Event`] with success data.
+pub struct Success(pub bool);
+
+impl EventAttributeEntry<'static> for Success {
+    type Value = bool;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "success";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Extend an [`Event`] with a new domain.
 pub struct Domain(pub EventSegment);
 

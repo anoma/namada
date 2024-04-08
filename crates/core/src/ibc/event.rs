@@ -8,6 +8,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
+use super::IbcShieldedTransfer;
 use crate::borsh::*;
 use crate::collections::HashMap;
 use crate::event::extend::{
@@ -26,6 +27,7 @@ use crate::ibc::core::host::types::identifiers::{
     ConnectionId as IbcConnectionId, PortId, Sequence,
 };
 use crate::ibc::primitives::Timestamp;
+use crate::masp::PaymentAddress;
 use crate::tendermint::abci::Event as AbciEvent;
 
 pub mod types {
@@ -344,6 +346,34 @@ impl<'ack> EventAttributeEntry<'ack> for PacketAck<'ack> {
     type ValueOwned = String;
 
     const KEY: &'static str = "packet_ack";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with shielded receiver data.
+pub struct ShieldedReceiver<'addr>(pub &'addr PaymentAddress);
+
+impl<'addr> EventAttributeEntry<'addr> for ShieldedReceiver<'addr> {
+    type Value = &'addr PaymentAddress;
+    type ValueOwned = PaymentAddress;
+
+    const KEY: &'static str = "receiver";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with shielded transfer data.
+pub struct ShieldedTransfer<'tx>(pub &'tx IbcShieldedTransfer);
+
+impl<'tx> EventAttributeEntry<'tx> for ShieldedTransfer<'tx> {
+    type Value = &'tx IbcShieldedTransfer;
+    type ValueOwned = IbcShieldedTransfer;
+
+    const KEY: &'static str = "memo";
 
     fn into_value(self) -> Self::Value {
         self.0
