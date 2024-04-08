@@ -754,7 +754,7 @@ fn proposal_submission() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 1979500"));
 
-    // 9. Send a yay vote from a validator
+    // 9.1. Send a yay vote from a validator
     while node.current_epoch().0 <= 13 {
         node.next_epoch();
     }
@@ -776,6 +776,7 @@ fn proposal_submission() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
+    // 9.2. Send a valid yay vote from a delegator with bonds
     let submit_proposal_vote_delegator = vec![
         "vote-proposal",
         "--proposal-id",
@@ -807,12 +808,11 @@ fn proposal_submission() -> Result<()> {
         &validator_one_rpc,
     ];
 
-    // this is valid because the client filter CHRISTEL delegation and there are
-    // none
+    // Expect a client failure here
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
     assert!(captured.result.is_err());
-    assert!(captured.err_contains("Voter address must have delegations"));
+    assert!(captured.err_contains(r"The account .* has no active delegations"));
 
     // 11. Query the proposal and check the result
     while node.current_epoch().0 <= 25 {
