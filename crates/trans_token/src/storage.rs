@@ -32,6 +32,23 @@ where
     Ok(balance)
 }
 
+/// Update the balance of a given token and owner.
+pub fn update_balance<S, F>(
+    storage: &mut S,
+    token: &Address,
+    owner: &Address,
+    f: F,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+    F: FnOnce(token::Amount) -> token::Amount,
+{
+    let key = balance_key(token, owner);
+    let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    let new_balance = f(balance);
+    storage.write(&key, new_balance)
+}
+
 /// Read the total network supply of a given token.
 pub fn read_total_supply<S>(
     storage: &S,
@@ -41,8 +58,24 @@ where
     S: StorageRead,
 {
     let key = minted_balance_key(token);
-    let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
-    Ok(balance)
+    let total_supply = storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    Ok(total_supply)
+}
+
+/// Update the total network supply of a given token.
+pub fn update_total_supply<S, F>(
+    storage: &mut S,
+    token: &Address,
+    f: F,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+    F: FnOnce(token::Amount) -> token::Amount,
+{
+    let key = minted_balance_key(token);
+    let total_supply = storage.read::<token::Amount>(&key)?.unwrap_or_default();
+    let new_supply = f(total_supply);
+    storage.write(&key, new_supply)
 }
 
 /// Get the effective circulating total supply of native tokens.
@@ -163,22 +196,11 @@ pub fn credit_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let balance_key = balance_key(token, dest);
-    let cur_balance = read_balance(storage, token, dest)?;
-    let new_balance = cur_balance
-        .checked_add(amount)
-        .ok_or_else(|| storage::Error::new_const("Token balance overflow"))?;
+    // Update the destination balance
+    update_balance(storage, token, dest, |cur_amount| cur_amount + amount)?;
 
-    let total_supply_key = minted_balance_key(token);
-    let cur_supply = storage
-        .read::<Amount>(&total_supply_key)?
-        .unwrap_or_default();
-    let new_supply = cur_supply.checked_add(amount).ok_or_else(|| {
-        storage::Error::new_const("Token total supply overflow")
-    })?;
-
-    storage.write(&balance_key, new_balance)?;
-    storage.write(&total_supply_key, new_supply)
+    // Update the total supply
+    update_total_supply(storage, token, |cur_supply| cur_supply + amount)
 }
 
 /// Burn a specified amount of tokens from some address. If the burn amount is
@@ -205,15 +227,12 @@ where
             source_balance
         };
 
-    let old_total_supply = read_total_supply(storage, token)?;
-    let new_total_supply = old_total_supply
-        .checked_sub(amount_to_burn)
-        .ok_or_else(|| {
-            storage::Error::new_const("Total token supply underflowed")
-        })?;
-
-    let total_supply_key = minted_balance_key(token);
-    storage.write(&total_supply_key, new_total_supply)
+    // Update total supply
+    update_total_supply(storage, token, |cur_supply| {
+        cur_supply
+            .checked_sub(amount_to_burn)
+            .expect("Total token supply underflowed")
+    })
 }
 
 /// Add denomination info if it exists in storage.
