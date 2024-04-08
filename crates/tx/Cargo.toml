@@ -27,6 +27,7 @@ namada_macros = { path = "../macros" }
 namada_migrations = {path = "../migrations", optional = true }
 
 ark-bls12-381.workspace = true
+bitflags.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
 linkme = {workspace = true, optional = true}

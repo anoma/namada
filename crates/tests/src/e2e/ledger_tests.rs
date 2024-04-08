@@ -2089,9 +2089,10 @@ fn proposal_change_shielded_reward() -> Result<()> {
     );
 
     // 1. Run the ledger node
-    let bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
+    let mut ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
+    ledger.exp_string("Committed block hash")?;
+    let bg_ledger = ledger.background();
 
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 

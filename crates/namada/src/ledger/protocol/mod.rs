@@ -6,14 +6,16 @@ use std::fmt::Debug;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
-use namada_tx::data::{GasLimit, TxResult, TxType, VpsResult, WrapperTx};
+use namada_tx::data::{
+    GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
+};
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -62,8 +64,8 @@ pub enum Error {
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
     FeeError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
     #[error(
         "The decrypted transaction {0} has already been applied in this block"
     )]
@@ -96,6 +98,18 @@ pub enum Error {
     MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
+}
+
+impl Error {
+    /// Determine if the error originates from an invalid transaction
+    /// section signature. This is required for replay protection.
+    const fn invalid_section_signature_flag(&self) -> VpStatusFlags {
+        if matches!(self, Self::InvalidSectionSignature(_)) {
+            VpStatusFlags::INVALID_SIGNATURE
+        } else {
+            VpStatusFlags::empty()
+        }
+    }
 }
 
 /// Shell parameters for running wasm transactions.
@@ -802,7 +816,7 @@ where
         .try_fold(VpsResult::default, |mut result, addr| {
             let gas_meter =
                 RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
-            let accept = match &addr {
+            let tx_accepted = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = state
                         .validity_predicate(addr)
@@ -828,27 +842,25 @@ where
                     )
                     .map_err(|err| match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
-                        wasm::run::Error::InvalidTxSignature => {
-                            Error::InvalidTxSignature
+                        wasm::run::Error::InvalidSectionSignature(msg) => {
+                            Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
                     })
                 }
                 Address::Internal(internal_addr) => {
-                    let sentinel = RefCell::new(VpSentinel::default());
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
                         tx,
                         tx_index,
                         &gas_meter,
-                        &sentinel,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
 
-                    let accepted: Result<bool> = match internal_addr {
+                    match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
                             pos.validate_tx(tx, &keys_changed, &verifiers)
@@ -904,64 +916,49 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::NutNativeVpError)
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_) => {
+                        internal_addr @ (InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_)) => {
                             // The address should be a part of a multitoken
                             // key
-                            Ok(verifiers.contains(&Address::Internal(
-                                InternalAddress::Multitoken,
-                            )))
+                            verifiers
+                                .contains(&Address::Internal(
+                                    InternalAddress::Multitoken,
+                                ))
+                                .ok_or_else(|| {
+                                    Error::AccessForbidden(
+                                        internal_addr.clone(),
+                                    )
+                                })
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
-                    };
-
-                    accepted.map_err(|err| {
-                        // No need to check invalid sig because internal vps
-                        // don't check the signature
-                        if sentinel.borrow().is_out_of_gas() {
-                            Error::GasError(err.to_string())
-                        } else {
-                            err
-                        }
-                    })
+                    }
                 }
             };
 
-            match accept {
-                Ok(accepted) => {
-                    if accepted {
-                        result.accepted_vps.insert(addr.clone());
-                    } else {
-                        result.rejected_vps.insert(addr.clone());
-                    }
-                }
-                Err(err) => match err {
-                    // Execution of VPs can (and must) be short-circuited
-                    // only in case of a gas overflow to prevent the
-                    // transaction from consuming resources that have not
-                    // been acquired in the corresponding wrapper tx. For
-                    // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult across all
-                    // nodes and find any invalid signatures
-                    Error::GasError(_) => {
-                        return Err(err);
-                    }
-                    Error::InvalidTxSignature => {
-                        result.invalid_sig = true;
-                        result.rejected_vps.insert(addr.clone());
-                        // Don't push the error since this is just a flag error
-                    }
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                    }
+            tx_accepted.map_or_else(
+                |err| {
+                    result
+                        .status_flags
+                        .insert(err.invalid_section_signature_flag());
+                    result.rejected_vps.insert(addr.clone());
+                    result.errors.push((addr.clone(), err.to_string()));
                 },
-            }
+                |()| {
+                    result.accepted_vps.insert(addr.clone());
+                },
+            );
 
+            // Execution of VPs can (and must) be short-circuited
+            // only in case of a gas overflow to prevent the
+            // transaction from consuming resources that have not
+            // been acquired in the corresponding wrapper tx. For
+            // all the other errors we keep evaluating the vps. This
+            // allows to display a consistent VpsResult across all
+            // nodes and find any invalid signatures
             result
                 .gas_used
                 .set(gas_meter.into_inner())
@@ -988,7 +985,7 @@ fn merge_vp_results(
     rejected_vps.extend(b.rejected_vps);
     let mut errors = a.errors;
     errors.append(&mut b.errors);
-    let invalid_sig = a.invalid_sig || b.invalid_sig;
+    let status_flags = a.status_flags | b.status_flags;
     let mut gas_used = a.gas_used;
 
     gas_used
@@ -1000,7 +997,7 @@ fn merge_vp_results(
         rejected_vps,
         gas_used,
         errors,
-        invalid_sig,
+        status_flags,
     })
 }
 

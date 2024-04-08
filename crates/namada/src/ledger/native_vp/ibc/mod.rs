@@ -37,17 +37,17 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
-    NativeVpError(native_vp::Error),
-    #[error("Decoding error: {0}")]
-    Decoding(std::io::Error),
-    #[error("IBC message is required as transaction data")]
+    #[error("IBC VP error: Native VP error: {0}")]
+    NativeVpError(#[from] native_vp::Error),
+    #[error("IBC VP error: Decoding error: {0}")]
+    Decoding(#[from] std::io::Error),
+    #[error("IBC VP error: IBC message is required as transaction data")]
     NoTxData,
-    #[error("IBC action error: {0}")]
-    IbcAction(ActionError),
-    #[error("State change error: {0}")]
+    #[error("IBC VP error: IBC action error: {0}")]
+    IbcAction(#[from] ActionError),
+    #[error("IBC VP error: State change error: {0}")]
     StateChange(String),
-    #[error("IBC event error: {0}")]
+    #[error("IBC VP error: IBC event error: {0}")]
     IbcEvent(String),
     #[error("IBC rate limit: {0}")]
     RateLimit(String),
@@ -78,7 +78,7 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> VpResult<bool> {
+    ) -> VpResult<()> {
         let signed = tx_data;
         let tx_data = signed.data().ok_or(Error::NoTxData)?;
 
@@ -94,7 +94,7 @@ where
         // Check the limits
         self.check_limits(keys_changed)?;
 
-        Ok(true)
+        Ok(())
     }
 }
 
@@ -315,12 +315,6 @@ fn match_value(
     }
 }
 
-impl From<ActionError> for Error {
-    fn from(err: ActionError) -> Self {
-        Self::IbcAction(err)
-    }
-}
-
 /// A dummy header used for testing
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 pub fn get_dummy_header() -> crate::storage::Header {
@@ -391,7 +385,6 @@ mod tests {
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
     use namada_core::address::InternalAddress;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
     use namada_state::testing::TestState;
@@ -903,14 +896,12 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -920,7 +911,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -982,14 +973,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1109,24 +1098,19 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -1221,14 +1205,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1237,7 +1219,7 @@ mod tests {
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -1318,14 +1300,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1440,24 +1420,19 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -1553,14 +1528,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1568,7 +1541,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -1651,14 +1624,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1666,7 +1637,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -1777,14 +1748,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1792,7 +1761,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -1902,14 +1871,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -1917,7 +1884,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -2012,14 +1979,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &outer_tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
@@ -2027,7 +1992,7 @@ mod tests {
         let ibc = Ibc { ctx };
         assert!(
             ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
-                .expect("validation failed")
+                .is_ok()
         );
     }
 
@@ -2117,23 +2082,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     // skip test_close_init_channel() and test_close_confirm_channel() since it
@@ -2276,23 +2236,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -2490,23 +2445,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -2638,23 +2588,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -2803,23 +2748,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -2969,23 +2909,18 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert!(
-            ibc.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(ibc.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]

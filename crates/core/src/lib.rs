@@ -35,6 +35,7 @@ pub mod collections {
 
 pub mod account;
 pub mod address;
+pub mod booleans;
 pub mod chain;
 pub mod dec;
 pub mod eth_abi;
