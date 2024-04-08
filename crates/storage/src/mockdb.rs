@@ -26,7 +26,7 @@ use crate::conversion_state::ConversionState;
 use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
-use crate::types::{KVBytes, PatternIterator, PrefixIterator};
+use crate::types::{CommitOnlyData, KVBytes, PatternIterator, PrefixIterator};
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -91,6 +91,11 @@ impl DB for MockDB {
             };
         let update_epoch_blocks_delay: Option<u32> =
             match self.0.borrow().get("update_epoch_blocks_delay") {
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+                None => return Ok(None),
+            };
+        let commit_only_data: CommitOnlyData =
+            match self.0.borrow().get("commit_only_data") {
                 Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
@@ -213,6 +218,7 @@ impl DB for MockDB {
                 conversion_state,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"

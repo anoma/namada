@@ -75,6 +75,8 @@ pub struct BlockStateRead {
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
     /// The queue of Ethereum events to be processed in order.
     pub eth_events_queue: EthEventsQueue,
+    /// Structure holding data that needs to be added to the merkle tree
+    pub commit_only_data: CommitOnlyData,
 }
 
 /// The block's state to write into the database.

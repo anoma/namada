@@ -76,6 +76,7 @@ use namada::storage::{
 };
 use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
+use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -747,6 +748,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let commit_only_data: CommitOnlyData = match self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load commit only data commitment from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let conversion_state: ConversionState = match self
             .0
             .get_cf(state_cf, "conversion_state")
@@ -913,6 +927,7 @@ impl DB for RocksDB {
                 address_gen,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -2095,7 +2110,6 @@ mod test {
     use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
-    use namada_sdk::storage::types::CommitOnlyData;
     use tempfile::tempdir;
     use test_log::test;
 
