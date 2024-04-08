@@ -948,7 +948,7 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
 
     TmClientStateType::new(
         chain_id,
-        TrustThreshold::default(),
+        TrustThreshold::TWO_THIRDS,
         Duration::from_secs(trusting_period),
         Duration::from_secs(unbonding_period),
         max_clock_drift,
@@ -1079,7 +1079,7 @@ fn connection_handshake(
             None,
             commitment_prefix(),
         ),
-        version: Some(ConnVersion::default()),
+        version: Some(ConnVersion::compatibles().first().unwrap().clone()),
         delay_period: Duration::new(0, 0),
         signer: signer(),
     };
@@ -1110,7 +1110,7 @@ fn connection_handshake(
         client_id_on_b: client_id_b.clone(),
         client_state_of_b_on_a: client_state.clone().into(),
         counterparty,
-        versions_on_a: vec![ConnVersion::default()],
+        versions_on_a: ConnVersion::compatibles(),
         proofs_height_on_a: height_a,
         proof_conn_end_on_a: conn_proof,
         proof_client_state_of_b_on_a: client_state_proof,
@@ -1119,7 +1119,7 @@ fn connection_handshake(
         delay_period: Duration::from_secs(0),
         signer: "test".to_string().into(),
         proof_consensus_state_of_b: None,
-        previous_connection_id: ConnectionId::default().to_string(),
+        previous_connection_id: ConnectionId::zero().to_string(),
     };
     // Update the client state of Chain A on Chain B
     update_client_with_height(test_a, test_b, client_id_b, height_a)?;
@@ -1150,7 +1150,7 @@ fn connection_handshake(
         proof_consensus_state_of_a_on_b: consensus_proof,
         proofs_height_on_b: height_b,
         consensus_height_of_a_on_b,
-        version: ConnVersion::default(),
+        version: ConnVersion::compatibles().first().unwrap().clone(),
         signer: signer(),
         proof_consensus_state_of_a: None,
     };
@@ -2384,12 +2384,12 @@ fn get_packet_from_events(events: &Vec<AbciEvent>) -> Option<Packet> {
         let mut packet = Packet {
             seq_on_a: 0.into(),
             port_id_on_a: PortId::transfer(),
-            chan_id_on_a: ChannelId::default(),
+            chan_id_on_a: ChannelId::zero(),
             port_id_on_b: PortId::transfer(),
-            chan_id_on_b: ChannelId::default(),
+            chan_id_on_b: ChannelId::zero(),
             data: vec![],
-            timeout_height_on_b: TimeoutHeight::default(),
-            timeout_timestamp_on_b: Timestamp::default(),
+            timeout_height_on_b: TimeoutHeight::Never,
+            timeout_timestamp_on_b: Timestamp::none(),
         };
         for (key, val) in attributes {
             match key.as_str() {

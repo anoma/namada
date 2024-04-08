@@ -2,6 +2,8 @@
 
 use ibc_derive::IbcConsensusState;
 #[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::ConsensusStateConverter as MockConsensusStateConverter;
+#[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
@@ -10,8 +12,12 @@ use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusStat
 use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 use namada_core::ibc::clients::tendermint::context::{
-    CommonContext, ExecutionContext as TmExecutionContext,
+    ConsensusStateConverter as TmConsensusStateConverter,
+    ExecutionContext as TmExecutionContext,
     ValidationContext as TmValidationContext,
+};
+use namada_core::ibc::clients::tendermint::types::{
+    ClientState as TmClientStateType, ConsensusState as TmConsensusStateType,
 };
 use namada_core::ibc::core::client::context::client_state::{
     ClientStateCommon, ClientStateExecution, ClientStateValidation,
@@ -20,13 +26,12 @@ use namada_core::ibc::core::client::context::{
     ClientExecutionContext, ClientValidationContext,
 };
 use namada_core::ibc::core::client::types::error::ClientError;
-use namada_core::ibc::core::client::types::{Height, Status, UpdateKind};
+use namada_core::ibc::core::client::types::{Height, Status};
 use namada_core::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes, CommitmentRoot,
 };
 use namada_core::ibc::core::host::types::identifiers::{ClientId, ClientType};
 use namada_core::ibc::core::host::types::path::Path;
-use namada_core::ibc::core::host::ExecutionContext;
 use namada_core::ibc::primitives::proto::Any;
 use prost::Message;
 
@@ -49,10 +54,48 @@ impl From<TmClientState> for AnyClientState {
     }
 }
 
+impl From<TmClientStateType> for AnyClientState {
+    fn from(cs: TmClientStateType) -> Self {
+        Self::Tendermint(cs.into())
+    }
+}
+
+impl TryFrom<AnyClientState> for TmClientState {
+    type Error = ClientError;
+
+    fn try_from(any: AnyClientState) -> Result<Self, Self::Error> {
+        match any {
+            AnyClientState::Tendermint(cs) => Ok(cs),
+            #[cfg(feature = "testing")]
+            AnyClientState::Mock(_) => {
+                Err(ClientError::UnknownConsensusStateType {
+                    consensus_state_type: "mock".to_string(),
+                })
+            }
+        }
+    }
+}
+
 #[cfg(feature = "testing")]
 impl From<MockClientState> for AnyClientState {
     fn from(cs: MockClientState) -> Self {
         Self::Mock(cs)
+    }
+}
+
+#[cfg(feature = "testing")]
+impl TryFrom<AnyClientState> for MockClientState {
+    type Error = ClientError;
+
+    fn try_from(any: AnyClientState) -> Result<Self, Self::Error> {
+        match any {
+            AnyClientState::Tendermint(_) => {
+                Err(ClientError::UnknownConsensusStateType {
+                    consensus_state_type: "tendermint".to_string(),
+                })
+            }
+            AnyClientState::Mock(cs) => Ok(cs),
+        }
     }
 }
 
@@ -98,6 +141,28 @@ pub enum AnyConsensusState {
 impl From<TmConsensusState> for AnyConsensusState {
     fn from(cs: TmConsensusState) -> Self {
         Self::Tendermint(cs)
+    }
+}
+
+impl From<TmConsensusStateType> for AnyConsensusState {
+    fn from(cs: TmConsensusStateType) -> Self {
+        Self::Tendermint(cs.into())
+    }
+}
+
+impl TryInto<TmConsensusStateType> for AnyConsensusState {
+    type Error = ClientError;
+
+    fn try_into(self) -> Result<TmConsensusStateType, Self::Error> {
+        match self {
+            AnyConsensusState::Tendermint(c) => Ok(c.inner().clone()),
+            #[cfg(feature = "testing")]
+            AnyConsensusState::Mock(_) => {
+                Err(ClientError::UnknownConsensusStateType {
+                    consensus_state_type: "mock".to_string(),
+                })
+            }
+        }
     }
 }
 
@@ -283,22 +348,19 @@ impl ClientStateCommon for AnyClientState {
 impl<V> ClientStateValidation<V> for AnyClientState
 where
     V: ClientValidationContext + TmValidationContext,
-    ClientError: From<<V as CommonContext>::ConversionError>,
+    <V as ClientValidationContext>::ConsensusStateRef:
+        TmConsensusStateConverter,
 {
     fn verify_client_message(
         &self,
         ctx: &V,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<(), ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.verify_client_message(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.verify_client_message(ctx, client_id, client_message)
+            }
         }
     }
 
@@ -307,15 +369,11 @@ where
         ctx: &V,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<bool, ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.check_for_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.check_for_misbehaviour(ctx, client_id, client_message)
+            }
         }
     }
 
@@ -334,33 +392,22 @@ where
 impl<V> ClientStateValidation<V> for AnyClientState
 where
     V: ClientValidationContext + TmValidationContext + MockClientContext,
-    ClientError: From<<V as CommonContext>::ConversionError>
-        + From<
-            <<V as MockClientContext>::AnyConsensusState as TryInto<
-                MockConsensusState,
-            >>::Error,
-        >,
+    <V as ClientValidationContext>::ConsensusStateRef:
+        TmConsensusStateConverter + MockConsensusStateConverter,
 {
     fn verify_client_message(
         &self,
         ctx: &V,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<(), ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.verify_client_message(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
-            AnyClientState::Mock(cs) => cs.verify_client_message(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.verify_client_message(ctx, client_id, client_message)
+            }
+            AnyClientState::Mock(cs) => {
+                cs.verify_client_message(ctx, client_id, client_message)
+            }
         }
     }
 
@@ -369,21 +416,14 @@ where
         ctx: &V,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<bool, ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.check_for_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
-            AnyClientState::Mock(cs) => cs.check_for_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.check_for_misbehaviour(ctx, client_id, client_message)
+            }
+            AnyClientState::Mock(cs) => {
+                cs.check_for_misbehaviour(ctx, client_id, client_message)
+            }
         }
     }
 
@@ -402,9 +442,10 @@ where
 #[cfg(not(feature = "testing"))]
 impl<E> ClientStateExecution<E> for AnyClientState
 where
-    E: ExecutionContext + TmExecutionContext,
-    <E as ClientExecutionContext>::AnyClientState: From<TmClientState>,
-    <E as ClientExecutionContext>::AnyConsensusState: From<TmConsensusState>,
+    E: ClientExecutionContext + TmExecutionContext,
+    <E as ClientValidationContext>::ConsensusStateRef:
+        TmConsensusStateConverter,
+    <E as ClientExecutionContext>::ClientStateMut: From<TmClientStateType>,
 {
     fn initialise(
         &self,
@@ -437,15 +478,11 @@ where
         ctx: &mut E,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<(), ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.update_state_on_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.update_state_on_misbehaviour(ctx, client_id, client_message)
+            }
         }
     }
 
@@ -470,11 +507,11 @@ where
 #[cfg(feature = "testing")]
 impl<E> ClientStateExecution<E> for AnyClientState
 where
-    E: ExecutionContext + TmExecutionContext + MockClientContext,
-    <E as ClientExecutionContext>::AnyClientState:
-        From<TmClientState> + From<MockClientState>,
-    <E as ClientExecutionContext>::AnyConsensusState:
-        From<TmConsensusState> + From<MockConsensusState>,
+    E: ClientExecutionContext + TmExecutionContext + MockClientContext,
+    <E as ClientValidationContext>::ConsensusStateRef:
+        TmConsensusStateConverter + MockConsensusStateConverter,
+    <E as ClientExecutionContext>::ClientStateMut:
+        From<TmClientStateType> + From<MockClientState>,
 {
     fn initialise(
         &self,
@@ -511,21 +548,14 @@ where
         ctx: &mut E,
         client_id: &ClientId,
         client_message: Any,
-        update_kind: &UpdateKind,
     ) -> Result<(), ClientError> {
         match self {
-            AnyClientState::Tendermint(cs) => cs.update_state_on_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
-            AnyClientState::Mock(cs) => cs.update_state_on_misbehaviour(
-                ctx,
-                client_id,
-                client_message,
-                update_kind,
-            ),
+            AnyClientState::Tendermint(cs) => {
+                cs.update_state_on_misbehaviour(ctx, client_id, client_message)
+            }
+            AnyClientState::Mock(cs) => {
+                cs.update_state_on_misbehaviour(ctx, client_id, client_message)
+            }
         }
     }
 

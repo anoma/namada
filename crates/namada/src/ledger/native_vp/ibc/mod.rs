@@ -623,7 +623,7 @@ mod tests {
             conn_state,
             get_client_id(),
             get_conn_counterparty(),
-            vec![ConnVersion::default()],
+            ConnVersion::compatibles(),
             Duration::new(0, 0),
         )
         .unwrap()
@@ -1130,7 +1130,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id_on_a: get_client_id(),
             counterparty,
-            version: Some(ConnVersion::default()),
+            version: Some(ConnVersion::compatibles().first().unwrap().clone()),
             delay_period: Duration::new(100, 0),
             signer: "account0".to_string().into(),
         };
@@ -1237,7 +1237,7 @@ mod tests {
         let msg = MsgConnectionOpenInit {
             client_id_on_a: get_client_id(),
             counterparty,
-            version: Some(ConnVersion::default()),
+            version: Some(ConnVersion::compatibles().first().unwrap().clone()),
             delay_period: Duration::new(100, 0),
             signer: "account0".to_string().into(),
         };
@@ -1335,7 +1335,7 @@ mod tests {
             client_id_on_b: get_client_id(),
             client_state_of_b_on_a: client_state.into(),
             counterparty: get_conn_counterparty(),
-            versions_on_a: vec![ConnVersion::default()],
+            versions_on_a: ConnVersion::compatibles(),
             proofs_height_on_a: proof_height,
             proof_conn_end_on_a: dummy_proof(),
             proof_client_state_of_b_on_a: dummy_proof(),
@@ -1344,7 +1344,7 @@ mod tests {
             delay_period: Duration::from_secs(0),
             signer: "account0".to_string().into(),
             proof_consensus_state_of_b: Some(dummy_proof()),
-            previous_connection_id: ConnectionId::default().to_string(),
+            previous_connection_id: ConnectionId::zero().to_string(),
         };
 
         // insert a TryOpen connection
@@ -1474,7 +1474,7 @@ mod tests {
             proof_consensus_state_of_a_on_b: dummy_proof(),
             proofs_height_on_b: proof_height,
             consensus_height_of_a_on_b: client_state.latest_height(),
-            version: ConnVersion::default(),
+            version: ConnVersion::compatibles().first().unwrap().clone(),
             signer: "account0".to_string().into(),
             proof_consensus_state_of_a: None,
         };
@@ -1782,7 +1782,7 @@ mod tests {
             proof_height_on_a: proof_height,
             ordering: Order::Unordered,
             signer: "account0".to_string().into(),
-            version_proposal: ChanVersion::default(),
+            version_proposal: ChanVersion::empty(),
         };
 
         // insert a TryOpen channel
@@ -2992,7 +2992,7 @@ mod tests {
             receiver: msg.packet_data.receiver.clone(),
             class: msg.packet_data.class_id.clone(),
             tokens: msg.packet_data.token_ids.clone(),
-            memo: msg.packet_data.memo.clone().unwrap_or_default(),
+            memo: msg.packet_data.memo.clone().unwrap_or("".into()),
         };
         let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
         state

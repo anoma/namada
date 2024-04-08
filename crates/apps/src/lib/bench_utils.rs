@@ -499,7 +499,7 @@ impl BenchShell {
                 Some(ConnectionId::new(1)),
                 CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
             ),
-            vec![Version::default()],
+            Version::compatibles(),
             std::time::Duration::new(100, 0),
         )
         .unwrap();

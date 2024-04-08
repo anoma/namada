@@ -16,8 +16,10 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
+use namada_core::hash::Sha256Hasher;
 use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
 use namada_core::ibc::core::host::types::identifiers::ChainId as IbcChainId;
+use namada_state::merkle_tree::ics23_specs::proof_specs;
 
 /// IBC context to handle IBC-related data
 #[derive(Debug)]
@@ -62,7 +64,7 @@ impl Default for ValidationParams {
         Self {
             chain_id: IbcChainId::new("non-init-chain")
                 .expect("Convert the default chain ID shouldn't fail"),
-            proof_specs: ProofSpecs::default(),
+            proof_specs: proof_specs::<Sha256Hasher>().into(),
             unbonding_period: Duration::default(),
             upgrade_path: Vec::default(),
         }
