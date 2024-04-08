@@ -10,7 +10,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let tx_data = governance::VoteProposalData::try_from_slice(&data[..])
-        .wrap_err("failed to decode VoteProposalData")?;
+        .wrap_err("Failed to decode VoteProposalData value")?;
 
     // The tx must be authorized by the source address
     ctx.insert_verifier(&tx_data.voter)?;
@@ -18,4 +18,5 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     debug_log!("apply_tx called to vote a governance proposal");
 
     governance::vote_proposal(ctx, tx_data)
+        .wrap_err("Failed to vote on governance proposal")
 }

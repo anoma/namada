@@ -18,7 +18,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         avatar,
         commission_rate,
     } = transaction::pos::MetaDataChange::try_from_slice(&data[..])
-        .wrap_err("failed to decode Dec value")?;
+        .wrap_err("Failed to decode MetaDataChange value")?;
     ctx.change_validator_metadata(
         &validator,
         email,
@@ -28,4 +28,5 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         avatar,
         commission_rate,
     )
+    .wrap_err("Failed to update validator's metadata")
 }

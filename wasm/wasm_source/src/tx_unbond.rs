@@ -11,14 +11,12 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
-        .wrap_err("failed to decode Unbond")?;
+        .wrap_err("Failed to decode Unbond tx data")?;
 
-    ctx.unbond_tokens(
-        unbond.source.as_ref(),
-        &unbond.validator,
-        unbond.amount,
-    )?;
-    // TODO: would using debug_log! be useful?
+    ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
+        .wrap_err("Failed to unbond tokens")?;
+
+    debug_log!("Unbonded {} from {}", unbond.amount, unbond.validator);
 
     Ok(())
 }

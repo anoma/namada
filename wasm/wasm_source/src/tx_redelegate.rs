@@ -16,8 +16,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         owner,
         amount,
     } = transaction::pos::Redelegation::try_from_slice(&data[..])
-        .wrap_err("failed to decode a Redelegation")?;
+        .wrap_err("Failed to decode a Redelegation tx data")?;
     ctx.redelegate_tokens(&owner, &src_validator, &dest_validator, amount)
+        .wrap_err("Failed to redelegate tokens")
 }
 
 #[cfg(test)]
