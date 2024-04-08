@@ -129,7 +129,7 @@ where
 
         if new_epoch {
             // Apply PoS and PGF inflation
-            self.apply_inflation(current_epoch)?;
+            self.apply_inflation(current_epoch, emit_events)?;
         }
 
         let mut stats = InternalStats::default();
@@ -602,7 +602,11 @@ where
     /// account, then update the reward products of the validators. This is
     /// executed while finalizing the first block of a new epoch and is applied
     /// with respect to the previous epoch.
-    fn apply_inflation(&mut self, current_epoch: Epoch) -> Result<()> {
+    fn apply_inflation(
+        &mut self,
+        current_epoch: Epoch,
+        events: &mut impl EmitEvents,
+    ) -> Result<()> {
         let last_epoch = current_epoch.prev();
 
         // Get the number of blocks in the last epoch
@@ -625,6 +629,16 @@ where
             self.state.restrict_writes_to_write_log(),
             namada::ibc::transfer_over_ibc,
         )?;
+
+        // Take IBC events that may be emitted from PGF
+        for ibc_event in self.state.write_log_mut().take_ibc_events() {
+            // Add the height for IBC event query
+            events.emit(
+                ibc_event.with(Height(
+                    self.state.in_mem().get_last_block_height() + 1,
+                )),
+            );
+        }
 
         Ok(())
     }
