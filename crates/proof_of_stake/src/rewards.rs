@@ -22,7 +22,6 @@ use crate::storage::{
     write_last_staked_ratio,
 };
 use crate::token::credit_tokens;
-use crate::token::storage_key::minted_balance_key;
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
@@ -345,9 +344,7 @@ where
         .expect("Epochs per year should exist in parameters storage");
 
     let staking_token = staking_token_address(storage);
-    let total_amount: token::Amount = storage
-        .read(&minted_balance_key(&staking_token))?
-        .expect("Total NAM balance should exist in storage");
+    let total_tokens = get_effective_total_native_supply(storage)?;
 
     // Read from PoS storage
     let params = read_pos_params(storage)?;
@@ -366,7 +363,7 @@ where
     // Compute the new inflation
     let inflation = compute_inflation(
         locked_amount,
-        total_amount,
+        total_tokens,
         max_inflation_rate,
         last_inflation_amount,
         p_gain_nom,
@@ -385,13 +382,13 @@ where
         num_blocks_in_last_epoch,
         inflation,
         &staking_token,
-        total_amount,
+        total_tokens,
     )?;
 
     // Write new rewards parameters that will be used for the inflation of
     // the current new epoch
     let locked_amount = Dec::from(locked_amount);
-    let total_amount = Dec::from(total_amount);
+    let total_amount = Dec::from(total_tokens);
     let locked_ratio = locked_amount / total_amount;
 
     write_last_staked_ratio(storage, locked_ratio)?;

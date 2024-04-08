@@ -10,7 +10,6 @@ use namada_core::hash::Hash;
 use namada_core::uint::Uint;
 use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
-use namada_trans_token::storage_key::balance_key;
 use namada_trans_token::{
     get_effective_total_native_supply, read_balance, read_denom, Amount,
     DenominatedAmount, Denomination,
@@ -245,6 +244,7 @@ where
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
     use namada_storage::ResultExt;
+    use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -565,7 +565,7 @@ mod tests {
     use namada_core::dec::testing::arb_non_negative_dec;
     use namada_core::token::testing::arb_amount;
     use namada_storage::testing::TestStorage;
-    use namada_trans_token::storage_key::minted_balance_key;
+    use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_trans_token::write_denom;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
