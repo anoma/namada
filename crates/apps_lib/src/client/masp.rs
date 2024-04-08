@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
-use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
@@ -34,7 +33,6 @@ pub async fn syncing<
         rx.await
     };
 
-    display_line!(io, "{}", "==== Shielded sync started ====".on_white());
     display_line!(io, "\n\n");
     let logger = CliLogger::new(io);
     let sync = async move {
@@ -54,7 +52,7 @@ pub async fn syncing<
     tokio::select! {
         sync = sync => {
             let shielded = sync?;
-            display!(io, "Syncing finished\n");
+            display!(io, "\nSyncing finished\n");
             Ok(shielded)
         },
         sig = shutdown_signal => {
@@ -70,6 +68,7 @@ struct IterProgress {
     index: usize,
     length: usize,
 }
+
 struct StdoutDrawer<'io, IO: Io> {
     io: &'io IO,
     fetch: IterProgress,
@@ -136,6 +135,7 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
             }
             (Some(fp), None) => {
                 display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(self.io, "\x1b[4A\x1b[J");
                 display_line!(
                     self.io,
                     "Fetched block {:?} of {:?}",
@@ -152,6 +152,7 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
                 self.io.flush()
             }
             (None, Some(sp)) => {
+                display_line!(self.io, "\x1b[4A\x1b[J");
                 display_line!(self.io, "\x1b[4A\x1b[J");
                 display_line!(
                     self.io,
@@ -222,6 +223,7 @@ where
             }
             ProgressType::Scan => {
                 locked.scan.index += 1;
+                locked.scan.length = self.items.size_hint().0;
             }
         }
     }
