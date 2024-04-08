@@ -36,7 +36,6 @@ use namada::ibc::core::channel::types::msgs::{
     MsgTimeout as IbcMsgTimeout,
 };
 use namada::ibc::core::channel::types::packet::Packet;
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada::ibc::core::channel::types::Version as ChanVersion;
 use namada::ibc::core::client::context::client_state::ClientStateCommon;
 use namada::ibc::core::client::types::msgs::{
@@ -56,6 +55,7 @@ use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
+use namada::ibc::event as ibc_events;
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, Timestamp, ToProto};
 use namada::ledger::events::EventType;
@@ -2375,51 +2375,10 @@ fn get_attribute_from_events(
     None
 }
 
-fn get_packet_from_events(events: &Vec<AbciEvent>) -> Option<Packet> {
-    for event in events {
-        let attributes = get_attributes_from_event(event);
-        if !attributes.contains_key("packet_src_port") {
-            continue;
-        }
-        let mut packet = Packet {
-            seq_on_a: 0.into(),
-            port_id_on_a: PortId::transfer(),
-            chan_id_on_a: ChannelId::default(),
-            port_id_on_b: PortId::transfer(),
-            chan_id_on_b: ChannelId::default(),
-            data: vec![],
-            timeout_height_on_b: TimeoutHeight::default(),
-            timeout_timestamp_on_b: Timestamp::default(),
-        };
-        for (key, val) in attributes {
-            match key.as_str() {
-                "packet_src_port" => packet.port_id_on_a = val.parse().unwrap(),
-                "packet_src_channel" => {
-                    packet.chan_id_on_a = val.parse().unwrap()
-                }
-                "packet_dst_port" => packet.port_id_on_b = val.parse().unwrap(),
-                "packet_dst_channel" => {
-                    packet.chan_id_on_b = val.parse().unwrap()
-                }
-                "packet_timeout_height" => {
-                    packet.timeout_height_on_b = match Height::from_str(&val) {
-                        Ok(height) => TimeoutHeight::At(height),
-                        Err(_) => TimeoutHeight::Never,
-                    }
-                }
-                "packet_timeout_timestamp" => {
-                    packet.timeout_timestamp_on_b = val.parse().unwrap()
-                }
-                "packet_sequence" => {
-                    packet.seq_on_a = u64::from_str(&val).unwrap().into()
-                }
-                "packet_data" => packet.data = Vec::from(val.as_bytes()),
-                _ => {}
-            }
-        }
-        return Some(packet);
-    }
-    None
+fn get_packet_from_events(events: &[AbciEvent]) -> Option<Packet> {
+    events.iter().find_map(|event| {
+        ibc_events::packet_from_event_attributes(&event.attributes).ok()
+    })
 }
 
 fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
