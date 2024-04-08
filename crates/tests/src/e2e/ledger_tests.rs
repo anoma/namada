@@ -982,6 +982,34 @@ fn pos_init_validator() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
+    // Stop the non-validator node and run it as the new validator
+    let mut non_validator = bg_non_validator.foreground();
+    non_validator.interrupt()?;
+    non_validator.exp_eof()?;
+
+    // it takes a bit before the node is shutdown. We dont want flasky test.
+    if is_debug_mode() {
+        sleep(10);
+    } else {
+        sleep(5);
+    }
+
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    let validator_1_base_dir = test.get_base_dir(Who::NonValidator);
+    let mut validator_1 = setup::run_cmd(
+        Bin::Node,
+        ["ledger"],
+        Some(60),
+        &test.working_dir,
+        validator_1_base_dir,
+        loc,
+    )?;
+
+    validator_1.exp_string(LEDGER_STARTED)?;
+    validator_1.exp_string(VALIDATOR_NODE)?;
+    validator_1.exp_string("Committed block hash")?;
+    let _bg_validator_1 = validator_1.background();
+
     // 3. Submit a delegation to the new validator First, transfer some tokens
     //    to the validator's key for fees:
     let tx_args = vec![
@@ -1056,34 +1084,6 @@ fn pos_init_validator() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
-
-    // Stop the non-validator node and run it as the new validator
-    let mut non_validator = bg_non_validator.foreground();
-    non_validator.interrupt()?;
-    non_validator.exp_eof()?;
-
-    // it takes a bit before the node is shutdown. We dont want flasky test.
-    if is_debug_mode() {
-        sleep(10);
-    } else {
-        sleep(5);
-    }
-
-    let loc = format!("{}:{}", std::file!(), std::line!());
-    let validator_1_base_dir = test.get_base_dir(Who::NonValidator);
-    let mut validator_1 = setup::run_cmd(
-        Bin::Node,
-        ["ledger"],
-        Some(60),
-        &test.working_dir,
-        validator_1_base_dir,
-        loc,
-    )?;
-
-    validator_1.exp_string(LEDGER_STARTED)?;
-    validator_1.exp_string(VALIDATOR_NODE)?;
-    validator_1.exp_string("Committed block hash")?;
-    let _bg_validator_1 = validator_1.background();
 
     // 6. Wait for the pipeline epoch when the validator's bonded stake should
     // be non-zero
