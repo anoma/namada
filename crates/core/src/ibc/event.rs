@@ -9,6 +9,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::IbcShieldedTransfer;
+use crate::address::Address;
 use crate::borsh::*;
 use crate::collections::HashMap;
 use crate::event::extend::{
@@ -358,6 +359,74 @@ pub struct ShieldedReceiver<'addr>(pub &'addr PaymentAddress);
 impl<'addr> EventAttributeEntry<'addr> for ShieldedReceiver<'addr> {
     type Value = &'addr PaymentAddress;
     type ValueOwned = PaymentAddress;
+
+    const KEY: &'static str = "receiver";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Receiving end of some IBC transaction.
+pub enum IbcReceiver<S, T> {
+    /// Shielded account receiver.
+    Shielded(S),
+    /// Transparent account receiver.
+    Transparent(T),
+}
+
+/// Owned variant of an [`IbcReceiver`].
+pub type OwnedIbcReceiver = IbcReceiver<PaymentAddress, Address>;
+
+/// Borrowed variant of an [`IbcReceiver`].
+pub type BorrowedIbcReceiver<'addr> =
+    IbcReceiver<&'addr PaymentAddress, &'addr Address>;
+
+impl FromStr for OwnedIbcReceiver {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Address::decode(s)
+            .map(IbcReceiver::Transparent)
+            .map_err(|_| ())
+            .or_else(|_| {
+                PaymentAddress::from_str(s)
+                    .map(IbcReceiver::Shielded)
+                    .map_err(|_| ())
+            })
+            .map_err(|()| {
+                format!(
+                    "IBC receiver address neither transparent nor shielded: \
+                     {s:?}"
+                )
+            })
+    }
+}
+
+impl<'addr> std::fmt::Display for BorrowedIbcReceiver<'addr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transparent(addr) => write!(f, "{addr}"),
+            Self::Shielded(addr) => write!(f, "{addr}"),
+        }
+    }
+}
+
+impl std::fmt::Display for OwnedIbcReceiver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Transparent(addr) => write!(f, "{addr}"),
+            Self::Shielded(addr) => write!(f, "{addr}"),
+        }
+    }
+}
+
+/// Extend an [`Event`] with receiver data.
+pub struct Receiver<'addr>(pub BorrowedIbcReceiver<'addr>);
+
+impl<'addr> EventAttributeEntry<'addr> for Receiver<'addr> {
+    type Value = BorrowedIbcReceiver<'addr>;
+    type ValueOwned = OwnedIbcReceiver;
 
     const KEY: &'static str = "receiver";
 
