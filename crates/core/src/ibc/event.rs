@@ -449,6 +449,34 @@ impl<'tx> EventAttributeEntry<'tx> for ShieldedTransfer<'tx> {
     }
 }
 
+/// Extend an [`Event`] with trace hash data.
+pub struct TraceHash<'hash>(pub &'hash str);
+
+impl<'hash> EventAttributeEntry<'hash> for TraceHash<'hash> {
+    type Value = &'hash str;
+    type ValueOwned = String;
+
+    const KEY: &'static str = "trace_hash";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with denomination data.
+pub struct Denomination<'denom>(pub &'denom str);
+
+impl<'denom> EventAttributeEntry<'denom> for Denomination<'denom> {
+    type Value = &'denom str;
+    type ValueOwned = String;
+
+    const KEY: &'static str = "denom";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Attempt to parse an IBC [`Packet`] from a set of event attributes.
 pub fn packet_from_event_attributes<A: AttributesMap>(
     attributes: &A,
