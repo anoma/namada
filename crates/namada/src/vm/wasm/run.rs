@@ -257,18 +257,20 @@ where
         // `&mut` ptrs we shared with the guest
         _ = (instance, imports);
 
-        yielded_value.take().map_or_else(
-            || {
-                Err(Error::TxError(
-                    "Execution ended abruptly with an unknown error".into(),
-                ))
-            },
+        let err = yielded_value.take().map_or_else(
+            || Ok("Execution ended abruptly with an unknown error".to_owned()),
             |borsh_encoded_err| {
                 let tx_err = TxError::try_from_slice(&borsh_encoded_err)
                     .map_err(|e| Error::ConversionError(e.to_string()))?;
-                Err(Error::TxError(tx_err))
+                Ok(tx_err)
             },
-        )
+        )?;
+
+        Err(match *sentinel.borrow() {
+            TxSentinel::None => Error::TxError(err),
+            TxSentinel::OutOfGas => Error::GasError(err),
+            TxSentinel::InvalidCommitment => Error::MissingSection(err),
+        })
     }
 }
 
