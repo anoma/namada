@@ -3,7 +3,9 @@
 use namada_core::address::Address;
 use namada_core::token;
 use namada_state::{DBIter, StorageHasher, DB};
-use namada_token::{read_denom, read_total_supply};
+use namada_token::{
+    get_effective_total_native_supply, read_denom, read_total_supply,
+};
 
 use crate::queries::RequestCtx;
 
@@ -34,7 +36,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_total_supply(ctx.state, &addr)
+    let native_token = ctx.state.in_mem().native_token.clone();
+    if addr == native_token {
+        get_effective_total_native_supply(ctx.state)
+    } else {
+        read_total_supply(ctx.state, &addr)
+    }
 }
 
 #[cfg(any(test, feature = "async-client"))]

@@ -10,6 +10,7 @@ use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_trans_token::get_effective_total_native_supply;
 use thiserror::Error;
 
 use crate::storage::{
