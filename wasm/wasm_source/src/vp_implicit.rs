@@ -338,7 +338,7 @@ fn validate_pos_changes(
 
     let pos_state_changes = is_valid_bond_or_unbond_change().is_ok()
         || storage_key::is_total_deltas_key(key)
-        || storage_key::is_total_active_voting_power_key(key)
+        || storage_key::is_total_active_deltas_key(key)
         || storage_key::is_validator_deltas_key(key)
         || storage_key::is_validator_total_bond_or_unbond_key(key)
         || storage_key::is_validator_set_positions_key(key)

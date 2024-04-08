@@ -245,9 +245,9 @@ pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
     LivenessSumMissedVotes::open(key)
 }
 
-/// Get the storage handle to the total active voting power
-pub fn total_active_voting_power_handle() -> TotalDeltas {
-    let key = storage_key::total_active_voting_power_key();
+/// Get the storage handle to the total active deltas
+pub fn total_active_deltas_handle() -> TotalDeltas {
+    let key = storage_key::total_active_deltas_key();
     TotalDeltas::open(key)
 }
 
@@ -531,7 +531,7 @@ pub fn read_total_active_stake<S>(
 where
     S: StorageRead,
 {
-    let handle = total_active_voting_power_handle();
+    let handle = total_active_deltas_handle();
     let amnt = handle
         .get_sum(storage, epoch, params)?
         .map(|change| {
@@ -697,7 +697,7 @@ where
 {
     let offset = offset_opt.unwrap_or(params.pipeline_len);
     let total_deltas = total_deltas_handle();
-    let total_active_voting_power = total_active_voting_power_handle();
+    let total_active_deltas = total_active_deltas_handle();
 
     // Update total deltas
     let total_deltas_val = total_deltas
@@ -714,12 +714,12 @@ where
 
     // Update total active voting power
     if update_active_voting_power {
-        let active_val = total_active_voting_power
+        let active_delta = total_active_deltas
             .get_delta_val(storage, current_epoch + offset)?
             .unwrap_or_default();
-        total_active_voting_power.set(
+        total_active_deltas.set(
             storage,
-            active_val.checked_add(&delta).expect(
+            active_delta.checked_add(&delta).expect(
                 "Total active voting power updated amount should not overflow",
             ),
             current_epoch,
