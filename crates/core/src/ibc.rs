@@ -275,6 +275,8 @@ impl BorshDeserialize for MsgTimeout {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Event error: {0}")]
+    Event(EventError),
     #[error("IBC event error: {0}")]
     IbcEvent(IbcEventError),
     #[error("IBC transfer memo HEX decoding error: {0}")]
