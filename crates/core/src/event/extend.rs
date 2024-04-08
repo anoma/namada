@@ -258,17 +258,13 @@ where
     where
         A: AttributesMap,
     {
-        let encoded_value =
-            attributes.retrieve_attribute(DATA::KEY).ok_or_else(|| {
-                EventError::AttributeRetrieval(format!(
-                    "Attribute {} not present",
-                    DATA::KEY
-                ))
-            })?;
+        let encoded_value = attributes
+            .retrieve_attribute(DATA::KEY)
+            .ok_or(EventError::MissingAttribute(DATA::KEY))?;
         encoded_value
             .parse()
             .map_err(|err: <Self::Value as FromStr>::Err| {
-                EventError::AttributeRetrieval(err.to_string())
+                EventError::AttributeEncoding(err.to_string())
             })
     }
 }
@@ -308,12 +304,9 @@ where
     where
         A: AttributesMap,
     {
-        attributes.retrieve_attribute(DATA::KEY).ok_or_else(|| {
-            EventError::AttributeRetrieval(format!(
-                "Attribute {} not present",
-                DATA::KEY
-            ))
-        })
+        attributes
+            .retrieve_attribute(DATA::KEY)
+            .ok_or(EventError::MissingAttribute(DATA::KEY))
     }
 }
 

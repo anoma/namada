@@ -294,9 +294,12 @@ pub enum EventError {
     /// Missing event domain.
     #[error("Missing the domain of the event")]
     MissingDomain,
-    /// Failed to retrieve an event attribute.
-    #[error("Failed to retrieve event attribute: {0}")]
-    AttributeRetrieval(String),
+    /// Error resulting from a missing event attribute.
+    #[error("Missing event attribute {0:?}")]
+    MissingAttribute(&'static str),
+    /// Error resulting from an invalid encoding of an event attribute.
+    #[error("Failed to parse event attribute: {0}")]
+    AttributeEncoding(String),
     /// Error when parsing an event type
     #[error("Invalid event type")]
     InvalidEventType,
