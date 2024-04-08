@@ -58,7 +58,7 @@ const VALIDATOR_AVATAR_KEY: &str = "avatar";
 const LIVENESS_PREFIX: &str = "liveness";
 const LIVENESS_MISSED_VOTES: &str = "missed_votes";
 const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
-const TOTAL_ACTIVE_VOTING_POWER_KEY: &str = "total_active_voting_power";
+const TOTAL_ACTIVE_DELTAS_KEY: &str = "total_active_deltas";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1046,20 +1046,20 @@ pub fn liveness_sum_missed_votes_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Storage key for total active voting power (Consensus, Below-Capacity, and
+/// Storage key for total active deltas (Consensus, Below-Capacity, and
 /// Below-threshold validators).
-pub fn total_active_voting_power_key() -> Key {
+pub fn total_active_deltas_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&TOTAL_ACTIVE_VOTING_POWER_KEY.to_owned())
+        .push(&TOTAL_ACTIVE_DELTAS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
-/// Is storage key for total active voting power?
-pub fn is_total_active_voting_power_key(key: &Key) -> bool {
+/// Is storage key for total active deltas?
+pub fn is_total_active_deltas_key(key: &Key) -> bool {
     if key.segments.len() >= 2 {
         match &key.segments[..2] {
             [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
-                addr == &ADDRESS && prefix == TOTAL_ACTIVE_VOTING_POWER_KEY
+                addr == &ADDRESS && prefix == TOTAL_ACTIVE_DELTAS_KEY
             }
             _ => false,
         }
