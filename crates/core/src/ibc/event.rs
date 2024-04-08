@@ -1,6 +1,7 @@
 //! IBC event related types
 
 use std::cmp::Ordering;
+use std::str::FromStr;
 
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -9,13 +10,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::borsh::*;
 use crate::collections::HashMap;
-use crate::event::extend::EventAttributeEntry;
+use crate::event::extend::{
+    AttributesMap, EventAttributeEntry, ReadFromEventAttributes as _,
+};
 use crate::event::{Event, EventError, EventToEmit as _};
-use crate::ibc::core::channel::types::timeout::TimeoutHeight;
+use crate::ibc::core::channel::types::packet::Packet;
+use crate::ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
 use crate::ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
-use crate::ibc::core::client::types::Height as IbcHeight;
+use crate::ibc::core::client::types::{Height as IbcHeight, HeightError};
 use crate::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId,
@@ -261,6 +265,35 @@ impl<'data> EventAttributeEntry<'data> for PacketData<'data> {
     }
 }
 
+/// Represents an IBC timeout height.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeoutHeight(pub IbcTimeoutHeight);
+
+impl FromStr for TimeoutHeight {
+    type Err = HeightError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        crate::ibc::core::client::types::Height::from_str(s).map_or_else(
+            |err| match err {
+                HeightError::ZeroHeight => {
+                    Ok(TimeoutHeight(IbcTimeoutHeight::Never))
+                }
+                err => Err(err),
+            },
+            |height| Ok(TimeoutHeight(IbcTimeoutHeight::At(height))),
+        )
+    }
+}
+
+impl std::fmt::Display for TimeoutHeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            IbcTimeoutHeight::Never => write!(f, "0-0"),
+            IbcTimeoutHeight::At(h) => write!(f, "{h}"),
+        }
+    }
+}
+
 /// Extend an [`Event`] with packet timeout height data.
 pub struct PacketTimeoutHeight(pub TimeoutHeight);
 
@@ -287,4 +320,24 @@ impl EventAttributeEntry<'static> for PacketTimeoutTimestamp {
     fn into_value(self) -> Self::Value {
         self.0
     }
+}
+
+/// Attempt to parse an IBC [`Packet`] from a set of event attributes.
+pub fn packet_from_event_attributes<A: AttributesMap>(
+    attributes: &A,
+) -> Result<Packet, EventError> {
+    Ok(Packet {
+        seq_on_a: PacketSequence::read_from_event_attributes(attributes)?,
+        port_id_on_a: PacketSrcPort::read_from_event_attributes(attributes)?,
+        chan_id_on_a: PacketSrcChannel::read_from_event_attributes(attributes)?,
+        port_id_on_b: PacketDstPort::read_from_event_attributes(attributes)?,
+        chan_id_on_b: PacketDstChannel::read_from_event_attributes(attributes)?,
+        data: PacketData::read_from_event_attributes(attributes)?.into_bytes(),
+        timeout_height_on_b: PacketTimeoutHeight::read_from_event_attributes(
+            attributes,
+        )?
+        .0,
+        timeout_timestamp_on_b:
+            PacketTimeoutTimestamp::read_from_event_attributes(attributes)?,
+    })
 }
