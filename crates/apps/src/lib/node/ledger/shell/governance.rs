@@ -18,10 +18,12 @@ use namada::governance::{
 use namada::ibc;
 use namada::ledger::events::extend::{ComposeEvent, Height};
 use namada::ledger::governance::utils::ProposalEvent;
-use namada::ledger::pos::BondId;
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::read_total_stake;
+use namada::proof_of_stake::storage::{
+    read_total_active_stake, validator_state_handle,
+};
+use namada::proof_of_stake::types::{BondId, ValidatorState};
 use namada::state::StorageWrite;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
@@ -97,8 +99,8 @@ where
         let is_steward = pgf::is_steward(&shell.state, &proposal_author)?;
 
         let params = read_pos_params(&shell.state)?;
-        let total_voting_power =
-            read_total_stake(&shell.state, &params, proposal_end_epoch)?;
+        let total_active_voting_power =
+            read_total_active_stake(&shell.state, &params, proposal_end_epoch)?;
 
         let tally_type = TallyType::from(proposal_type.clone(), is_steward);
         let votes = compute_proposal_votes(
@@ -107,8 +109,11 @@ where
             id,
             proposal_end_epoch,
         )?;
-        let proposal_result =
-            compute_proposal_result(votes, total_voting_power, tally_type);
+        let proposal_result = compute_proposal_result(
+            votes,
+            total_active_voting_power,
+            tally_type,
+        );
         gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
@@ -274,8 +279,19 @@ where
     > = HashMap::default();
 
     for vote in votes {
+        // Skip votes involving jailed or inactive validators
+        let validator = vote.validator.clone();
+        let validator_state =
+            validator_state_handle(&validator).get(storage, epoch, params)?;
+        if matches!(
+            validator_state,
+            Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
+        ) {
+            continue;
+        }
+
+        // Tally the votes involving active validators
         if vote.is_validator() {
-            let validator = vote.validator.clone();
             let vote_data = vote.data.clone();
 
             let validator_stake =
@@ -285,7 +301,6 @@ where
             validators_vote.insert(validator.clone(), vote_data);
             validator_voting_power.insert(validator, validator_stake);
         } else {
-            let validator = vote.validator.clone();
             let delegator = vote.delegator.clone();
             let vote_data = vote.data.clone();
 

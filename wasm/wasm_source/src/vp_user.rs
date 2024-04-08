@@ -19,7 +19,8 @@ use proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use proof_of_stake::storage::{read_pos_params, validator_state_handle};
 use proof_of_stake::storage_key::{
     self, is_below_capacity_validator_set_key, is_consensus_keys_key,
-    is_consensus_validator_set_key, is_pos_key, is_total_consensus_stake_key,
+    is_consensus_validator_set_key, is_pos_key,
+    is_total_active_voting_power_key, is_total_consensus_stake_key,
     is_total_deltas_key, is_validator_address_raw_hash_key,
     is_validator_addresses_key, is_validator_commission_rate_key,
     is_validator_deltas_key, is_validator_eth_cold_key_key,
@@ -398,6 +399,7 @@ fn validate_pos_changes(
 
     let pos_state_changes = is_valid_bond_or_unbond_change().is_ok()
         || is_total_deltas_key(key)
+        || is_total_active_voting_power_key(key)
         || is_validator_deltas_key(key)
         || is_validator_total_bond_or_unbond_key(key)
         || is_validator_set_positions_key(key)
