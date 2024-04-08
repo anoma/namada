@@ -11,6 +11,7 @@ use crate::borsh::*;
 use crate::collections::HashMap;
 use crate::event::extend::EventAttributeEntry;
 use crate::event::{Event, EventError, EventToEmit as _};
+use crate::ibc::core::channel::types::timeout::TimeoutHeight;
 use crate::ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
@@ -20,6 +21,7 @@ use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId as IbcClientId, ConnectionId as IbcConnectionId,
     PortId, Sequence,
 };
+use crate::ibc::primitives::Timestamp;
 use crate::tendermint::abci::Event as AbciEvent;
 
 pub mod types {
@@ -239,6 +241,48 @@ impl EventAttributeEntry<'static> for ConnectionId {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "connection_id";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with packet data.
+pub struct PacketData<'data>(pub &'data str);
+
+impl<'data> EventAttributeEntry<'data> for PacketData<'data> {
+    type Value = &'data str;
+    type ValueOwned = String;
+
+    const KEY: &'static str = "packet_data";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with packet timeout height data.
+pub struct PacketTimeoutHeight(pub TimeoutHeight);
+
+impl EventAttributeEntry<'static> for PacketTimeoutHeight {
+    type Value = TimeoutHeight;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "packet_timeout_height";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with packet timeout timestamp data.
+pub struct PacketTimeoutTimestamp(pub Timestamp);
+
+impl EventAttributeEntry<'static> for PacketTimeoutTimestamp {
+    type Value = Timestamp;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "packet_timeout_timestamp";
 
     fn into_value(self) -> Self::Value {
         self.0
