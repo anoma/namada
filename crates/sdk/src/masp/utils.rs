@@ -2,7 +2,7 @@ use core::str::FromStr;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::sapling::keys::FullViewingKey;
@@ -442,7 +442,6 @@ pub(super) struct FetchQueueSender {
 pub(super) struct FetchQueueReceiver {
     cache: Unscanned,
     last_fetched: flume::Receiver<BlockHeight>,
-    last_query_height: BlockHeight,
 }
 
 impl FetchQueueReceiver {
@@ -471,8 +470,7 @@ impl Iterator for FetchQueueReceiver {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = (self.last_query_height - self.cache.first_height().into()).0
-            as usize;
+        let size = self.last_fetched.len();
         (size, Some(size))
     }
 }
@@ -490,12 +488,10 @@ impl FetchQueueSender {
 
 /// A convenience for creating a channel for fetching blocks.
 pub mod fetch_channel {
-    use namada_core::storage::BlockHeight;
 
     use super::{FetchQueueReceiver, FetchQueueSender, Unscanned};
     pub(in super::super) fn new(
         cache: Unscanned,
-        last_query_height: BlockHeight,
     ) -> (FetchQueueSender, FetchQueueReceiver) {
         let (fetch_send, fetch_recv) = flume::unbounded();
         (
@@ -506,7 +502,6 @@ pub mod fetch_channel {
             FetchQueueReceiver {
                 cache: cache.clone(),
                 last_fetched: fetch_recv,
-                last_query_height,
             },
         )
     }
@@ -522,7 +517,7 @@ pub struct TaskManager<U: ShieldedUtils> {
 }
 
 #[derive(Clone)]
-pub(super) struct TaskManagerChannel<U: ShieldedUtils> {
+pub(super) struct TaskRunner<U: ShieldedUtils> {
     action: Sender<Action<U>>,
     ctx: Arc<futures_locks::Mutex<ShieldedContext<U>>>,
 }
@@ -532,10 +527,10 @@ impl<U: ShieldedUtils> TaskManager<U> {
     /// proxy requests.
     pub(super) fn new(
         ctx: ShieldedContext<U>,
-    ) -> (TaskManagerChannel<U>, Self) {
+    ) -> (TaskRunner<U>, Self) {
         let (save_send, save_recv) = tokio::sync::mpsc::channel(100);
         (
-            TaskManagerChannel {
+            TaskRunner {
                 action: save_send,
                 ctx: Arc::new(futures_locks::Mutex::new(ctx)),
             },
@@ -560,7 +555,7 @@ impl<U: ShieldedUtils> TaskManager<U> {
     }
 }
 
-impl<U: ShieldedUtils> TaskManagerChannel<U> {
+impl<U: ShieldedUtils> TaskRunner<U> {
 
     pub(super) fn complete(&self) {
         self.action.blocking_send(Action::Complete).unwrap()
@@ -650,4 +645,79 @@ pub trait ProgressLogger<IO: Io> {
         I: Iterator<Item = IndexedNoteEntry>;
 
     fn left_to_fetch(&self) -> usize;
+}
+
+/// The default type for logging sync progress.
+#[derive(Debug, Clone)]
+pub struct DefaultLogger<'io, IO: Io> {
+    io: &'io IO,
+    progress: Arc<Mutex<IterProgress>>
+}
+
+impl<'io, IO: Io> DefaultLogger<'io, IO> {
+    pub fn new(io: &'io IO) -> Self {
+        Self {
+            io,
+            progress: Arc::new(Mutex::new(Default::default()))
+        }
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug)]
+struct IterProgress {
+    index: usize,
+    length: usize,
+}
+
+struct DefaultFetchIterator<I>
+where
+    I: Iterator<Item=u64>,
+{
+    inner: I,
+    progress: Arc<Mutex<IterProgress>>
+}
+
+impl<I: Iterator<Item=u64>> Iterator for DefaultFetchIterator<I> {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let item = self.inner.next()?;
+        let mut locked = self.progress.lock().unwrap();
+        locked.index += 1;
+        Some(item)
+    }
+}
+
+impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
+
+    fn io(&self) -> &IO {
+        self.io
+    }
+
+    fn fetch<I>(&self, items: I) -> impl Iterator<Item = u64>
+        where
+            I: Iterator<Item = u64>,
+    {
+        {
+            let mut locked = self.progress.lock().unwrap();
+            locked.length = items.size_hint().0;
+        }
+        DefaultFetchIterator {
+            inner: items,
+            progress: self.progress.clone(),
+        }
+    }
+
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry>
+        where
+            I: IntoIterator<Item = IndexedNoteEntry>,
+    {
+        let items: Vec<_> = items.into_iter().collect();
+        items.into_iter()
+    }
+
+    fn left_to_fetch(&self) -> usize {
+        let locked = self.progress.lock().unwrap();
+        locked.length - locked.index
+    }
 }
