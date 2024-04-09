@@ -112,6 +112,14 @@ impl Error {
     }
 }
 
+impl Error {
+    /// Determine if the error originates from an invalid transaction
+    /// section signature.
+    fn is_invalid_section_signature(&self) -> bool {
+        matches!(self, Self::InvalidSectionSignature(_))
+    }
+}
+
 /// Shell parameters for running wasm transactions.
 #[allow(missing_docs)]
 #[derive(Debug)]
@@ -935,6 +943,10 @@ where
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
+                        InternalAddress::TempStorage => Err(
+                            // Temp storage changes must never be committed
+                            Error::AccessForbidden((*internal_addr).clone()),
+                        ),
                     }
                 }
             };

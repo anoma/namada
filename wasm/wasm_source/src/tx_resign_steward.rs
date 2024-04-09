@@ -1,5 +1,6 @@
 //! A tx to resign as a steward
 
+use namada_tx_prelude::action::{Action, PgfAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
