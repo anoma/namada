@@ -167,7 +167,7 @@ test-e2e:
 	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
 	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test $(jobs) e2e::$(TEST_FILTER) \
+	$(cargo) +$(nightly) test --lib $(jobs) e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -177,14 +177,14 @@ test-e2e:
 # Run integration tests
 test-integration:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test $(jobs) integration::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
 	-Z unstable-options --report-time
 
 test-unit:
-	$(cargo) +$(nightly) test \
+	$(cargo) +$(nightly) test --lib \
 		$(TEST_FILTER) \
 		$(jobs) \
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
@@ -198,7 +198,7 @@ test-unit-with-coverage:
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
-	$(cargo) +$(nightly) test \
+	$(cargo) +$(nightly) test --lib \
 		--features "mainnet" \
 		$(TEST_FILTER) \
 		$(jobs) \
@@ -206,7 +206,7 @@ test-unit-mainnet:
 		-Z unstable-options --report-time
 
 test-unit-debug:
-	$(debug-cargo) +$(nightly) test \
+	$(debug-cargo) +$(nightly) test --lib \
 		$(jobs) \
 		$(TEST_FILTER) \
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
@@ -224,7 +224,7 @@ test-wasm-templates:
 	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
-	$(debug-cargo) +$(nightly) test \
+	$(debug-cargo) +$(nightly) test --lib \
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time
@@ -241,7 +241,7 @@ test-pos-sm:
 		PROPTEST_CASES=$(PROPTEST_CASES) \
 		PROPTEST_MAX_SHRINK_ITERS=$(PROPTEST_MAX_SHRINK_ITERS) \
 		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
-		cargo test pos_state_machine_test --release 
+		cargo test --lib pos_state_machine_test --release 
 
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
