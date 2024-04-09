@@ -37,10 +37,6 @@ use crate::token::Transfer;
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
 /// The event type defined in ibc-rs for receiving an NFT
 pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
-/// The event attribute key defined in ibc-rs for receiving result
-pub const EVENT_ATTRIBUTE_SUCCESS: &str = "success";
-/// The event attribute value defined in ibc-rs for receiving success
-pub const EVENT_VALUE_SUCCESS: &str = "true";
 /// The escrow address for IBC transfer
 pub const IBC_ESCROW_ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 

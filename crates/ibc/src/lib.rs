@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -23,6 +22,9 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
 use namada_core::address::{Address, MASP};
+use namada_core::event::extend::{
+    ReadFromEventAttributes, Success as SuccessAttr,
+};
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -52,6 +54,7 @@ use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::core::router::types::error::RouterError;
+use namada_core::ibc::event as ibc_events;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
@@ -318,14 +321,14 @@ where
                     Error::Trace("Reading the IBC event failed".to_string())
                 })?;
         }
-        match receive_event
+        Ok(receive_event
             .first()
             .as_ref()
-            .and_then(|event| event.attributes.get(EVENT_ATTRIBUTE_SUCCESS))
-        {
-            Some(success) if success == EVENT_VALUE_SUCCESS => Ok(true),
-            _ => Ok(false),
-        }
+            .and_then(|event| {
+                SuccessAttr::read_opt_from_event_attributes(&event.attributes)
+            })
+            .transpose()?
+            .map_or_else(|| false, |success| success))
     }
 
     /// Validate according to the message in IBC VP
