@@ -76,8 +76,6 @@ router! {POS,
 
         ( "below_capacity" / [epoch: opt Epoch] )
             -> BTreeSet<WeightedValidator> = below_capacity_validator_set,
-
-        // TODO: add "below_threshold"
     },
 
     ( "pos_params") -> PosParams = pos_params,
