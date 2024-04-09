@@ -386,6 +386,18 @@ where
             AnyClientState::Tendermint(cs) => cs.status(ctx, client_id),
         }
     }
+
+    fn check_substitute(
+        &self,
+        ctx: &V,
+        substitute_client_state: Any,
+    ) -> Result<(), ClientError> {
+        match self {
+            AnyClientState::Tendermint(cs) => {
+                cs.check_substitute(ctx, substitute_client_state)
+            }
+        }
+    }
 }
 
 #[cfg(feature = "testing")]
@@ -435,6 +447,21 @@ where
         match self {
             AnyClientState::Tendermint(cs) => cs.status(ctx, client_id),
             AnyClientState::Mock(cs) => cs.status(ctx, client_id),
+        }
+    }
+
+    fn check_substitute(
+        &self,
+        ctx: &V,
+        substitute_client_state: Any,
+    ) -> Result<(), ClientError> {
+        match self {
+            AnyClientState::Tendermint(cs) => {
+                cs.check_substitute(ctx, substitute_client_state)
+            }
+            AnyClientState::Mock(cs) => {
+                cs.check_substitute(ctx, substitute_client_state)
+            }
         }
     }
 }
@@ -499,6 +526,21 @@ where
                 client_id,
                 upgraded_client_state,
                 upgraded_consensus_state,
+            ),
+        }
+    }
+
+    fn update_on_recovery(
+        &self,
+        ctx: &mut E,
+        subject_client_id: &ClientId,
+        substitute_client_state: Any,
+    ) -> Result<(), ClientError> {
+        match self {
+            AnyClientState::Tendermint(cs) => cs.update_on_recovery(
+                ctx,
+                subject_client_id,
+                substitute_client_state,
             ),
         }
     }
@@ -578,6 +620,26 @@ where
                 client_id,
                 upgraded_client_state,
                 upgraded_consensus_state,
+            ),
+        }
+    }
+
+    fn update_on_recovery(
+        &self,
+        ctx: &mut E,
+        subject_client_id: &ClientId,
+        substitute_client_state: Any,
+    ) -> Result<(), ClientError> {
+        match self {
+            AnyClientState::Tendermint(cs) => cs.update_on_recovery(
+                ctx,
+                subject_client_id,
+                substitute_client_state,
+            ),
+            AnyClientState::Mock(cs) => cs.update_on_recovery(
+                ctx,
+                subject_client_id,
+                substitute_client_state,
             ),
         }
     }
