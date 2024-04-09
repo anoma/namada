@@ -232,6 +232,13 @@ pub trait ReadFromEventAttributes<'value> {
     type Value;
 
     /// Read an attribute from the provided event attributes.
+    fn read_opt_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Option<Self::Value>, EventError>
+    where
+        A: AttributesMap;
+
+    /// Read an attribute from the provided event attributes.
     fn read_from_event_attributes<A>(
         attributes: &A,
     ) -> Result<Self::Value, EventError>
@@ -252,20 +259,36 @@ where
     type Value = <DATA as EventAttributeEntry<'value>>::ValueOwned;
 
     #[inline]
+    fn read_opt_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Option<Self::Value>, EventError>
+    where
+        A: AttributesMap,
+    {
+        attributes
+            .retrieve_attribute(DATA::KEY)
+            .map(|encoded_value| {
+                encoded_value.parse().map_err(
+                    |err: <Self::Value as FromStr>::Err| {
+                        EventError::AttributeEncoding(err.to_string())
+                    },
+                )
+            })
+            .transpose()
+    }
+
+    #[inline]
     fn read_from_event_attributes<A>(
         attributes: &A,
     ) -> Result<Self::Value, EventError>
     where
         A: AttributesMap,
     {
-        let encoded_value = attributes
-            .retrieve_attribute(DATA::KEY)
-            .ok_or(EventError::MissingAttribute(DATA::KEY))?;
-        encoded_value
-            .parse()
-            .map_err(|err: <Self::Value as FromStr>::Err| {
-                EventError::AttributeEncoding(err.to_string())
-            })
+        Self::read_opt_from_event_attributes(attributes)?.ok_or(
+            EventError::MissingAttribute(
+                <Self as EventAttributeEntry<'value>>::KEY,
+            ),
+        )
     }
 }
 
@@ -274,6 +297,11 @@ pub trait RawReadFromEventAttributes<'value> {
     /// Check if the associated attribute is present in the provided event
     /// attributes.
     fn check_if_present_in<A>(attributes: &A) -> bool
+    where
+        A: AttributesMap;
+
+    /// Read a string encoded attribute from the provided event attributes.
+    fn raw_read_opt_from_event_attributes<A>(attributes: &A) -> Option<&str>
     where
         A: AttributesMap;
 
@@ -298,15 +326,25 @@ where
     }
 
     #[inline]
+    fn raw_read_opt_from_event_attributes<A>(attributes: &A) -> Option<&str>
+    where
+        A: AttributesMap,
+    {
+        attributes.retrieve_attribute(DATA::KEY)
+    }
+
+    #[inline]
     fn raw_read_from_event_attributes<A>(
         attributes: &A,
     ) -> Result<&str, EventError>
     where
         A: AttributesMap,
     {
-        attributes
-            .retrieve_attribute(DATA::KEY)
-            .ok_or(EventError::MissingAttribute(DATA::KEY))
+        Self::raw_read_opt_from_event_attributes(attributes).ok_or(
+            EventError::MissingAttribute(
+                <Self as EventAttributeEntry<'value>>::KEY,
+            ),
+        )
     }
 }
 
