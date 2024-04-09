@@ -282,12 +282,17 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
+    fn new_update_account(
+        &self,
+        addr: Address,
+        public_keys: Vec<common::PublicKey>,
+        threshold: u8,
+    ) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
             vp_code_path: None,
-            public_keys: vec![],
-            threshold: None,
+            public_keys,
+            threshold: Some(threshold),
             tx_code_path: PathBuf::from(TX_UPDATE_ACCOUNT_WASM),
             tx: self.tx_builder(),
         }
