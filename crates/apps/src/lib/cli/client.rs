@@ -285,25 +285,8 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let cli::context::ChainContext {
-                            wallet,
-                            mut config,
-                            shielded,
-                            native_token,
-                        } = ctx.take_chain_or_exit();
-                        let namada = NamadaImpl::native_new(
-                            client,
-                            wallet,
-                            shielded,
-                            io,
-                            native_token,
-                        );
-                        tx::submit_change_consensus_key(
-                            &namada,
-                            &mut config,
-                            args,
-                        )
-                        .await?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::submit_change_consensus_key(&namada, args).await?;
                     }
                     Sub::TxMetadataChange(TxMetadataChange(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();

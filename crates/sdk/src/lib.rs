@@ -329,10 +329,11 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_change_consensus_key(
         &self,
         validator: Address,
+        consensus_key: common::PublicKey,
     ) -> args::ConsensusKeyChange {
         args::ConsensusKeyChange {
             validator,
-            consensus_key: None,
+            consensus_key: Some(consensus_key),
             tx_code_path: PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM),
             unsafe_dont_encrypt: false,
             tx: self.tx_builder(),
