@@ -103,7 +103,7 @@ where
         for action in actions {
             match action {
                 Action::Gov(gov_action) => match gov_action {
-                    GovAction::InitProposal { id: _, author } => {
+                    GovAction::InitProposal { author } => {
                         if !verifiers.contains(&author) {
                             tracing::info!(
                                 "Unauthorized GovAction::InitProposal"
@@ -916,7 +916,7 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error(native_vp::Error::new_alloc(format!(
+                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
                         "Funds must be greater than the minimum funds of {}",
                         min_funds_parameter.native_denominated()
                     )))
@@ -938,7 +938,7 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error(native_vp::Error::new_alloc(format!(
+                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
                         "Funds {} must be greater than the minimum funds of {}",
                         post_funds.native_denominated(),
                         min_funds_parameter.native_denominated()
@@ -1009,7 +1009,7 @@ where
 
         let author = self.force_read(&author_key, ReadType::Post)?;
         namada_account::exists(&self.ctx.pre(), &author)
-            .map_err(Error)
+            .map_err(Error::NativeVpError)
             .true_or_else(|| {
                 native_vp::Error::new_alloc(format!(
                     "No author account {author} could be found for the \
@@ -1079,7 +1079,7 @@ where
             },
             |data| {
                 is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error)?
+                    .map_err(Error::NativeVpError)?
                     .ok_or_else(|| {
                         native_vp::Error::new_const(
                             "Governance parameter changes can only be \
@@ -1270,6 +1270,7 @@ mod test {
         State, StorageRead, TxIndex,
     };
     use namada_token::storage_key::balance_key;
+    use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
 
@@ -1462,7 +1463,7 @@ mod test {
         signer_address: &Address,
         no_commiting_key: bool,
     ) where
-        S: State,
+        S: State + namada_tx::action::Write,
     {
         let counter_key = get_counter_key();
         let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
@@ -1478,6 +1479,12 @@ mod test {
         // let author_balance_key = balance_key(&nam(), signer_address);
 
         transfer(state, signer_address, &ADDRESS, funds);
+
+        state
+            .push_action(Action::Gov(GovAction::InitProposal {
+                author: signer_address.clone(),
+            }))
+            .unwrap();
 
         state
             .write_log_mut()
@@ -2316,6 +2323,12 @@ mod test {
             validator_address.clone(),
         );
         state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: validator_address.clone(),
+            }))
+            .unwrap();
+        state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2435,6 +2448,12 @@ mod test {
             validator_address.clone(),
         );
         state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: validator_address.clone(),
+            }))
+            .unwrap();
+        state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2553,6 +2572,12 @@ mod test {
             validator_address.clone(),
             validator_address.clone(),
         );
+        state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: validator_address.clone(),
+            }))
+            .unwrap();
         state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
@@ -2690,6 +2715,12 @@ mod test {
             validator_address.clone(),
         );
         state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: delegator_address.clone(),
+            }))
+            .unwrap();
+        state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2826,6 +2857,12 @@ mod test {
             validator_address.clone(),
         );
         state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: delegator_address.clone(),
+            }))
+            .unwrap();
+        state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2961,6 +2998,12 @@ mod test {
             delegator_address.clone(),
             validator_address.clone(),
         );
+        state
+            .push_action(Action::Gov(GovAction::VoteProposal {
+                id: 0,
+                voter: delegator_address.clone(),
+            }))
+            .unwrap();
         state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())

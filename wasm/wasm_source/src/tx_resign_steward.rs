@@ -17,6 +17,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     // The tx must be authorized by the source address
     ctx.insert_verifier(&steward_address)?;
 
+    ctx.push_action(Action::Pgf(PgfAction::ResignSteward(
+        steward_address.clone(),
+    )))?;
+
     pgf::remove_steward(ctx, &steward_address)
         .wrap_err("Failed to remove PGF steward")?;
     debug_log!("Removed PGF steward {steward_address}");

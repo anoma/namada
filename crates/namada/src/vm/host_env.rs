@@ -2102,14 +2102,14 @@ where
     // Verifier set populated in tx execution
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     // Scoped to drop `verifiers.clone`s after `actions.execute`
-    {
+    let transfer = {
         let mut actions = IbcActions::new(state.clone(), verifiers.clone());
         let module = TransferModule::new(state.clone(), verifiers.clone());
         actions.add_transfer_module(module);
         let module = NftTransferModule::new(state);
         actions.add_transfer_module(module);
-        actions.execute(&tx_data)?;
-    }
+        actions.execute(&tx_data)?
+    };
     // NB: There must be no other strong references to this Rc
     let verifiers = Rc::into_inner(verifiers)
         .expect("There must be only one strong ref to verifiers set")

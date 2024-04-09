@@ -16,7 +16,6 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     ctx.insert_verifier(&tx_data.author)?;
 
     ctx.push_action(Action::Gov(GovAction::InitProposal {
-        id: tx_data.id,
         author: tx_data.author.clone(),
     }))?;
 

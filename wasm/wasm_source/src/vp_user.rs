@@ -88,7 +88,7 @@ fn validate_tx(
                 }
             },
             Action::Gov(
-                GovAction::InitProposal { author: source, .. }
+                GovAction::InitProposal { author: source }
                 | GovAction::VoteProposal { voter: source, .. },
             )
             | Action::Pgf(

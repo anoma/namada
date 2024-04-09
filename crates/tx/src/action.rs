@@ -4,6 +4,8 @@
 //! the action from storage changes). When used, the kind is expected to written
 //! to under temporary storage (discarded after tx execution and validation).
 
+use std::fmt;
+
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::storage::KeySeg;
@@ -44,7 +46,7 @@ pub enum PosAction {
 /// Gov tx actions.
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum GovAction {
-    InitProposal { id: u64, author: Address },
+    InitProposal { author: Address },
     VoteProposal { id: u64, voter: Address },
 }
 
@@ -58,7 +60,7 @@ pub enum PgfAction {
 /// Read actions from temporary storage
 pub trait Read {
     /// Storage access errors
-    type Err;
+    type Err: fmt::Debug;
 
     fn read_temp<T: BorshDeserialize>(
         &self,
