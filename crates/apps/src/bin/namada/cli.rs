@@ -1,3 +1,4 @@
+
 //! Namada CLI.
 //!
 //! This CLI groups together the most commonly used commands inlined from the
@@ -54,9 +55,10 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
             handle_subcommand("namadac", sub_args)
         }
         cli::cmds::Namada::Wallet(_) => handle_subcommand("namadaw", sub_args),
-        cli::cmds::Namada::Relayer(_) | cli::cmds::Namada::EthBridgePool(_) => {
+        cli::cmds::Namada::Relayer(_) => {
             handle_subcommand("namadar", sub_args)
         }
+        cli::cmds::Namada::EthBridgePool() => todo!(),
     }
 }
 
