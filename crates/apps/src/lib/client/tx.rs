@@ -16,7 +16,6 @@ use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::{CompressedSignature, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
-use namada_sdk::signing::validate_fee_and_gen_unshield;
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -25,10 +24,7 @@ use tokio::sync::RwLock;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
-use crate::client::rpc::query_wasm_code_hash;
-use crate::client::tx::signing::{
-    default_sign, init_validator_signing_data, SigningTxData,
-};
+use crate::client::tx::signing::{default_sign, SigningTxData};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
