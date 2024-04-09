@@ -3883,6 +3883,7 @@ dependencies = [
  "owo-colors",
  "parse_duration",
  "paste",
+ "patricia_tree",
  "proptest",
  "prost 0.12.3",
  "rand 0.8.5",
@@ -4518,6 +4519,15 @@ name = "paste"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
+name = "patricia_tree"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f2f4539bffe53fc4b4da301df49d114b845b077bd5727b7fe2bd9d8df2ae68"
+dependencies = [
+ "bitflags 2.4.1",
+]
 
 [[package]]
 name = "pbkdf2"

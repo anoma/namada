@@ -32,6 +32,12 @@ pub struct QueryMatcher {
 }
 
 impl QueryMatcher {
+    /// Returns the event type that this [`QueryMatcher`]
+    /// attempts to match.
+    pub fn event_type(&self) -> &EventType {
+        &self.event_type
+    }
+
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
     pub fn matches(&self, event: &Event) -> bool {
