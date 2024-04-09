@@ -1,3 +1,4 @@
+
 //! The CLI commands that are re-used between the executables `namada`,
 //! `namada-node` and `namada-client`.
 //!
@@ -53,7 +54,7 @@ pub mod cmds {
         Ledger(Ledger),
 
         // Inlined commands from the relayer.
-        EthBridgePool(EthBridgePool),
+        EthBridgePool(),
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
@@ -71,7 +72,7 @@ pub mod cmds {
                 .subcommand(NamadaRelayer::def())
                 .subcommand(NamadaClient::def())
                 .subcommand(NamadaWallet::def())
-                .subcommand(EthBridgePool::def())
+                // .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
                 .subcommand(TxTransfer::def())
@@ -86,8 +87,8 @@ pub mod cmds {
             let node = SubCmd::parse(matches).map(Self::Node);
             let client = SubCmd::parse(matches).map(Self::Client);
             let relayer = SubCmd::parse(matches).map(Self::Relayer);
-            let eth_bridge_pool =
-                SubCmd::parse(matches).map(Self::EthBridgePool);
+            // let eth_bridge_pool =
+            //     SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
@@ -103,7 +104,7 @@ pub mod cmds {
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             node.or(client)
                 .or(relayer)
-                .or(eth_bridge_pool)
+                // .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
@@ -160,21 +161,22 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     #[allow(clippy::large_enum_variant)]
     pub enum NamadaRelayer {
-        EthBridgePool(EthBridgePool),
+        // EthBridgePool(EthBridgePool),
         ValidatorSet(ValidatorSet),
     }
 
     impl Cmd for NamadaRelayer {
         fn add_sub(app: App) -> App {
-            app.subcommand(EthBridgePool::def())
-                .subcommand(ValidatorSet::def())
+            // app.subcommand(EthBridgePool::def())
+                app.subcommand(ValidatorSet::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            let eth_bridge_pool =
-                SubCmd::parse(matches).map(Self::EthBridgePool);
+            // let eth_bridge_pool =
+            //     SubCmd::parse(matches).map(Self::EthBridgePool);
             let validator_set = SubCmd::parse(matches).map(Self::ValidatorSet);
-            eth_bridge_pool.or(validator_set)
+            // eth_bridge_pool.or
+            validator_set
         }
     }
 
@@ -237,7 +239,7 @@ pub mod cmds {
                 .subcommand(TxChangeConsensusKey::def().display_order(2))
                 .subcommand(TxMetadataChange::def().display_order(2))
                 // Ethereum bridge transactions
-                .subcommand(AddToEthBridgePool::def().display_order(3))
+                // .subcommand(AddToEthBridgePool::def().display_order(3))
                 // PGF transactions
                 .subcommand(TxUpdateStewardCommission::def().display_order(4))
                 .subcommand(TxResignSteward::def().display_order(4))
@@ -349,8 +351,8 @@ pub mod cmds {
             let query_commission =
                 Self::parse_with_ctx(matches, QueryCommissionRate);
             let query_metadata = Self::parse_with_ctx(matches, QueryMetaData);
-            let add_to_eth_bridge_pool =
-                Self::parse_with_ctx(matches, AddToEthBridgePool);
+            // let add_to_eth_bridge_pool =
+            //     Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let gen_ibc_shielded =
@@ -377,7 +379,7 @@ pub mod cmds {
                 .or(withdraw)
                 .or(redelegate)
                 .or(claim_rewards)
-                .or(add_to_eth_bridge_pool)
+                // .or(add_to_eth_bridge_pool)
                 .or(tx_update_steward_commission)
                 .or(tx_resign_steward)
                 .or(query_epoch)
@@ -467,7 +469,7 @@ pub mod cmds {
         Withdraw(Withdraw),
         ClaimRewards(ClaimRewards),
         Redelegate(Redelegate),
-        AddToEthBridgePool(AddToEthBridgePool),
+        // AddToEthBridgePool(AddToEthBridgePool),
         TxUpdateStewardCommission(TxUpdateStewardCommission),
         TxResignSteward(TxResignSteward),
         QueryEpoch(QueryEpoch),
@@ -2549,137 +2551,137 @@ pub mod cmds {
     }
 
     /// Used as sub-commands (`SubCmd` instance) in `namadar` binary.
-    #[derive(Clone, Debug)]
-    pub enum EthBridgePool {
-        /// The [`super::Context`] provides access to the wallet and the
-        /// config. It will generate a new wallet and config, if they
-        /// don't exist.
-        WithContext(EthBridgePoolWithCtx),
-        /// Utils don't have [`super::Context`], only the global arguments.
-        WithoutContext(EthBridgePoolWithoutCtx),
-    }
+    // #[derive(Clone, Debug)]
+    // pub enum EthBridgePool {
+    //     /// The [`super::Context`] provides access to the wallet and the
+    //     /// config. It will generate a new wallet and config, if they
+    //     /// don't exist.
+    //     WithContext(EthBridgePoolWithCtx),
+    //     /// Utils don't have [`super::Context`], only the global arguments.
+    //     WithoutContext(EthBridgePoolWithoutCtx),
+    // }
 
-    /// Ethereum Bridge pool commands requiring [`super::Context`].
-    #[derive(Clone, Debug)]
-    pub enum EthBridgePoolWithCtx {
-        /// Get a recommendation on a batch of transfers
-        /// to relay.
-        RecommendBatch(RecommendBatch),
-    }
+    // /// Ethereum Bridge pool commands requiring [`super::Context`].
+    // #[derive(Clone, Debug)]
+    // pub enum EthBridgePoolWithCtx {
+    //     /// Get a recommendation on a batch of transfers
+    //     /// to relay.
+    //     RecommendBatch(RecommendBatch),
+    // }
 
     /// Ethereum Bridge pool commands not requiring [`super::Context`].
-    #[derive(Clone, Debug)]
-    pub enum EthBridgePoolWithoutCtx {
-        /// Construct a proof that a set of transfers is in the pool.
-        /// This can be used to relay transfers across the
-        /// bridge to Ethereum.
-        ConstructProof(ConstructProof),
-        /// Construct and relay a Bridge pool proof to
-        /// Ethereum directly.
-        RelayProof(RelayProof),
-        /// Query the contents of the pool.
-        QueryPool(QueryEthBridgePool),
-        /// Query to provable contents of the pool.
-        QuerySigned(QuerySignedBridgePool),
-        /// Check the confirmation status of `TransferToEthereum`
-        /// events.
-        QueryRelays(QueryRelayProgress),
-    }
+    // #[derive(Clone, Debug)]
+    // pub enum EthBridgePoolWithoutCtx {
+    //     /// Construct a proof that a set of transfers is in the pool.
+    //     /// This can be used to relay transfers across the
+    //     /// bridge to Ethereum.
+    //     ConstructProof(ConstructProof),
+    //     /// Construct and relay a Bridge pool proof to
+    //     /// Ethereum directly.
+    //     RelayProof(RelayProof),
+    //     /// Query the contents of the pool.
+    //     QueryPool(QueryEthBridgePool),
+    //     /// Query to provable contents of the pool.
+    //     QuerySigned(QuerySignedBridgePool),
+    //     /// Check the confirmation status of `TransferToEthereum`
+    //     /// events.
+    //     QueryRelays(QueryRelayProgress),
+    // }
 
-    impl Cmd for EthBridgePool {
-        fn add_sub(app: App) -> App {
-            app.subcommand(RecommendBatch::def().display_order(1))
-                .subcommand(ConstructProof::def().display_order(1))
-                .subcommand(RelayProof::def().display_order(1))
-                .subcommand(QueryEthBridgePool::def().display_order(1))
-                .subcommand(QuerySignedBridgePool::def().display_order(1))
-                .subcommand(QueryRelayProgress::def().display_order(1))
-        }
+    // impl Cmd for EthBridgePool {
+    //     fn add_sub(app: App) -> App {
+    //         app.subcommand(RecommendBatch::def().display_order(1))
+    //             .subcommand(ConstructProof::def().display_order(1))
+    //             .subcommand(RelayProof::def().display_order(1))
+    //             .subcommand(QueryEthBridgePool::def().display_order(1))
+    //             .subcommand(QuerySignedBridgePool::def().display_order(1))
+    //             .subcommand(QueryRelayProgress::def().display_order(1))
+    //     }
 
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            use EthBridgePoolWithCtx::*;
-            use EthBridgePoolWithoutCtx::*;
+    //     fn parse(matches: &ArgMatches) -> Option<Self> {
+    //         use EthBridgePoolWithCtx::*;
+    //         use EthBridgePoolWithoutCtx::*;
 
-            let recommend = Self::parse_with_ctx(matches, RecommendBatch);
-            let construct_proof =
-                Self::parse_without_ctx(matches, ConstructProof);
-            let relay_proof = Self::parse_without_ctx(matches, RelayProof);
-            let query_pool = Self::parse_without_ctx(matches, QueryPool);
-            let query_signed = Self::parse_without_ctx(matches, QuerySigned);
-            let query_relays = Self::parse_without_ctx(matches, QueryRelays);
+    //         let recommend = Self::parse_with_ctx(matches, RecommendBatch);
+    //         let construct_proof =
+    //             Self::parse_without_ctx(matches, ConstructProof);
+    //         let relay_proof = Self::parse_without_ctx(matches, RelayProof);
+    //         let query_pool = Self::parse_without_ctx(matches, QueryPool);
+    //         let query_signed = Self::parse_without_ctx(matches, QuerySigned);
+    //         let query_relays = Self::parse_without_ctx(matches, QueryRelays);
 
-            construct_proof
-                .or(recommend)
-                .or(relay_proof)
-                .or(query_pool)
-                .or(query_signed)
-                .or(query_relays)
-        }
-    }
+    //         construct_proof
+    //             .or(recommend)
+    //             .or(relay_proof)
+    //             .or(query_pool)
+    //             .or(query_signed)
+    //             .or(query_relays)
+    //     }
+    // }
 
-    impl EthBridgePool {
-        /// A helper method to parse sub cmds with context
-        fn parse_with_ctx<T: SubCmd>(
-            matches: &ArgMatches,
-            sub_to_self: impl Fn(T) -> EthBridgePoolWithCtx,
-        ) -> Option<Self> {
-            T::parse(matches).map(|sub| Self::WithContext(sub_to_self(sub)))
-        }
+    // impl EthBridgePool {
+    //     /// A helper method to parse sub cmds with context
+    //     fn parse_with_ctx<T: SubCmd>(
+    //         matches: &ArgMatches,
+    //         sub_to_self: impl Fn(T) -> EthBridgePoolWithCtx,
+    //     ) -> Option<Self> {
+    //         T::parse(matches).map(|sub| Self::WithContext(sub_to_self(sub)))
+    //     }
 
-        /// A helper method to parse sub cmds without context
-        fn parse_without_ctx<T: SubCmd>(
-            matches: &ArgMatches,
-            sub_to_self: impl Fn(T) -> EthBridgePoolWithoutCtx,
-        ) -> Option<Self> {
-            T::parse(matches).map(|sub| Self::WithoutContext(sub_to_self(sub)))
-        }
-    }
+    //     /// A helper method to parse sub cmds without context
+    //     fn parse_without_ctx<T: SubCmd>(
+    //         matches: &ArgMatches,
+    //         sub_to_self: impl Fn(T) -> EthBridgePoolWithoutCtx,
+    //     ) -> Option<Self> {
+    //         T::parse(matches).map(|sub| Self::WithoutContext(sub_to_self(sub)))
+    //     }
+    // }
 
-    impl SubCmd for EthBridgePool {
-        const CMD: &'static str = "ethereum-bridge-pool";
+    // impl SubCmd for EthBridgePool {
+    //     const CMD: &'static str = "ethereum-bridge-pool";
 
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).and_then(Cmd::parse)
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self> {
+    //         matches.subcommand_matches(Self::CMD).and_then(Cmd::parse)
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(
-                    "Functionality for interacting with the Ethereum bridge \
-                     pool. This pool holds transfers waiting to be relayed to \
-                     Ethereum.",
-                )
-                .subcommand_required(true)
-                .subcommand(ConstructProof::def().display_order(1))
-                .subcommand(RecommendBatch::def().display_order(1))
-                .subcommand(RelayProof::def().display_order(1))
-                .subcommand(QueryEthBridgePool::def().display_order(1))
-                .subcommand(QuerySignedBridgePool::def().display_order(1))
-                .subcommand(QueryRelayProgress::def().display_order(1))
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about(
+    //                 "Functionality for interacting with the Ethereum bridge \
+    //                  pool. This pool holds transfers waiting to be relayed to \
+    //                  Ethereum.",
+    //             )
+    //             .subcommand_required(true)
+    //             .subcommand(ConstructProof::def().display_order(1))
+    //             .subcommand(RecommendBatch::def().display_order(1))
+    //             .subcommand(RelayProof::def().display_order(1))
+    //             .subcommand(QueryEthBridgePool::def().display_order(1))
+    //             .subcommand(QuerySignedBridgePool::def().display_order(1))
+    //             .subcommand(QueryRelayProgress::def().display_order(1))
+    //     }
+    // }
 
-    #[derive(Clone, Debug)]
-    pub struct AddToEthBridgePool(pub args::EthereumBridgePool<args::CliTypes>);
+    // #[derive(Clone, Debug)]
+    // pub struct AddToEthBridgePool(pub args::EthereumBridgePool<args::CliTypes>);
 
-    impl SubCmd for AddToEthBridgePool {
-        const CMD: &'static str = "add-erc20-transfer";
+    // impl SubCmd for AddToEthBridgePool {
+    //     const CMD: &'static str = "add-erc20-transfer";
 
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::EthereumBridgePool::parse(matches)))
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self> {
+    //         matches
+    //             .subcommand_matches(Self::CMD)
+    //             .map(|matches| Self(args::EthereumBridgePool::parse(matches)))
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Add a new transfer to the Ethereum Bridge pool.")
-                .arg_required_else_help(true)
-                .add_args::<args::EthereumBridgePool<args::CliTypes>>()
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about("Add a new transfer to the Ethereum Bridge pool.")
+    //             .arg_required_else_help(true)
+    //             .add_args::<args::EthereumBridgePool<args::CliTypes>>()
+    //     }
+    // }
 
-    #[derive(Clone, Debug)]
+    // #[derive(Clone, Debug)]
     pub struct ConstructProof(pub args::BridgePoolProof<args::CliTypes>);
 
     impl SubCmd for ConstructProof {
@@ -2748,24 +2750,24 @@ pub mod cmds {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct QueryEthBridgePool(pub args::QueryWithoutCtx<args::CliTypes>);
+    // #[derive(Clone, Debug)]
+    // pub struct QueryEthBridgePool(pub args::QueryWithoutCtx<args::CliTypes>);
 
-    impl SubCmd for QueryEthBridgePool {
-        const CMD: &'static str = "query";
+    // impl SubCmd for QueryEthBridgePool {
+    //     const CMD: &'static str = "query";
 
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::QueryWithoutCtx::parse(matches)))
-        }
+    //     fn parse(matches: &ArgMatches) -> Option<Self> {
+    //         matches
+    //             .subcommand_matches(Self::CMD)
+    //             .map(|matches| Self(args::QueryWithoutCtx::parse(matches)))
+    //     }
 
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Get the contents of the Ethereum Bridge pool.")
-                .add_args::<args::QueryWithoutCtx<args::CliTypes>>()
-        }
-    }
+    //     fn def() -> App {
+    //         App::new(Self::CMD)
+    //             .about("Get the contents of the Ethereum Bridge pool.")
+    //             .add_args::<args::QueryWithoutCtx<args::CliTypes>>()
+    //     }
+    // }
 
     #[derive(Clone, Debug)]
     pub struct QuerySignedBridgePool(pub args::QueryWithoutCtx<args::CliTypes>);
@@ -7507,8 +7509,8 @@ pub fn namada_wallet_cli() -> Result<(cmds::NamadaWallet, Context)> {
 }
 
 pub enum NamadaRelayer {
-    EthBridgePoolWithCtx(Box<(cmds::EthBridgePoolWithCtx, Context)>),
-    EthBridgePoolWithoutCtx(cmds::EthBridgePoolWithoutCtx),
+    // EthBridgePoolWithCtx(Box<(cmds::EthBridgePoolWithCtx, Context)>),
+    // EthBridgePoolWithoutCtx(cmds::EthBridgePoolWithoutCtx),
     ValidatorSet(cmds::ValidatorSet),
 }
 
@@ -7517,18 +7519,18 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     let matches = app.clone().get_matches();
     match Cmd::parse(&matches) {
         Some(cmd) => match cmd {
-            cmds::NamadaRelayer::EthBridgePool(
-                cmds::EthBridgePool::WithContext(sub_cmd),
-            ) => {
-                let global_args = args::Global::parse(&matches);
-                let context = Context::new::<StdIo>(global_args)?;
-                Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
-                    sub_cmd, context,
-                ))))
-            }
-            cmds::NamadaRelayer::EthBridgePool(
-                cmds::EthBridgePool::WithoutContext(sub_cmd),
-            ) => Ok(NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd)),
+            // cmds::NamadaRelayer::EthBridgePool(
+            //     cmds::EthBridgePool::WithContext(sub_cmd),
+            // ) => {
+            //     let global_args = args::Global::parse(&matches);
+            //     let context = Context::new::<StdIo>(global_args)?;
+            //     Ok(NamadaRelayer::EthBridgePoolWithCtx(Box::new((
+            //         sub_cmd, context,
+            //     ))))
+            // }
+            // cmds::NamadaRelayer::EthBridgePool(
+            //     cmds::EthBridgePool::WithoutContext(sub_cmd),
+            // ) => Ok(NamadaRelayer::EthBridgePoolWithoutCtx(sub_cmd)),
             cmds::NamadaRelayer::ValidatorSet(sub_cmd) => {
                 Ok(NamadaRelayer::ValidatorSet(sub_cmd))
             }
