@@ -641,17 +641,19 @@ pub async fn build_validator_commission_change(
 
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
-        match rpc::query_commission_rate(
+        let CommissionPair {
+            commission_rate,
+            max_commission_change_per_epoch,
+            epoch: _,
+        } = rpc::query_commission_rate(
             context.client(),
             &validator,
             Some(pipeline_epoch_minus_one),
         )
-        .await?
-        {
-            Some(CommissionPair {
-                commission_rate,
-                max_commission_change_per_epoch,
-            }) => {
+        .await?;
+
+        match (commission_rate, max_commission_change_per_epoch) {
+            (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
                 if rate.is_negative() || *rate > Dec::one() {
                     edisplay_line!(
                         context.io(),
@@ -680,8 +682,23 @@ pub async fn build_validator_commission_change(
                     }
                 }
             }
-            None => {
-                edisplay_line!(context.io(), "Error retrieving from storage");
+            (None, None) => {
+                edisplay_line!(
+                    context.io(),
+                    "Error retrieving commission data from validator storage. \
+                     This address may not yet be a validator."
+                );
+                if !tx_args.force {
+                    return Err(Error::from(TxSubmitError::Retrieval));
+                }
+            }
+            _ => {
+                edisplay_line!(
+                    context.io(),
+                    "Error retrieving some of the commission data from \
+                     validator storage, while other data was found. This is a \
+                     bug and should be reported."
+                );
                 if !tx_args.force {
                     return Err(Error::from(TxSubmitError::Retrieval));
                 }
@@ -848,17 +865,19 @@ pub async fn build_validator_metadata_change(
         }
         let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
 
-        match rpc::query_commission_rate(
+        let CommissionPair {
+            commission_rate,
+            max_commission_change_per_epoch,
+            epoch: _,
+        } = rpc::query_commission_rate(
             context.client(),
             &validator,
             Some(pipeline_epoch_minus_one),
         )
-        .await?
-        {
-            Some(CommissionPair {
-                commission_rate,
-                max_commission_change_per_epoch,
-            }) => {
+        .await?;
+
+        match (commission_rate, max_commission_change_per_epoch) {
+            (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
                 if rate.is_negative() || *rate > Dec::one() {
                     edisplay_line!(
                         context.io(),
@@ -887,8 +906,23 @@ pub async fn build_validator_metadata_change(
                     }
                 }
             }
-            None => {
-                edisplay_line!(context.io(), "Error retrieving from storage");
+            (None, None) => {
+                edisplay_line!(
+                    context.io(),
+                    "Error retrieving commission data from validator storage. \
+                     This address may not yet be a validator."
+                );
+                if !tx_args.force {
+                    return Err(Error::from(TxSubmitError::Retrieval));
+                }
+            }
+            _ => {
+                edisplay_line!(
+                    context.io(),
+                    "Error retrieving some of the commission data from \
+                     validator storage, while other data was found. This is a \
+                     bug and should be reported."
+                );
                 if !tx_args.force {
                     return Err(Error::from(TxSubmitError::Retrieval));
                 }
@@ -2099,7 +2133,8 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await?.0
+        .await?
+        .0
         .expect("Expected to find the state of the validator");
 
         if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
@@ -2149,7 +2184,8 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await?.0
+        .await?
+        .0
         .expect("Expected to find the state of the validator");
 
         if !matches!(
@@ -2191,7 +2227,8 @@ pub async fn build_vote_proposal(
                 validator,
                 Some(current_epoch),
             )
-            .await?.0
+            .await?
+            .0
             .expect("Expected to find the state of the validator");
 
             if matches!(

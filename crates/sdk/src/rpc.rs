@@ -48,7 +48,9 @@ use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::masp::MaspTokenRewardData;
-use crate::queries::vp::pos::{EnrichedBondsAndUnbondsDetails, ValidatorStateInfo};
+use crate::queries::vp::pos::{
+    EnrichedBondsAndUnbondsDetails, ValidatorStateInfo,
+};
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
@@ -832,8 +834,8 @@ pub async fn query_commission_rate<C: crate::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<CommissionPair>, Error> {
-    convert_response::<C, Option<CommissionPair>>(
+) -> Result<CommissionPair, Error> {
+    convert_response::<C, CommissionPair>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)
@@ -847,11 +849,11 @@ pub async fn query_metadata<C: crate::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<(Option<ValidatorMetaData>, Option<CommissionPair>), Error> {
+) -> Result<(Option<ValidatorMetaData>, CommissionPair), Error> {
     let metadata = convert_response::<C, Option<ValidatorMetaData>>(
         RPC.vp().pos().validator_metadata(client, validator).await,
     )?;
-    let commission_info = convert_response::<C, Option<CommissionPair>>(
+    let commission_info = convert_response::<C, CommissionPair>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)

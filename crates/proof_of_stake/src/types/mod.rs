@@ -285,9 +285,11 @@ pub struct SlashedAmount {
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
-    pub commission_rate: Dec,
+    pub commission_rate: Option<Dec>,
     /// Validator max commission rate change per epoch
-    pub max_commission_change_per_epoch: Dec,
+    pub max_commission_change_per_epoch: Option<Dec>,
+    /// Query epoch
+    pub epoch: Epoch,
 }
 
 /// Epoched rewards products

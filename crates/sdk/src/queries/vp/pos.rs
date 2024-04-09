@@ -55,7 +55,7 @@ router! {POS,
             -> Vec<Slash> = validator_slashes,
 
         ( "commission" / [validator: Address] / [epoch: opt Epoch] )
-            -> Option<CommissionPair> = validator_commission,
+            -> CommissionPair = validator_commission,
 
         ( "metadata" / [validator: Address] )
             -> Option<ValidatorMetaData> = validator_metadata,
@@ -250,7 +250,7 @@ fn validator_commission<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     epoch: Option<Epoch>,
-) -> namada_storage::Result<Option<CommissionPair>>
+) -> namada_storage::Result<CommissionPair>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -262,15 +262,11 @@ where
     let max_commission_change_per_epoch =
         read_validator_max_commission_rate_change(ctx.state, &validator)?;
 
-    match (commission_rate, max_commission_change_per_epoch) {
-        (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
-            Ok(Some(CommissionPair {
-                commission_rate,
-                max_commission_change_per_epoch,
-            }))
-        }
-        _ => Ok(None),
-    }
+    Ok(CommissionPair {
+        commission_rate,
+        max_commission_change_per_epoch,
+        epoch,
+    })
 }
 
 /// Get the validator metadata

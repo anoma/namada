@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::key::common;
 use namada_sdk::proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorStateInfo,
+    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
+    ValidatorStateInfo,
 };
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
@@ -185,7 +186,7 @@ pub async fn query_commission_rate(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<CommissionPair>, Error> {
+) -> Result<CommissionPair, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -200,7 +201,7 @@ pub async fn query_metadata(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<(Option<ValidatorMetaData>, Option<CommissionPair>), Error> {
+) -> Result<(Option<ValidatorMetaData>, CommissionPair), Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,

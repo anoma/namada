@@ -38,7 +38,9 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
-use namada::proof_of_stake::types::{ValidatorState, ValidatorStateInfo, WeightedValidator};
+use namada::proof_of_stake::types::{
+    ValidatorState, ValidatorStateInfo, WeightedValidator,
+};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
@@ -2008,8 +2010,8 @@ pub async fn query_commission_rate<
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<CommissionPair> {
-    unwrap_client_response::<C, Option<CommissionPair>>(
+) -> CommissionPair {
+    unwrap_client_response::<C, CommissionPair>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)
@@ -2068,31 +2070,44 @@ pub async fn query_and_print_validator_state(
             ValidatorState::Consensus => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the consensus set in epoch {epoch}"
+                    "Validator {validator} is in the consensus set in epoch \
+                     {epoch}"
                 )
             }
             ValidatorState::BelowCapacity => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-capacity set in epoch {epoch}"
+                    "Validator {validator} is in the below-capacity set in \
+                     epoch {epoch}"
                 )
             }
             ValidatorState::BelowThreshold => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-threshold set in epoch {epoch}"
+                    "Validator {validator} is in the below-threshold set in \
+                     epoch {epoch}"
                 )
             }
             ValidatorState::Inactive => {
-                display_line!(context.io(), "Validator {validator} is inactive in epoch {epoch}")
+                display_line!(
+                    context.io(),
+                    "Validator {validator} is inactive in epoch {epoch}"
+                )
             }
             ValidatorState::Jailed => {
-                display_line!(context.io(), "Validator {validator} is jailed in epoch {epoch}")
+                display_line!(
+                    context.io(),
+                    "Validator {validator} is jailed in epoch {epoch}"
+                )
             }
         },
         None => display_line!(
             context.io(),
-            "Validator {validator} not found in epoch {epoch}. This account may not be a validator, or the validator account has been recently initialized and may not be active yet. It is also possible that this data is no longer available in storage if an epoch before the current epoch has been queried."
+            "Validator {validator} not found in epoch {epoch}. This account \
+             may not be a validator, or the validator account has been \
+             recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
         ),
     }
 }
@@ -2104,29 +2119,34 @@ pub async fn query_and_print_commission_rate(
 ) {
     let validator = args.validator;
 
-    let info: Option<CommissionPair> =
-        query_commission_rate(context.client(), &validator, args.epoch).await;
-    match info {
-        Some(CommissionPair {
-            commission_rate: rate,
-            max_commission_change_per_epoch: change,
-        }) => {
+    let CommissionPair {
+        commission_rate,
+        max_commission_change_per_epoch,
+        epoch: query_epoch,
+    } = query_commission_rate(context.client(), &validator, args.epoch).await;
+    match (commission_rate, max_commission_change_per_epoch) {
+        (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
             display_line!(
                 context.io(),
-                "Validator {} commission rate: {}, max change per epoch: {}",
-                validator.encode(),
-                rate,
-                change
-            );
+                "Validator {validator} commission rate: {commission_rate}, \
+                 max change per epoch: {max_commission_change_per_epoch} in \
+                 epoch {query_epoch}"
+            )
         }
-        None => {
-            display_line!(
-                context.io(),
-                "Address {} is not a validator (did not find commission rate \
-                 and max change)",
-                validator.encode(),
-            );
-        }
+        (None, None) => display_line!(
+            context.io(),
+            "Validator {validator} not found in epoch {query_epoch}. This \
+             account may not be a validator, or the validator account has \
+             been recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
+        ),
+        _ => display_line!(
+            context.io(),
+            "Only one of the commission rate and max commission change per \
+             epoch was found for validator {validator} in epoch \
+             {query_epoch}. This is a bug and should be reported."
+        ),
     }
 }
 
@@ -2187,29 +2207,34 @@ pub async fn query_and_print_metadata(
     }
 
     // Get commission rate info for the current epoch
-    let info: Option<CommissionPair> =
-        query_commission_rate(context.client(), &validator, None).await;
-    match info {
-        Some(CommissionPair {
-            commission_rate: rate,
-            max_commission_change_per_epoch: change,
-        }) => {
+    let CommissionPair {
+        commission_rate,
+        max_commission_change_per_epoch,
+        epoch: query_epoch,
+    } = query_commission_rate(context.client(), &validator, None).await;
+    match (commission_rate, max_commission_change_per_epoch) {
+        (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
             display_line!(
                 context.io(),
-                "Validator {} commission rate: {}, max change per epoch: {}",
-                validator.encode(),
-                rate,
-                change
-            );
+                "Validator {validator} commission rate: {commission_rate}, \
+                 max change per epoch: {max_commission_change_per_epoch} in \
+                 epoch {query_epoch}"
+            )
         }
-        None => {
-            display_line!(
-                context.io(),
-                "Address {} is not a validator (did not find commission rate \
-                 and max change)",
-                validator.encode(),
-            );
-        }
+        (None, None) => display_line!(
+            context.io(),
+            "Validator {validator} not found in epoch {query_epoch}. This \
+             account may not be a validator, or the validator account has \
+             been recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
+        ),
+        _ => display_line!(
+            context.io(),
+            "Only one of the commission rate and max commission change per \
+             epoch was found for validator {validator} in epoch \
+             {query_epoch}. This is a bug and should be reported."
+        ),
     }
 }
 
