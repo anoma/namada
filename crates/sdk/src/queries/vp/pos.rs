@@ -26,9 +26,10 @@ use namada_proof_of_stake::storage::{
     validator_commission_rate_handle, validator_incoming_redelegations_handle,
     validator_slashes_handle, validator_state_handle,
 };
+pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, ValidatorMetaData, ValidatorState, WeightedValidator,
+    Slash, ValidatorMetaData, WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
 use namada_state::{DBIter, StorageHasher, DB};
@@ -60,7 +61,7 @@ router! {POS,
             -> Option<ValidatorMetaData> = validator_metadata,
 
         ( "state" / [validator: Address] / [epoch: opt Epoch] )
-            -> Option<ValidatorState> = validator_state,
+            -> ValidatorStateInfo = validator_state,
 
         ( "incoming_redelegation" / [src_validator: Address] / [delegator: Address] )
             -> Option<Epoch> = validator_incoming_redelegation,
@@ -305,7 +306,7 @@ fn validator_state<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     epoch: Option<Epoch>,
-) -> namada_storage::Result<Option<ValidatorState>>
+) -> namada_storage::Result<ValidatorStateInfo>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -314,7 +315,7 @@ where
     let params = read_pos_params(ctx.state)?;
     let state =
         validator_state_handle(&validator).get(ctx.state, epoch, &params)?;
-    Ok(state)
+    Ok((state, epoch))
 }
 
 /// Get the validator state

@@ -35,7 +35,7 @@ use namada_ibc::storage::{
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
+    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
 use namada_tx::data::{ResultCode, TxResult};
@@ -48,7 +48,7 @@ use crate::events::Event;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::masp::MaspTokenRewardData;
-use crate::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
+use crate::queries::vp::pos::{EnrichedBondsAndUnbondsDetails, ValidatorStateInfo};
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
@@ -783,8 +783,8 @@ pub async fn get_validator_state<C: crate::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<ValidatorState>, error::Error> {
-    convert_response::<C, Option<ValidatorState>>(
+) -> Result<ValidatorStateInfo, error::Error> {
+    convert_response::<C, ValidatorStateInfo>(
         RPC.vp()
             .pos()
             .validator_state(client, validator, &epoch)

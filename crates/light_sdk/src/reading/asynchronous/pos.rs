@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::key::common;
 use namada_sdk::proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
+    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorStateInfo,
 };
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
@@ -143,7 +143,7 @@ pub async fn get_validator_state(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<ValidatorState>, Error> {
+) -> Result<ValidatorStateInfo, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,

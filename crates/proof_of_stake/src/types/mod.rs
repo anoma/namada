@@ -548,6 +548,9 @@ pub enum ValidatorState {
     Jailed,
 }
 
+/// The validator state from a query and the epoch when it was queried.
+pub type ValidatorStateInfo = (Option<ValidatorState>, Epoch);
+
 /// A slash applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.
 #[derive(

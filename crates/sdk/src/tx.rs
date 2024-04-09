@@ -1084,7 +1084,7 @@ pub async fn build_unjail_validator(
     let current_epoch = rpc::query_epoch(context.client()).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    let validator_state_at_pipeline = rpc::get_validator_state(
+    let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         validator,
         Some(pipeline_epoch),
@@ -1192,7 +1192,7 @@ pub async fn build_deactivate_validator(
     let current_epoch = rpc::query_epoch(context.client()).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    let validator_state_at_pipeline = rpc::get_validator_state(
+    let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         validator,
         Some(pipeline_epoch),
@@ -1271,7 +1271,7 @@ pub async fn build_reactivate_validator(
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
-        let validator_state =
+        let (validator_state, _) =
             rpc::get_validator_state(context.client(), validator, Some(epoch))
                 .await?;
 
@@ -1404,7 +1404,7 @@ pub async fn build_redelegation(
     // Give a redelegation warning based on the pipeline state of the dest
     // validator
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    let dest_validator_state_at_pipeline = rpc::get_validator_state(
+    let (dest_validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &dest_validator,
         Some(pipeline_epoch),
@@ -1915,7 +1915,7 @@ pub async fn build_bond(
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    let validator_state_at_pipeline = rpc::get_validator_state(
+    let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &validator,
         Some(pipeline_epoch),
@@ -2099,7 +2099,7 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await?
+        .await?.0
         .expect("Expected to find the state of the validator");
 
         if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
@@ -2149,7 +2149,7 @@ pub async fn build_vote_proposal(
             voter_address,
             Some(current_epoch),
         )
-        .await?
+        .await?.0
         .expect("Expected to find the state of the validator");
 
         if !matches!(
@@ -2191,7 +2191,7 @@ pub async fn build_vote_proposal(
                 validator,
                 Some(current_epoch),
             )
-            .await?
+            .await?.0
             .expect("Expected to find the state of the validator");
 
             if matches!(

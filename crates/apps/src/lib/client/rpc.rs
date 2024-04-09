@@ -38,7 +38,7 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
-use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
+use namada::proof_of_stake::types::{ValidatorState, ValidatorStateInfo, WeightedValidator};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
@@ -2034,8 +2034,8 @@ pub async fn query_validator_state<
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<ValidatorState> {
-    unwrap_client_response::<C, Option<ValidatorState>>(
+) -> ValidatorStateInfo {
+    unwrap_client_response::<C, ValidatorStateInfo>(
         RPC.vp()
             .pos()
             .validator_state(client, validator, &epoch)
@@ -2060,7 +2060,7 @@ pub async fn query_and_print_validator_state(
     args: args::QueryValidatorState,
 ) {
     let validator = args.validator;
-    let state: Option<ValidatorState> =
+    let (state, epoch): ValidatorStateInfo =
         query_validator_state(context.client(), &validator, args.epoch).await;
 
     match state {
@@ -2068,33 +2068,31 @@ pub async fn query_and_print_validator_state(
             ValidatorState::Consensus => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the consensus set"
+                    "Validator {validator} is in the consensus set in epoch {epoch}"
                 )
             }
             ValidatorState::BelowCapacity => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-capacity set"
+                    "Validator {validator} is in the below-capacity set in epoch {epoch}"
                 )
             }
             ValidatorState::BelowThreshold => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-threshold set"
+                    "Validator {validator} is in the below-threshold set in epoch {epoch}"
                 )
             }
             ValidatorState::Inactive => {
-                display_line!(context.io(), "Validator {validator} is inactive")
+                display_line!(context.io(), "Validator {validator} is inactive in epoch {epoch}")
             }
             ValidatorState::Jailed => {
-                display_line!(context.io(), "Validator {validator} is jailed")
+                display_line!(context.io(), "Validator {validator} is jailed in epoch {epoch}")
             }
         },
         None => display_line!(
             context.io(),
-            "Validator {validator} is either not a validator, or an epoch \
-             before the current epoch has been queried (and the validator \
-             state information is no longer stored)"
+            "Validator {validator} not found in epoch {epoch}. This account may not be a validator, or the validator account has been recently initialized and may not be active yet. It is also possible that this data is no longer available in storage if an epoch before the current epoch has been queried."
         ),
     }
 }
