@@ -1,3 +1,4 @@
+
 use color_eyre::eyre::Result;
 use namada::io::Io;
 use namada_sdk::eth_bridge::{bridge_pool, validator_set};
@@ -18,77 +19,77 @@ impl CliApi {
         C: CliClient,
     {
         match cmd {
-            cli::NamadaRelayer::EthBridgePoolWithCtx(boxed) => {
-                let (sub, mut ctx) = *boxed;
-                match sub {
-                    EthBridgePoolWithCtx::RecommendBatch(RecommendBatch(
-                        args,
-                    )) => {
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        let ledger_address =
-                            chain_ctx.get(&args.query.ledger_address);
-                        let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&ledger_address)
-                        });
-                        client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
-                        bridge_pool::recommend_batch(&namada, args).await?;
-                    }
-                }
-            }
-            cli::NamadaRelayer::EthBridgePoolWithoutCtx(sub) => match sub {
-                EthBridgePoolWithoutCtx::ConstructProof(ConstructProof(
-                    args,
-                )) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&args.ledger_address)
-                    });
-                    client.wait_until_node_is_synced(&io).await?;
-                    let args = args.to_sdk_ctxless();
-                    bridge_pool::construct_proof(&client, &io, args).await?;
-                }
-                EthBridgePoolWithoutCtx::RelayProof(RelayProof(args)) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&args.ledger_address)
-                    });
-                    client.wait_until_node_is_synced(&io).await?;
-                    let eth_client =
-                        get_eth_rpc_client(&args.eth_rpc_endpoint).await;
-                    let args = args.to_sdk_ctxless();
-                    bridge_pool::relay_bridge_pool_proof(
-                        eth_client, &client, &io, args,
-                    )
-                    .await?;
-                }
-                EthBridgePoolWithoutCtx::QueryPool(QueryEthBridgePool(
-                    query,
-                )) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&query.ledger_address)
-                    });
-                    client.wait_until_node_is_synced(&io).await?;
-                    bridge_pool::query_bridge_pool(&client, &io).await?;
-                }
-                EthBridgePoolWithoutCtx::QuerySigned(
-                    QuerySignedBridgePool(query),
-                ) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&query.ledger_address)
-                    });
-                    client.wait_until_node_is_synced(&io).await?;
-                    bridge_pool::query_signed_bridge_pool(&client, &io).await?;
-                }
-                EthBridgePoolWithoutCtx::QueryRelays(QueryRelayProgress(
-                    query,
-                )) => {
-                    let client = client.unwrap_or_else(|| {
-                        C::from_tendermint_address(&query.ledger_address)
-                    });
-                    client.wait_until_node_is_synced(&io).await?;
-                    bridge_pool::query_relay_progress(&client, &io).await?;
-                }
-            },
+            // cli::NamadaRelayer::EthBridgePoolWithCtx(boxed) => {
+            //     let (sub, mut ctx) = *boxed;
+            //     match sub {
+            //         EthBridgePoolWithCtx::RecommendBatch(RecommendBatch(
+            //             args,
+            //         )) => {
+            //             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            //             let ledger_address =
+            //                 chain_ctx.get(&args.query.ledger_address);
+            //             let client = client.unwrap_or_else(|| {
+            //                 C::from_tendermint_address(&ledger_address)
+            //             });
+            //             client.wait_until_node_is_synced(&io).await?;
+            //             let args = args.to_sdk(&mut ctx);
+            //             let namada = ctx.to_sdk(client, io);
+            //             bridge_pool::recommend_batch(&namada, args).await?;
+            //         }
+            //     }
+            // }
+            // cli::NamadaRelayer::EthBridgePoolWithoutCtx(sub) => match sub {
+            //     EthBridgePoolWithoutCtx::ConstructProof(ConstructProof(
+            //         args,
+            //     )) => {
+            //         let client = client.unwrap_or_else(|| {
+            //             C::from_tendermint_address(&args.ledger_address)
+            //         });
+            //         client.wait_until_node_is_synced(&io).await?;
+            //         let args = args.to_sdk_ctxless();
+            //         bridge_pool::construct_proof(&client, &io, args).await?;
+            //     }
+            //     EthBridgePoolWithoutCtx::RelayProof(RelayProof(args)) => {
+            //         let client = client.unwrap_or_else(|| {
+            //             C::from_tendermint_address(&args.ledger_address)
+            //         });
+            //         client.wait_until_node_is_synced(&io).await?;
+            //         let eth_client =
+            //             get_eth_rpc_client(&args.eth_rpc_endpoint).await;
+            //         let args = args.to_sdk_ctxless();
+            //         bridge_pool::relay_bridge_pool_proof(
+            //             eth_client, &client, &io, args,
+            //         )
+            //         .await?;
+            //     }
+            //     EthBridgePoolWithoutCtx::QueryPool(QueryEthBridgePool(
+            //         query,
+            //     )) => {
+            //         let client = client.unwrap_or_else(|| {
+            //             C::from_tendermint_address(&query.ledger_address)
+            //         });
+            //         client.wait_until_node_is_synced(&io).await?;
+            //         bridge_pool::query_bridge_pool(&client, &io).await?;
+            //     }
+            //     EthBridgePoolWithoutCtx::QuerySigned(
+            //         QuerySignedBridgePool(query),
+            //     ) => {
+            //         let client = client.unwrap_or_else(|| {
+            //             C::from_tendermint_address(&query.ledger_address)
+            //         });
+            //         client.wait_until_node_is_synced(&io).await?;
+            //         bridge_pool::query_signed_bridge_pool(&client, &io).await?;
+            //     }
+            //     EthBridgePoolWithoutCtx::QueryRelays(QueryRelayProgress(
+            //         query,
+            //     )) => {
+            //         let client = client.unwrap_or_else(|| {
+            //             C::from_tendermint_address(&query.ledger_address)
+            //         });
+            //         client.wait_until_node_is_synced(&io).await?;
+            //         bridge_pool::query_relay_progress(&client, &io).await?;
+            //     }
+            // },
             cli::NamadaRelayer::ValidatorSet(sub) => match sub {
                 ValidatorSet::BridgeValidatorSet(BridgeValidatorSet(args)) => {
                     let client = client.unwrap_or_else(|| {
