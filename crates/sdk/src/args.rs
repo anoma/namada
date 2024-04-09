@@ -1455,51 +1455,50 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
-// impl<C: NamadaTypes> TxBuilder<C> for ConsensusKeyChange<C> {
-//     fn tx<F>(self, func: F) -> Self
-//     where
-//         F: FnOnce(Tx<C>) -> Tx<C>,
-//     {
-//         ConsensusKeyChange {
-//             tx: func(self.tx),
-//             ..self
-//         }
-//     }
-// }
+impl<C: NamadaTypes> TxBuilder<C> for ConsensusKeyChange<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        ConsensusKeyChange {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
 
-// impl<C: NamadaTypes> ConsensusKeyChange<C> {
-//     /// Validator address (should be self)
-//     pub fn validator(self, validator: C::Address) -> Self {
-//         Self { validator, ..self }
-//     }
+impl<C: NamadaTypes> ConsensusKeyChange<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
 
-//     /// Value to which the tx changes the commission rate
-//     pub fn consensus_key(self, consensus_key: C::Keypair) -> Self {
-//         Self {
-//             consensus_key: Some(consensus_key),
-//             ..self
-//         }
-//     }
+    /// Value to which the tx changes the commission rate
+    pub fn consensus_key(self, consensus_key: C::PublicKey) -> Self {
+        Self {
+            consensus_key: Some(consensus_key),
+            ..self
+        }
+    }
 
-//     /// Path to the TX WASM code file
-//     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
-//         Self {
-//             tx_code_path,
-//             ..self
-//         }
-//     }
-// }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
 
-// impl ConsensusKeyChange {
-//     /// Build a transaction from this builder
-//     pub async fn build(
-//         &self,
-//         context: &impl Namada,
-//     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData,
-// Option<Epoch>)>     {
-//         tx::build_change_consensus_key(context, self).await
-//     }
-// }
+impl ConsensusKeyChange {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_change_consensus_key(context, self).await
+    }
+}
 
 #[derive(Clone, Debug)]
 /// Commission rate change args
