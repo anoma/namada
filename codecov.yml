@@ -1,0 +1,29 @@
+coverage:
+  precision: 2
+  round: down
+  range: "60...90"
+
+github_checks:
+  annotations: false
+
+ignore:
+  - audits/*
+  - docker/*
+  - documentation/*
+  - examples/*
+  - genesis/*
+  - proto/*
+  - scripts/*
+  - *.hsb
+  - *.toml
+  - *.lock
+  - *.md
+  - *.yml
+  - .github/*
+  - .vscode
+  - changelog/*
+  - LICENSE
+  - Makefile
+  - crates/tests
+  - crates/test_utils
+  - crates/benches
