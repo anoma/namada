@@ -344,7 +344,8 @@ fn dummy_client() -> (MockClientState, MockConsensusState) {
         // for a past block on the counterparty chain
         timestamp: (Timestamp::now() - Duration::from_secs(10)).unwrap(),
     };
-    let client_state = MockClientState::new(header);
+    let client_state = MockClientState::new(header)
+        .with_trusting_period(Duration::from_secs(30));
     let consensus_state = MockConsensusState::new(header);
 
     (client_state, consensus_state)
