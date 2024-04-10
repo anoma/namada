@@ -49,7 +49,10 @@ where
     eth_syncing_status_timeout(
         client,
         DEFAULT_BACKOFF,
-        Instant::now() + DEFAULT_CEILING,
+        {
+            #[allow(clippy::disallowed_methods)]
+            Instant::now()
+        } + DEFAULT_CEILING,
     )
     .await
 }

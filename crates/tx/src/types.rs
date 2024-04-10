@@ -233,7 +233,13 @@ impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             data,
         }
     }
@@ -332,7 +338,13 @@ impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             code: Commitment::Id(code),
             tag,
         }
@@ -344,7 +356,13 @@ impl Code {
         tag: Option<String>,
     ) -> Self {
         Self {
-            salt: DateTimeUtc::now().0.timestamp_millis().to_le_bytes(),
+            salt: {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            }
+            .0
+            .timestamp_millis()
+            .to_le_bytes(),
             code: Commitment::Hash(hash),
             tag,
         }
@@ -902,6 +920,7 @@ impl Header {
             tx_type,
             chain_id: ChainId::default(),
             expiration: None,
+            #[allow(clippy::disallowed_methods)]
             timestamp: DateTimeUtc::now(),
             code_hash: namada_core::hash::Hash::default(),
             data_hash: namada_core::hash::Hash::default(),

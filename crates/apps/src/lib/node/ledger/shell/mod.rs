@@ -1637,6 +1637,7 @@ mod test_utils {
             &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
+            #[allow(clippy::disallowed_methods)]
             let time = DateTimeUtc::now();
             let (resp, tx_results) =
                 self.shell.process_proposal(RequestProcessProposal {
@@ -1710,15 +1711,21 @@ mod test_utils {
         pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
             self.state.in_mem_mut().next_epoch_min_start_height =
                 self.state.in_mem().get_last_block_height() + num_blocks;
-            self.state.in_mem_mut().next_epoch_min_start_time =
-                DateTimeUtc::now();
+            self.state.in_mem_mut().next_epoch_min_start_time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
         }
 
         /// Simultaneously call the `FinalizeBlock` and
         /// `Commit` handlers.
         pub fn finalize_and_commit(&mut self, req: Option<FinalizeBlock>) {
             let mut req = req.unwrap_or_default();
-            req.header.time = DateTimeUtc::now();
+            req.header.time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
+
             self.finalize_block(req).expect("Test failed");
             self.commit();
         }
@@ -1865,6 +1872,7 @@ mod test_utils {
                 hash: BlockHash([0u8; 32]),
                 header: Header {
                     hash: Hash([0; 32]),
+                    #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash([0; 32]),
                 },
