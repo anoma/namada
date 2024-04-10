@@ -1,5 +1,7 @@
 //! Ledger events
 
+pub mod extend;
+
 use std::fmt::{self, Display};
 use std::ops::{Index, IndexMut};
 use std::str::FromStr;
@@ -16,13 +18,34 @@ use crate::ibc::IbcEvent;
 
 /// Used in sub-systems that may emit events.
 pub trait EmitEvents {
-    /// Emit an event
-    fn emit(&mut self, value: Event);
+    /// Emit a single [event](Event).
+    fn emit<E>(&mut self, event: E)
+    where
+        E: Into<Event>;
+
+    /// Emit a batch of [events](Event).
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: Into<Event>;
 }
 
 impl EmitEvents for Vec<Event> {
-    fn emit(&mut self, value: Event) {
-        Vec::push(self, value)
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: Into<Event>,
+    {
+        self.push(event.into());
+    }
+
+    /// Emit a batch of [events](Event).
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: Into<Event>,
+    {
+        self.extend(event_batch.into_iter().map(Into::into));
     }
 }
 
@@ -42,6 +65,19 @@ pub enum EventLevel {
     Block,
     /// Indicates an event is to do with an individual transaction.
     Tx,
+}
+
+impl Display for EventLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                EventLevel::Block => "block",
+                EventLevel::Tx => "tx",
+            }
+        )
+    }
 }
 
 /// Custom events that can be queried from Tendermint
@@ -65,6 +101,13 @@ pub struct Event {
     pub attributes: HashMap<String, String>,
 }
 
+impl Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: print attributes, too
+        write!(f, "{} in {}", self.event_type, self.level)
+    }
+}
+
 /// The two types of custom events we currently use
 #[derive(
     Clone,
@@ -79,6 +122,7 @@ pub enum EventType {
     /// The transaction was applied during block finalization
     Applied,
     /// The IBC transaction was applied during block finalization
+    // TODO: create type-safe wrapper for all ibc event kinds
     Ibc(String),
     /// The proposal that has been executed
     Proposal,
@@ -109,12 +153,13 @@ impl FromStr for EventType {
             "applied" => Ok(EventType::Applied),
             "proposal" => Ok(EventType::Proposal),
             "pgf_payments" => Ok(EventType::PgfPayment),
-            // IBC
+            // <IBC>
             "update_client" => Ok(EventType::Ibc("update_client".to_string())),
             "send_packet" => Ok(EventType::Ibc("send_packet".to_string())),
             "write_acknowledgement" => {
                 Ok(EventType::Ibc("write_acknowledgement".to_string()))
             }
+            // </IBC>
             "ethereum_bridge" => Ok(EventType::EthereumBridge),
             _ => Err(EventError::InvalidEventType),
         }
@@ -139,6 +184,15 @@ pub enum EventError {
 }
 
 impl Event {
+    /// Create an applied tx event with empty attributes.
+    pub fn applied_tx() -> Self {
+        Self {
+            event_type: EventType::Applied,
+            level: EventLevel::Tx,
+            attributes: HashMap::new(),
+        }
+    }
+
     /// Check if the events keys contains a given string
     pub fn contains_key(&self, key: &str) -> bool {
         self.attributes.contains_key(key)
@@ -148,6 +202,16 @@ impl Event {
     /// Else return None.
     pub fn get(&self, key: &str) -> Option<&String> {
         self.attributes.get(key)
+    }
+
+    /// Extend this [`Event`] with additional data.
+    #[inline]
+    pub fn extend<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: extend::ExtendEvent,
+    {
+        data.extend_event(self);
+        self
     }
 }
 
@@ -192,10 +256,8 @@ impl Index<&str> for Event {
 
 impl IndexMut<&str> for Event {
     fn index_mut(&mut self, index: &str) -> &mut Self::Output {
-        if !self.attributes.contains_key(index) {
-            self.attributes.insert(String::from(index), String::new());
-        }
-        self.attributes.get_mut(index).unwrap()
+        let entry = self.attributes.entry(index.into()).or_default();
+        &mut *entry
     }
 }
 

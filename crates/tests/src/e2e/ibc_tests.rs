@@ -1864,7 +1864,7 @@ fn propose_funding(
     let albert = find_address(test_a, ALBERT)?;
     let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
     let epoch = get_epoch(test_a, &rpc_a)?;
-    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let start_epoch = (epoch.0 + 6) / 3 * 3;
     let proposal_json_path = prepare_proposal_data(
         test_a.test_dir.path(),
         0,
