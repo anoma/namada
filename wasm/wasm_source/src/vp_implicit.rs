@@ -11,65 +11,14 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use core::cell::RefCell;
-
 use booleans::BoolResultUnitExt;
+use namada_vp_prelude::tx::action::*;
 use namada_vp_prelude::*;
-
-enum KeyType<'a> {
-    /// Public key - written once revealed
-    Pk(&'a Address),
-    TokenBalance {
-        owner: &'a Address,
-    },
-    TokenMinted,
-    TokenMinter(&'a Address),
-    PoS,
-    Masp,
-    PgfSteward(&'a Address),
-    GovernanceVote(&'a Address),
-    Ibc,
-    Unknown,
-}
-
-impl<'a> From<&'a storage::Key> for KeyType<'a> {
-    fn from(key: &'a storage::Key) -> KeyType<'a> {
-        if let Some(address) = account::is_pks_key(key) {
-            Self::Pk(address)
-        } else if let Some([_, owner]) =
-            token::storage_key::is_any_token_balance_key(key)
-        {
-            Self::TokenBalance { owner }
-        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
-            Self::TokenMinted
-        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
-        {
-            Self::TokenMinter(minter)
-        } else if proof_of_stake::storage_key::is_pos_key(key) {
-            Self::PoS
-        } else if let Some(address) = pgf_storage::keys::is_stewards_key(key) {
-            Self::PgfSteward(address)
-        } else if gov_storage::keys::is_vote_key(key) {
-            let voter_address = gov_storage::keys::get_voter_address(key);
-            if let Some(address) = voter_address {
-                Self::GovernanceVote(address)
-            } else {
-                Self::Unknown
-            }
-        } else if token::storage_key::is_masp_key(key) {
-            Self::Masp
-        } else if ibc::is_ibc_key(key) {
-            Self::Ibc
-        } else {
-            Self::Unknown
-        }
-    }
-}
 
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx_data: Tx,
+    tx: Tx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -81,7 +30,78 @@ fn validate_tx(
         verifiers
     );
 
+    // Check if this is a governance proposal first
+    let is_gov_proposal = tx
+        .data()
+        .and_then(|tx_data| {
+            let proposal_id = u64::try_from_slice(&tx_data).ok()?;
+            Some(is_proposal_accepted(ctx, proposal_id))
+        })
+        .transpose()?
+        .unwrap_or(false);
+    if is_gov_proposal {
+        // Any change from governance is allowed without further checks
+        return Ok(());
+    }
+
     let mut gadget = VerifySigGadget::new();
+
+    // Find the actions applied in the tx
+    let actions = ctx.read_actions().into_vp_error()?;
+
+    // Require authorization by signature when the source of an action is this
+    // VP's address
+    for action in actions {
+        match action {
+            Action::Pos(pos_action) => match pos_action {
+                PosAction::BecomeValidator(source)
+                | PosAction::DeactivateValidator(source)
+                | PosAction::ReactivateValidator(source)
+                | PosAction::Unjail(source)
+                | PosAction::CommissionChange(source)
+                | PosAction::MetadataChange(source)
+                | PosAction::ConsensusKeyChange(source)
+                | PosAction::Redelegation(Redelegation {
+                    owner: source, ..
+                }) => gadget.verify_signatures_when(
+                    || source == addr,
+                    ctx,
+                    &tx,
+                    &addr,
+                )?,
+                PosAction::Bond(Bond {
+                    source, validator, ..
+                })
+                | PosAction::Unbond(Unbond {
+                    source, validator, ..
+                })
+                | PosAction::Withdraw(Withdraw { source, validator })
+                | PosAction::ClaimRewards(ClaimRewards { validator, source }) =>
+                {
+                    let source = source.unwrap_or(validator);
+                    gadget.verify_signatures_when(
+                        || source == addr,
+                        ctx,
+                        &tx,
+                        &addr,
+                    )?
+                }
+            },
+            Action::Gov(
+                GovAction::InitProposal { author: source }
+                | GovAction::VoteProposal { voter: source, .. },
+            )
+            | Action::Pgf(
+                PgfAction::ResignSteward(source)
+                | PgfAction::UpdateStewardCommission(source),
+            ) => gadget.verify_signatures_when(
+                || source == addr,
+                ctx,
+                &tx,
+                &addr,
+            )?,
+        }
+    }
 
     keys_changed.iter().try_for_each(|key| {
         let key_type: KeyType = key.into();
@@ -136,7 +156,7 @@ fn validate_tx(
                         // NB: debit has to signed, credit doesn't
                         || change.is_negative(),
                         ctx,
-                        &tx_data,
+                        &tx,
                         &addr,
                     )?;
                     let sign = if change.non_negative() { "" } else { "-" };
@@ -165,30 +185,13 @@ fn validate_tx(
             KeyType::TokenMinter(minter_addr) => gadget.verify_signatures_when(
                 || minter_addr == &addr,
                 ctx,
-                &tx_data,
+                &tx,
                 &addr,
             ),
-            KeyType::PoS => {
-                validate_pos_changes(ctx, &tx_data, &addr, key, &mut gadget)
-            }
-            KeyType::PgfSteward(pgf_steward_addr) => gadget
-                .verify_signatures_when(
-                    || pgf_steward_addr == &addr,
-                    ctx,
-                    &tx_data,
-                    &addr,
-                ),
-            KeyType::GovernanceVote(voter_addr) => gadget
-                .verify_signatures_when(
-                    || voter_addr == &addr,
-                    ctx,
-                    &tx_data,
-                    &addr,
-                ),
             KeyType::Masp | KeyType::Ibc => Ok(()),
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
-                gadget.verify_signatures(ctx, &tx_data, &addr)
+                gadget.verify_signatures(ctx, &tx, &addr)
             }
         };
         validate_change().inspect_err(|reason| {
@@ -199,168 +202,40 @@ fn validate_tx(
     })
 }
 
-// TODO: handle I/O errors
-// TODO: pass back to user proper PoS err reporting
-fn validate_pos_changes(
-    ctx: &Ctx,
-    tx_data: &Tx,
-    owner: &Address,
-    key: &storage::Key,
-    gadget: &mut VerifySigGadget,
-) -> VpResult {
-    use proof_of_stake::{storage, storage_key};
+enum KeyType<'a> {
+    /// Public key - written once revealed
+    Pk(&'a Address),
+    TokenBalance {
+        owner: &'a Address,
+    },
+    TokenMinted,
+    TokenMinter(&'a Address),
+    Masp,
+    Ibc,
+    Unknown,
+}
 
-    // Kinda silly to wrap this in a ref cell, but it's required
-    // for the mut borrow to be valid across all closures below
-    let gadget = RefCell::new(gadget);
-
-    // Bond or unbond
-    let is_valid_bond_or_unbond_change = || {
-        let bond_id = storage_key::is_bond_key(key)
-            .map(|(bond_id, _)| bond_id)
-            .or_else(|| storage_key::is_bond_epoched_meta_key(key))
-            .or_else(|| {
-                storage_key::is_unbond_key(key).map(|(bond_id, _, _)| bond_id)
-            })
-            .ok_or(VpError::Unspecified)?;
-        gadget.borrow_mut().verify_signatures_when(
-            // Bonds and unbonds changes for this address must be signed
-            || &bond_id.source == owner,
-            ctx,
-            tx_data,
-            owner,
-        )
-    };
-
-    // Changes in validator state
-    let is_valid_state_change = || {
-        let state_change = storage_key::is_validator_state_key(key);
-        let is_valid_state = match state_change {
-            Some((address, epoch)) => {
-                let params_pre =
-                    storage::read_pos_params(&ctx.pre()).into_vp_error()?;
-                let state_pre = storage::validator_state_handle(address)
-                    .get(&ctx.pre(), epoch, &params_pre)
-                    .into_vp_error()?;
-
-                let params_post =
-                    storage::read_pos_params(&ctx.post()).into_vp_error()?;
-                let state_post = storage::validator_state_handle(address)
-                    .get(&ctx.post(), epoch, &params_post)
-                    .into_vp_error()?;
-
-                match (state_pre, state_post) {
-                    (Some(pre), Some(post)) => {
-                        use proof_of_stake::types::ValidatorState::*;
-
-                        // Bonding and unbonding may affect validator sets
-                        if matches!(
-                            pre,
-                            Consensus | BelowCapacity | BelowThreshold
-                        ) && matches!(
-                            post,
-                            Consensus | BelowCapacity | BelowThreshold
-                        ) {
-                            true
-                        } else {
-                            // Unknown state changes are not allowed
-                            false
-                        }
-                    }
-                    (Some(_pre), None) => {
-                        // Clearing of old epoched data
-                        true
-                    }
-                    _ => false,
-                }
-            }
-            None => false,
-        };
-
-        (is_valid_state
-            || storage_key::is_validator_state_epoched_meta_key(key)
-            || storage_key::is_consensus_validator_set_key(key)
-            || storage_key::is_below_capacity_validator_set_key(key))
-        .ok_or(VpError::Unspecified)
-    };
-
-    let is_valid_reward_claim = || {
-        if let Some(bond_id) =
-            storage_key::is_last_pos_reward_claim_epoch_key(key)
+impl<'a> From<&'a storage::Key> for KeyType<'a> {
+    fn from(key: &'a storage::Key) -> KeyType<'a> {
+        if let Some(address) = account::is_pks_key(key) {
+            Self::Pk(address)
+        } else if let Some([_, owner]) =
+            token::storage_key::is_any_token_balance_key(key)
         {
-            return gadget.borrow_mut().verify_signatures_when(
-                // Claims for this address must be signed
-                || &bond_id.source == owner,
-                ctx,
-                tx_data,
-                owner,
-            );
-        }
-        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
-            return gadget.borrow_mut().verify_signatures_when(
-                // Redelegations auto-claim rewards
-                || &bond_id.source == owner,
-                ctx,
-                tx_data,
-                owner,
-            );
-        }
-
-        Err(VpError::Unspecified)
-    };
-
-    let is_valid_redelegation = || {
-        if storage_key::is_validator_redelegations_key(key) {
-            return Ok(());
-        }
-        if let Some(delegator) =
-            storage_key::is_delegator_redelegations_key(key)
+            Self::TokenBalance { owner }
+        } else if token::storage_key::is_any_minted_balance_key(key).is_some() {
+            Self::TokenMinted
+        } else if let Some(minter) = token::storage_key::is_any_minter_key(key)
         {
-            return gadget.borrow_mut().verify_signatures_when(
-                // Redelegations for this address must be signed
-                || delegator == owner,
-                ctx,
-                tx_data,
-                owner,
-            );
+            Self::TokenMinter(minter)
+        } else if token::storage_key::is_masp_key(key) {
+            Self::Masp
+        } else if ibc::is_ibc_key(key) {
+            Self::Ibc
+        } else {
+            Self::Unknown
         }
-        if let Some(bond_id) = storage_key::is_rewards_counter_key(key) {
-            return gadget.borrow_mut().verify_signatures_when(
-                // Redelegations auto-claim rewards
-                || &bond_id.source == owner,
-                ctx,
-                tx_data,
-                owner,
-            );
-        }
-        Err(VpError::Unspecified)
-    };
-
-    let pos_state_changes = is_valid_bond_or_unbond_change().is_ok()
-        || storage_key::is_total_deltas_key(key)
-        || storage_key::is_total_active_deltas_key(key)
-        || storage_key::is_validator_deltas_key(key)
-        || storage_key::is_validator_total_bond_or_unbond_key(key)
-        || storage_key::is_validator_set_positions_key(key)
-        || storage_key::is_total_consensus_stake_key(key)
-        || is_valid_state_change().is_ok()
-        || is_valid_reward_claim().is_ok()
-        || is_valid_redelegation().is_ok();
-    let unknown_state_changes = !pos_state_changes;
-
-    let result = gadget.borrow_mut().verify_signatures_when(
-        || unknown_state_changes,
-        ctx,
-        tx_data,
-        owner,
-    );
-
-    result.map_err(|err| match err {
-        VpError::Unspecified => {
-            VpError::Erased("Invalid PoS state changes".into())
-        }
-        err => err,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -535,6 +410,11 @@ mod tests {
             amount,
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         );
+
+        // Add the receiver's address to the verifier set as this address is not
+        // part of the verifier set from a transfer function
+        tx_env.verifiers.insert(vp_owner.clone());
+
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction

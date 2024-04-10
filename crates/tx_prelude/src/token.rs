@@ -19,6 +19,12 @@ pub fn transfer(
 ) -> TxResult {
     // The tx must be authorized by the source address
     ctx.insert_verifier(src)?;
+    if token.is_internal() {
+        // Established address tokens do not have VPs themselves, their
+        // validation is handled by the `Multitoken` internal address, but
+        // internal token addresses have to verify the transfer
+        ctx.insert_verifier(token)?;
+    }
 
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
@@ -46,6 +52,12 @@ pub fn undenominated_transfer(
 ) -> TxResult {
     // The tx must be authorized by the source address
     ctx.insert_verifier(src)?;
+    if token.is_internal() {
+        // Established address tokens do not have VPs themselves, their
+        // validation is handled by the `Multitoken` internal address, but
+        // internal token addresses have to verify the transfer
+        ctx.insert_verifier(token)?;
+    }
 
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);

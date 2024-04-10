@@ -9,6 +9,7 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_governance::pgf::storage::keys as pgf_storage;
 use namada_governance::{is_proposal_accepted, pgf};
 use namada_state::StateRead;
+use namada_tx::action::{Action, PgfAction, Read};
 use namada_tx::Tx;
 use thiserror::Error;
 
@@ -29,6 +30,10 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::Pgf);
 pub enum Error {
     #[error("PGF VP error: Native VP error: {0}")]
     NativeVpError(#[from] native_vp::Error),
+    #[error(
+        "Action {0} not authorized by {1} which is not part of verifier set"
+    )]
+    Unauthorized(&'static str, Address),
 }
 
 /// Pgf VP
@@ -54,6 +59,57 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
+        // Find the actions applied in the tx
+        let actions = self.ctx.read_actions()?;
+
+        // There must be at least one action if any of the keys belong to PGF
+        if actions.is_empty()
+            && keys_changed.iter().any(pgf_storage::is_pgf_key)
+        {
+            tracing::info!(
+                "Rejecting tx without any action written to temp storage"
+            );
+            return Err(native_vp::Error::new_const(
+                "Rejecting tx without any action written to temp storage",
+            )
+            .into());
+        }
+
+        // Check action authorization
+        for action in actions {
+            match action {
+                Action::Pgf(pgf_action) => match pgf_action {
+                    PgfAction::UpdateStewardCommission(address) => {
+                        if !verifiers.contains(&address) {
+                            tracing::info!(
+                                "Unauthorized \
+                                 PgfAction::UpdateStewardCommission"
+                            );
+                            return Err(Error::Unauthorized(
+                                "UpdateStewardCommission",
+                                address,
+                            ));
+                        }
+                    }
+                    PgfAction::ResignSteward(address) => {
+                        if !verifiers.contains(&address) {
+                            tracing::info!(
+                                "Unauthorized PgfAction::ResignSteward"
+                            );
+                            return Err(Error::Unauthorized(
+                                "ResignSteward",
+                                address,
+                            ));
+                        }
+                    }
+                },
+                _ => {
+                    // Other actions are not relevant to PoS VP
+                    continue;
+                }
+            }
+        }
+
         keys_changed.iter().try_for_each(|key| {
             let key_type = KeyType::from(key);
 

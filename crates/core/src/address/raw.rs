@@ -65,6 +65,8 @@ pub enum Discriminant {
     IbcToken = 13,
     /// MASP raw address.
     Masp = 14,
+    /// Temporary storage address.
+    TempStorage = 15,
 }
 
 /// Raw address representation.

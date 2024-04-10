@@ -1,5 +1,6 @@
 //! A tx to update the commission distribution for a steward
 
+use namada_tx_prelude::action::{Action, PgfAction, Write};
 use namada_tx_prelude::transaction::pgf::UpdateStewardCommission;
 use namada_tx_prelude::*;
 
@@ -15,6 +16,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
     // The tx must be authorized by the source address
     ctx.insert_verifier(&steward_commission.steward)?;
+
+    ctx.push_action(Action::Pgf(PgfAction::UpdateStewardCommission(
+        steward_commission.steward.clone(),
+    )))?;
 
     pgf::update_steward_commission(ctx, steward_commission)
         .wrap_err("Failed to update steward commission rate")?;

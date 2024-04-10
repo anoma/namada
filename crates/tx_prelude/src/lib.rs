@@ -38,7 +38,7 @@ pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead, StorageWrite,
 };
-pub use namada_tx::{data as transaction, Section, Tx};
+pub use namada_tx::{action, data as transaction, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
@@ -260,13 +260,14 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn write_temp<T: BorshSerialize>(
-        &mut self,
+    fn read_bytes_temp(
+        &self,
         key: &storage::Key,
-        val: T,
-    ) -> Result<(), Error> {
-        let buf = val.serialize_to_vec();
-        self.write_bytes_temp(key, buf)
+    ) -> Result<Option<Vec<u8>>, Error> {
+        let key = key.to_string();
+        let read_result =
+            unsafe { namada_tx_read_temp(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
     fn write_bytes_temp(
@@ -379,6 +380,27 @@ impl TxEnv for Ctx {
 
     fn set_commitment_sentinel(&mut self) {
         unsafe { namada_tx_set_commitment_sentinel() }
+    }
+}
+
+impl namada_tx::action::Read for Ctx {
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        TxEnv::read_temp(self, key)
+    }
+}
+
+impl namada_tx::action::Write for Ctx {
+    fn write_temp<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<(), Self::Err> {
+        TxEnv::write_temp(self, key, val)
     }
 }
 

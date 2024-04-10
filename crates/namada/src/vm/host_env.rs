@@ -67,6 +67,8 @@ pub enum TxRuntimeError {
     StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::storage::Error),
+    #[error("Trying to read a permanent value with read_temp")]
+    ReadPermanentValueError,
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Address error: {0}")]
@@ -670,6 +672,57 @@ where
 
     let state = env.state();
     let value = state.read_bytes(&key)?;
+    match value {
+        Some(value) => {
+            let len: i64 = value
+                .len()
+                .try_into()
+                .map_err(TxRuntimeError::NumConversionError)?;
+            let result_buffer = unsafe { env.ctx.result_buffer.get() };
+            result_buffer.replace(value);
+            Ok(len)
+        }
+        None => Ok(HostEnvResult::Fail.to_i64()),
+    }
+}
+
+/// Read temporary value (not committed to storage) from the given key function
+/// exposed to the wasm VM Tx environment. It will try to read from the write
+/// log only.
+///
+/// Returns `-1` when the key is not present, or the length of the data when
+/// the key is present (the length may be `0`).
+pub fn tx_read_temp<MEM, D, H, CA>(
+    env: &TxVmEnv<MEM, D, H, CA>,
+    key_ptr: u64,
+    key_len: u64,
+) -> TxResult<i64>
+where
+    MEM: VmMemory,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+    CA: WasmCacheAccess,
+{
+    let (key, gas) = env
+        .memory
+        .read_string(key_ptr, key_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
+
+    tracing::debug!("tx_read {}, key {}", key, key_ptr,);
+
+    let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
+
+    let write_log = unsafe { env.ctx.write_log.get() };
+    let (log_val, gas) = write_log.read(&key);
+    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
+    let value = match log_val {
+        Some(write_log::StorageModification::Temp { ref value }) => {
+            Ok(Some(value.clone()))
+        }
+        None => Ok(None),
+        _ => Err(TxRuntimeError::ReadPermanentValueError),
+    }?;
     match value {
         Some(value) => {
             let len: i64 = value
@@ -2046,12 +2099,31 @@ where
         TxRuntimeError::MissingTxData
     })?;
     let state = Rc::new(RefCell::new(env.state()));
-    let mut actions = IbcActions::new(state.clone());
-    let module = TransferModule::new(state.clone());
-    actions.add_transfer_module(module);
-    let module = NftTransferModule::new(state);
-    actions.add_transfer_module(module);
-    let transfer = actions.execute(&tx_data)?;
+    // Verifier set populated in tx execution
+    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+    // Scoped to drop `verifiers.clone`s after `actions.execute`
+    let transfer = {
+        let mut actions = IbcActions::new(state.clone(), verifiers.clone());
+        let module = TransferModule::new(state.clone(), verifiers.clone());
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(state);
+        actions.add_transfer_module(module);
+        actions.execute(&tx_data)?
+    };
+    // NB: There must be no other strong references to this Rc
+    let verifiers = Rc::into_inner(verifiers)
+        .expect("There must be only one strong ref to verifiers set")
+        .into_inner();
+
+    // Insert all the verifiers from the tx into the verifier set in env
+    let verifiers_in_env = unsafe { env.ctx.verifiers.get() };
+    for addr in verifiers.into_iter() {
+        tx_charge_gas::<MEM, D, H, CA>(
+            env,
+            ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        )?;
+        verifiers_in_env.insert(addr);
+    }
 
     let value = transfer.serialize_to_vec();
     let len: i64 = value

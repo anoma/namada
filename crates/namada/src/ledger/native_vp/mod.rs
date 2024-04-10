@@ -524,6 +524,21 @@ where
     }
 }
 
+impl<S, CA> namada_tx::action::Read for Ctx<'_, S, CA>
+where
+    S: StateRead,
+    CA: 'static + WasmCacheAccess,
+{
+    type Err = Error;
+
+    fn read_temp<T: BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        VpEnv::read_temp(self, key)
+    }
+}
+
 /// A convenience trait for reading and automatically deserializing a value from
 /// storage
 pub trait StorageReader {

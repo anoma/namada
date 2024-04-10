@@ -1261,3 +1261,52 @@ where
         &mut self.0
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+impl<D, H> namada_tx::action::Read for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let (log_val, _) = self.write_log().read(key);
+        match log_val {
+            Some(crate::write_log::StorageModification::Temp { value }) => {
+                let value =
+                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
+                        .map_err(Error::BorshCodingError)?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+            _ => Err(Error::UnknownKey {
+                key: key.to_string(),
+            }),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl<D, H> namada_tx::action::Write for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn write_temp<T: namada_core::borsh::BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        let _ = self
+            .write_log_mut()
+            .write_temp(key, val.serialize_to_vec())
+            .map_err(|err| Error::Temporary {
+                error: err.to_string(),
+            })?;
+        Ok(())
+    }
+}
