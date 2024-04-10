@@ -810,7 +810,7 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Code, Commitment, Header, MaspBuilder, Section, Signature,
+        Authorization, Code, Commitment, Header, MaspBuilder, Section,
     };
 
     #[derive(Debug, Clone)]
@@ -1503,16 +1503,16 @@ pub mod testing {
                 1..3,
             ),
             signer in option::of(arb_non_internal_address()),
-        ) -> Signature {
+        ) -> Authorization {
             if signer.is_some() {
-                Signature::new(targets, secret_keys, signer)
+                Authorization::new(targets, secret_keys, signer)
             } else {
                 let secret_keys = secret_keys
                     .into_values()
                     .enumerate()
                     .map(|(k, v)| (k as u8, v))
                     .collect();
-                Signature::new(targets, secret_keys, signer)
+                Authorization::new(targets, secret_keys, signer)
             }
         }
     }
@@ -1525,7 +1525,7 @@ pub mod testing {
         ) -> (Tx, TxData) {
             for sig in sigs {
                 // Add all the generated signature sections
-                tx.0.add_section(Section::Signature(sig));
+                tx.0.add_section(Section::Authorization(sig));
             }
             (tx.0, tx.1)
         }

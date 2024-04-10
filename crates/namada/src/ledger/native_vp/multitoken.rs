@@ -220,7 +220,7 @@ mod tests {
     use namada_gas::TxGasMeter;
     use namada_state::testing::TestState;
     use namada_tx::data::TxType;
-    use namada_tx::{Code, Data, Section, Signature};
+    use namada_tx::{Authorization, Code, Data, Section};
 
     use super::*;
     use crate::core::address::testing::{
@@ -242,7 +242,7 @@ mod tests {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             tx.sechashes(),
             [(0, keypair_1())].into_iter().collect(),
             None,

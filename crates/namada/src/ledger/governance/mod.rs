@@ -886,7 +886,7 @@ mod test {
     };
     use namada_token::storage_key::balance_key;
     use namada_tx::data::TxType;
-    use namada_tx::{Code, Data, Section, Signature, Tx};
+    use namada_tx::{Authorization, Code, Data, Section, Tx};
 
     use crate::core::address::Address;
     use crate::ledger::governance::GovernanceVp;
@@ -945,7 +945,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1182,7 +1182,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1279,7 +1279,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1379,7 +1379,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1478,7 +1478,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1557,7 +1557,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1636,7 +1636,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1733,7 +1733,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1830,7 +1830,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1909,7 +1909,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2033,7 +2033,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2157,7 +2157,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2281,7 +2281,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2422,7 +2422,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2563,7 +2563,7 @@ mod test {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.set_code(Code::new(tx_code, None));
         tx.set_data(Data::new(tx_data));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
