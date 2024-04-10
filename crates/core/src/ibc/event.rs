@@ -135,7 +135,8 @@ impl TryFrom<Event> for IbcEvent {
         Ok(Self {
             event_type: IbcEventType(event_type.to_owned()),
             attributes: {
-                let mut attrs = namada_event.into_attributes();
+                let mut attrs: HashMap<_, _> =
+                    namada_event.into_attributes().into_iter().collect();
                 attrs.with_attribute(event_domain_of::<Self>());
                 attrs
             },

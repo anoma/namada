@@ -3,6 +3,7 @@
 pub mod extend;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -14,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
-use crate::collections::HashMap;
 use crate::ethereum_structs::EthBridgeEvent;
 use crate::ibc::IbcEvent;
 
@@ -298,7 +298,7 @@ pub struct Event {
     /// The type of event.
     event_type: EventType,
     /// Key-value attributes of the event.
-    attributes: HashMap<String, String>,
+    attributes: BTreeMap<String, String>,
 }
 
 impl Display for Event {
@@ -343,7 +343,7 @@ impl Event {
         Self {
             event_type,
             level,
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
         }
     }
 
@@ -369,7 +369,7 @@ impl Event {
                     Consider using domain types to compose events with \
                     attributes."]
     #[inline]
-    pub fn attributes(&self) -> &HashMap<String, String> {
+    pub fn attributes(&self) -> &BTreeMap<String, String> {
         &self.attributes
     }
 
@@ -378,14 +378,14 @@ impl Event {
                     Consider using domain types to compose events with \
                     attributes."]
     #[inline]
-    pub fn attributes_mut(&mut self) -> &mut HashMap<String, String> {
+    pub fn attributes_mut(&mut self) -> &mut BTreeMap<String, String> {
         &mut self.attributes
     }
 
     /// Return the attributes of the event, destroying
     /// it in the process.
     #[inline]
-    pub fn into_attributes(self) -> HashMap<String, String> {
+    pub fn into_attributes(self) -> BTreeMap<String, String> {
         self.attributes
     }
 
@@ -479,7 +479,7 @@ impl From<&EthBridgeEvent> for Event {
                     use self::extend::ExtendAttributesMap;
                     use crate::ethereum_structs::BridgePoolTxHash;
 
-                    let mut attributes = HashMap::new();
+                    let mut attributes = BTreeMap::new();
                     attributes.with_attribute(BridgePoolTxHash(tx_hash));
                     attributes
                 },
@@ -498,7 +498,8 @@ impl From<IbcEvent> for Event {
             attributes: {
                 use extend::{event_domain_of, ExtendAttributesMap};
 
-                let mut attrs = ibc_event.attributes;
+                let mut attrs: BTreeMap<_, _> =
+                    ibc_event.attributes.into_iter().collect();
                 attrs.with_attribute(event_domain_of::<IbcEvent>());
                 attrs
             },
