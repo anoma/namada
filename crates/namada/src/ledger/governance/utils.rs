@@ -1,7 +1,8 @@
 //! Governance utility functions
 
 use namada_core::collections::HashMap;
-use namada_governance::utils::TallyResult;
+use namada_governance::utils::TallyResult as GovTallyResult;
+use namada_sdk::events::extend::{EventAttributeEntry, ExtendAttributesMap};
 use namada_sdk::events::{Event, EventLevel, EventSegment, EventToEmit};
 use thiserror::Error;
 
@@ -125,7 +126,7 @@ impl From<ProposalEvent> for Event {
             } => (
                 event_types::PROPOSAL_PASSED,
                 governance_proposal_attributes(
-                    TallyResult::Passed,
+                    GovTallyResult::Passed,
                     proposal_id,
                     has_code,
                     execution_status,
@@ -134,7 +135,7 @@ impl From<ProposalEvent> for Event {
             ProposalEventKind::Rejected => (
                 event_types::PROPOSAL_REJECTED,
                 governance_proposal_attributes(
-                    TallyResult::Rejected,
+                    GovTallyResult::Rejected,
                     proposal_id,
                     false,
                     false,
@@ -143,7 +144,7 @@ impl From<ProposalEvent> for Event {
             ProposalEventKind::PgfSteward { result } => (
                 event_types::PROPOSAL_PGF_STEWARD,
                 governance_proposal_attributes(
-                    TallyResult::Passed,
+                    GovTallyResult::Passed,
                     proposal_id,
                     false,
                     result,
@@ -152,7 +153,7 @@ impl From<ProposalEvent> for Event {
             ProposalEventKind::PgfPayments { result } => (
                 event_types::PROPOSAL_PGF_PAYMENTS,
                 governance_proposal_attributes(
-                    TallyResult::Passed,
+                    GovTallyResult::Passed,
                     proposal_id,
                     false,
                     result,
@@ -213,25 +214,75 @@ impl ProposalEvent {
     }
 }
 
+/// Extend an [`Event`] with tally result data.
+pub struct TallyResult(pub GovTallyResult);
+
+impl EventAttributeEntry<'static> for TallyResult {
+    type Value = GovTallyResult;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "tally_result";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with proposal id data.
+pub struct ProposalId(pub u64);
+
+impl EventAttributeEntry<'static> for ProposalId {
+    type Value = u64;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "proposal_id";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with has proposal code data.
+pub struct HasProposalCode(pub bool);
+
+impl EventAttributeEntry<'static> for HasProposalCode {
+    type Value = bool;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "has_proposal_code";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with proposal code exit status data.
+pub struct ProposalCodeExitStatus(pub bool);
+
+impl EventAttributeEntry<'static> for ProposalCodeExitStatus {
+    type Value = bool;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "proposal_code_exit_status";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Return the attributes of a governance proposal.
 #[inline]
 fn governance_proposal_attributes(
-    tally: TallyResult,
+    tally: GovTallyResult,
     id: u64,
     has_proposal_code: bool,
     proposal_code_exit_status: bool,
 ) -> HashMap<String, String> {
-    // TODO: switch to type-safe attributes api
-    HashMap::from([
-        ("tally_result".to_string(), tally.to_string()),
-        ("proposal_id".to_string(), id.to_string()),
-        (
-            "has_proposal_code".to_string(),
-            (!has_proposal_code as u64).to_string(),
-        ),
-        (
-            "proposal_code_exit_status".to_string(),
-            (!proposal_code_exit_status as u64).to_string(),
-        ),
-    ])
+    let mut attrs = HashMap::new();
+    attrs
+        .with_attribute(TallyResult(tally))
+        .with_attribute(ProposalId(id))
+        .with_attribute(HasProposalCode(has_proposal_code))
+        .with_attribute(ProposalCodeExitStatus(proposal_code_exit_status));
+    attrs
 }
