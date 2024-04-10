@@ -100,7 +100,7 @@ The validator transactions are signed using (note the extra `--alias` argument n
 cargo run --bin namadac -- --base-dir "genesis/localnet/src" utils \
   sign-genesis-txs \
   --path "genesis/localnet/src/pre-genesis/validator-0/unsigned-transactions.toml" \
-  --output "genesis/localnet/src/validator-0/signed-transactions.toml"
+  --output "genesis/localnet/src/pre-genesis/validator-0/signed-transactions.toml"
   --alias validator-0
 ```
 
