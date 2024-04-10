@@ -1,6 +1,6 @@
 use namada_vp_prelude::*;
 
-#[validity_predicate(gas = 1000)]
+#[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -14,5 +14,5 @@ fn validate_tx(
         input,
     }: EvalVp =
         EvalVp::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();
-    ctx.eval(vp_code_hash, input)
+    ctx.eval(vp_code_hash, input).into_vp_error()
 }

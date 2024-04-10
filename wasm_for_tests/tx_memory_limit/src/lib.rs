@@ -1,6 +1,6 @@
 use namada_tx_prelude::*;
 
-#[transaction(gas = 1000)]
+#[transaction]
 fn apply_tx(_ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     let len =
         usize::try_from_slice(&tx_data.data().as_ref().unwrap()[..]).unwrap();

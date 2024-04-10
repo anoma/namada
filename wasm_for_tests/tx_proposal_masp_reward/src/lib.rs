@@ -3,7 +3,7 @@ use std::str::FromStr;
 use dec::Dec;
 use namada_tx_prelude::*;
 
-#[transaction(gas = 1000)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     let native_token = ctx.get_native_token()?;
     let shielded_rewards_key =

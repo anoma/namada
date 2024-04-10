@@ -1,6 +1,6 @@
 use namada_tx_prelude::*;
 
-#[transaction(gas = 1000)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
     // Allocates a memory of size given from the `tx_data (usize)`
     let key =

@@ -8,7 +8,7 @@ const IBC_TOKEN_DENOM: u8 = 0;
 const CHANNEL_ID: &str = "channel-0";
 const BASE_TOKEN: &str = "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy";
 
-#[transaction(gas = 1000)]
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
     let ibc_denom = format!("transfer/{CHANNEL_ID}/{BASE_TOKEN}");
     let ibc_token = ibc::ibc_token(&ibc_denom);
@@ -27,14 +27,12 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         token::storage_key::masp_kd_gain_key(&ibc_token);
 
     let token_map_key = token::storage_key::masp_token_map_key();
-    let mut token_map: masp::TokenMap = ctx.read(&token_map_key)?.unwrap_or_default();
+    let mut token_map: masp::TokenMap =
+        ctx.read(&token_map_key)?.unwrap_or_default();
     token_map.insert(ibc_denom, ibc_token);
     ctx.write(&token_map_key, token_map)?;
 
-    ctx.write(
-        &shielded_token_last_inflation_key,
-        token::Amount::zero(),
-    )?;
+    ctx.write(&shielded_token_last_inflation_key, token::Amount::zero())?;
     ctx.write(
         &shielded_token_last_locked_amount_key,
         token::Amount::zero(),

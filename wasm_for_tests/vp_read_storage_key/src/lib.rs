@@ -1,6 +1,6 @@
 use namada_vp_prelude::*;
 
-#[validity_predicate(gas = 1000)]
+#[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
     tx_data: Tx,
@@ -13,6 +13,6 @@ fn validate_tx(
         storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
             .unwrap();
     log_string(format!("key {}", key));
-    let _result: Vec<u8> = ctx.read_pre(&key)?.unwrap();
+    let _result: Vec<u8> = ctx.read_pre(&key).into_vp_error()?.unwrap();
     accept()
 }

@@ -13,7 +13,6 @@ namada_tx_prelude.workspace = true
 namada_vp_prelude.workspace = true
 wee_alloc.workspace = true
 getrandom.workspace = true
-once_cell.workspace = true
 
 [dev-dependencies]
 namada = {path = "../../crates/namada"}
