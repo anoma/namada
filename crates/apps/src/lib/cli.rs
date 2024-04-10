@@ -3555,7 +3555,24 @@ pub mod args {
     /// Convert CLI args to SDK args, with contextual data.
     pub trait CliToSdk<SDK>: Args {
         /// Convert CLI args to SDK args, with contextual data.
-        fn to_sdk(self, ctx: &mut Context) -> SDK;
+        /// Error type for fallible operations.
+        type Error;
+
+        /// Convert CLI args to SDK args, with contextual data.
+        fn to_sdk(self, ctx: &mut Context) -> Result<SDK, Self::Error>;
+
+        /// Convert CLI args to SDK args, with contextual data.
+        fn infallible_to_sdk(&self, ctx: &mut Context) -> SDK
+        where
+            // NB: matching on the type with `==` is not stable AFAIK,
+            // so we use `Into<T>`, which is implemented for any `T`
+            Self::Error: Into<std::convert::Infallible>,
+        {
+            match self.to_sdk(ctx).map_err(Into::into) {
+                Ok(x) => x,
+                Err(e) => match e {},
+            }
+        }
     }
 
     /// Convert CLI args to SDK args, without contextual data.
@@ -3568,14 +3585,21 @@ pub mod args {
     where
         CLI: Args + CliToSdkCtxless<SDK>,
     {
+        type Error;
+
         #[inline]
-        fn to_sdk(self, _: &mut Context) -> SDK {
+        fn to_sdk(self, _: &mut Context) -> Result<SDK, Self::Error> {
             self.to_sdk_ctxless()
         }
     }
 
     impl CliToSdk<QueryResult<SdkTypes>> for QueryResult<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryResult<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryResult<SdkTypes>, Self::Error> {
             QueryResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tx_hash: self.tx_hash,
@@ -3600,7 +3624,12 @@ pub mod args {
     }
 
     impl CliToSdk<EthereumBridgePool<SdkTypes>> for EthereumBridgePool<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> EthereumBridgePool<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<EthereumBridgePool<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             EthereumBridgePool::<SdkTypes> {
@@ -3687,7 +3716,12 @@ pub mod args {
     }
 
     impl CliToSdk<RecommendBatch<SdkTypes>> for RecommendBatch<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> RecommendBatch<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<RecommendBatch<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             RecommendBatch::<SdkTypes> {
@@ -3760,6 +3794,8 @@ pub mod args {
     }
 
     impl CliToSdkCtxless<BridgePoolProof<SdkTypes>> for BridgePoolProof<CliTypes> {
+        type Error;
+
         fn to_sdk_ctxless(self) -> BridgePoolProof<SdkTypes> {
             BridgePoolProof::<SdkTypes> {
                 ledger_address: self.ledger_address,
@@ -3809,6 +3845,8 @@ pub mod args {
     impl CliToSdkCtxless<RelayBridgePoolProof<SdkTypes>>
         for RelayBridgePoolProof<CliTypes>
     {
+        type Error;
+
         fn to_sdk_ctxless(self) -> RelayBridgePoolProof<SdkTypes> {
             RelayBridgePoolProof::<SdkTypes> {
                 ledger_address: self.ledger_address,
@@ -3905,6 +3943,8 @@ pub mod args {
     impl CliToSdkCtxless<BridgeValidatorSet<SdkTypes>>
         for BridgeValidatorSet<CliTypes>
     {
+        type Error;
+
         fn to_sdk_ctxless(self) -> BridgeValidatorSet<SdkTypes> {
             BridgeValidatorSet::<SdkTypes> {
                 ledger_address: self.ledger_address,
@@ -3934,6 +3974,8 @@ pub mod args {
     impl CliToSdkCtxless<GovernanceValidatorSet<SdkTypes>>
         for GovernanceValidatorSet<CliTypes>
     {
+        type Error;
+
         fn to_sdk_ctxless(self) -> GovernanceValidatorSet<SdkTypes> {
             GovernanceValidatorSet::<SdkTypes> {
                 ledger_address: self.ledger_address,
@@ -3963,6 +4005,8 @@ pub mod args {
     impl CliToSdkCtxless<ValidatorSetProof<SdkTypes>>
         for ValidatorSetProof<CliTypes>
     {
+        type Error;
+
         fn to_sdk_ctxless(self) -> ValidatorSetProof<SdkTypes> {
             ValidatorSetProof::<SdkTypes> {
                 ledger_address: self.ledger_address,
@@ -3994,6 +4038,8 @@ pub mod args {
     impl CliToSdkCtxless<ValidatorSetUpdateRelay<SdkTypes>>
         for ValidatorSetUpdateRelay<CliTypes>
     {
+        type Error;
+
         fn to_sdk_ctxless(self) -> ValidatorSetUpdateRelay<SdkTypes> {
             ValidatorSetUpdateRelay::<SdkTypes> {
                 daemon: self.daemon,
@@ -4093,7 +4139,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxCustom<SdkTypes>> for TxCustom<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxCustom<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxCustom<SdkTypes>, Self::Error> {
             TxCustom::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 code_path: self.code_path,
@@ -4161,7 +4212,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxTransfer<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxTransfer::<SdkTypes> {
@@ -4209,7 +4265,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxIbcTransfer<SdkTypes>> for TxIbcTransfer<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxIbcTransfer<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxIbcTransfer::<SdkTypes> {
@@ -4287,7 +4348,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxInitAccount<SdkTypes>> for TxInitAccount<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxInitAccount<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxInitAccount<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxInitAccount::<SdkTypes> {
@@ -4342,7 +4408,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxBecomeValidator<SdkTypes>> for TxBecomeValidator<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxBecomeValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxBecomeValidator<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxBecomeValidator::<SdkTypes> {
@@ -4462,7 +4533,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxInitValidator<SdkTypes>> for TxInitValidator<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxInitValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxInitValidator<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxInitValidator::<SdkTypes> {
@@ -4611,7 +4687,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxUpdateAccount<SdkTypes>> for TxUpdateAccount<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxUpdateAccount<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxUpdateAccount<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             TxUpdateAccount::<SdkTypes> {
@@ -4671,7 +4752,12 @@ pub mod args {
     }
 
     impl CliToSdk<Bond<SdkTypes>> for Bond<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Bond<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Bond<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             Bond::<SdkTypes> {
@@ -4720,7 +4806,12 @@ pub mod args {
     }
 
     impl CliToSdk<Unbond<SdkTypes>> for Unbond<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Unbond<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Unbond<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             Unbond::<SdkTypes> {
@@ -4776,10 +4867,12 @@ pub mod args {
     impl CliToSdk<UpdateStewardCommission<SdkTypes>>
         for UpdateStewardCommission<CliTypes>
     {
+        type Error;
+
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> UpdateStewardCommission<SdkTypes> {
+        ) -> Result<UpdateStewardCommission<SdkTypes>, Self::Error> {
             UpdateStewardCommission::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 steward: ctx.borrow_chain_or_exit().get(&self.steward),
@@ -4815,7 +4908,12 @@ pub mod args {
     }
 
     impl CliToSdk<ResignSteward<SdkTypes>> for ResignSteward<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> ResignSteward<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<ResignSteward<SdkTypes>, Self::Error> {
             ResignSteward::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 steward: ctx.borrow_chain_or_exit().get(&self.steward),
@@ -4843,7 +4941,12 @@ pub mod args {
     }
 
     impl CliToSdk<Redelegate<SdkTypes>> for Redelegate<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Redelegate<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Redelegate<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             Redelegate::<SdkTypes> {
@@ -4902,7 +5005,12 @@ pub mod args {
     }
 
     impl CliToSdk<InitProposal<SdkTypes>> for InitProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> InitProposal<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<InitProposal<SdkTypes>, Self::Error> {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: std::fs::read(self.proposal_data).expect(""),
@@ -4988,7 +5096,12 @@ pub mod args {
     }
 
     impl CliToSdk<VoteProposal<SdkTypes>> for VoteProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> VoteProposal<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<VoteProposal<SdkTypes>, Self::Error> {
             VoteProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -5060,7 +5173,12 @@ pub mod args {
     }
 
     impl CliToSdk<RevealPk<SdkTypes>> for RevealPk<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> RevealPk<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<RevealPk<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             RevealPk::<SdkTypes> {
@@ -5085,7 +5203,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryProposal<SdkTypes>> for QueryProposal<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProposal<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryProposal<SdkTypes>, Self::Error> {
             QueryProposal::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -5108,7 +5231,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryProposalVotes<SdkTypes>> for QueryProposalVotes<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProposalVotes<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryProposalVotes<SdkTypes>, Self::Error> {
             QueryProposalVotes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -5150,7 +5278,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryProposalResult<SdkTypes>> for QueryProposalResult<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryProposalResult<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryProposalResult<SdkTypes>, Self::Error> {
             QueryProposalResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
@@ -5212,10 +5345,12 @@ pub mod args {
     impl CliToSdk<QueryProtocolParameters<SdkTypes>>
         for QueryProtocolParameters<CliTypes>
     {
+        type Error;
+
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> QueryProtocolParameters<SdkTypes> {
+        ) -> Result<QueryProtocolParameters<SdkTypes>, Self::Error> {
             QueryProtocolParameters::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
             }
@@ -5247,7 +5382,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryPgf<SdkTypes>> for QueryPgf<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryPgf<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryPgf<SdkTypes>, Self::Error> {
             QueryPgf::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
             }
@@ -5255,7 +5395,12 @@ pub mod args {
     }
 
     impl CliToSdk<Withdraw<SdkTypes>> for Withdraw<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Withdraw<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Withdraw<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             Withdraw::<SdkTypes> {
@@ -5293,7 +5438,12 @@ pub mod args {
     }
 
     impl CliToSdk<ClaimRewards<SdkTypes>> for ClaimRewards<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> ClaimRewards<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<ClaimRewards<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             ClaimRewards::<SdkTypes> {
@@ -5330,7 +5480,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryConversions<SdkTypes>> for QueryConversions<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryConversions<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryConversions<SdkTypes>, Self::Error> {
             QueryConversions::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 token: self.token.map(|x| ctx.borrow_chain_or_exit().get(&x)),
@@ -5367,7 +5522,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryAccount<SdkTypes>> for QueryAccount<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryAccount<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryAccount<SdkTypes>, Self::Error> {
             QueryAccount::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
@@ -5393,7 +5553,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryBalance<SdkTypes>> for QueryBalance<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBalance<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryBalance<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             QueryBalance::<SdkTypes> {
@@ -5440,7 +5605,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryTransfers<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             QueryTransfers::<SdkTypes> {
@@ -5475,7 +5645,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryBonds<SdkTypes>> for QueryBonds<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryBonds<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             QueryBonds::<SdkTypes> {
@@ -5514,7 +5689,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryBondedStake<SdkTypes>> for QueryBondedStake<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryBondedStake<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryBondedStake<SdkTypes>, Self::Error> {
             QueryBondedStake::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self
@@ -5550,7 +5730,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryValidatorState<SdkTypes>> for QueryValidatorState<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryValidatorState<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryValidatorState<SdkTypes>, Self::Error> {
             QueryValidatorState::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5588,7 +5773,12 @@ pub mod args {
     impl CliToSdk<CommissionRateChange<SdkTypes>>
         for CommissionRateChange<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> CommissionRateChange<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<CommissionRateChange<SdkTypes>, Self::Error> {
             CommissionRateChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5626,7 +5816,12 @@ pub mod args {
     }
 
     impl CliToSdk<ConsensusKeyChange<SdkTypes>> for ConsensusKeyChange<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> ConsensusKeyChange<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<ConsensusKeyChange<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx);
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             ConsensusKeyChange::<SdkTypes> {
@@ -5672,7 +5867,12 @@ pub mod args {
     }
 
     impl CliToSdk<MetaDataChange<SdkTypes>> for MetaDataChange<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> MetaDataChange<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<MetaDataChange<SdkTypes>, Self::Error> {
             MetaDataChange::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5747,7 +5947,12 @@ pub mod args {
     }
 
     impl CliToSdk<TxUnjailValidator<SdkTypes>> for TxUnjailValidator<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> TxUnjailValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxUnjailValidator<SdkTypes>, Self::Error> {
             TxUnjailValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5780,7 +5985,12 @@ pub mod args {
     impl CliToSdk<TxDeactivateValidator<SdkTypes>>
         for TxDeactivateValidator<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> TxDeactivateValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxDeactivateValidator<SdkTypes>, Self::Error> {
             TxDeactivateValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5813,7 +6023,12 @@ pub mod args {
     impl CliToSdk<TxReactivateValidator<SdkTypes>>
         for TxReactivateValidator<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> TxReactivateValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxReactivateValidator<SdkTypes>, Self::Error> {
             TxReactivateValidator::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -5844,7 +6059,12 @@ pub mod args {
     }
 
     impl CliToSdk<SignTx<SdkTypes>> for SignTx<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> SignTx<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<SignTx<SdkTypes>, Self::Error> {
             SignTx::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 tx_data: std::fs::read(self.tx_data).expect(""),
@@ -5920,7 +6140,12 @@ pub mod args {
     }
 
     impl CliToSdk<ShieldedSync<SdkTypes>> for ShieldedSync<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> ShieldedSync<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<ShieldedSync<SdkTypes>, Self::Error> {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             ShieldedSync {
                 ledger_address: self.ledger_address,
@@ -5944,7 +6169,12 @@ pub mod args {
     impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
         for GenIbcShieldedTransfer<CliTypes>
     {
-        fn to_sdk(self, ctx: &mut Context) -> GenIbcShieldedTransfer<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<GenIbcShieldedTransfer<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx);
             let chain_ctx = ctx.borrow_chain_or_exit();
             GenIbcShieldedTransfer::<SdkTypes> {
@@ -6001,7 +6231,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryCommissionRate<SdkTypes>> for QueryCommissionRate<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryCommissionRate<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryCommissionRate<SdkTypes>, Self::Error> {
             QueryCommissionRate::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -6035,7 +6270,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryMetaData<SdkTypes>> for QueryMetaData<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryMetaData<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryMetaData<SdkTypes>, Self::Error> {
             QueryMetaData::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -6060,7 +6300,12 @@ pub mod args {
     }
 
     impl CliToSdk<QuerySlashes<SdkTypes>> for QuerySlashes<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QuerySlashes<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QuerySlashes<SdkTypes>, Self::Error> {
             QuerySlashes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: self
@@ -6087,7 +6332,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryRewards<SdkTypes>> for QueryRewards<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryRewards<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryRewards<SdkTypes>, Self::Error> {
             QueryRewards::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
@@ -6139,7 +6389,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryDelegations<SdkTypes>> for QueryDelegations<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryDelegations<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryDelegations<SdkTypes>, Self::Error> {
             QueryDelegations::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
@@ -6175,7 +6430,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryFindValidator<SdkTypes>> for QueryFindValidator<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryFindValidator<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryFindValidator<SdkTypes>, Self::Error> {
             QueryFindValidator::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 tm_addr: self.tm_addr,
@@ -6187,7 +6447,12 @@ pub mod args {
     }
 
     impl CliToSdk<QueryRawBytes<SdkTypes>> for QueryRawBytes<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryRawBytes<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryRawBytes<SdkTypes>, Self::Error> {
             QueryRawBytes::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 storage_key: self.storage_key,
@@ -6230,7 +6495,12 @@ pub mod args {
     }
 
     impl CliToSdk<Tx<SdkTypes>> for Tx<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Tx<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Tx<SdkTypes>, Self::Error> {
             let ctx = ctx.borrow_mut_chain_or_exit();
             Tx::<SdkTypes> {
                 dry_run: self.dry_run,
@@ -6443,7 +6713,12 @@ pub mod args {
     }
 
     impl CliToSdk<Query<SdkTypes>> for Query<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> Query<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<Query<SdkTypes>, Self::Error> {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             Query::<SdkTypes> {
                 ledger_address: chain_ctx.get(&self.ledger_address),
@@ -6469,7 +6744,11 @@ pub mod args {
     }
 
     impl CliToSdkCtxless<QueryWithoutCtx<SdkTypes>> for QueryWithoutCtx<CliTypes> {
-        fn to_sdk_ctxless(self) -> QueryWithoutCtx<SdkTypes> {
+        type Error;
+
+        fn to_sdk_ctxless(
+            self,
+        ) -> Result<QueryWithoutCtx<SdkTypes>, Self::Error> {
             QueryWithoutCtx::<SdkTypes> {
                 ledger_address: self.ledger_address,
             }
@@ -6494,7 +6773,12 @@ pub mod args {
     }
 
     impl CliToSdk<PayAddressGen<SdkTypes>> for PayAddressGen<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> PayAddressGen<SdkTypes> {
+        type Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<PayAddressGen<SdkTypes>, Self::Error> {
             use namada_sdk::wallet::Wallet;
 
             use crate::wallet::CliWalletUtils;
