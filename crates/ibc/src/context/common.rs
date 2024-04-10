@@ -721,4 +721,48 @@ pub trait IbcCommonContext: IbcStorageContext {
         let amount = self.read::<Amount>(&balance_key)?;
         Ok(amount == Some(Amount::from_u64(1)))
     }
+
+    /// Read the mint amount of the given token
+    fn mint_amount(&self, token: &Address) -> Result<Amount> {
+        let key = storage::mint_amount_key(token);
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the mint amount of the given token
+    fn store_mint_amount(
+        &mut self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<()> {
+        let key = storage::mint_amount_key(token);
+        self.write(&key, amount).map_err(ContextError::from)
+    }
+
+    /// Read the per-epoch deposit of the given token
+    fn deposit(&self, token: &Address) -> Result<Amount> {
+        let key = storage::deposit_key(token);
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the per-epoch deposit of the given token
+    fn store_deposit(&mut self, token: &Address, amount: Amount) -> Result<()> {
+        let key = storage::deposit_key(token);
+        self.write(&key, amount).map_err(ContextError::from)
+    }
+
+    /// Read the per-epoch withdraw of the given token
+    fn withdraw(&self, token: &Address) -> Result<Amount> {
+        let key = storage::withdraw_key(token);
+        Ok(self.read::<Amount>(&key)?.unwrap_or_default())
+    }
+
+    /// Write the per-epoch withdraw of the given token
+    fn store_withdraw(
+        &mut self,
+        token: &Address,
+        amount: Amount,
+    ) -> Result<()> {
+        let key = storage::withdraw_key(token);
+        self.write(&key, amount).map_err(ContextError::from)
+    }
 }

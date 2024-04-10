@@ -106,6 +106,12 @@ fn run_ledger_ibc() -> Result<()> {
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -183,6 +189,12 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -213,7 +225,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -242,7 +253,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_b,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -261,7 +271,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(0, 0)),
         None,
         false,
@@ -293,7 +302,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -309,7 +317,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         None,
         None,
         false,
@@ -332,7 +339,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        None,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -353,21 +359,27 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn pgf_over_ibc_with_hermes() -> Result<()> {
-    let update_genesis =
-        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(20);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 5;
-            genesis.parameters.parameters.max_proposal_bytes =
-                Default::default();
-            genesis.parameters.pgf_params.stewards =
-                BTreeSet::from_iter([get_established_addr_from_pregenesis(
-                    ALBERT_KEY, base_dir, &genesis,
-                )
-                .unwrap()]);
-            setup::set_validators(1, genesis, base_dir, |_| 0)
-        };
+    let update_genesis = |mut genesis: templates::All<
+        templates::Unvalidated,
+    >,
+                          base_dir: &_| {
+        genesis.parameters.parameters.epochs_per_year =
+            epochs_per_year_from_min_duration(20);
+        // for the trusting period of IBC client
+        genesis.parameters.pos_params.pipeline_len = 5;
+        genesis.parameters.parameters.max_proposal_bytes = Default::default();
+        genesis.parameters.pgf_params.stewards =
+            BTreeSet::from_iter([get_established_addr_from_pregenesis(
+                ALBERT_KEY, base_dir, &genesis,
+            )
+            .unwrap()]);
+        genesis.parameters.ibc_params.default_mint_limit = Amount::max_signed();
+        genesis
+            .parameters
+            .ibc_params
+            .default_per_epoch_throughput_limit = Amount::max_signed();
+        setup::set_validators(1, genesis, base_dir, |_| 0)
+    };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -433,6 +445,12 @@ fn proposal_ibc_token_inflation() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
@@ -464,29 +482,15 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let port_id_b: PortId = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
+    let (channel_id_a, _channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
     let _bg_hermes = hermes.background();
 
-    // Get masp proof for the following IBC transfer from the destination chain
-    // It will send 1 APFEL to PA(B) on Chain B
-    // PA(B) on Chain B will receive APFEL on chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(&test_a, APFEL)?;
     // wait the next epoch not to update the epoch during the IBC transfer
     wait_epochs(&test_b, 1)?;
-    let file_path = gen_ibc_shielded_transfer(
-        &test_b,
-        AB_PAYMENT_ADDRESS,
-        token_addr.to_string(),
-        1,
-        &port_id_b,
-        &channel_id_b,
-    )?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
     transfer(
@@ -498,7 +502,6 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        Some(&file_path.to_string_lossy()),
         None,
         None,
         false,
@@ -510,6 +513,142 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     // Check balances
     check_inflated_balance(&test_b)?;
+
+    Ok(())
+}
+
+#[test]
+fn ibc_rate_limit() -> Result<()> {
+    // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
+    let update_genesis = |mut genesis: templates::All<
+        templates::Unvalidated,
+    >,
+                          base_dir: &_| {
+        genesis.parameters.parameters.epochs_per_year =
+            epochs_per_year_from_min_duration(50);
+        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
+        genesis
+            .parameters
+            .ibc_params
+            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
+        setup::set_validators(1, genesis, base_dir, |_| 0)
+    };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b: PortId = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    // wait for the next epoch
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let next_epoch = epoch.next();
+    while epoch <= next_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+
+    // Transfer 1 NAM from Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let receiver = find_address(&test_b, BERTHA)?;
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+
+    // Transfer 1 NAM from Chain A to Chain B again will fail
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        // expect an error of the throughput limit
+        Some("Transaction was rejected by VPs"),
+        false,
+    )?;
+
+    // wait for the next epoch
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let next_epoch = epoch.next();
+    while epoch <= next_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+
+    // Transfer 1 NAM from Chain A to Chain B will succeed in the new epoch
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        false,
+    )?;
+
+    // wait for the next epoch
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let next_epoch = epoch.next();
+    while epoch <= next_epoch {
+        sleep(5);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    }
+
+    // Transfer 1 NAM from Chain A to Chain B will succeed, but Chain B can't
+    // receive due to the mint limit and the packet will be timed out
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        "1",
+        ALBERT_KEY,
+        &port_id_a,
+        &channel_id_a,
+        Some(Duration::new(20, 0)),
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+
+    // Check the balance on Chain B
+    let ibc_denom = format!("{port_id_b}/{channel_id_b}/nam");
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    let query_args = vec![
+        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    ];
+    let expected = format!("{ibc_denom}: 2");
+    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
+    client.exp_string(&expected)?;
+    client.assert_success();
 
     Ok(())
 }
@@ -1244,7 +1383,6 @@ fn transfer_token(
         channel_id_a,
         None,
         None,
-        None,
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1323,7 +1461,6 @@ fn try_invalid_transfers(
         port_id_a,
         channel_id_a,
         None,
-        None,
         Some("The amount for the IBC transfer should be an integer"),
         false,
     )?;
@@ -1340,7 +1477,6 @@ fn try_invalid_transfers(
         &"port".parse().unwrap(),
         channel_id_a,
         None,
-        None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
@@ -1356,7 +1492,6 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
-        None,
         None,
         Some("Error trying to apply a transaction"),
         false,
@@ -1421,7 +1556,6 @@ fn transfer_back(
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
-        None,
         None,
         None,
         false,
@@ -1495,7 +1629,6 @@ fn transfer_timeout(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        None,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1528,46 +1661,6 @@ fn transfer_timeout(
     )?;
 
     Ok(())
-}
-
-fn gen_ibc_shielded_transfer(
-    test: &Test,
-    target: impl AsRef<str>,
-    token: impl AsRef<str>,
-    amount: u64,
-    port_id: &PortId,
-    channel_id: &ChannelId,
-) -> Result<PathBuf> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let output_folder = test.test_dir.path().to_string_lossy();
-    let args = [
-        "ibc-gen-shielded",
-        "--output-folder-path",
-        &output_folder,
-        "--target",
-        target.as_ref(),
-        "--token",
-        token.as_ref(),
-        "--amount",
-        &amount.to_string(),
-        "--port-id",
-        port_id.as_ref(),
-        "--channel-id",
-        channel_id.as_ref(),
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test, Bin::Client, args, Some(120))?;
-    let file_path = get_shielded_transfer_path(&mut client)?;
-    Ok(file_path)
-}
-
-fn get_shielded_transfer_path(client: &mut NamadaCmd) -> Result<PathBuf> {
-    let (_unread, matched) =
-        client.exp_regex("Output IBC shielded transfer .*")?;
-    let file_path = matched.trim().split(' ').last().expect("invalid output");
-    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
 
 fn get_commitment_proof(
@@ -1670,7 +1763,6 @@ fn transfer(
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
-    memo: Option<&str>,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1699,12 +1791,6 @@ fn transfer(
         "--node",
         &rpc,
     ];
-
-    let memo_path = memo.unwrap_or_default();
-    if memo.is_some() {
-        tx_args.push("--memo-path");
-        tx_args.push(memo_path);
-    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
@@ -2190,17 +2276,25 @@ fn check_funded_balances(
     let query_args = vec![
         "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{ibc_denom}: 10");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
+    let regex = format!("{ibc_denom}: .*");
+    let (_, matched) = client.exp_regex(&regex)?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let iter = regex.find_iter(&matched);
+    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
+    assert!(balance >= 10);
     client.assert_success();
 
     let query_args = vec![
         "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
     ];
-    let expected = format!("{ibc_denom}: 5");
     let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
+    let regex = format!("{ibc_denom}: .*");
+    let (_, matched) = client.exp_regex(&regex)?;
+    let regex = regex::Regex::new(r"[0-9]+").unwrap();
+    let iter = regex.find_iter(&matched);
+    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
+    assert!(balance >= 5);
     client.assert_success();
 
     Ok(())

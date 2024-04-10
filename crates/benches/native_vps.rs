@@ -364,7 +364,10 @@ fn ibc(c: &mut Criterion) {
             "open_channel" => {
                 let _ = shell.init_ibc_connection();
             }
-            "outgoing_transfer" => shell.init_ibc_channel(),
+            "outgoing_transfer" => {
+                shell.init_ibc_channel();
+                shell.enable_ibc_transfer();
+            }
             _ => panic!("Unexpected bench test"),
         }
 
