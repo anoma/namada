@@ -1565,6 +1565,9 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
+    /// A transcation can have up to two shielded transfers.
+    /// This indicates if the wrapper contained a shielded transfer.
+    pub is_wrapper: bool,
 }
 
 #[cfg(test)]

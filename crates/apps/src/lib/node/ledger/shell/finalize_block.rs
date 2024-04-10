@@ -5,7 +5,7 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
 use namada::governance::pgf::inflation as pgf_inflation;
-use namada::ledger::events::EventType;
+use namada::hash::Hash;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::WrapperArgs;
@@ -202,158 +202,109 @@ where
                     format!("Tx rejected: {}", &processed_tx.result.info);
                 tx_event["gas_used"] = "0".into();
                 response.events.push(tx_event);
-                // if the rejected tx was decrypted, remove it
-                // from the queue of txs to be processed
-                if let TxType::Decrypted(_) = &tx_header.tx_type {
-                    self.state
-                        .in_mem_mut()
-                        .tx_queue
-                        .pop()
-                        .expect("Missing wrapper tx in queue");
-                }
-
                 continue;
             }
 
-            let (
-                mut tx_event,
-                embedding_wrapper,
-                tx_gas_meter,
-                wrapper,
-                mut wrapper_args,
-            ) = match &tx_header.tx_type {
-                TxType::Wrapper(wrapper) => {
-                    stats.increment_wrapper_txs();
-                    let tx_event = new_tx_event(&tx, height.0);
-                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                    (
-                        tx_event,
-                        None,
-                        gas_meter,
-                        Some(tx.clone()),
-                        Some(WrapperArgs {
-                            block_proposer: &native_block_proposer_address,
-                            is_committed_fee_unshield: false,
-                        }),
-                    )
-                }
-                TxType::Decrypted(inner) => {
-                    // We remove the corresponding wrapper tx from the queue
-                    let tx_in_queue = self
-                        .state
-                        .in_mem_mut()
-                        .tx_queue
-                        .pop()
-                        .expect("Missing wrapper tx in queue");
-                    let mut event = new_tx_event(&tx, height.0);
-
-                    match inner {
-                        DecryptedTx::Decrypted => {
-                            if let Some(code_sec) = tx
-                                .get_section(tx.code_sechash())
-                                .and_then(|x| Section::code_sec(x.as_ref()))
-                            {
-                                stats.increment_tx_type(
-                                    code_sec.code.hash().to_string(),
-                                );
-                            }
-                        }
-                        DecryptedTx::Undecryptable => {
-                            tracing::info!(
-                                "Tx with hash {} was un-decryptable",
-                                tx_in_queue.tx.header_hash()
+            let (mut tx_event, tx_gas_meter, mut wrapper_args) =
+                match &tx_header.tx_type {
+                    TxType::Wrapper(wrapper) => {
+                        stats.increment_wrapper_txs();
+                        let tx_event = new_tx_event(&tx, height.0);
+                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        if let Some(code_sec) = tx
+                            .get_section(tx.code_sechash())
+                            .and_then(|x| Section::code_sec(x.as_ref()))
+                        {
+                            stats.increment_tx_type(
+                                code_sec.code.hash().to_string(),
                             );
-                            event["info"] = "Transaction is invalid.".into();
-                            event["log"] =
-                                "Transaction could not be decrypted.".into();
-                            event["code"] = ResultCode::Undecryptable.into();
-                            response.events.push(event);
-                            continue;
                         }
+                        (
+                            tx_event,
+                            gas_meter,
+                            Some(WrapperArgs {
+                                block_proposer: &native_block_proposer_address,
+                                is_committed_fee_unshield: false,
+                            }),
+                        )
                     }
-
-                    (
-                        event,
-                        Some(tx_in_queue.tx),
-                        TxGasMeter::new_from_sub_limit(tx_in_queue.gas),
-                        None,
-                        None,
-                    )
-                }
-                TxType::Raw => {
-                    tracing::error!(
-                        "Internal logic error: FinalizeBlock received a \
-                         TxType::Raw transaction"
-                    );
-                    continue;
-                }
-                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::BridgePoolVext
-                    | ProtocolTxType::BridgePool
-                    | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => (
-                        new_tx_event(&tx, height.0),
-                        None,
-                        TxGasMeter::new_from_sub_limit(0.into()),
-                        None,
-                        None,
-                    ),
-                    ProtocolTxType::EthEventsVext => {
-                        let ext =
+                    TxType::Raw => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                             TxType::Raw transaction"
+                        );
+                        continue;
+                    }
+                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                        ProtocolTxType::BridgePoolVext
+                        | ProtocolTxType::BridgePool
+                        | ProtocolTxType::ValSetUpdateVext
+                        | ProtocolTxType::ValidatorSetUpdate => (
+                            new_tx_event(&tx, height.0),
+                            TxGasMeter::new_from_sub_limit(0.into()),
+                            None,
+                        ),
+                        ProtocolTxType::EthEventsVext => {
+                            let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
                             .unwrap();
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
-                        {
-                            for event in ext.data.ethereum_events.iter() {
-                                self.mode.dequeue_eth_event(event);
-                            }
-                        }
-                        (
-                            new_tx_event(&tx, height.0),
-                            None,
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                            None,
-                        )
-                    }
-                    ProtocolTxType::EthereumEvents => {
-                        let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
-                            ).unwrap();
-                        if let Some(address) =
-                            self.mode.get_validator_address().cloned()
-                        {
-                            let this_signer = &(
-                                address,
-                                self.state.in_mem().get_last_block_height(),
-                            );
-                            for MultiSignedEthEvent { event, signers } in
-                                &digest.events
+                            if self
+                                .mode
+                                .get_validator_address()
+                                .map(|validator| {
+                                    validator == &ext.data.validator_addr
+                                })
+                                .unwrap_or(false)
                             {
-                                if signers.contains(this_signer) {
+                                for event in ext.data.ethereum_events.iter() {
                                     self.mode.dequeue_eth_event(event);
                                 }
                             }
+                            (
+                                new_tx_event(&tx, height.0),
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
                         }
-                        (
-                            new_tx_event(&tx, height.0),
-                            None,
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                            None,
-                        )
-                    }
-                },
-            };
+                        ProtocolTxType::EthereumEvents => {
+                            let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx,
+                            ).unwrap();
+                            if let Some(address) =
+                                self.mode.get_validator_address().cloned()
+                            {
+                                let this_signer = &(
+                                    address,
+                                    self.state.in_mem().get_last_block_height(),
+                                );
+                                for MultiSignedEthEvent { event, signers } in
+                                    &digest.events
+                                {
+                                    if signers.contains(this_signer) {
+                                        self.mode.dequeue_eth_event(event);
+                                    }
+                                }
+                            }
+                            (
+                                new_tx_event(&tx, height.0),
+                                TxGasMeter::new_from_sub_limit(0.into()),
+                                None,
+                            )
+                        }
+                    },
+                };
+            let replay_protection_hashes =
+                if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
+                    Some(ReplayProtectionHashes {
+                        raw_header_hash: tx.raw_header_hash(),
+                        header_hash: tx.header_hash(),
+                    })
+                } else {
+                    None
+                };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
             let tx_result = protocol::check_tx_allowed(&tx, &self.state)
                 .and_then(|()| {
@@ -377,45 +328,33 @@ where
             match tx_result {
                 Ok(result) => {
                     if result.is_accepted() {
-                        if let EventType::Accepted = tx_event.event_type {
-                            // Wrapper transaction
-                            tracing::trace!(
-                                "Wrapper transaction {} was accepted",
-                                tx_event["hash"]
-                            );
-                            if wrapper_args
-                                .expect("Missing required wrapper arguments")
-                                .is_committed_fee_unshield
-                            {
-                                tx_event["is_valid_masp_tx"] =
-                                    format!("{}", tx_index);
-                            }
-                            self.state.in_mem_mut().tx_queue.push(TxInQueue {
-                                tx: wrapper.expect("Missing expected wrapper"),
-                                gas: tx_gas_meter.get_available_gas(),
-                            });
-                        } else {
-                            tracing::trace!(
-                                "all VPs accepted transaction {} storage \
-                                 modification {:#?}",
-                                tx_event["hash"],
-                                result
-                            );
-                            if result.vps_result.accepted_vps.contains(
+                        if wrapper_args
+                            .map(|args| args.is_committed_fee_unshield)
+                            .unwrap_or_default()
+                            || result.vps_result.accepted_vps.contains(
                                 &Address::Internal(
                                     address::InternalAddress::Masp,
                                 ),
-                            ) {
-                                tx_event["is_valid_masp_tx"] =
-                                    format!("{}", tx_index);
-                            }
-                            changed_keys
-                                .extend(result.changed_keys.iter().cloned());
-                            stats.increment_successful_txs();
-                            if let Some(wrapper) = embedding_wrapper {
-                                self.commit_inner_tx_hash(wrapper);
-                            }
+                            )
+                        {
+                            tx_event["is_valid_masp_tx"] =
+                                format!("{}", tx_index);
                         }
+                        tracing::trace!(
+                            "all VPs accepted transaction {} storage \
+                             modification {:#?}",
+                            tx_event["hash"],
+                            result
+                        );
+
+                        changed_keys
+                            .extend(result.changed_keys.iter().cloned());
+                        changed_keys.extend(
+                            result.wrapper_changed_keys.iter().cloned(),
+                        );
+                        stats.increment_successful_txs();
+                        self.commit_inner_tx_hash(replay_protection_hashes);
+
                         self.state.commit_tx();
                         if !tx_event.contains_key("code") {
                             tx_event["code"] = ResultCode::Ok.into();
@@ -447,20 +386,28 @@ where
                                 ),
                         );
                     } else {
+                        // this branch can only be reached by inner txs
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
                              modification {:#?}",
                             tx_event["hash"],
                             result.vps_result.rejected_vps
                         );
+                        // The fee unshield operation could still have been
+                        // committed
+                        if wrapper_args
+                            .map(|args| args.is_committed_fee_unshield)
+                            .unwrap_or_default()
+                        {
+                            tx_event["is_valid_masp_tx"] =
+                                format!("{}", tx_index);
+                        }
 
-                        if let Some(wrapper) = embedding_wrapper {
-                            // If decrypted tx failed for any reason but invalid
-                            // signature, commit its hash to storage, otherwise
-                            // allow for a replay
-                            if !result.vps_result.invalid_sig {
-                                self.commit_inner_tx_hash(wrapper);
-                            }
+                        // If an inner tx failed for any reason but invalid
+                        // signature, commit its hash to storage, otherwise
+                        // allow for a replay
+                        if !result.vps_result.invalid_sig {
+                            self.commit_inner_tx_hash(replay_protection_hashes);
                         }
 
                         stats.increment_rejected_txs();
@@ -471,6 +418,19 @@ where
                     tx_event["info"] = "Check inner_tx for result.".to_string();
                     tx_event["inner_tx"] = result.to_string();
                 }
+                Err(Error::TxApply(protocol::Error::WrapperRunnerError(
+                    msg,
+                ))) => {
+                    tracing::info!(
+                        "Wrapper transaction {} failed with: {}",
+                        tx_event["hash"],
+                        msg,
+                    );
+                    tx_event["gas_used"] =
+                        tx_gas_meter.get_tx_consumed_gas().to_string();
+                    tx_event["info"] = msg.to_string();
+                    tx_event["code"] = ResultCode::InvalidTx.into();
+                }
                 Err(msg) => {
                     tracing::info!(
                         "Transaction {} failed with: {}",
@@ -478,10 +438,10 @@ where
                         msg
                     );
 
-                    // If transaction type is Decrypted and didn't fail
+                    // If user transaction didn't fail
                     // because of out of gas nor invalid
                     // section commitment, commit its hash to prevent replays
-                    if let Some(wrapper) = embedding_wrapper {
+                    if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
                         if !matches!(
                             msg,
                             Error::TxApply(protocol::Error::GasError(_))
@@ -492,7 +452,7 @@ where
                                     protocol::Error::ReplayAttempt(_)
                                 )
                         ) {
-                            self.commit_inner_tx_hash(wrapper);
+                            self.commit_inner_tx_hash(replay_protection_hashes);
                         } else if let Error::TxApply(
                             protocol::Error::ReplayAttempt(_),
                         ) = msg
@@ -501,11 +461,10 @@ where
                             // hash. A replay of the wrapper is impossible since
                             // the inner tx hash is committed to storage and
                             // we validate the wrapper against that hash too
-                            self.state
-                                .delete_tx_hash(wrapper.header_hash())
-                                .expect(
-                                    "Error while deleting tx hash from storage",
-                                );
+                            let header_hash = replay_protection_hashes
+                                .expect("This cannot fail")
+                                .header_hash;
+                            self.state.delete_tx_hash(header_hash);
                         }
                     }
 
@@ -515,21 +474,18 @@ where
                     tx_event["gas_used"] =
                         tx_gas_meter.get_tx_consumed_gas().to_string();
                     tx_event["info"] = msg.to_string();
-                    if let EventType::Accepted = tx_event.event_type {
-                        // If wrapper, invalid tx error code
-                        tx_event["code"] = ResultCode::InvalidTx.into();
-                        // The fee unshield operation could still have been
-                        // committed
-                        if wrapper_args
-                            .expect("Missing required wrapper arguments")
-                            .is_committed_fee_unshield
-                        {
-                            tx_event["is_valid_masp_tx"] =
-                                format!("{}", tx_index);
-                        }
-                    } else {
-                        tx_event["code"] = ResultCode::WasmRuntimeError.into();
+
+                    // If wrapper, invalid tx error code
+                    tx_event["code"] = ResultCode::InvalidTx.into();
+                    // The fee unshield operation could still have been
+                    // committed
+                    if wrapper_args
+                        .map(|args| args.is_committed_fee_unshield)
+                        .unwrap_or_default()
+                    {
+                        tx_event["is_valid_masp_tx"] = format!("{}", tx_index);
                     }
+                    tx_event["code"] = ResultCode::WasmRuntimeError.into();
                 }
             }
             response.events.push(tx_event);
@@ -662,15 +618,24 @@ where
     // hash since it's redundant (we check the inner tx hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
-    fn commit_inner_tx_hash(&mut self, wrapper_tx: Tx) {
-        self.state
-            .write_tx_hash(wrapper_tx.raw_header_hash())
-            .expect("Error while writing tx hash to storage");
+    fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
+        if let Some(ReplayProtectionHashes {
+            raw_header_hash,
+            header_hash,
+        }) = hashes
+        {
+            self.state
+                .write_tx_hash(raw_header_hash)
+                .expect("Error while writing tx hash to storage");
 
-        self.state
-            .delete_tx_hash(wrapper_tx.header_hash())
-            .expect("Error while deleting tx hash from storage");
+            self.state.delete_tx_hash(header_hash)
+        }
     }
+}
+
+struct ReplayProtectionHashes {
+    raw_header_hash: Hash,
+    header_hash: Hash,
 }
 
 /// Convert ABCI vote info to PoS vote info. Any info which fails the conversion
@@ -809,6 +774,7 @@ mod test_finalize_block {
         shell: &TestShell,
         keypair: &common::SecretKey,
     ) -> (Tx, ProcessedTx) {
+        let tx_code = TestWasms::TxNoOp.read_bytes();
         let mut wrapper_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -821,10 +787,10 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
+        wrapper_tx.set_code(Code::new(tx_code, None));
         wrapper_tx.add_section(Section::Signature(Signature::new(
             wrapper_tx.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
@@ -843,44 +809,6 @@ mod test_finalize_block {
         )
     }
 
-    /// Make a wrapper tx and a processed tx from the wrapped tx that can be
-    /// added to `FinalizeBlock` request.
-    fn mk_decrypted_tx(
-        shell: &mut TestShell,
-        keypair: &common::SecretKey,
-    ) -> ProcessedTx {
-        let tx_code = TestWasms::TxNoOp.read_bytes();
-        let mut outer_tx =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(
-            "Decrypted transaction data".as_bytes().to_owned(),
-        ));
-        let gas_limit =
-            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
-                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
-                .unwrap();
-        shell.enqueue_tx(outer_tx.clone(), gas_limit);
-        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        ProcessedTx {
-            tx: outer_tx.to_bytes().into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        }
-    }
-
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
@@ -889,9 +817,8 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
         let keypair = gen_keypair();
         let mut processed_txs = vec![];
-        let mut valid_wrappers = vec![];
 
-        // Add unshielded balance for fee paymenty
+        // Add unshielded balance for fee payment
         let balance_key = token::storage_key::balance_key(
             &shell.state.in_mem().native_token,
             &Address::from(&keypair.ref_to()),
@@ -902,30 +829,10 @@ mod test_finalize_block {
             .unwrap();
 
         // create some wrapper txs
-        for i in 1u64..5 {
-            let (wrapper, mut processed_tx) = mk_wrapper_tx(&shell, &keypair);
-            if i > 1 {
-                processed_tx.result.code =
-                    u32::try_from(i.rem_euclid(2)).unwrap();
-                processed_txs.push(processed_tx);
-            } else {
-                let wrapper_info =
-                    if let TxType::Wrapper(w) = wrapper.header().tx_type {
-                        w
-                    } else {
-                        panic!("Unexpected tx type");
-                    };
-                shell.enqueue_tx(
-                    wrapper.clone(),
-                    Gas::from(wrapper_info.gas_limit)
-                        .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
-                        .unwrap(),
-                );
-            }
-
-            if i != 3 {
-                valid_wrappers.push(wrapper)
-            }
+        for i in 0u64..4 {
+            let (_, mut processed_tx) = mk_wrapper_tx(&shell, &keypair);
+            processed_tx.result.code = u32::try_from(i.rem_euclid(2)).unwrap();
+            processed_txs.push(processed_tx);
         }
 
         // check that the correct events were created
@@ -938,208 +845,10 @@ mod test_finalize_block {
             .iter()
             .enumerate()
         {
-            assert_eq!(event.event_type.to_string(), String::from("accepted"));
+            assert_eq!(event.event_type.to_string(), String::from("applied"));
             let code = event.attributes.get("code").expect("Test failed");
             assert_eq!(code, &index.rem_euclid(2).to_string());
         }
-        // verify that the queue of wrapper txs to be processed is correct
-        let mut valid_tx = valid_wrappers.iter();
-        let mut counter = 0;
-        for wrapper in shell.iter_tx_queue() {
-            // we cannot easily implement the PartialEq trait for WrapperTx
-            // so we check the hashes of the inner txs for equality
-            let valid_tx = valid_tx.next().expect("Test failed");
-            assert_eq!(wrapper.tx.header.code_hash, *valid_tx.code_sechash());
-            assert_eq!(wrapper.tx.header.data_hash, *valid_tx.data_sechash());
-            counter += 1;
-        }
-        assert_eq!(counter, 3);
-    }
-
-    /// Check that if a decrypted tx was rejected by [`process_proposal`],
-    /// the correct event is returned. Check that it is still
-    /// removed from the queue of txs to be included in the next block
-    /// proposal
-    #[test]
-    fn test_process_proposal_rejected_decrypted_tx() {
-        let (mut shell, _, _, _) = setup();
-        let keypair = gen_keypair();
-        let mut outer_tx =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(
-                        Default::default(),
-                    ),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        outer_tx.set_data(Data::new(
-            String::from("transaction data").as_bytes().to_owned(),
-        ));
-        let gas_limit =
-            Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
-                .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
-                .unwrap();
-        shell.enqueue_tx(outer_tx.clone(), gas_limit);
-
-        outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        let processed_tx = ProcessedTx {
-            tx: outer_tx.to_bytes().into(),
-            result: TxResult {
-                code: ResultCode::InvalidTx.into(),
-                info: "".into(),
-            },
-        };
-
-        // check that the decrypted tx was not applied
-        for event in shell
-            .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
-                ..Default::default()
-            })
-            .expect("Test failed")
-        {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code = event.attributes.get("code").expect("Test failed");
-            assert_eq!(code, &String::from(ResultCode::InvalidTx));
-        }
-        // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.state.in_mem().tx_queue.is_empty());
-    }
-
-    /// Test that if a tx is undecryptable, it is applied
-    /// but the tx result contains the appropriate error code.
-    #[test]
-    fn test_undecryptable_returns_error_code() {
-        let (mut shell, _, _, _) = setup();
-
-        let keypair = crate::wallet::defaults::daewon_keypair();
-        // not valid tx bytes
-        let wrapper = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                token: shell.state.in_mem().native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            None,
-        ))));
-        let processed_tx = ProcessedTx {
-            tx: Tx::from_type(TxType::Decrypted(DecryptedTx::Undecryptable))
-                .to_bytes()
-                .into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        };
-
-        let gas_limit =
-            Gas::from(wrapper.header().wrapper().unwrap().gas_limit)
-                .checked_sub(Gas::from(wrapper.to_bytes().len() as u64))
-                .unwrap();
-        shell.enqueue_tx(wrapper, gas_limit);
-
-        // check that correct error message is returned
-        for event in shell
-            .finalize_block(FinalizeBlock {
-                txs: vec![processed_tx],
-                ..Default::default()
-            })
-            .expect("Test failed")
-        {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code = event.attributes.get("code").expect("Test failed");
-            assert_eq!(code, &String::from(ResultCode::Undecryptable));
-            let log = event.attributes.get("log").expect("Test failed");
-            assert!(log.contains("Transaction could not be decrypted."))
-        }
-        // check that the corresponding wrapper tx was removed from the queue
-        assert!(shell.state.in_mem().tx_queue.is_empty());
-    }
-
-    /// Test that the wrapper txs are queued in the order they
-    /// are received from the block. Tests that the previously
-    /// decrypted txs are de-queued.
-    #[test]
-    fn test_mixed_txs_queued_in_correct_order() {
-        let (mut shell, _, _, _) = setup();
-        let keypair = gen_keypair();
-        let mut processed_txs = vec![];
-        let mut valid_txs = vec![];
-
-        // Add unshielded balance for fee payment
-        let balance_key = token::storage_key::balance_key(
-            &shell.state.in_mem().native_token,
-            &Address::from(&keypair.ref_to()),
-        );
-        shell
-            .state
-            .write(&balance_key, Amount::native_whole(1000))
-            .unwrap();
-
-        // create two decrypted txs
-        for _ in 0..2 {
-            processed_txs.push(mk_decrypted_tx(&mut shell, &keypair));
-        }
-        // create two wrapper txs
-        for _ in 0..2 {
-            let (tx, processed_tx) = mk_wrapper_tx(&shell, &keypair);
-            valid_txs.push(tx.clone());
-            processed_txs.push(processed_tx);
-        }
-        // Put the wrapper txs in front of the decrypted txs
-        processed_txs.rotate_left(2);
-        // check that the correct events were created
-        for (index, event) in shell
-            .finalize_block(FinalizeBlock {
-                txs: processed_txs,
-                ..Default::default()
-            })
-            .expect("Test failed")
-            .iter()
-            .enumerate()
-        {
-            if index < 2 {
-                // these should be accepted wrapper txs
-                assert_eq!(
-                    event.event_type.to_string(),
-                    String::from("accepted")
-                );
-                let code =
-                    event.attributes.get("code").expect("Test failed").as_str();
-                assert_eq!(code, String::from(ResultCode::Ok).as_str());
-            } else {
-                // these should be accepted decrypted txs
-                assert_eq!(
-                    event.event_type.to_string(),
-                    String::from("applied")
-                );
-                let code =
-                    event.attributes.get("code").expect("Test failed").as_str();
-                assert_eq!(code, String::from(ResultCode::Ok).as_str());
-            }
-        }
-
-        // check that the applied decrypted txs were dequeued and the
-        // accepted wrappers were enqueued in correct order
-        let mut txs = valid_txs.iter();
-
-        let mut counter = 0;
-        for wrapper in shell.iter_tx_queue() {
-            let next = txs.next().expect("Test failed");
-            assert_eq!(wrapper.tx.header.code_hash, *next.code_sechash());
-            assert_eq!(wrapper.tx.header.data_hash, *next.data_sechash());
-            counter += 1;
-        }
-        assert_eq!(counter, 2);
     }
 
     /// Test if a rejected protocol tx is applied and emits
@@ -1605,10 +1314,6 @@ mod test_finalize_block {
         for _ in 0..20 {
             // Add some txs
             let mut txs = vec![];
-            // create two decrypted txs
-            for _ in 0..2 {
-                txs.push(mk_decrypted_tx(&mut shell, &txs_key));
-            }
             // create two wrapper txs
             for _ in 0..2 {
                 let (_tx, processed_tx) = mk_wrapper_tx(&shell, &txs_key);
@@ -2704,15 +2409,8 @@ mod test_finalize_block {
                 ..Default::default()
             })
             .expect("Test failed")[0];
-        assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        let code = event
-            .attributes
-            .get("code")
-            .expect(
-                "Test
-        failed",
-            )
-            .as_str();
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
         // the merkle tree root should not change after finalize_block
@@ -2725,7 +2423,7 @@ mod test_finalize_block {
                 .shell
                 .state
                 .write_log()
-                .has_replay_protection_entry(&wrapper_tx.header_hash())
+                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
                 .unwrap_or_default()
         );
         // Check that the hash is present in the merkle tree
@@ -2741,14 +2439,13 @@ mod test_finalize_block {
         );
     }
 
-    /// Test that a decrypted tx that has already been applied in the same block
+    /// Test that a tx that has already been applied in the same block
     /// doesn't get reapplied
     #[test]
-    fn test_duplicated_decrypted_tx_same_block() {
+    fn test_duplicated_tx_same_block() {
         let (mut shell, _, _, _) = setup();
-        let keypair = gen_keypair();
-        let keypair_2 = gen_keypair();
-        let mut batch = namada::state::testing::TestState::batch();
+        let keypair = crate::wallet::defaults::albert_keypair();
+        let keypair_2 = crate::wallet::defaults::bertha_keypair();
 
         let tx_code = TestWasms::TxNoOp.read_bytes();
         let mut wrapper =
@@ -2764,9 +2461,7 @@ mod test_finalize_block {
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));
-        wrapper.set_data(Data::new(
-            "Decrypted transaction data".as_bytes().to_owned(),
-        ));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
 
         let mut new_wrapper = wrapper.clone();
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -2790,26 +2485,10 @@ mod test_finalize_block {
             None,
         )));
 
-        let mut inner = wrapper.clone();
-        let mut new_inner = new_wrapper.clone();
-
-        for inner in [&mut inner, &mut new_inner] {
-            inner.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        }
-
-        // Write wrapper hashes in storage
-        for tx in [&wrapper, &new_wrapper] {
-            let hash_subkey = replay_protection::last_key(&tx.header_hash());
-            shell
-                .state
-                .write_replay_protection_entry(&mut batch, &hash_subkey)
-                .expect("Test failed");
-        }
-
         let mut processed_txs: Vec<ProcessedTx> = vec![];
-        for inner in [&inner, &new_inner] {
+        for tx in [&wrapper, &new_wrapper] {
             processed_txs.push(ProcessedTx {
-                tx: inner.to_bytes().into(),
+                tx: tx.to_bytes().into(),
                 result: TxResult {
                     code: ResultCode::Ok.into(),
                     info: "".into(),
@@ -2817,8 +2496,6 @@ mod test_finalize_block {
             })
         }
 
-        shell.enqueue_tx(wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
-        shell.enqueue_tx(new_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
 
@@ -2840,12 +2517,12 @@ mod test_finalize_block {
         let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
-        for (inner, wrapper) in [(inner, wrapper), (new_inner, new_wrapper)] {
+        for wrapper in [&wrapper, &new_wrapper] {
             assert!(
                 shell
                     .state
                     .write_log()
-                    .has_replay_protection_entry(&inner.raw_header_hash())
+                    .has_replay_protection_entry(&wrapper.raw_header_hash())
                     .unwrap_or_default()
             );
             assert!(
@@ -2858,23 +2535,48 @@ mod test_finalize_block {
         }
     }
 
-    /// Test that if a decrypted transaction fails because of out-of-gas,
-    /// undecryptable, invalid signature or wrong section commitment, its hash
+    /// Test that if a transaction fails because of out-of-gas,
+    ///  invalid signature or wrong section commitment, its hash
     /// is not committed to storage. Also checks that a tx failing for other
     /// reason has its hash written to storage.
     #[test]
     fn test_tx_hash_handling() {
         let (mut shell, _, _, _) = setup();
-        let keypair = gen_keypair();
-        let mut batch = namada::state::testing::TestState::batch();
+        let keypair = crate::wallet::defaults::bertha_keypair();
+        let mut out_of_gas_wrapper = {
+            let tx_code = TestWasms::TxNoOp.read_bytes();
+            let mut wrapper_tx =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    Epoch(0),
+                    0.into(),
+                    None,
+                ))));
+            wrapper_tx.header.chain_id = shell.chain_id.clone();
+            wrapper_tx.set_data(Data::new(
+                "Encrypted transaction data".as_bytes().to_owned(),
+            ));
+            wrapper_tx.set_code(Code::new(tx_code, None));
+            wrapper_tx.add_section(Section::Signature(Signature::new(
+                wrapper_tx.sechashes(),
+                [(0, keypair.clone())].into_iter().collect(),
+                None,
+            )));
+            wrapper_tx
+        };
 
-        let (out_of_gas_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
-        let (undecryptable_wrapper, _) = mk_wrapper_tx(&shell, &keypair);
         let mut wasm_path = top_level_directory();
         // Write a key to trigger the vp to validate the signature
         wasm_path.push("wasm_for_tests/tx_write.wasm");
         let tx_code = std::fs::read(wasm_path)
             .expect("Expected a file at given code path");
+
         let mut unsigned_wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -2889,7 +2591,9 @@ mod test_finalize_block {
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
+
         let mut failing_wrapper = unsigned_wrapper.clone();
+
         unsigned_wrapper.set_code(Code::new(tx_code, None));
         let addr = Address::from(&keypair.to_public());
         let key = Key::from(addr.to_db_key())
@@ -2901,6 +2605,7 @@ mod test_finalize_block {
             })
             .unwrap(),
         ));
+
         let mut wasm_path = top_level_directory();
         wasm_path.push("wasm_for_tests/tx_fail.wasm");
         let tx_code = std::fs::read(wasm_path)
@@ -2909,55 +2614,38 @@ mod test_finalize_block {
         failing_wrapper.set_data(Data::new(
             "Encrypted transaction data".as_bytes().to_owned(),
         ));
-        let mut wrong_commitment_wrapper = failing_wrapper.clone();
-        wrong_commitment_wrapper.set_code_sechash(Hash::default());
 
-        let mut out_of_gas_inner = out_of_gas_wrapper.clone();
-        let mut undecryptable_inner = undecryptable_wrapper.clone();
-        let mut unsigned_inner = unsigned_wrapper.clone();
-        let mut wrong_commitment_inner = failing_wrapper.clone();
+        let mut wrong_commitment_wrapper = failing_wrapper.clone();
+        let tx_code = TestWasms::TxInvalidData.read_bytes();
+        wrong_commitment_wrapper.set_code(Code::new(tx_code, None));
+        wrong_commitment_wrapper
+            .sections
+            .retain(|sec| !matches!(sec, Section::Data(_)));
         // Add some extra data to avoid having the same Tx hash as the
         // `failing_wrapper`
-        wrong_commitment_inner.add_memo(&[0_u8]);
-        let mut failing_inner = failing_wrapper.clone();
-
-        undecryptable_inner
-            .update_header(TxType::Decrypted(DecryptedTx::Undecryptable));
-        for inner in [
-            &mut out_of_gas_inner,
-            &mut unsigned_inner,
-            &mut wrong_commitment_inner,
-            &mut failing_inner,
-        ] {
-            inner.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        }
-
-        // Write wrapper hashes in storage
-        for wrapper in [
-            &out_of_gas_wrapper,
-            &undecryptable_wrapper,
-            &unsigned_wrapper,
-            &wrong_commitment_wrapper,
-            &failing_wrapper,
-        ] {
-            let hash_subkey =
-                replay_protection::last_key(&wrapper.header_hash());
-            shell
-                .state
-                .write_replay_protection_entry(&mut batch, &hash_subkey)
-                .unwrap();
-        }
+        wrong_commitment_wrapper.add_memo(&[0_u8]);
 
         let mut processed_txs: Vec<ProcessedTx> = vec![];
-        for inner in [
-            &out_of_gas_inner,
-            &undecryptable_inner,
-            &unsigned_inner,
-            &wrong_commitment_inner,
-            &failing_inner,
+        for tx in [
+            &mut out_of_gas_wrapper,
+            &mut wrong_commitment_wrapper,
+            &mut failing_wrapper,
         ] {
+            tx.sign_raw(
+                vec![keypair.clone()],
+                vec![keypair.ref_to()].into_iter().collect(),
+                None,
+            );
+        }
+        for tx in [
+            &mut out_of_gas_wrapper,
+            &mut unsigned_wrapper,
+            &mut wrong_commitment_wrapper,
+            &mut failing_wrapper,
+        ] {
+            tx.sign_wrapper(keypair.clone());
             processed_txs.push(ProcessedTx {
-                tx: inner.to_bytes().into(),
+                tx: tx.to_bytes().into(),
                 result: TxResult {
                     code: ResultCode::Ok.into(),
                     info: "".into(),
@@ -2965,17 +2653,6 @@ mod test_finalize_block {
             })
         }
 
-        shell.enqueue_tx(out_of_gas_wrapper.clone(), Gas::default());
-        shell.enqueue_tx(
-            undecryptable_wrapper.clone(),
-            GAS_LIMIT_MULTIPLIER.into(),
-        );
-        shell.enqueue_tx(unsigned_wrapper.clone(), u64::MAX.into()); // Prevent out of gas which would still make the test pass
-        shell.enqueue_tx(
-            wrong_commitment_wrapper.clone(),
-            GAS_LIMIT_MULTIPLIER.into(),
-        );
-        shell.enqueue_tx(failing_wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
 
@@ -2992,38 +2669,35 @@ mod test_finalize_block {
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
         let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::Undecryptable).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         assert_eq!(event[2].event_type.to_string(), String::from("applied"));
         let code = event[2].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
         assert_eq!(event[3].event_type.to_string(), String::from("applied"));
         let code = event[3].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
-        assert_eq!(event[4].event_type.to_string(), String::from("applied"));
-        let code = event[4].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
-        for (invalid_inner, valid_wrapper) in [
-            (out_of_gas_inner, out_of_gas_wrapper),
-            (undecryptable_inner, undecryptable_wrapper),
-            (unsigned_inner, unsigned_wrapper),
-            (wrong_commitment_inner, wrong_commitment_wrapper),
+        for valid_wrapper in [
+            out_of_gas_wrapper,
+            unsigned_wrapper,
+            wrong_commitment_wrapper,
         ] {
             assert!(
                 !shell
                     .state
                     .write_log()
                     .has_replay_protection_entry(
-                        &invalid_inner.raw_header_hash()
+                        &valid_wrapper.raw_header_hash()
                     )
                     .unwrap_or_default()
             );
             assert!(
                 shell
                     .state
+                    .write_log()
                     .has_replay_protection_entry(&valid_wrapper.header_hash())
                     .unwrap_or_default()
             );
@@ -3032,7 +2706,7 @@ mod test_finalize_block {
             shell
                 .state
                 .write_log()
-                .has_replay_protection_entry(&failing_inner.raw_header_hash())
+                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
                 .expect("test failed")
         );
         assert!(
@@ -3099,7 +2773,7 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("accepted"));
+        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
         let code = event[0]
             .attributes
             .get("code")
@@ -3169,8 +2843,8 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer is 0
-        assert_eq!(event.event_type.to_string(), String::from("accepted"));
-        let code = event.attributes.get("code").expect("Testfailed").as_str();
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
+        let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         let balance_key = token::storage_key::balance_key(
             &shell.state.in_mem().native_token,
@@ -3227,9 +2901,7 @@ mod test_finalize_block {
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));
-        wrapper.set_data(Data::new(
-            "Enxrypted transaction data".as_bytes().to_owned(),
-        ));
+        wrapper.set_data(Data::new("Transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Signature(Signature::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
@@ -3270,7 +2942,7 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check fee payment
-        assert_eq!(event.event_type.to_string(), String::from("accepted"));
+        assert_eq!(event.event_type.to_string(), String::from("applied"));
         let code = event.attributes.get("code").expect("Test failed").as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
 
