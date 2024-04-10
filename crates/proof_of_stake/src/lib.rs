@@ -1381,7 +1381,7 @@ where
     }
 
     let mut unbonds_and_redelegated_unbonds: BTreeMap<
-        (Epoch, Epoch),
+        EpochBounds,
         (token::Amount, EagerRedelegatedBondsMap),
     > = BTreeMap::new();
 
@@ -1426,7 +1426,10 @@ where
         }
 
         unbonds_and_redelegated_unbonds.insert(
-            (start_epoch, withdraw_epoch),
+            EpochBounds {
+                start: start_epoch,
+                end: withdraw_epoch,
+            },
             (amount, eager_redelegated_unbonds),
         );
     }

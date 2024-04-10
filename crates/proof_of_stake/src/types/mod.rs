@@ -685,6 +685,12 @@ pub struct UnbondDetails {
     pub slashed_amount: Option<token::Amount>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EpochBounds {
+    pub start: Epoch,
+    pub end: Epoch,
+}
+
 impl Display for BondId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(

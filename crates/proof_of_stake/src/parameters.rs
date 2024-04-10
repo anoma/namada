@@ -209,7 +209,7 @@ impl OwnedPosParams {
     pub fn cubic_slash_epoch_window(
         &self,
         infraction_epoch: Epoch,
-    ) -> (Epoch, Epoch) {
+    ) -> EpochBounds {
         let start = infraction_epoch
             .sub_or_default(Epoch(self.cubic_slashing_window_length));
         let end = infraction_epoch + self.cubic_slashing_window_length;
