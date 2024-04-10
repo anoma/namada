@@ -535,56 +535,23 @@ where
 {
     match code_or_hash {
         Commitment::Hash(code_hash) => {
-            let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
-                Some((module, store)) => {
-                    // Gas accounting even if the compiled module is in cache
-                    let key = Key::wasm_code_len(code_hash);
-                    let tx_len = state
-                        .read::<u64>(&key)
-                        .map_err(|e| {
-                            Error::LoadWasmCode(format!(
-                                "Read wasm code length failed from storage: \
-                                 key {}, error {}",
-                                key, e
-                            ))
-                        })?
-                        .ok_or_else(|| {
-                            Error::LoadWasmCode(format!(
-                                "No wasm code length in storage: key {}",
-                                key
-                            ))
-                        })?;
+            let code_len_key = Key::wasm_code_len(code_hash);
+            let tx_len = state
+                .read::<u64>(&code_len_key)
+                .map_err(|e| {
+                    Error::LoadWasmCode(format!(
+                        "Read wasm code length failed: key {code_len_key}, \
+                         error {e}"
+                    ))
+                })?
+                .ok_or_else(|| {
+                    Error::LoadWasmCode(format!(
+                        "No wasm code length in storage: key {code_len_key}"
+                    ))
+                })?;
 
-                    (module, store, tx_len)
-                }
-                None => {
-                    let key = Key::wasm_code(code_hash);
-                    let code = state
-                        .read_bytes(&key)
-                        .map_err(|e| {
-                            Error::LoadWasmCode(format!(
-                                "Read wasm code failed from storage: key {}, \
-                                 error {}",
-                                key, e
-                            ))
-                        })?
-                        .ok_or_else(|| {
-                            Error::LoadWasmCode(format!(
-                                "No wasm code in storage: key {}",
-                                key
-                            ))
-                        })?;
-
-                    let tx_len = u64::try_from(code.len())
-                        .map_err(|e| Error::ConversionError(e.to_string()))?;
-
-                    match wasm_cache.compile_or_fetch(code)? {
-                        Some((module, store)) => (module, store, tx_len),
-                        None => return Err(Error::NoCompiledWasmCode),
-                    }
-                }
-            };
-
+            // Gas accounting in any case, even if the compiled module is in
+            // cache
             gas_meter
                 .borrow_mut()
                 .add_wasm_load_from_storage_gas(tx_len)
@@ -593,6 +560,31 @@ where
                 .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
+
+            let (module, store) = match wasm_cache.fetch(code_hash)? {
+                Some((module, store)) => (module, store),
+                None => {
+                    let key = Key::wasm_code(code_hash);
+                    let code = state
+                        .read_bytes(&key)
+                        .map_err(|e| {
+                            Error::LoadWasmCode(format!(
+                                "Read wasm code failed: key {key}, error {e}"
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::LoadWasmCode(format!(
+                                "No wasm code in storage: key {key}"
+                            ))
+                        })?;
+
+                    match wasm_cache.compile_or_fetch(code)? {
+                        Some((module, store)) => (module, store),
+                        None => return Err(Error::NoCompiledWasmCode),
+                    }
+                }
+            };
+
             Ok((module, store))
         }
         Commitment::Id(code) => {
