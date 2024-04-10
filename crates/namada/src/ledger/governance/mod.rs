@@ -95,8 +95,8 @@ where
                 (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
                     self.is_valid_proposal_code(proposal_id)
                 }
-                (KeyType::GRACE_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_grace_epoch(proposal_id)
+                (KeyType::ACTIVATION_EPOCH, Some(proposal_id)) => {
+                    self.is_valid_activation_epoch(proposal_id)
                 }
                 (KeyType::START_EPOCH, Some(proposal_id)) => {
                     self.is_valid_start_epoch(proposal_id)
@@ -162,7 +162,7 @@ where
                 gov_storage::get_funds_key(counter),
                 gov_storage::get_voting_start_epoch_key(counter),
                 gov_storage::get_voting_end_epoch_key(counter),
-                gov_storage::get_grace_epoch_key(counter),
+                gov_storage::get_activation_epoch_key(counter),
             ]);
 
             // Check that expected set is a subset of the actual one
@@ -458,18 +458,20 @@ where
         Ok(post_code.len() <= max_proposal_length)
     }
 
-    /// Validate a grace_epoch key
-    pub fn is_valid_grace_epoch(&self, proposal_id: u64) -> Result<bool> {
+    /// Validate an activation_epoch key
+    pub fn is_valid_activation_epoch(&self, proposal_id: u64) -> Result<bool> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
-        let grace_epoch_key = gov_storage::get_grace_epoch_key(proposal_id);
+        let activation_epoch_key =
+            gov_storage::get_activation_epoch_key(proposal_id);
         let max_proposal_period = gov_storage::get_max_proposal_period_key();
-        let min_grace_epoch_key =
-            gov_storage::get_min_proposal_grace_epoch_key();
+        let min_grace_epochs_key =
+            gov_storage::get_min_proposal_grace_epochs_key();
 
-        let has_pre_grace_epoch = self.ctx.has_key_pre(&grace_epoch_key)?;
-        if has_pre_grace_epoch {
+        let has_pre_activation_epoch =
+            self.ctx.has_key_pre(&activation_epoch_key)?;
+        if has_pre_activation_epoch {
             return Ok(false);
         }
 
@@ -477,16 +479,16 @@ where
             self.force_read(&start_epoch_key, ReadType::Post)?;
         let end_epoch: Epoch =
             self.force_read(&end_epoch_key, ReadType::Post)?;
-        let grace_epoch: Epoch =
-            self.force_read(&grace_epoch_key, ReadType::Post)?;
-        let min_grace_epoch: u64 =
-            self.force_read(&min_grace_epoch_key, ReadType::Pre)?;
+        let activation_epoch: Epoch =
+            self.force_read(&activation_epoch_key, ReadType::Post)?;
+        let min_grace_epochs: u64 =
+            self.force_read(&min_grace_epochs_key, ReadType::Pre)?;
         let max_proposal_period: u64 =
             self.force_read(&max_proposal_period, ReadType::Pre)?;
 
         let committing_epoch_key = gov_storage::get_committing_proposals_key(
             proposal_id,
-            grace_epoch.into(),
+            activation_epoch.into(),
         );
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
@@ -494,29 +496,29 @@ where
             return Ok(false);
         }
 
-        let is_valid_grace_epoch = end_epoch < grace_epoch
-            && (grace_epoch - end_epoch).0 >= min_grace_epoch;
-        if !is_valid_grace_epoch {
+        let is_valid_activation_epoch = end_epoch < activation_epoch
+            && (activation_epoch - end_epoch).0 >= min_grace_epochs;
+        if !is_valid_activation_epoch {
             tracing::info!(
-                "Expected min duration between the end and grace epoch \
-                 {min_grace_epoch}, but got grace = {}, end = {}",
-                grace_epoch,
+                "Expected min duration between the end and activation epoch \
+                 {min_grace_epochs}, but got activation = {}, end = {}",
+                activation_epoch,
                 end_epoch
             );
         }
-        let is_valid_max_proposal_period = start_epoch < grace_epoch
-            && grace_epoch.0 - start_epoch.0 <= max_proposal_period;
+        let is_valid_max_proposal_period = start_epoch < activation_epoch
+            && activation_epoch.0 - start_epoch.0 <= max_proposal_period;
         if !is_valid_max_proposal_period {
             tracing::info!(
-                "Expected max duration between the start and grace epoch \
-                 {max_proposal_period}, but got grace ={}, start = {}",
-                grace_epoch,
+                "Expected max duration between the start and activation epoch \
+                 {max_proposal_period}, but got activation = {}, start = {}",
+                activation_epoch,
                 start_epoch
             );
         }
 
         Ok(has_post_committing_epoch
-            && is_valid_grace_epoch
+            && is_valid_activation_epoch
             && is_valid_max_proposal_period)
     }
 
@@ -798,7 +800,7 @@ enum KeyType {
     #[allow(non_camel_case_types)]
     PROPOSAL_COMMIT,
     #[allow(non_camel_case_types)]
-    GRACE_EPOCH,
+    ACTIVATION_EPOCH,
     #[allow(non_camel_case_types)]
     START_EPOCH,
     #[allow(non_camel_case_types)]
@@ -827,8 +829,8 @@ impl KeyType {
             Self::TYPE
         } else if gov_storage::is_proposal_code_key(key) {
             Self::PROPOSAL_CODE
-        } else if gov_storage::is_grace_epoch_key(key) {
-            KeyType::GRACE_EPOCH
+        } else if gov_storage::is_activation_epoch_key(key) {
+            KeyType::ACTIVATION_EPOCH
         } else if gov_storage::is_start_epoch_key(key) {
             KeyType::START_EPOCH
         } else if gov_storage::is_commit_proposal_key(key) {
@@ -863,9 +865,9 @@ mod test {
     use borsh_ext::BorshSerializeExt;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_governance::storage::keys::{
-        get_author_key, get_committing_proposals_key, get_content_key,
-        get_counter_key, get_funds_key, get_grace_epoch_key,
-        get_proposal_type_key, get_vote_proposal_key, get_voting_end_epoch_key,
+        get_activation_epoch_key, get_author_key, get_committing_proposals_key,
+        get_content_key, get_counter_key, get_funds_key, get_proposal_type_key,
+        get_vote_proposal_key, get_voting_end_epoch_key,
         get_voting_start_epoch_key,
     };
     use namada_governance::{ProposalType, ProposalVote, ADDRESS};
@@ -1011,17 +1013,20 @@ mod test {
         }
     }
 
-    fn get_proposal_keys(proposal_id: u64, grace_epoch: u64) -> BTreeSet<Key> {
+    fn get_proposal_keys(
+        proposal_id: u64,
+        activation_epoch: u64,
+    ) -> BTreeSet<Key> {
         let counter_key = get_counter_key();
         let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
         let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
-        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let activation_epoch_key = get_activation_epoch_key(proposal_id);
         let content_key = get_content_key(proposal_id);
         let author_key = get_author_key(proposal_id);
         let proposal_type_key = get_proposal_type_key(proposal_id);
         let funds_key = get_funds_key(proposal_id);
         let commiting_key =
-            get_committing_proposals_key(proposal_id, grace_epoch);
+            get_committing_proposals_key(proposal_id, activation_epoch);
 
         BTreeSet::from([
             counter_key.clone(),
@@ -1031,7 +1036,7 @@ mod test {
             proposal_type_key.clone(),
             voting_start_epoch_key.clone(),
             voting_end_epoch_key.clone(),
-            grace_epoch_key.clone(),
+            activation_epoch_key.clone(),
             commiting_key.clone(),
         ])
     }
@@ -1083,7 +1088,7 @@ mod test {
         let counter_key = get_counter_key();
         let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
         let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
-        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let activation_epoch_key = get_activation_epoch_key(proposal_id);
         let content_key = get_content_key(proposal_id);
         let author_key = get_author_key(proposal_id);
         let proposal_type_key = get_proposal_type_key(proposal_id);
@@ -1112,7 +1117,7 @@ mod test {
             .unwrap();
         state
             .write_log_mut()
-            .write(&grace_epoch_key, Epoch(grace_epoch).serialize_to_vec())
+            .write(&activation_epoch_key, Epoch(grace_epoch).serialize_to_vec())
             .unwrap();
         state
             .write_log_mut()
@@ -1146,9 +1151,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1243,9 +1248,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1343,9 +1348,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1679,12 +1684,12 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
         let counter_key = get_counter_key();
         let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
         let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
-        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let activation_epoch_key = get_activation_epoch_key(proposal_id);
         let content_key = get_content_key(proposal_id);
         let author_key = get_author_key(proposal_id);
         let proposal_type_key = get_proposal_type_key(proposal_id);
@@ -1698,7 +1703,7 @@ mod test {
             proposal_type_key.clone(),
             voting_start_epoch_key.clone(),
             voting_end_epoch_key.clone(),
-            grace_epoch_key.clone(),
+            activation_epoch_key.clone(),
         ]);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1745,7 +1750,7 @@ mod test {
             509,
             3,
             9,
-            grace_epoch,
+            activation_epoch,
             &signer_address,
             true,
         );
@@ -1776,12 +1781,12 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
         let counter_key = get_counter_key();
         let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
         let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
-        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let activation_epoch_key = get_activation_epoch_key(proposal_id);
         let content_key = get_content_key(proposal_id);
         let author_key = get_author_key(proposal_id);
         let proposal_type_key = get_proposal_type_key(proposal_id);
@@ -1795,7 +1800,7 @@ mod test {
             proposal_type_key.clone(),
             voting_start_epoch_key.clone(),
             voting_end_epoch_key.clone(),
-            grace_epoch_key.clone(),
+            activation_epoch_key.clone(),
         ]);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1842,7 +1847,7 @@ mod test {
             500,
             0,
             9,
-            grace_epoch,
+            activation_epoch,
             &signer_address,
             false,
         );
@@ -1873,9 +1878,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1997,9 +2002,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2121,9 +2126,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2245,9 +2250,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2386,9 +2391,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2527,9 +2532,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let mut keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
