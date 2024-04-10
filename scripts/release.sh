@@ -25,15 +25,15 @@ HASH_BEFORE=$(git rev-parse HEAD)
 cargo release --execute $VERSION
 HASH_AFTER=$(git rev-parse HEAD)
 
-# update the wasm crate versions (2 fixups)
+# update the wasm workspace crate versions (2 fixups)
 cd $REPO_ROOT/wasm
 cargo update -w
 git add Cargo.lock
 git commit --fixup=$HASH_AFTER
 cargo release --execute $VERSION
 
-# update the wasm_for_tests crate version, and rebuild them (3 fixups)
-cd $REPO_ROOT/wasm_for_tests/wasm_source
+# update the wasm_for_tests workspace crate version, and rebuild them (3 fixups)
+cd $REPO_ROOT/wasm_for_tests
 cargo update -w
 git add Cargo.lock
 git commit --fixup=$HASH_AFTER
