@@ -36,7 +36,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 
         // The module entrypoint callable by wasm runtime
         #[no_mangle]
-        extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
+        extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) -> u64 {
             let slice = unsafe {
                 core::slice::from_raw_parts(
                     tx_data_ptr as *const u8,
@@ -52,10 +52,15 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
             // to "fake" it.
             let mut ctx = unsafe { namada_tx_prelude::Ctx::new() };
 
-            if let Err(err) = #ident(&mut ctx, tx_data) {
-                namada_tx_prelude::debug_log!("Transaction error: {}", err);
-                // crash the transaction to abort
-                panic!();
+            match #ident(&mut ctx, tx_data) {
+                Ok(()) => 1,
+                Err(err) => {
+                    namada_tx_prelude::debug_log!("Transaction error: {err}");
+                    // TODO: pass some proper error from txs, instead of a string
+                    let err = err.to_string().serialize_to_vec();
+                    ctx.yield_value(err);
+                    0
+                },
             }
         }
     };

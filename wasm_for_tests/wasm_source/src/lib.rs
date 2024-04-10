@@ -46,7 +46,8 @@ pub mod main {
     fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
         let target_key = parameters_storage::get_tx_allowlist_storage_key();
         loop {
-            // NOTE: don't propagate the error to verify that execution abortion is done in host and does not require guest cooperation
+            // NOTE: don't propagate the error to verify that execution abortion
+            // is done in host and does not require guest cooperation
             let _ = ctx.write(&target_key, vec!["hash"]);
         }
     }
@@ -135,14 +136,12 @@ pub mod main {
             token::storage_key::masp_kd_gain_key(&ibc_token);
 
         let token_map_key = token::storage_key::masp_token_map_key();
-        let mut token_map: masp::TokenMap = ctx.read(&token_map_key)?.unwrap_or_default();
+        let mut token_map: masp::TokenMap =
+            ctx.read(&token_map_key)?.unwrap_or_default();
         token_map.insert(ibc_denom, ibc_token);
         ctx.write(&token_map_key, token_map)?;
 
-        ctx.write(
-            &shielded_token_last_inflation_key,
-            token::Amount::zero(),
-        )?;
+        ctx.write(&shielded_token_last_inflation_key, token::Amount::zero())?;
         ctx.write(
             &shielded_token_last_locked_amount_key,
             token::Amount::zero(),
@@ -188,10 +187,7 @@ pub mod main {
 #[cfg(feature = "tx_write")]
 pub mod main {
     use namada_test_utils::tx_data::TxWriteData;
-    use namada_tx_prelude::{
-        log_string, transaction, BorshDeserialize, Ctx, StorageRead,
-        StorageWrite, Tx, TxResult,
-    };
+    use namada_tx_prelude::*;
 
     const TX_NAME: &str = "tx_write";
 
@@ -390,7 +386,8 @@ pub mod main {
             namada_tx_prelude::parameters_storage::get_tx_allowlist_storage_key(
             );
         loop {
-            // NOTE: don't propagate the error to verify that execution abortion is done in host and does not require guest cooperation
+            // NOTE: don't propagate the error to verify that execution abortion
+            // is done in host and does not require guest cooperation
             let _ = ctx.read_bytes_pre(&target_key);
         }
     }

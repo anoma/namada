@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let transfer = token::Transfer::try_from_slice(&data[..])
-        .wrap_err("failed to decode token::Transfer")?;
+        .wrap_err("Failed to decode token::Transfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
 
     token::transfer(
@@ -21,7 +21,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         &transfer.target,
         &transfer.token,
         transfer.amount.amount(),
-    )?;
+    )
+    .wrap_err("Token transfer failed")?;
 
     let shielded = transfer
         .shielded
@@ -30,7 +31,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
             signed
                 .get_section(hash)
                 .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg("unable to find shielded section")
+                .ok_or_err_msg(
+                    "Unable to find required shielded section in tx data",
+                )
                 .map_err(|err| {
                     ctx.set_commitment_sentinel();
                     err
@@ -38,8 +41,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         })
         .transpose()?;
     if let Some(shielded) = shielded {
-        token::utils::handle_masp_tx(ctx, &shielded, transfer.key.as_deref())?;
-        update_masp_note_commitment_tree(&shielded)?;
+        token::utils::handle_masp_tx(ctx, &shielded, transfer.key.as_deref())
+            .wrap_err("Encountered error while handling MASP transaction")?;
+        update_masp_note_commitment_tree(&shielded)
+            .wrap_err("Failed to update the MASP commitment tree")?;
     }
     Ok(())
 }
