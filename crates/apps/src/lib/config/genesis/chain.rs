@@ -295,6 +295,7 @@ impl Finalized {
             max_block_gas,
             minimum_gas_price,
             max_tx_bytes,
+            is_native_token_transferable,
             ..
         } = self.parameters.parameters.clone();
 
@@ -348,6 +349,7 @@ impl Finalized {
                     )
                 })
                 .collect(),
+            is_native_token_transferable,
         }
     }
 

@@ -215,6 +215,7 @@ pub fn init_storage() -> (Address, Address) {
     let code_hash = Hash::sha256(&code);
 
     tx_host_env::with(|env| {
+        namada::parameters::init_test_storage(&mut env.state).unwrap();
         ibc::init_genesis_storage(&mut env.state);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut env.state).unwrap();
