@@ -49,6 +49,7 @@ use crate::data::protocol::ProtocolTx;
     ToPrimitive,
     PartialEq,
     Eq,
+    Hash,
     Serialize,
     Deserialize,
 )]

@@ -59,6 +59,7 @@ tracing.workspace = true
 namada_apps = {path = "../apps", features = ["testing"]}
 namada_vm_env = {path = "../vm_env"}
 assert_cmd.workspace = true
+assert_matches.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 color-eyre.workspace = true
@@ -74,6 +75,7 @@ pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
+test-log.workspace = true
 toml.workspace = true
 
 # This is used to enable logging from tests

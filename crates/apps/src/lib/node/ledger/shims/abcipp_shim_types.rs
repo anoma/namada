@@ -218,7 +218,7 @@ pub mod shim {
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
 
-        #[derive(Debug, Default, Clone, PartialEq, Eq)]
+        #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
         pub struct TxResult {
             pub code: u32,
             pub info: String,

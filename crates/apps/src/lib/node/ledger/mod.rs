@@ -14,7 +14,7 @@ use std::thread;
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
 use futures::future::TryFutureExt;
-use namada::core::storage::{BlockHeight, Key};
+use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::state::DB;
@@ -208,7 +208,7 @@ pub fn dump_db(
 #[cfg(feature = "migrations")]
 pub fn query_db(
     config: config::Ledger,
-    key: &Key,
+    key: &namada::core::storage::Key,
     type_hash: &[u8; 32],
     cf: &DbColFam,
 ) {
