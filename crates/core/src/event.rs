@@ -289,6 +289,7 @@ impl EventTypeBuilder {
     PartialEq,
     Ord,
     PartialOrd,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
