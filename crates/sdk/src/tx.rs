@@ -2127,7 +2127,7 @@ pub async fn build_vote_proposal(
         rpc::is_validator(context.client(), voter_address).await?;
 
     // Prevent jailed or inactive validators from voting
-    if is_validator && !tx.force {
+    if is_validator {
         let state = rpc::get_validator_state(
             context.client(),
             voter_address,
@@ -2138,10 +2138,21 @@ pub async fn build_vote_proposal(
         .expect("Expected to find the state of the validator");
 
         if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
-            return Err(Error::from(TxSubmitError::CannotVoteInGovernance(
-                voter_address.clone(),
-                current_epoch,
-            )));
+            edisplay_line!(
+                context.io(),
+                "The voter {} is a validator who is currently jailed or \
+                 inactive. Thus, this address is prohibited from voting in \
+                 governance right now.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::from(
+                    TxSubmitError::CannotVoteInGovernance(
+                        voter_address.clone(),
+                        current_epoch,
+                    ),
+                ));
+            }
         }
     }
 
