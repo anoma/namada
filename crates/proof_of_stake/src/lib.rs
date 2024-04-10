@@ -3000,12 +3000,13 @@ where
 {
     let validators = delegation_targets_handle(delegator);
     if let Some(delegation) = validators.get(storage, validator)?.as_mut() {
+        let (_start, end) = &mut delegation.last_range;
         debug_assert!(
-            delegation.last_range.1.is_none(),
+            end.is_none(),
             "End epoch should be None since we are removing the delegation
               right now!!"
         );
-        delegation.last_range.1 = Some(epoch);
+        *end = Some(epoch);
         validators.insert(storage, validator.clone(), delegation.clone())?;
     } else {
         panic!("Delegation should exist since we are removing it right now!!!");

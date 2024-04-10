@@ -277,34 +277,6 @@ pub struct DelegationEpochs {
 /// The set of all target validators for a given delegator.
 pub type DelegationTargets = LazyMap<Address, DelegationEpochs>;
 
-// impl DelegationTargets {
-//     pub fn get_delegation_validators<S>(
-//         &self,
-//         storage: &mut S,
-//         epoch: Epoch,
-//     ) -> namada_storage::Result<Option<&LazySet<Address>>>
-//     where
-//         S: StorageRead,
-//     {
-//         let oldest_epoch = self
-//             .get_last_update(storage)?
-//             .expect("Oldest epoch should be set");
-
-//         if epoch < oldest_epoch {
-//             // Should we return an error or None?
-//             return Ok(None);
-//         }
-
-//         let mut epoch = epoch;
-//         while epoch >= oldest_epoch {
-//             if let Some(validators) = self.get(epoch, storage)? {
-//                 return Ok(Some(validators));
-//             }
-//             epoch = epoch - 1;
-//         }
-//     }
-// }
-
 #[derive(
     Debug,
     Clone,
