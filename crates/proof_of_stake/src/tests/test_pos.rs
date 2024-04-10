@@ -22,7 +22,9 @@ use token::get_effective_total_native_supply;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
-use crate::queries::{bonds_and_unbonds, find_delegation_validators};
+use crate::queries::{
+    bonds_and_unbonds, find_delegation_validators, find_delegations,
+};
 use crate::rewards::{
     log_block_rewards_aux, update_rewards_products_and_mint_inflation,
     PosRewardsCalculator,
@@ -1757,8 +1759,8 @@ fn test_delegation_targets() {
         token::Amount::native_whole(1),
         token::Amount::native_whole(2),
     ];
-    let mut s = TestState::default();
-    let mut current_epoch = s.in_mem().block.epoch;
+    let mut storage = TestState::default();
+    let mut current_epoch = storage.in_mem().block.epoch;
     let params = OwnedPosParams::default();
 
     let genesis_validators = get_genesis_validators(2, stakes.clone());
@@ -1766,51 +1768,60 @@ fn test_delegation_targets() {
     let validator2 = genesis_validators[1].address.clone();
 
     let delegator = address::testing::gen_implicit_address();
-    let staking_token = staking_token_address(&s);
+    let staking_token = staking_token_address(&storage);
     credit_tokens(
-        &mut s,
+        &mut storage,
         &staking_token,
         &delegator,
         token::Amount::native_whole(20),
     )
     .unwrap();
+    credit_tokens(
+        &mut storage,
+        &staking_token,
+        &validator2,
+        token::Amount::native_whole(20),
+    )
+    .unwrap();
 
     let params = test_init_genesis(
-        &mut s,
+        &mut storage,
         params,
         genesis_validators.into_iter(),
         current_epoch,
     )
     .unwrap();
 
+    println!("\nValidator1: {:?}", validator1);
+    println!("Validator2: {:?}", validator2);
+    println!("Delegator: {:?}\n", delegator);
+
     // Check initial delegation targets
     for epoch in Epoch::iter_bounds_inclusive(
         current_epoch,
         current_epoch + params.pipeline_len,
     ) {
-        println!("Epoch: {:?}", epoch);
         let delegatees1 =
-            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =
-            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
         assert!(delegatees1.contains(&validator1));
         assert!(delegatees2.contains(&validator2));
     }
 
-    // Advance an epoch and check if the delegation targets are properly updated
-    // in the absence of bonds
-    current_epoch = advance_epoch(&mut s, &params);
+    // Advance to epoch 1 and check if the delegation targets are properly
+    // updated in the absence of bonds
+    current_epoch = advance_epoch(&mut storage, &params);
     for epoch in Epoch::iter_bounds_inclusive(
         Epoch::default(),
         current_epoch + params.pipeline_len,
     ) {
-        println!("Epoch: {:?}", epoch);
         let delegatees1 =
-            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =
-            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
         assert!(delegatees1.contains(&validator1));
@@ -1819,7 +1830,7 @@ fn test_delegation_targets() {
 
     // Bond from a delegator to validator1 in epoch 1
     bond_tokens(
-        &mut s,
+        &mut storage,
         Some(&delegator),
         &validator1,
         token::Amount::native_whole(3),
@@ -1829,19 +1840,25 @@ fn test_delegation_targets() {
     .unwrap();
 
     // Completely self-unbond from validator2
-    unbond_tokens(&mut s, None, &validator2, stakes[1], current_epoch, false)
-        .unwrap();
+    unbond_tokens(
+        &mut storage,
+        None,
+        &validator2,
+        stakes[1],
+        current_epoch,
+        false,
+    )
+    .unwrap();
 
     // Check the delegation targets now
     let pipeline_epoch = current_epoch + params.pipeline_len;
     for epoch in
         Epoch::iter_bounds_inclusive(Epoch::default(), pipeline_epoch.prev())
     {
-        println!("Epoch: {:?}", epoch);
         let delegatees1 =
-            find_delegation_validators(&s, &validator1, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =
-            find_delegation_validators(&s, &validator2, &epoch).unwrap();
+            find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
         assert!(delegatees1.contains(&validator1));
@@ -1849,14 +1866,219 @@ fn test_delegation_targets() {
     }
 
     let delegatees1 =
-        find_delegation_validators(&s, &validator1, &pipeline_epoch).unwrap();
-    let delegatees2 =
-        find_delegation_validators(&s, &validator2, &pipeline_epoch).unwrap();
-    let del_delegatees =
-        find_delegation_validators(&s, &delegator, &pipeline_epoch).unwrap();
+        find_delegation_validators(&storage, &validator1, &pipeline_epoch)
+            .unwrap();
     assert_eq!(delegatees1.len(), 1);
-    assert_eq!(delegatees2.len(), 0);
+    assert!(delegatees1.contains(&validator1));
+
+    let delegatees2 =
+        find_delegation_validators(&storage, &validator2, &pipeline_epoch)
+            .unwrap();
+    assert!(delegatees2.is_empty());
+
+    let del_delegatees =
+        find_delegation_validators(&storage, &delegator, &pipeline_epoch)
+            .unwrap();
     assert_eq!(del_delegatees.len(), 1);
+    assert!(del_delegatees.contains(&validator1));
+
+    // Advance to epoch 3
+    advance_epoch(&mut storage, &params);
+    current_epoch = advance_epoch(&mut storage, &params);
+
+    // Bond from delegator to validator1
+    bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator1,
+        token::Amount::native_whole(3),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Bond from delegator to validator2
+    bond_tokens(
+        &mut storage,
+        Some(&delegator),
+        &validator2,
+        token::Amount::native_whole(3),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    // Checks
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Up to epoch 2
+    for epoch in
+        Epoch::iter_bounds_inclusive(Epoch::default(), current_epoch.prev())
+    {
+        let delegatees1 =
+            find_delegation_validators(&storage, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegation_validators(&storage, &validator2, &epoch).unwrap();
+        let del_delegatees =
+            find_delegation_validators(&storage, &delegator, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert_eq!(delegatees2.len(), 1);
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
+        assert!(del_delegatees.is_empty());
+    }
+
+    // Epochs 3-4
+    for epoch in
+        Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch.prev())
+    {
+        let delegatees1 =
+            find_delegation_validators(&storage, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegation_validators(&storage, &validator2, &epoch).unwrap();
+        let del_delegatees =
+            find_delegation_validators(&storage, &delegator, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert!(delegatees2.is_empty());
+        assert_eq!(del_delegatees.len(), 1);
+        assert!(delegatees1.contains(&validator1));
+        assert!(del_delegatees.contains(&validator1));
+    }
+
+    // Epoch 5 (pipeline)
+    let delegatees1 =
+        find_delegation_validators(&storage, &validator1, &pipeline_epoch)
+            .unwrap();
+    let delegatees2 =
+        find_delegation_validators(&storage, &validator2, &pipeline_epoch)
+            .unwrap();
+    let del_delegatees =
+        find_delegation_validators(&storage, &delegator, &pipeline_epoch)
+            .unwrap();
+    assert_eq!(delegatees1.len(), 1);
+    assert!(delegatees2.is_empty());
+    assert_eq!(del_delegatees.len(), 2);
     assert!(delegatees1.contains(&validator1));
     assert!(del_delegatees.contains(&validator1));
+    assert!(del_delegatees.contains(&validator2));
+
+    // Advance to epoch 4 and self-bond from validator2 again
+    current_epoch = advance_epoch(&mut storage, &params);
+    bond_tokens(
+        &mut storage,
+        None,
+        &validator2,
+        token::Amount::native_whole(1),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    let pipeline_epoch = current_epoch + params.pipeline_len;
+
+    // Check at pipeline epoch 6
+    let delegatees1 =
+        find_delegation_validators(&storage, &validator1, &pipeline_epoch)
+            .unwrap();
+    let delegatees2 =
+        find_delegation_validators(&storage, &validator2, &pipeline_epoch)
+            .unwrap();
+    let del_delegatees =
+        find_delegation_validators(&storage, &delegator, &pipeline_epoch)
+            .unwrap();
+    assert_eq!(delegatees1.len(), 1);
+    assert_eq!(delegatees2.len(), 1);
+    assert_eq!(del_delegatees.len(), 2);
+    assert!(delegatees1.contains(&validator1));
+    assert!(delegatees2.contains(&validator2));
+    assert!(del_delegatees.contains(&validator1));
+    assert!(del_delegatees.contains(&validator2));
+
+    // Check everything again including the raw bond amount this time
+
+    // Up to epoch 2
+    for epoch in Epoch::iter_bounds_inclusive(Epoch::default(), Epoch(2)) {
+        let delegatees1 =
+            find_delegations(&storage, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegations(&storage, &validator2, &epoch).unwrap();
+        let del_delegatees =
+            find_delegations(&storage, &delegator, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert_eq!(delegatees2.len(), 1);
+        assert!(del_delegatees.is_empty());
+        assert_eq!(delegatees1.get(&validator1).unwrap(), &stakes[0]);
+        assert_eq!(delegatees2.get(&validator2).unwrap(), &stakes[1]);
+    }
+
+    // Epochs 3-4
+    for epoch in Epoch::iter_bounds_inclusive(Epoch(3), Epoch(4)) {
+        let delegatees1 =
+            find_delegations(&storage, &validator1, &epoch).unwrap();
+        let delegatees2 =
+            find_delegations(&storage, &validator2, &epoch).unwrap();
+        let del_delegatees =
+            find_delegations(&storage, &delegator, &epoch).unwrap();
+        assert_eq!(delegatees1.len(), 1);
+        assert!(delegatees2.is_empty());
+        assert_eq!(del_delegatees.len(), 1);
+        assert_eq!(
+            delegatees1.get(&validator1).unwrap(),
+            &token::Amount::native_whole(1)
+        );
+        assert_eq!(
+            del_delegatees.get(&validator1).unwrap(),
+            &token::Amount::native_whole(3)
+        );
+    }
+
+    // Epoch 5
+    let delegatees1 =
+        find_delegations(&storage, &validator1, &Epoch(5)).unwrap();
+    let delegatees2 =
+        find_delegations(&storage, &validator2, &Epoch(5)).unwrap();
+    let del_delegatees =
+        find_delegations(&storage, &delegator, &Epoch(5)).unwrap();
+    assert_eq!(delegatees1.len(), 1);
+    assert!(delegatees2.is_empty());
+    assert_eq!(del_delegatees.len(), 2);
+    assert_eq!(
+        delegatees1.get(&validator1).unwrap(),
+        &token::Amount::native_whole(1)
+    );
+    assert_eq!(
+        del_delegatees.get(&validator1).unwrap(),
+        &token::Amount::native_whole(6)
+    );
+    assert_eq!(
+        del_delegatees.get(&validator2).unwrap(),
+        &token::Amount::native_whole(3)
+    );
+
+    // Epoch 6
+    let delegatees1 =
+        find_delegations(&storage, &validator1, &Epoch(6)).unwrap();
+    let delegatees2 =
+        find_delegations(&storage, &validator2, &Epoch(6)).unwrap();
+    let del_delegatees =
+        find_delegations(&storage, &delegator, &Epoch(6)).unwrap();
+    assert_eq!(delegatees1.len(), 1);
+    assert_eq!(delegatees2.len(), 1);
+    assert_eq!(del_delegatees.len(), 2);
+    assert_eq!(
+        delegatees1.get(&validator1).unwrap(),
+        &token::Amount::native_whole(1)
+    );
+    assert_eq!(
+        delegatees2.get(&validator2).unwrap(),
+        &token::Amount::native_whole(1)
+    );
+    assert_eq!(
+        del_delegatees.get(&validator1).unwrap(),
+        &token::Amount::native_whole(6)
+    );
+    assert_eq!(
+        del_delegatees.get(&validator2).unwrap(),
+        &token::Amount::native_whole(3)
+    );
 }
