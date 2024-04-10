@@ -1,10 +1,13 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use masp_primitives::sapling::Node;
+use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
+use masp_primitives::transaction::txid::TxIdDigester;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
@@ -42,9 +45,13 @@ use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
-use namada::sdk::masp::verify_shielded_tx;
+use namada::sdk::masp::{
+    check_convert, check_output, check_spend, partial_deauthorize,
+    preload_verifying_keys, PVKs,
+};
 use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
+use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
@@ -306,72 +313,115 @@ fn governance(c: &mut Criterion) {
 //      group.finish();
 //  }
 
+fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
+    match bench_name {
+        "open_connection" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.init_ibc_client_state(
+                namada::core::storage::Key::from(
+                    Address::Internal(InternalAddress::Ibc).to_db_key(),
+                ),
+            );
+            let msg = MsgConnectionOpenInit {
+                client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
+                counterparty: Counterparty::new(
+                    ClientId::from_str("07-tendermint-1").unwrap(),
+                    None,
+                    CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                ),
+                version: Some(Version::default()),
+                delay_period: std::time::Duration::new(100, 0),
+                signer: defaults::albert_address().to_string().into(),
+            };
+            let mut data = vec![];
+            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+            let open_connection =
+                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+
+            (shielded_ctx, open_connection)
+        }
+        "open_channel" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.init_ibc_connection();
+            // Channel handshake
+            let msg = MsgChannelOpenInit {
+                port_id_on_a: PortId::transfer(),
+                connection_hops_on_a: vec![ConnectionId::new(1)],
+                port_id_on_b: PortId::transfer(),
+                ordering: Order::Unordered,
+                signer: defaults::albert_address().to_string().into(),
+                version_proposal: ChannelVersion::new("ics20-1".to_string()),
+            };
+
+            // Avoid serializing the data again with borsh
+            let mut data = vec![];
+            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+            let open_channel =
+                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+
+            (shielded_ctx, open_channel)
+        }
+        "outgoing_transfer" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
+            let outgoing_transfer =
+                shielded_ctx.shell.generate_ibc_transfer_tx();
+
+            (shielded_ctx, outgoing_transfer)
+        }
+        "outgoing_shielded_action" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
+
+            let albert_payment_addr = shielded_ctx
+                .wallet
+                .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+                .unwrap()
+                .to_owned();
+            let albert_spending_key = shielded_ctx
+                .wallet
+                .find_spending_key(ALBERT_SPENDING_KEY, None)
+                .unwrap()
+                .to_owned();
+            // Shield some tokens for Albert
+            let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
+                Amount::native_whole(500),
+                TransferSource::Address(defaults::albert_address()),
+                TransferTarget::PaymentAddress(albert_payment_addr),
+            );
+            shielded_ctx.shell.execute_tx(&shield_tx);
+            shielded_ctx.shell.commit_masp_tx(shield_tx);
+            shielded_ctx.shell.commit_block();
+            shielded_ctx.generate_shielded_action(
+                Amount::native_whole(10),
+                TransferSource::ExtendedSpendingKey(albert_spending_key),
+                TransferTarget::Address(defaults::bertha_address()),
+            )
+        }
+        _ => panic!("Unexpected bench test"),
+    }
+}
+
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
-    let shell = BenchShell::default();
 
     // NOTE: Ibc encompass a variety of different messages that can be executed,
     // here we only benchmark a few of those Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("07-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
         // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => {
-                shell.init_ibc_channel();
-                shell.enable_ibc_transfer();
-            }
-            _ => panic!("Unexpected bench test"),
-        }
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        shell.execute_tx(signed_tx);
-        let (verifiers, keys_changed) = shell
+        shielded_ctx.shell.execute_tx(&signed_tx);
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
@@ -383,14 +433,14 @@ fn ibc(c: &mut Criterion) {
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
                 &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
 
@@ -398,7 +448,7 @@ fn ibc(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     ibc.validate_tx(
-                        signed_tx,
+                        &signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
@@ -590,32 +640,186 @@ fn masp(c: &mut Criterion) {
     group.finish();
 }
 
-fn masp_verify_shielded_tx(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_masp_verify_shielded_tx");
+fn masp_check_spend(c: &mut Criterion) {
+    let spend_vk = &preload_verifying_keys().spend_vk;
 
-    for bench_name in ["shielding", "unshielding", "shielded"] {
-        group.bench_function(bench_name, |b| {
-            let (_, signed_tx) =
-                setup_storage_for_masp_verification(bench_name);
+    c.bench_function("vp_masp_check_spend", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
 
-            let transaction = signed_tx
-                .sections
-                .into_iter()
-                .filter_map(|section| match section {
-                    Section::MaspTx(transaction) => Some(transaction),
-                    _ => None,
-                })
-                .collect::<Vec<Transaction>>()
-                .first()
-                .unwrap()
-                .to_owned();
-            b.iter(|| {
-                assert!(verify_shielded_tx(&transaction));
-            })
-        });
-    }
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let spend = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_spends
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+                let tx_data = transaction.deref();
+                // Partially deauthorize the transparent bundle
+                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
+                let txid_parts = unauth_tx_data.digest(TxIdDigester);
+                let sighash = signature_hash(
+                    &unauth_tx_data,
+                    &SignableInput::Shielded,
+                    &txid_parts,
+                );
 
-    group.finish();
+                (ctx, spend, sighash)
+            },
+            |(ctx, spend, sighash)| {
+                assert!(check_spend(spend, sighash.as_ref(), ctx, spend_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_convert(c: &mut Criterion) {
+    let convert_vk = &preload_verifying_keys().convert_vk;
+
+    c.bench_function("vp_masp_check_convert", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let convert = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_converts
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+
+                (ctx, convert)
+            },
+            |(ctx, convert)| {
+                assert!(check_convert(convert, ctx, convert_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_output(c: &mut Criterion) {
+    let output_vk = &preload_verifying_keys().output_vk;
+
+    c.bench_function("masp_vp_check_output", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let output = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_outputs
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+
+                (ctx, output)
+            },
+            |(ctx, output)| {
+                assert!(check_output(output, ctx, output_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_final_check(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
+
+    let (_, signed_tx) = setup_storage_for_masp_verification("shielded");
+
+    let transaction = signed_tx
+        .sections
+        .into_iter()
+        .filter_map(|section| match section {
+            Section::MaspTx(transaction) => Some(transaction),
+            _ => None,
+        })
+        .collect::<Vec<Transaction>>()
+        .first()
+        .unwrap()
+        .to_owned();
+    let sapling_bundle = transaction.sapling_bundle().unwrap();
+    let mut ctx = SaplingVerificationContext::new(true);
+    // Partially deauthorize the transparent bundle
+    let unauth_tx_data = partial_deauthorize(transaction.deref()).unwrap();
+    let txid_parts = unauth_tx_data.digest(TxIdDigester);
+    let sighash =
+        signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
+
+    // Check spends, converts and outputs before the final check
+    assert!(sapling_bundle.shielded_spends.iter().all(|spend| {
+        check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk)
+    }));
+    assert!(
+        sapling_bundle
+            .shielded_converts
+            .iter()
+            .all(|convert| check_convert(convert, &mut ctx, convert_vk))
+    );
+    assert!(
+        sapling_bundle
+            .shielded_outputs
+            .iter()
+            .all(|output| check_output(output, &mut ctx, output_vk))
+    );
+
+    c.bench_function("vp_masp_final_check", |b| {
+        b.iter(|| {
+            assert!(ctx.final_check(
+                sapling_bundle.value_balance.clone(),
+                sighash.as_ref(),
+                sapling_bundle.authorization.binding_sig
+            ))
+        })
+    });
 }
 
 fn pgf(c: &mut Criterion) {
@@ -1091,67 +1295,19 @@ fn pos(c: &mut Criterion) {
 
 fn ibc_vp_validate_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_validate_action");
-    let shell = BenchShell::default();
 
-    // Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("07-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
-        // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => shell.init_ibc_channel(),
-            _ => panic!("Unexpected bench test"),
-        }
-
-        shell.execute_tx(signed_tx);
+        shielded_ctx.shell.execute_tx(&signed_tx);
         let tx_data = signed_tx.data().unwrap();
-        let (verifiers, keys_changed) = shell
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
@@ -1163,14 +1319,14 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
                 &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
@@ -1193,67 +1349,19 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
 fn ibc_vp_execute_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_execute_action");
-    let shell = BenchShell::default();
 
-    // Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("07-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, data);
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let mut data = vec![];
-    prost::Message::encode(&msg.to_any(), &mut data).unwrap();
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, data);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
-        // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => shell.init_ibc_channel(),
-            _ => panic!("Unexpected bench test"),
-        }
-
-        shell.execute_tx(signed_tx);
+        shielded_ctx.shell.execute_tx(&signed_tx);
         let tx_data = signed_tx.data().unwrap();
-        let (verifiers, keys_changed) = shell
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
             .verifiers_and_changed_keys(&BTreeSet::default());
@@ -1265,14 +1373,14 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
                 &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
@@ -1299,7 +1407,10 @@ criterion_group!(
     // slash_fund,
     ibc,
     masp,
-    masp_verify_shielded_tx,
+    masp_check_spend,
+    masp_check_convert,
+    masp_check_output,
+    masp_final_check,
     vp_multitoken,
     pgf,
     eth_bridge_nut,

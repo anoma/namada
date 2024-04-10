@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpSentinel;
@@ -12,7 +13,8 @@ use namada_state::write_log::StorageModification;
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{Commitment, Section, Tx};
-use parity_wasm::elements;
+use parity_wasm::elements::Instruction::*;
+use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
 
@@ -510,7 +512,7 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
         wasm_instrument::gas_metering::host_function::Injector::new(
             "env", "gas",
         ),
-        &get_gas_rules(),
+        &GasRules,
     )
     .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
@@ -633,18 +635,217 @@ where
     }
 }
 
-/// Get the gas rules used to meter wasm operations
-fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
-    // NOTE: costs set to 0 don't actually trigger the injection of a call to
-    // the gas host function (no useless instructions are injected)
-    let instruction_cost = 0;
-    let memory_grow_cost = WASM_MEMORY_PAGE_GAS;
-    let call_per_local_cost = 0;
-    wasm_instrument::gas_metering::ConstantCostRules::new(
-        instruction_cost,
-        memory_grow_cost,
-        call_per_local_cost,
-    )
+struct GasRules;
+
+impl wasm_instrument::gas_metering::Rules for GasRules {
+    fn instruction_cost(
+        &self,
+        instruction: &wasm_instrument::parity_wasm::elements::Instruction,
+    ) -> Option<u32> {
+        // NOTE: costs set to 0 don't actually trigger the injection of a call
+        // to the gas host function (no useless instructions are
+        // injected)
+        // NOTE: these costs are taken from the benchmarks crate. None of them
+        // should be zero
+        let gas = match instruction {
+            Unreachable => 129_358,
+            // Just a flag, aribitrary cost of 1
+            End => 1,
+            // Just a flag, aribitrary cost of 1
+            Else => 1,
+            Nop => 1,
+            Block(_) => 1,
+            Loop(_) => 1,
+            If(_) => 4,
+            Br(_) => 27,
+            BrIf(_) => 36,
+            BrTable(_) => 70,
+            Return => 7,
+            Call(_) => 43,
+            CallIndirect(_, _) => 140,
+            Drop => 1,
+            Select => 37,
+            GetLocal(_) => 2,
+            SetLocal(_) => 2,
+            TeeLocal(_) => 2,
+            GetGlobal(_) => 3,
+            SetGlobal(_) => 4,
+            I32Load(_, _) => 5,
+            I64Load(_, _) => 5,
+            F32Load(_, _) => 6,
+            F64Load(_, _) => 6,
+            I32Load8S(_, _) => 5,
+            I32Load8U(_, _) => 5,
+            I32Load16S(_, _) => 5,
+            I32Load16U(_, _) => 5,
+            I64Load8S(_, _) => 5,
+            I64Load8U(_, _) => 5,
+            I64Load16S(_, _) => 5,
+            I64Load16U(_, _) => 5,
+            I64Load32S(_, _) => 5,
+            I64Load32U(_, _) => 5,
+            I32Store(_, _) => 5,
+            I64Store(_, _) => 7,
+            F32Store(_, _) => 5,
+            F64Store(_, _) => 6,
+            I32Store8(_, _) => 5,
+            I32Store16(_, _) => 15,
+            I64Store8(_, _) => 5,
+            I64Store16(_, _) => 15,
+            I64Store32(_, _) => 6,
+            CurrentMemory(_) => 108,
+            GrowMemory(_) => 394,
+            I32Const(_) => 1,
+            I64Const(_) => 1,
+            F32Const(_) => 1,
+            F64Const(_) => 1,
+            I32Eqz => 6,
+            I32Eq => 6,
+            I32Ne => 6,
+            I32LtS => 6,
+            I32LtU => 6,
+            I32GtS => 6,
+            I32GtU => 6,
+            I32LeS => 6,
+            I32LeU => 6,
+            I32GeS => 6,
+            I32GeU => 6,
+            I64Eqz => 7,
+            I64Eq => 7,
+            I64Ne => 7,
+            I64LtS => 7,
+            I64LtU => 7,
+            I64GtS => 7,
+            I64GtU => 7,
+            I64LeS => 7,
+            I64LeU => 7,
+            I64GeS => 7,
+            I64GeU => 7,
+            F32Eq => 8,
+            F32Ne => 8,
+            F32Lt => 8,
+            F32Gt => 8,
+            F32Le => 8,
+            F32Ge => 8,
+            F64Eq => 10,
+            F64Ne => 10,
+            F64Lt => 9,
+            F64Gt => 9,
+            F64Le => 9,
+            F64Ge => 9,
+            I32Clz => 35,
+            I32Ctz => 34,
+            I32Popcnt => 3,
+            I32Add => 3,
+            I32Sub => 3,
+            I32Mul => 5,
+            I32DivS => 17,
+            I32DivU => 17,
+            I32RemS => 41,
+            I32RemU => 17,
+            I32And => 3,
+            I32Or => 3,
+            I32Xor => 3,
+            I32Shl => 3,
+            I32ShrS => 3,
+            I32ShrU => 3,
+            I32Rotl => 3,
+            I32Rotr => 3,
+            I64Clz => 35,
+            I64Ctz => 34,
+            I64Popcnt => 3,
+            I64Add => 5,
+            I64Sub => 5,
+            I64Mul => 6,
+            I64DivS => 28,
+            I64DivU => 28,
+            I64RemS => 46,
+            I64RemU => 28,
+            I64And => 5,
+            I64Or => 5,
+            I64Xor => 5,
+            I64Shl => 4,
+            I64ShrS => 4,
+            I64ShrU => 4,
+            I64Rotl => 4,
+            I64Rotr => 4,
+            F32Abs => 4,
+            F32Neg => 3,
+            F32Ceil => 6,
+            F32Floor => 6,
+            F32Trunc => 6,
+            F32Nearest => 6,
+            F32Sqrt => 9,
+            F32Add => 6,
+            F32Sub => 6,
+            F32Mul => 6,
+            F32Div => 9,
+            F32Min => 50,
+            F32Max => 47,
+            F32Copysign => 6,
+            F64Abs => 6,
+            F64Neg => 4,
+            F64Ceil => 7,
+            F64Floor => 7,
+            F64Trunc => 7,
+            F64Nearest => 7,
+            F64Sqrt => 17,
+            F64Add => 7,
+            F64Sub => 7,
+            F64Mul => 7,
+            F64Div => 12,
+            F64Min => 52,
+            F64Max => 49,
+            F64Copysign => 11,
+            I32WrapI64 => 2,
+            I32TruncSF32 => 54,
+            I32TruncUF32 => 54,
+            I32TruncSF64 => 57,
+            I32TruncUF64 => 57,
+            I64ExtendSI32 => 2,
+            I64ExtendUI32 => 2,
+            I64TruncSF32 => 73,
+            I64TruncUF32 => 70,
+            I64TruncSF64 => 89,
+            I64TruncUF64 => 70,
+            F32ConvertSI32 => 12,
+            F32ConvertUI32 => 6,
+            F32ConvertSI64 => 6,
+            F32ConvertUI64 => 39,
+            F32DemoteF64 => 9,
+            F64ConvertSI32 => 12,
+            F64ConvertUI32 => 12,
+            F64ConvertSI64 => 12,
+            F64ConvertUI64 => 39,
+            F64PromoteF32 => 9,
+            I32ReinterpretF32 => 2,
+            I64ReinterpretF64 => 2,
+            F32ReinterpretI32 => 3,
+            F64ReinterpretI64 => 3,
+            SignExt(SignExtInstruction::I32Extend8S) => 1,
+            SignExt(SignExtInstruction::I32Extend16S) => 1,
+            SignExt(SignExtInstruction::I64Extend8S) => 1,
+            SignExt(SignExtInstruction::I64Extend16S) => 1,
+            SignExt(SignExtInstruction::I64Extend32S) => 1,
+        };
+
+        // We always return a cost, forbidden instructions should be rejected at
+        // validation time not here
+        Some(gas)
+    }
+
+    fn memory_grow_cost(
+        &self,
+    ) -> wasm_instrument::gas_metering::MemoryGrowCost {
+        wasm_instrument::gas_metering::MemoryGrowCost::Linear(
+            NonZeroU32::new(WASM_MEMORY_PAGE_GAS)
+                .expect("Memory grow gas cost should be non-zero"),
+        )
+    }
+
+    fn call_per_local_cost(&self) -> u32 {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -667,7 +868,8 @@ mod tests {
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 
-    const TX_GAS_LIMIT: u64 = 10_000_000_000;
+    const TX_GAS_LIMIT: u64 = 10_000_000_000_000;
+    const OUT_OF_GAS_LIMIT: u64 = 10_000;
 
     /// Test that we sanitize accesses to invalid addresses in wasm memory.
     #[test]
@@ -1380,6 +1582,169 @@ mod tests {
                 assert!(!matches!(result, Error::DisallowedTx));
             }
         }
+    }
+
+    /// Test that when a function runs out of gas in guest, the execution is
+    /// aborted
+    #[test]
+    fn test_tx_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a function runs out of gas in host, the execution is
+    /// aborted from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_tx_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in guest, the execution is aborted
+    #[test]
+    fn test_vp_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
+            code_hash,
+            &outer_tx,
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in host, the execution is aborted
+    /// from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_vp_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
+            code_hash,
+            &outer_tx,
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
     }
 
     fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {

@@ -767,7 +767,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 100_000_000;
+    const WRAPPER_GAS_LIMIT: u64 = 20_000;
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
@@ -784,7 +784,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -2459,7 +2459,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2474,7 +2474,7 @@ mod test_finalize_block {
             },
             keypair_2.ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
         new_wrapper.add_section(Section::Signature(Signature::new(
@@ -2590,7 +2590,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2816,7 +2816,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();

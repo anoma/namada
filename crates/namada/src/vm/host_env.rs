@@ -7,6 +7,7 @@ use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::internal::KeyVal;
@@ -1932,10 +1933,8 @@ where
     Ok(len)
 }
 
-/// Verify a transaction signature
-/// TODO: this is just a warkaround to track gas for multiple signature
-/// verifications. When the runtime gas meter is implemented, this function can
-/// be removed
+/// Verify a transaction signature in the host environment for better
+/// performance
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<MEM, D, H, EVAL, CA>,
@@ -2055,6 +2054,8 @@ where
     use std::rc::Rc;
 
     use namada_ibc::{IbcActions, NftTransferModule, TransferModule};
+
+    tx_charge_gas::<MEM, D, H, CA>(env, IBC_TX_GAS)?;
 
     let tx = unsafe { env.ctx.tx.get() };
     let tx_data = tx.data().ok_or_else(|| {

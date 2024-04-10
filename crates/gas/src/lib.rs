@@ -22,47 +22,56 @@ pub enum Error {
     GasOverflow,
 }
 
-const COMPILE_GAS_PER_BYTE: u64 = 24;
+const COMPILE_GAS_PER_BYTE: u64 = 1_955;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
-const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 1;
-const WRAPPER_TX_VALIDATION_GAS: u64 = 58_371;
+const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 67;
+const WRAPPER_TX_VALIDATION_GAS: u64 = 3_245_500;
 const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
-    100 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    100_000 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
 // NOTE: this accounts for the latency of a physical drive access. For read
 // accesses we have no way to tell if data was in cache or in storage. Moreover,
 // the latency shouldn't really be accounted per single byte but rather per
 // storage blob but this would make it more tedious to compute gas in the
 // codebase. For these two reasons we just set an arbitrary value (based on
 // actual SSDs latency) per byte here
-const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 75;
+const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 1_000_000;
 // This is based on the global average bandwidth
-const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 13;
+const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 848;
 
 /// The cost of accessing data from memory (both read and write mode), per byte
-pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 2;
+pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 104;
 /// The cost of accessing data from storage, per byte
 pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
-    3 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    163 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
 /// The cost of writing data to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
-    MEMORY_ACCESS_GAS_PER_BYTE + 848 + STORAGE_OCCUPATION_GAS_PER_BYTE;
+    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + STORAGE_OCCUPATION_GAS_PER_BYTE;
 /// The cost of verifying a single signature of a transaction
-pub const VERIFY_TX_SIG_GAS: u64 = 9_793;
+pub const VERIFY_TX_SIG_GAS: u64 = 594_290;
 /// The cost for requesting one more page in wasm (64KiB)
 pub const WASM_MEMORY_PAGE_GAS: u32 =
     MEMORY_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
 /// The cost to validate an Ibc action
-pub const IBC_ACTION_VALIDATE_GAS: u64 = 7_511;
+pub const IBC_ACTION_VALIDATE_GAS: u64 = 1_472_023;
 /// The cost to execute an Ibc action
-pub const IBC_ACTION_EXECUTE_GAS: u64 = 47_452;
-/// The cost to execute a masp tx verification
-pub const MASP_VERIFY_SHIELDED_TX_GAS: u64 = 62_381_957;
+pub const IBC_ACTION_EXECUTE_GAS: u64 = 3_678_745;
+/// The cost to execute an ibc transaction TODO: remove once ibc tx goes back to
+/// wasm
+pub const IBC_TX_GAS: u64 = 111_825_500;
+/// The cost to verify a masp spend note
+pub const MASP_VERIFY_SPEND_GAS: u64 = 66_822_000;
+/// The cost to verify a masp convert note
+pub const MASP_VERIFY_CONVERT_GAS: u64 = 45_240_000;
+/// The cost to verify a masp output note
+pub const MASP_VERIFY_OUTPUT_GAS: u64 = 55_023_000;
+/// The cost to run the final masp verification
+pub const MASP_VERIFY_FINAL_GAS: u64 = 3_475_200;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Decimal scale of Gas units
-const SCALE: u64 = 10_000;
+const SCALE: u64 = 100_000_000;
 
 /// Representation of gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,
