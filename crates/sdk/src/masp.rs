@@ -64,6 +64,7 @@ use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
@@ -333,23 +334,27 @@ pub fn partial_deauthorize(
 pub fn verify_shielded_tx<F>(
     transaction: &Transaction,
     mut consume_verify_gas: F,
-) -> Result<bool, namada_state::StorageError>
+) -> Result<(), StorageError>
 where
-    F: FnMut(u64) -> std::result::Result<(), namada_state::StorageError>,
+    F: FnMut(u64) -> std::result::Result<(), StorageError>,
 {
     tracing::info!("entered verify_shielded_tx()");
 
     let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
         bundle
     } else {
-        return Ok(false);
+        return Err(StorageError::SimpleMessage("no sapling bundle"));
     };
     let tx_data = transaction.deref();
 
     // Partially deauthorize the transparent bundle
     let unauth_tx_data = match partial_deauthorize(tx_data) {
         Some(tx_data) => tx_data,
-        None => return Ok(false),
+        None => {
+            return Err(StorageError::SimpleMessage(
+                "Failed to partially de-authorize",
+            ));
+        }
     };
 
     let txid_parts = unauth_tx_data.digest(TxIdDigester);
@@ -374,19 +379,21 @@ where
     for spend in &sapling_bundle.shielded_spends {
         consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
         if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
-            return Ok(false);
+            return Err(StorageError::SimpleMessage("Invalid shielded spend"));
         }
     }
     for convert in &sapling_bundle.shielded_converts {
         consume_verify_gas(namada_gas::MASP_VERIFY_CONVERT_GAS)?;
         if !check_convert(convert, &mut ctx, convert_vk) {
-            return Ok(false);
+            return Err(StorageError::SimpleMessage(
+                "Invalid shielded conversion",
+            ));
         }
     }
     for output in &sapling_bundle.shielded_outputs {
         consume_verify_gas(namada_gas::MASP_VERIFY_OUTPUT_GAS)?;
         if !check_output(output, &mut ctx, output_vk) {
-            return Ok(false);
+            return Err(StorageError::SimpleMessage("Invalid shielded output"));
         }
     }
 
@@ -406,7 +413,10 @@ where
         sapling_bundle.authorization.binding_sig,
     );
     tracing::info!("final check result {result}");
-    Ok(result)
+    if !result {
+        return Err(StorageError::SimpleMessage("MASP final check failed"));
+    }
+    Ok(())
 }
 
 /// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or

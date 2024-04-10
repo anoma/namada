@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
 use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
@@ -24,7 +25,7 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Native VP error: {0}")]
+    #[error("Multitoken VP error: Native VP error: {0}")]
     NativeVpError(#[from] native_vp::Error),
 }
 
@@ -53,7 +54,7 @@ where
         tx_data: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let native_token = self.ctx.pre().ctx.get_native_token()?;
         let is_native_token_transferable =
             is_native_token_transferable(&self.ctx.pre())?;
@@ -85,7 +86,11 @@ where
                             tracing::debug!(
                                 "Native token deposit isn't allowed"
                             );
-                            return Ok(false);
+                            return Err(Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Native token deposit isn't allowed",
+                                ),
+                            ));
                         }
                         let change =
                             inc_changes.entry(token.clone()).or_default();
@@ -103,7 +108,11 @@ where
                             tracing::debug!(
                                 "Native token withdraw isn't allowed"
                             );
-                            return Ok(false);
+                            return Err(Error::NativeVpError(
+                                native_vp::Error::SimpleMessage(
+                                    "Native token deposit isn't allowed",
+                                ),
+                            ));
                         }
                         let diff = pre
                             .checked_sub(post)
@@ -125,7 +134,11 @@ where
                     tracing::debug!(
                         "Minting/Burning native token isn't allowed"
                     );
-                    return Ok(false);
+                    return Err(Error::NativeVpError(
+                        native_vp::Error::SimpleMessage(
+                            "Minting/Burning native token isn't allowed",
+                        ),
+                    ));
                 }
 
                 let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
@@ -156,13 +169,9 @@ where
                     }
                 }
                 // Check if the minter is set
-                if !self.is_valid_minter(token, verifiers)? {
-                    return Ok(false);
-                }
+                self.is_valid_minter(token, verifiers)?;
             } else if let Some(token) = is_any_minter_key(key) {
-                if !self.is_valid_minter(token, verifiers)? {
-                    return Ok(false);
-                }
+                self.is_valid_minter(token, verifiers)?;
             } else if is_any_token_parameter_key(key).is_some() {
                 return self.is_valid_parameter(tx_data);
             } else if key.segments.first()
@@ -172,7 +181,10 @@ where
             {
                 // Reject when trying to update an unexpected key under
                 // `#Multitoken/...`
-                return Ok(false);
+                return Err(native_vp::Error::new_alloc(format!(
+                    "Unexpected change to the multitoken account: {key}"
+                ))
+                .into());
             }
         }
 
@@ -182,7 +194,7 @@ where
         all_tokens.extend(inc_mints.keys().cloned());
         all_tokens.extend(dec_mints.keys().cloned());
 
-        Ok(all_tokens.iter().all(|token| {
+        all_tokens.iter().try_for_each(|token| {
             let inc_change =
                 inc_changes.get(token).cloned().unwrap_or_default();
             let dec_change =
@@ -190,18 +202,26 @@ where
             let inc_mint = inc_mints.get(token).cloned().unwrap_or_default();
             let dec_mint = dec_mints.get(token).cloned().unwrap_or_default();
 
-            if inc_change >= dec_change && inc_mint >= dec_mint {
-                inc_change.checked_sub(dec_change)
-                    == inc_mint.checked_sub(dec_mint)
-            } else if (inc_change < dec_change && inc_mint >= dec_mint)
-                || (inc_change >= dec_change && inc_mint < dec_mint)
-            {
-                false
-            } else {
-                dec_change.checked_sub(inc_change)
-                    == dec_mint.checked_sub(inc_mint)
-            }
-        }))
+            let token_changes_are_balanced =
+                if inc_change >= dec_change && inc_mint >= dec_mint {
+                    inc_change.checked_sub(dec_change)
+                        == inc_mint.checked_sub(dec_mint)
+                } else if (inc_change < dec_change && inc_mint >= dec_mint)
+                    || (inc_change >= dec_change && inc_mint < dec_mint)
+                {
+                    false
+                } else {
+                    dec_change.checked_sub(inc_change)
+                        == dec_mint.checked_sub(inc_mint)
+                };
+
+            token_changes_are_balanced.ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "The transaction's token changes are unbalanced",
+                )
+                .into()
+            })
+        })
     }
 }
 
@@ -215,7 +235,7 @@ where
         &self,
         token: &Address,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         match token {
             Address::Internal(InternalAddress::IbcToken(_)) => {
                 // Check if the minter is set
@@ -225,26 +245,47 @@ where
                         if minter
                             == Address::Internal(InternalAddress::Ibc) =>
                     {
-                        Ok(verifiers.contains(&minter))
+                        verifiers.contains(&minter).ok_or_else(|| {
+                            native_vp::Error::new_const(
+                                "The IBC VP was not triggered",
+                            )
+                            .into()
+                        })
                     }
-                    _ => Ok(false),
+                    _ => Err(native_vp::Error::new_const(
+                        "Only the IBC account is able to mint IBC tokens",
+                    )
+                    .into()),
                 }
             }
-            _ => {
-                // ERC20 and other tokens should not be minted by a wasm
-                // transaction
-                Ok(false)
-            }
+            _ => Err(native_vp::Error::new_const(
+                "Only IBC tokens can be minted by a user transaction",
+            )
+            .into()),
         }
     }
 
     /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<bool> {
-        match tx.data() {
-            Some(data) => is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                .map_err(Error::NativeVpError),
-            None => Ok(false),
-        }
+    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
+        tx.data().map_or_else(
+            || {
+                Err(native_vp::Error::new_const(
+                    "Token parameter changes require tx data to be present",
+                )
+                .into())
+            },
+            |data| {
+                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                    .map_err(Error::NativeVpError)?
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Token parameter changes can only be performed by \
+                             a governance proposal that has been accepted",
+                        )
+                        .into()
+                    })
+            },
+        )
     }
 }
 
@@ -252,8 +293,8 @@ where
 mod tests {
     use std::cell::RefCell;
 
+    use assert_matches::assert_matches;
     use borsh_ext::BorshSerializeExt;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
@@ -342,24 +383,19 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -384,24 +420,19 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -447,24 +478,19 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
     }
 
     #[test]
@@ -508,24 +534,19 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -562,24 +583,19 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -625,24 +641,19 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -668,24 +679,19 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -712,24 +718,19 @@ mod tests {
         ));
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let verifiers = BTreeSet::new();
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
     }
 
     #[test]
@@ -751,24 +752,19 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
     }
 
     #[test]
@@ -790,24 +786,19 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
     }
 
     #[test]
@@ -829,23 +820,18 @@ mod tests {
         let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
-        let sentinel = RefCell::new(VpSentinel::default());
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
             &tx,
             &tx_index,
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             vp_wasm_cache,
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            !vp.validate_tx(&tx, &keys_changed, &verifiers)
-                .expect("validation failed")
-        );
+        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
     }
 }

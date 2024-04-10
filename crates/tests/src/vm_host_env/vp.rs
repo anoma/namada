@@ -12,7 +12,6 @@ use namada::tx::Tx;
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
-use namada_tx_prelude::validity_predicate::VpSentinel;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
@@ -44,13 +43,13 @@ pub struct TestVpEnv {
     pub state: TestState,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: RefCell<VpGasMeter>,
-    pub sentinel: RefCell<VpSentinel>,
     pub tx: Tx,
     pub tx_index: TxIndex,
     pub keys_changed: BTreeSet<storage::Key>,
     pub verifiers: BTreeSet<Address>,
     pub eval_runner: native_vp_host_env::VpEval,
     pub result_buffer: Option<Vec<u8>>,
+    pub yielded_value: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
 }
@@ -75,13 +74,13 @@ impl Default for TestVpEnv {
             gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(1_000_000_000_000.into()),
             )),
-            sentinel: RefCell::new(VpSentinel::default()),
             tx,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),
             eval_runner,
             result_buffer: None,
+            yielded_value: None,
             vp_wasm_cache,
             vp_cache_dir,
         }
@@ -254,13 +253,13 @@ mod native_vp_host_env {
                                 state,
                                 iterators,
                                 gas_meter,
-                                sentinel,
                                 tx,
                                 tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
@@ -270,11 +269,11 @@ mod native_vp_host_env {
                                 state,
                                 iterators,
                                 gas_meter,
-                                sentinel,
                                 tx,
                                 tx_index,
                                 verifiers,
                                 result_buffer,
+                                yielded_value,
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
@@ -298,13 +297,13 @@ mod native_vp_host_env {
                                 state,
                                 iterators,
                                 gas_meter,
-                                sentinel,
                                 tx,
                                 tx_index,
                                 keys_changed,
                                 verifiers,
                                 eval_runner,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
@@ -314,11 +313,11 @@ mod native_vp_host_env {
                                 state,
                                 iterators,
                                 gas_meter,
-                                sentinel,
                                 tx,
                                 tx_index,
                                 verifiers,
                                 result_buffer,
+                                yielded_value,
                                 keys_changed,
                                 eval_runner,
                                 vp_wasm_cache,
@@ -370,6 +369,7 @@ mod native_vp_host_env {
         threshold: u8,
         max_signatures_ptr: u64,
         max_signatures_len: u64,
-    ) -> i64);
+    ));
     native_host_fn!(vp_charge_gas(used_gas: u64));
+    native_host_fn!(vp_yield_value(buf_ptr: u64, buf_len: u64));
 }

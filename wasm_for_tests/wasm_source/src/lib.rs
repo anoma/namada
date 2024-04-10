@@ -321,7 +321,7 @@ pub mod main {
         }: EvalVp =
             EvalVp::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
                 .unwrap();
-        ctx.eval(vp_code_hash, input)
+        ctx.eval(vp_code_hash, input).into_vp_error()
     }
 }
 
@@ -368,7 +368,7 @@ pub mod main {
             storage::Key::try_from_slice(&tx_data.data().as_ref().unwrap()[..])
                 .unwrap();
         log_string(format!("key {}", key));
-        let _result: Vec<u8> = ctx.read_pre(&key)?.unwrap();
+        let _result: Vec<u8> = ctx.read_pre(&key).into_vp_error()?.unwrap();
         accept()
     }
 }

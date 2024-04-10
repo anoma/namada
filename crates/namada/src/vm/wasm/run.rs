@@ -2,12 +2,13 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::error::Error as _;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
 
 use borsh::BorshDeserialize;
-use namada_core::validity_predicate::VpSentinel;
+use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
@@ -23,6 +24,7 @@ use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
 use crate::internal::HostEnvResult;
 use crate::ledger::gas::VpGasMeter;
+use crate::ledger::vp_host_fns;
 use crate::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
@@ -30,7 +32,7 @@ use crate::vm::types::VpInput;
 use crate::vm::wasm::host_env::{tx_imports, vp_imports};
 use crate::vm::wasm::{memory, Cache, CacheName, VpCache};
 use crate::vm::{
-    validate_untrusted_wasm, WasmCacheAccess, WasmValidationError,
+    validate_untrusted_wasm, MutHostRef, WasmCacheAccess, WasmValidationError,
 };
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -40,6 +42,8 @@ const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("VP error: {0}")]
+    VpError(VpError),
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("Memory error: {0}")]
@@ -83,12 +87,12 @@ pub enum Error {
     GasError(String),
     #[error("Failed type conversion: {0}")]
     ConversionError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
     #[error("Storage error: {0}")]
     StorageError(String),
     #[error("Tx is not allowed in allowlist parameter")]
     DisallowedTx,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
 }
 
 /// Result for functions that may fail
@@ -254,7 +258,7 @@ pub fn vp<S, CA>(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
-) -> Result<bool>
+) -> Result<()>
 where
     S: StateRead,
     CA: 'static + WasmCacheAccess,
@@ -270,13 +274,13 @@ where
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
     let eval_runner =
         VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
             db: PhantomData,
             hasher: PhantomData,
             cache_access: PhantomData,
         };
-    let sentinel = RefCell::new(VpSentinel::default());
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
@@ -284,12 +288,12 @@ where
         state.in_mem(),
         state.db(),
         gas_meter,
-        &sentinel,
         tx,
         tx_index,
         &mut iterators,
         verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
@@ -297,9 +301,10 @@ where
 
     let initial_memory =
         memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
+    let yielded_value_borrow = env.ctx.yielded_value.clone();
     let imports = vp_imports(&store, initial_memory, env);
 
-    match run_vp(
+    run_vp(
         module,
         imports,
         &vp_code_hash,
@@ -307,46 +312,21 @@ where
         address,
         keys_changed,
         verifiers,
-    ) {
-        Ok(accept) => {
-            if sentinel.borrow().is_invalid_signature() {
-                if accept {
-                    // This is unexpected, if the signature is invalid the vp
-                    // should have rejected the tx. Something must be wrong with
-                    // the VP logic and we take the signature verification
-                    // result as the reference. In this case we override the vp
-                    // result and log the issue
-                    tracing::warn!(
-                        "VP of {address} accepted the transaction but \
-                         signaled that the signature was invalid. Overriding \
-                         the vp result to reject the transaction..."
-                    );
-                }
-                Err(Error::InvalidTxSignature)
-            } else {
-                Ok(accept)
-            }
-        }
-        Err(err) => {
-            if sentinel.borrow().is_out_of_gas() {
-                Err(Error::GasError(err.to_string()))
-            } else {
-                Err(err)
-            }
-        }
-    }
+        yielded_value_borrow,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
-    _vp_code_hash: &Hash,
+    vp_code_hash: &Hash,
     input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-) -> Result<bool> {
+    yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
+) -> Result<()> {
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,
@@ -396,9 +376,48 @@ fn run_vp(
             verifiers_ptr,
             verifiers_len,
         )
-        .map_err(Error::RuntimeError)?;
-    tracing::debug!("is_valid {}", is_valid);
-    Ok(is_valid == 1)
+        .map_err(|rt_error| {
+            let downcasted_err = || {
+                let source_err = rt_error.source()?;
+                let downcasted_vp_rt_err: &vp_host_fns::RuntimeError =
+                    source_err.downcast_ref()?;
+
+                match downcasted_vp_rt_err {
+                    vp_host_fns::RuntimeError::OutOfGas(_) => {
+                        Some(Error::GasError(rt_error.to_string()))
+                    }
+                    vp_host_fns::RuntimeError::InvalidSectionSignature(_) => {
+                        Some(Error::InvalidSectionSignature(
+                            rt_error.to_string(),
+                        ))
+                    }
+                    _ => None,
+                }
+            };
+            downcasted_err().unwrap_or(Error::RuntimeError(rt_error))
+        })?;
+    tracing::debug!(
+        is_valid,
+        %vp_code_hash,
+        "wasm vp"
+    );
+
+    if is_valid == 1 {
+        Ok(())
+    } else {
+        // NB: drop imports so we can safely access the
+        // `&mut` ptrs we shared with the guest
+        _ = (instance, vp_imports);
+
+        unsafe { yielded_value.get() }.take().map_or_else(
+            || Err(Error::VpError(VpError::Unspecified)),
+            |borsh_encoded_err| {
+                let vp_err = VpError::try_from_slice(&borsh_encoded_err)
+                    .map_err(|e| Error::ConversionError(e.to_string()))?;
+                Err(Error::VpError(vp_err))
+            },
+        )
+    }
 }
 
 /// Validity predicate wasm evaluator for `eval` host function calls.
@@ -434,13 +453,14 @@ where
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
-        match self.eval_native_result(ctx, vp_code_hash, input_data) {
-            Ok(ok) => HostEnvResult::from(ok),
-            Err(err) => {
-                tracing::warn!("VP eval error {}", err);
-                HostEnvResult::Fail
-            }
-        }
+        self.eval_native_result(ctx, vp_code_hash, input_data)
+            .map_or_else(
+                |err| {
+                    tracing::warn!("VP eval error {err}");
+                    HostEnvResult::Fail
+                },
+                |()| HostEnvResult::Success,
+            )
     }
 }
 
@@ -456,7 +476,7 @@ where
         ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let address = unsafe { ctx.address.get() };
         let keys_changed = unsafe { ctx.keys_changed.get() };
         let verifiers = unsafe { ctx.verifiers.get() };
@@ -478,6 +498,7 @@ where
             memory: WasmMemory::default(),
             ctx,
         };
+        let yielded_value_borrow = env.ctx.yielded_value.clone();
         let imports = vp_imports(&store, initial_memory, env);
 
         run_vp(
@@ -488,6 +509,7 @@ where
             address,
             keys_changed,
             verifiers,
+            yielded_value_borrow,
         )
     }
 }
@@ -1064,19 +1086,20 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        let passed = vp(
-            code_hash,
-            &outer_tx,
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache.clone(),
-        )
-        .unwrap();
-        assert!(passed);
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache.clone(),
+            )
+            .is_ok()
+        );
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -1095,20 +1118,20 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        let passed = vp(
-            code_hash,
-            &outer_tx,
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache,
-        )
-        .unwrap();
-
-        assert!(!passed);
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1474,19 +1497,20 @@ mod tests {
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
-        let passed = vp(
-            code_hash,
-            &outer_tx,
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache,
-        )
-        .unwrap();
-        assert!(!passed);
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1790,7 +1814,7 @@ mod tests {
         execute_tx_with_code(tx_code)
     }
 
-    fn loop_in_vp_wasm(loops: u32) -> Result<bool> {
+    fn loop_in_vp_wasm(loops: u32) -> Result<()> {
         // A validity predicate with a recursive loop.
         // The boilerplate code is generated from vp_template.wasm using
         // `wasm2wat` and the loop code is hand-written.
@@ -1804,7 +1828,7 @@ mod tests {
                 (if
                 (result i64)
                 (i64.eqz (get_local 0))
-                (then (get_local 0))
+                (then (i64.const 1))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
                 (func $_validate_tx (type 0) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)
