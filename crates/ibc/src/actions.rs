@@ -4,14 +4,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::borsh::BorshSerializeExt;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::primitives::Msg;
-use namada_core::ibc::IbcEvent;
+use namada_core::ibc::{IbcEvent, MsgTransfer};
 use namada_core::tendermint::Time as TmTime;
-use namada_core::token::DenominatedAmount;
+use namada_core::token::Amount;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::write_log::WriteLog;
@@ -320,9 +320,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self, token, src, dest, amount.amount())
+        token::transfer(self, token, src, dest, amount)
     }
 
     fn handle_masp_tx(
@@ -338,9 +338,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self, token, target, amount.amount())?;
+        token::credit_tokens(self, token, target, amount)?;
         let minter_key = token::storage_key::minter_key(token);
         self.write(&minter_key, Address::Internal(InternalAddress::Ibc))
     }
@@ -349,9 +349,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self, token, target, amount.amount())
+        token::burn_tokens(self, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -396,9 +396,9 @@ where
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self.state, token, src, dest, amount.amount())
+        token::transfer(self.state, token, src, dest, amount)
     }
 
     /// Handle masp tx
@@ -415,9 +415,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self.state, token, target, amount.amount())?;
+        token::credit_tokens(self.state, token, target, amount)?;
         let minter_key = token::storage_key::minter_key(token);
         self.state
             .write(&minter_key, Address::Internal(InternalAddress::Ibc))
@@ -428,9 +428,9 @@ where
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self.state, token, target, amount.amount())
+        token::burn_tokens(self.state, token, target, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -470,16 +470,18 @@ where
         + read_epoch_duration_parameter(state)?.min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
-    let ibc_message = MsgTransfer {
+    let message = IbcMsgTransfer {
         port_id_on_a: target.port_id.clone(),
         chan_id_on_a: target.channel_id.clone(),
         packet_data,
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
-    let any_msg = ibc_message.to_any();
-    let mut data = vec![];
-    prost::Message::encode(&any_msg, &mut data).into_storage_result()?;
+    let data = MsgTransfer {
+        message,
+        shielded_transfer: None,
+    }
+    .serialize_to_vec();
 
     let ctx = IbcProtocolContext { state };
     let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)));
