@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "tx_fail",
+    "tx_infinite_guest_gas",
+    "tx_infinite_host_gas",
+    "tx_invalid_data",
+    "tx_memory_limit",
+    "tx_no_op",
+    "tx_proposal_code",
+    "tx_proposal_ibc_token_inflation",
+    "tx_proposal_masp_reward",
+    "tx_read_storage_key",
+    "tx_write",
+    "vp_always_false",
+    "vp_always_true",
+    "vp_eval",
+    "vp_infinite_guest_gas",
+    "vp_infinite_host_gas",
+    "vp_memory_limit",
+    "vp_read_storage_key",
+]
+
+[workspace.package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+version = "0.32.1"
+
+[workspace.dependencies]
+namada_test_utils = { path = "../crates/test_utils" }
+namada_tx_prelude = { path = "../crates/tx_prelude" }
+namada_vp_prelude = { path = "../crates/vp_prelude" }
+wee_alloc = "0.4.5"
+getrandom = { version = "0.2", features = ["custom"] }
+
+[profile.release]
+# smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
+lto = true
+# simply terminate on panics, no unwinding
+panic = "abort"
+# tell llvm to optimize for size (https://rustwasm.github.io/book/reference/code-size.html#tell-llvm-to-optimize-for-size-instead-of-speed)
+opt-level = 'z'
+strip = "debuginfo"
