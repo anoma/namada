@@ -2,13 +2,11 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::env;
-use std::fmt::Debug;
-use std::ops::Deref;
-use std::path::PathBuf;
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use lazy_static::lazy_static;
+use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::consensus::TestNetwork;
 use masp_primitives::convert::AllowedConversion;
@@ -23,11 +21,7 @@ use masp_primitives::sapling::note_encryption::{
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
-use masp_primitives::transaction::builder::{self, *};
-use masp_primitives::transaction::components::sapling::builder::{
-    RngBuildParams, SaplingMetadata,
-};
-use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
+use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::{
     I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
 };
@@ -36,37 +30,26 @@ use masp_primitives::transaction::{
     builder, Authorization, Authorized, Transaction, TransparentAddress,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::PreparedVerifyingKey;
-use masp_proofs::bls12_381::Bls12;
-use masp_proofs::prover::LocalTxProver;
-#[cfg(not(feature = "testing"))]
-use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::address::Address;
-use namada_core::collections::{HashMap, HashSet};
-use namada_core::dec::Dec;
-pub use namada_core::masp::{
+use namada_core::address::{Address, MASP};
+use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
 use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
-use namada_core::uint::Uint;
-use namada_events::extend::{
-    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
-};
-use namada_ibc::IbcMessage;
-use namada_macros::BorshDeserializer;
-#[cfg(feature = "migrations")]
-use namada_migrations::*;
-use namada_state::StorageError;
-use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
+use namada_core::token::Amount;
+use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::Tx;
 use rand_core::OsRng;
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
-use thiserror::Error;
+use tendermint_rpc::query::Query;
+use tendermint_rpc::Order;
 
-use crate::error::{Error, QueryError};
+use crate::error::{Error, PinnedBalanceError, QueryError};
+use crate::eth_bridge::token::storage_key::{
+    balance_key, is_any_shielded_action_balance_key,
+};
 use crate::io::Io;
 use crate::masp::types::{
     ContextSyncStatus, Conversions, MaspAmount, MaspChange, ShieldedTransfer,
@@ -78,511 +61,15 @@ use crate::masp::utils::{
     DefaultLogger, ExtractShieldedActionArg, FetchQueueSender, ProgressLogger,
     ShieldedUtils, TaskManager,
 };
-use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED, NETWORK};
+use crate::masp::NETWORK;
+#[cfg(any(test, feature = "testing"))]
+use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
 use crate::queries::Client;
-use crate::rpc::{query_block, query_conversion, query_denom};
+use crate::rpc::{
+    query_block, query_conversion, query_denom, query_epoch_at_height,
+    query_native_token,
+};
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
-
-/// Env var to point to a dir with MASP parameters. When not specified,
-/// the default OS specific path is used.
-pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
-
-/// Randomness seed for MASP integration tests to build proofs with
-/// deterministic rng.
-pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
-
-/// The network to use for MASP
-#[cfg(feature = "mainnet")]
-const NETWORK: MainNetwork = MainNetwork;
-#[cfg(not(feature = "mainnet"))]
-const NETWORK: TestNetwork = TestNetwork;
-
-// TODO these could be exported from masp_proof crate
-/// Spend circuit name
-pub const SPEND_NAME: &str = "masp-spend.params";
-/// Output circuit name
-pub const OUTPUT_NAME: &str = "masp-output.params";
-/// Convert circuit name
-pub const CONVERT_NAME: &str = "masp-convert.params";
-
-/// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
-
-/// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Transaction);
-
-/// Shielded transfer
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
-pub struct ShieldedTransfer {
-    /// Shielded transfer builder
-    pub builder: Builder<(), ExtendedFullViewingKey, ()>,
-    /// MASP transaction
-    pub masp_tx: Transaction,
-    /// Metadata
-    pub metadata: SaplingMetadata,
-    /// Epoch in which the transaction was created
-    pub epoch: Epoch,
-}
-
-/// Shielded pool data for a token
-#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
-pub struct MaspTokenRewardData {
-    pub name: String,
-    pub address: Address,
-    pub max_reward_rate: Dec,
-    pub kp_gain: Dec,
-    pub kd_gain: Dec,
-    pub locked_amount_target: Uint,
-}
-
-/// A return type for gen_shielded_transfer
-#[derive(Error, Debug)]
-pub enum TransferErr {
-    /// Build error for masp errors
-    #[error("{0}")]
-    Build(#[from] builder::Error<std::convert::Infallible>),
-    /// errors
-    #[error("{0}")]
-    General(#[from] Error),
-}
-
-#[derive(Debug, Clone)]
-struct ExtractedMaspTx {
-    fee_unshielding: Option<Transaction>,
-    inner_tx: Option<Transaction>,
-}
-
-/// MASP verifying keys
-pub struct PVKs {
-    /// spend verifying key
-    pub spend_vk: PreparedVerifyingKey<Bls12>,
-    /// convert verifying key
-    pub convert_vk: PreparedVerifyingKey<Bls12>,
-    /// output verifying key
-    pub output_vk: PreparedVerifyingKey<Bls12>,
-}
-
-lazy_static! {
-    /// MASP verifying keys load from parameters
-    static ref VERIFIYING_KEYS: PVKs =
-        {
-        let params_dir = get_params_dir();
-        let [spend_path, convert_path, output_path] =
-            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
-
-        #[cfg(feature = "download-params")]
-        if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
-            let paths = masp_proofs::download_masp_parameters(None).expect(
-                "MASP parameters were not present, expected the download to \
-                succeed",
-            );
-            if paths.spend != spend_path
-                || paths.convert != convert_path
-                || paths.output != output_path
-            {
-                panic!(
-                    "unrecoverable: downloaded missing masp params, but to an \
-                    unfamiliar path"
-                )
-            }
-        }
-        // size and blake2b checked here
-        let params = masp_proofs::load_parameters(
-            spend_path.as_path(),
-            output_path.as_path(),
-            convert_path.as_path(),
-        );
-        PVKs {
-            spend_vk: params.spend_vk,
-            convert_vk: params.convert_vk,
-            output_vk: params.output_vk
-        }
-    };
-}
-
-/// Make sure the MASP params are present and load verifying keys into memory
-pub fn preload_verifying_keys() -> &'static PVKs {
-    &VERIFIYING_KEYS
-}
-
-fn load_pvks() -> &'static PVKs {
-    &VERIFIYING_KEYS
-}
-
-/// check_spend wrapper
-pub fn check_spend(
-    spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
-    sighash: &[u8; 32],
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(spend.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_spend(
-        spend.cv,
-        spend.anchor,
-        &spend.nullifier.0,
-        PublicKey(spend.rk.0),
-        sighash,
-        spend.spend_auth_sig,
-        zkproof,
-        parameters,
-    )
-}
-
-/// check_output wrapper
-pub fn check_output(
-    output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(output.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-    let epk =
-        masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
-    let epk = match epk.into() {
-        Some(p) => p,
-        None => return false,
-    };
-
-    ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
-}
-
-/// check convert wrapper
-pub fn check_convert(
-    convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(convert.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
-}
-
-/// Represents an authorization where the Sapling bundle is authorized and the
-/// transparent bundle is unauthorized.
-pub struct PartialAuthorized;
-
-impl Authorization for PartialAuthorized {
-    type SaplingAuth = <Authorized as Authorization>::SaplingAuth;
-    type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
-}
-
-/// Partially deauthorize the transparent bundle
-pub fn partial_deauthorize(
-    tx_data: &TransactionData<Authorized>,
-) -> Option<TransactionData<PartialAuthorized>> {
-    let transp = tx_data.transparent_bundle().and_then(|x| {
-        let mut tb = TransparentBuilder::empty();
-        for vin in &x.vin {
-            tb.add_input(TxOut {
-                asset_type: vin.asset_type,
-                value: vin.value,
-                address: vin.address,
-            })
-            .ok()?;
-        }
-        for vout in &x.vout {
-            tb.add_output(&vout.address, vout.asset_type, vout.value)
-                .ok()?;
-        }
-        tb.build()
-    });
-    if tx_data.transparent_bundle().is_some() != transp.is_some() {
-        return None;
-    }
-    Some(TransactionData::from_parts(
-        tx_data.version(),
-        tx_data.consensus_branch_id(),
-        tx_data.lock_time(),
-        tx_data.expiry_height(),
-        transp,
-        tx_data.sapling_bundle().cloned(),
-    ))
-}
-
-/// Verify a shielded transaction.
-pub fn verify_shielded_tx<F>(
-    transaction: &Transaction,
-    mut consume_verify_gas: F,
-) -> Result<(), StorageError>
-where
-    F: FnMut(u64) -> std::result::Result<(), StorageError>,
-{
-    tracing::info!("entered verify_shielded_tx()");
-
-    let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
-        bundle
-    } else {
-        return Err(StorageError::SimpleMessage("no sapling bundle"));
-    };
-    let tx_data = transaction.deref();
-
-    // Partially deauthorize the transparent bundle
-    let unauth_tx_data = match partial_deauthorize(tx_data) {
-        Some(tx_data) => tx_data,
-        None => {
-            return Err(StorageError::SimpleMessage(
-                "Failed to partially de-authorize",
-            ));
-        }
-    };
-
-    let txid_parts = unauth_tx_data.digest(TxIdDigester);
-    // the commitment being signed is shared across all Sapling inputs; once
-    // V4 transactions are deprecated this should just be the txid, but
-    // for now we need to continue to compute it here.
-    let sighash =
-        signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
-
-    tracing::info!("sighash computed");
-
-    let PVKs {
-        spend_vk,
-        convert_vk,
-        output_vk,
-    } = load_pvks();
-
-    #[cfg(not(feature = "testing"))]
-    let mut ctx = SaplingVerificationContext::new(true);
-    #[cfg(feature = "testing")]
-    let mut ctx = testing::MockSaplingVerificationContext::new(true);
-    for spend in &sapling_bundle.shielded_spends {
-        consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
-        if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded spend"));
-        }
-    }
-    for convert in &sapling_bundle.shielded_converts {
-        consume_verify_gas(namada_gas::MASP_VERIFY_CONVERT_GAS)?;
-        if !check_convert(convert, &mut ctx, convert_vk) {
-            return Err(StorageError::SimpleMessage(
-                "Invalid shielded conversion",
-            ));
-        }
-    }
-    for output in &sapling_bundle.shielded_outputs {
-        consume_verify_gas(namada_gas::MASP_VERIFY_OUTPUT_GAS)?;
-        if !check_output(output, &mut ctx, output_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded output"));
-        }
-    }
-
-    tracing::info!("passed spend/output verification");
-
-    let assets_and_values: I128Sum = sapling_bundle.value_balance.clone();
-
-    tracing::info!(
-        "accumulated {} assets/values",
-        assets_and_values.components().len()
-    );
-
-    consume_verify_gas(namada_gas::MASP_VERIFY_FINAL_GAS)?;
-    let result = ctx.final_check(
-        assets_and_values,
-        sighash.as_ref(),
-        sapling_bundle.authorization.binding_sig,
-    );
-    tracing::info!("final check result {result}");
-    if !result {
-        return Err(StorageError::SimpleMessage("MASP final check failed"));
-    }
-    Ok(())
-}
-
-/// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or
-/// use the default.
-pub fn get_params_dir() -> PathBuf {
-    if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        println!("Using {} as masp parameter folder.", params_dir);
-        PathBuf::from(params_dir)
-    } else {
-        masp_proofs::default_params_folder().unwrap()
-    }
-}
-
-/// Freeze a Builder into the format necessary for inclusion in a Tx. This is
-/// the format used by hardware wallets to validate a MASP Transaction.
-struct WalletMap;
-
-impl<P1>
-    masp_primitives::transaction::components::sapling::builder::MapBuilder<
-        P1,
-        ExtendedSpendingKey,
-        (),
-        ExtendedFullViewingKey,
-    > for WalletMap
-{
-    fn map_params(&self, _s: P1) {}
-
-    fn map_key(&self, s: ExtendedSpendingKey) -> ExtendedFullViewingKey {
-        (&s).into()
-    }
-}
-
-impl<P1, N1>
-    MapBuilder<P1, ExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
-    for WalletMap
-{
-    fn map_notifier(&self, _s: N1) {}
-}
-
-/// Abstracts platform specific details away from the logic of shielded pool
-/// operations.
-#[cfg_attr(feature = "async-send", async_trait::async_trait)]
-#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-pub trait ShieldedUtils:
-    Sized + BorshDeserialize + BorshSerialize + Default + Clone
-{
-    /// Get a MASP transaction prover
-    fn local_tx_prover(&self) -> LocalTxProver;
-
-    /// Load up the currently saved ShieldedContext
-    async fn load<U: ShieldedUtils + MaybeSend>(
-        &self,
-        ctx: &mut ShieldedContext<U>,
-        force_confirmed: bool,
-    ) -> std::io::Result<()>;
-
-    /// Save the given ShieldedContext for future loads
-    async fn save<U: ShieldedUtils + MaybeSync>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()>;
-}
-
-/// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
-pub fn to_viewing_key(esk: &ExtendedSpendingKey) -> FullViewingKey {
-    ExtendedFullViewingKey::from(esk).fvk
-}
-
-/// Generate a valid diversifier, i.e. one that has a diversified base. Return
-/// also this diversified base.
-pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
-    rng: &mut R,
-) -> (Diversifier, masp_primitives::jubjub::SubgroupPoint) {
-    let mut diversifier;
-    let g_d;
-    // Keep generating random diversifiers until one has a diversified base
-    loop {
-        let mut d = [0; 11];
-        rng.fill_bytes(&mut d);
-        diversifier = Diversifier(d);
-        if let Some(val) = diversifier.g_d() {
-            g_d = val;
-            break;
-        }
-    }
-    (diversifier, g_d)
-}
-
-/// Determine if using the current note would actually bring us closer to our
-/// target
-pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
-    let gap = dest - src;
-    for (asset_type, value) in gap.components() {
-        if *value > 0 && delta[asset_type] > 0 {
-            return true;
-        }
-    }
-    false
-}
-
-/// a masp change
-#[derive(BorshSerialize, BorshDeserialize, BorshDeserializer, Debug, Clone)]
-pub struct MaspChange {
-    /// the token address
-    pub asset: Address,
-    /// the change in the token
-    pub change: token::Change,
-}
-
-/// a masp amount
-pub type MaspAmount = ValueSum<(Option<Epoch>, Address), token::Change>;
-
-/// An extension of Option's cloned method for pair types
-fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
-    (a.clone(), b.clone())
-}
-
-/// Represents the amount used of different conversions
-pub type Conversions =
-    BTreeMap<AssetType, (AllowedConversion, MerklePath<Node>, i128)>;
-
-/// Represents the changes that were made to a list of transparent accounts
-pub type TransferDelta = HashMap<Address, MaspChange>;
-
-/// Represents the changes that were made to a list of shielded accounts
-pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
-/// A cache of fetched indexed transactions.
-///
-/// The cache is designed so that it either contains
-/// all transactions from a given height, or none.
-#[derive(
-    BorshSerialize, BorshDeserialize, BorshDeserializer, Debug, Default, Clone,
-)]
-pub struct Unscanned {
-    txs: IndexedNoteData,
-}
-
-impl Unscanned {
-    fn extend<I>(&mut self, items: I)
-    where
-        I: IntoIterator<Item = IndexedNoteEntry>,
-    {
-        self.txs.extend(items);
-    }
-
-    fn contains_height(&self, height: u64) -> bool {
-        self.txs.keys().any(|k| k.height.0 == height)
-    }
-
-    /// We remove all indices from blocks that have been entirely scanned.
-    /// If a block is only partially scanned, we leave all the events in the
-    /// cache.
-    fn scanned(&mut self, ix: &IndexedTx) {
-        self.txs.retain(|i, _| i.height >= ix.height);
-    }
-}
-
-impl IntoIterator for Unscanned {
-    type IntoIter = <IndexedNoteData as IntoIterator>::IntoIter;
-    type Item = IndexedNoteEntry;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.txs.into_iter()
-    }
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-/// The possible sync states of the shielded context
-pub enum ContextSyncStatus {
-    /// The context contains only data that has been confirmed by the protocol
-    Confirmed,
-    /// The context contains that that has not yet been confirmed by the
-    /// protocol and could end up being invalid
-    Speculative,
-}
 
 /// Represents the current state of the shielded pool from the perspective of
 /// the chosen viewing keys.
@@ -608,6 +95,9 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub div_map: HashMap<usize, Diversifier>,
     /// Maps note positions to their witness (used to make merkle paths)
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
+    /// Tracks what each transaction does to various account balances
+    pub delta_map:
+        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
@@ -638,6 +128,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             div_map: HashMap::default(),
             witness_map: HashMap::default(),
             spents: HashSet::default(),
+            delta_map: BTreeMap::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
             unscanned: Default::default(),
@@ -754,32 +245,36 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for idx in txs_results {
+            for (idx, tx_event) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let ExtractedMaspTx {
                     fee_unshielding,
                     inner_tx,
-                } = Self::extract_masp_tx(&tx, true).await?;
-                // Collect the current transaction(s)
-                fee_unshielding.and_then(|masp_transaction| {
+                } = extract_masp_tx::<C>(
+                    &tx,
+                    ExtractShieldedActionArg::Event(&tx_event),
+                    true,
+                )
+                .await?;
+                fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
                     block_sender.send((
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: true,
                         },
-                        masp_transaction,
+                        (epoch, changed_keys, masp_transaction),
                     ));
                 });
-                inner_tx.and_then(|masp_transaction| {
+                inner_tx.and_then(|(changed_keys, masp_transaction)| {
                     block_sender.send((
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: false,
                         },
-                       masp_transaction,
+                        (epoch, changed_keys, masp_transaction),
                     ));
                 })
             }
@@ -798,8 +293,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub fn scan_tx(
         &mut self,
         indexed_tx: IndexedTx,
+        epoch: Epoch,
+        tx_changed_keys: &BTreeSet<namada_core::storage::Key>,
         shielded: &Transaction,
         vk: &ViewingKey,
+        native_token: Address,
     ) -> Result<(), Error> {
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
@@ -885,8 +383,153 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?;
             }
         }
+        // Record the changes to the transparent accounts
+        let mut transfer_delta = TransferDelta::new();
 
+        let balance_keys: Vec<_> = tx_changed_keys
+            .iter()
+            .filter_map(is_any_shielded_action_balance_key)
+            .collect();
+        let (source, token, amount) = match shielded.transparent_bundle() {
+            Some(transp_bundle) => {
+                // Shielding/Unshielding transfer
+                match (transp_bundle.vin.len(), transp_bundle.vout.len()) {
+                    (0, 0) => {
+                        return Err(Error::Other(
+                            "Expected shielding/unshielding transaction"
+                                .to_string(),
+                        ));
+                    }
+                    (_, 0) => {
+                        // Shielding, only if we are syncing. If in
+                        // speculative context do not update
+                        if let ContextSyncStatus::Confirmed = self.sync_status {
+                            let addresses = balance_keys
+                                .iter()
+                                .find(|addresses| {
+                                    if addresses[1] != &MASP {
+                                        let transp_addr_commit =
+                                            TransparentAddress(
+                                                ripemd::Ripemd160::digest(
+                                                    sha2::Sha256::digest(
+                                                        &addresses[1]
+                                                            .serialize_to_vec(),
+                                                    ),
+                                                )
+                                                .into(),
+                                            );
+                                        // Vins contain the same address, so we
+                                        // can
+                                        // just examine the first one
+                                        transp_bundle.vin.first().is_some_and(
+                                            |vin| {
+                                                vin.address
+                                                    == transp_addr_commit
+                                            },
+                                        )
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .ok_or_else(|| {
+                                    Error::Other(
+                                        "Could not find source of MASP tx"
+                                            .to_string(),
+                                    )
+                                })?;
+
+                            let amount = transp_bundle
+                                .vin
+                                .iter()
+                                .fold(Amount::zero(), |acc, vin| {
+                                    acc + Amount::from_u64(vin.value)
+                                });
+
+                            (
+                                addresses[1].to_owned(),
+                                addresses[0].to_owned(),
+                                amount,
+                            )
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                    (0, _) => {
+                        // Unshielding
+                        let token = balance_keys
+                            .iter()
+                            .find(|addresses| {
+                                if addresses[1] != &MASP {
+                                    let transp_addr_commit = TransparentAddress(
+                                        ripemd::Ripemd160::digest(
+                                            sha2::Sha256::digest(
+                                                &addresses[1]
+                                                    .serialize_to_vec(),
+                                            ),
+                                        )
+                                        .into(),
+                                    );
+
+                                    // Vouts contain the same address, so we
+                                    // can
+                                    // just examine the first one
+                                    transp_bundle.vout.first().is_some_and(
+                                        |vout| {
+                                            vout.address == transp_addr_commit
+                                        },
+                                    )
+                                } else {
+                                    false
+                                }
+                            })
+                            .ok_or_else(|| {
+                                Error::Other(
+                                    "Could not find target of MASP tx"
+                                        .to_string(),
+                                )
+                            })?[0];
+
+                        let amount = transp_bundle
+                            .vout
+                            .iter()
+                            .fold(Amount::zero(), |acc, vout| {
+                                acc + Amount::from_u64(vout.value)
+                            });
+                        (MASP, token.to_owned(), amount)
+                    }
+                    (_, _) => {
+                        return Err(Error::Other(
+                            "MASP transaction cannot contain both transparent \
+                             inputs and outputs"
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
+            None => {
+                // Shielded transfer
+                (MASP, native_token, Amount::zero())
+            }
+        };
+
+        transfer_delta.insert(
+            source,
+            MaspChange {
+                asset: token,
+                change: -amount.change(),
+            },
+        );
+        self.delta_map
+            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
         Ok(())
+    }
+
+    /// Summarize the effects on shielded and transparent accounts of each
+    /// Transfer in this context
+    pub fn get_tx_deltas(
+        &self,
+    ) -> &BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)> {
+        &self.delta_map
     }
 
     /// Compute the total unspent notes associated with the viewing key in the
@@ -1338,6 +981,139 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok((val_acc, notes, conversions))
     }
 
+    /// Compute the combined value of the output notes of the transaction pinned
+    /// at the given payment address. This computation uses the supplied viewing
+    /// keys to try to decrypt the output notes. If no transaction is pinned at
+    /// the given payment address fails with
+    /// `PinnedBalanceError::NoTransactionPinned`.
+    pub async fn compute_pinned_balance<C: Client + Sync>(
+        client: &C,
+        owner: PaymentAddress,
+        viewing_key: &ViewingKey,
+    ) -> Result<(I128Sum, Epoch), Error> {
+        // Check that the supplied viewing key corresponds to given payment
+        // address
+        let counter_owner = viewing_key.to_payment_address(
+            *masp_primitives::sapling::PaymentAddress::diversifier(
+                &owner.into(),
+            ),
+        );
+        match counter_owner {
+            Some(counter_owner) if counter_owner == owner.into() => {}
+            _ => {
+                return Err(Error::from(PinnedBalanceError::InvalidViewingKey));
+            }
+        }
+        // Construct the key for where the transaction ID would be stored
+        let pin_key = namada_token::storage_key::masp_pin_tx_key(&owner.hash());
+        // Obtain the transaction pointer at the key
+        // If we don't discard the error message then a test fails,
+        // however the error underlying this will go undetected
+        let indexed_tx =
+            rpc::query_storage_value::<C, IndexedTx>(client, &pin_key)
+                .await
+                .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
+        let tx_epoch = query_epoch_at_height(client, indexed_tx.height)
+            .await?
+            .ok_or_else(|| {
+                Error::from(QueryError::General(
+                    "Queried height is greater than the last committed block \
+                     height"
+                        .to_string(),
+                ))
+            })?;
+
+        let block = client
+            .block(indexed_tx.height.0 as u32)
+            .await
+            .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+            .block
+            .data;
+
+        let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
+            .map_err(|e| Error::Other(e.to_string()))?;
+        let (_, shielded) = extract_masp_tx(
+            &tx,
+            ExtractShieldedActionArg::Request::<C>((
+                client,
+                indexed_tx.height,
+                Some(indexed_tx.index),
+            )),
+            false,
+        )
+        .await?
+        .inner_tx
+        .ok_or_else(|| {
+            Error::Other("Missing shielded inner portion of pinned tx".into())
+        })?;;
+
+        // Accumulate the combined output note value into this Amount
+        let mut val_acc = I128Sum::zero();
+        for so in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_outputs)
+        {
+            // Let's try to see if our viewing key can decrypt current note
+            let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+                &NETWORK,
+                1.into(),
+                &PreparedIncomingViewingKey::new(&viewing_key.ivk()),
+                so,
+            );
+            match decres {
+                // So the given viewing key does decrypt this current note...
+                Some((note, pa, _memo)) if pa == owner.into() => {
+                    val_acc += I128Sum::from_nonnegative(
+                        note.asset_type,
+                        note.value as i128,
+                    )
+                    .map_err(|()| {
+                        Error::Other(
+                            "found note with invalid value or asset type"
+                                .to_string(),
+                        )
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        Ok((val_acc, tx_epoch))
+    }
+
+    /// Compute the combined value of the output notes of the pinned transaction
+    /// at the given payment address if there's any. The asset types may be from
+    /// the epoch of the transaction or even before, so exchange all these
+    /// amounts to the epoch of the transaction in order to get the value that
+    /// would have been displayed in the epoch of the transaction.
+    pub async fn compute_exchanged_pinned_balance(
+        &mut self,
+        context: &impl Namada,
+        owner: PaymentAddress,
+        viewing_key: &ViewingKey,
+    ) -> Result<(ValueSum<Address, token::Change>, I128Sum, Epoch), Error> {
+        // Obtain the balance that will be exchanged
+        let (amt, ep) =
+            Self::compute_pinned_balance(context.client(), owner, viewing_key)
+                .await?;
+        display_line!(context.io(), "Pinned balance: {:?}", amt);
+        // Finally, exchange the balance to the transaction's epoch
+        let computed_amount = self
+            .compute_exchanged_amount(
+                context.client(),
+                context.io(),
+                amt,
+                ep,
+                BTreeMap::new(),
+            )
+            .await?
+            .0;
+        display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
+        let (decoded, undecoded) = self
+            .decode_combine_sum_to_epoch(context.client(), computed_amount, ep)
+            .await;
+        Ok((decoded, undecoded, ep))
+    }
+
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to. All asset types not corresponding to
     /// the given epoch are ignored.
@@ -1475,16 +1251,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.
-        #[allow(unused_mut)]
-        let mut rng = StdRng::from_rng(OsRng).unwrap();
+        let rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
-        let mut rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
+        let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
                 let exp_str =
                     format!("Env var {ENV_VAR_MASP_TEST_SEED} must be a u64.");
-                let parsed_seed: u64 =
-                    seed.parse().map_err(|_| Error::Other(exp_str))?;
+                let parsed_seed: u64 = FromStr::from_str(&seed)
+                    .map_err(|_| Error::Other(exp_str))?;
                 Ok(parsed_seed)
             }) {
             tracing::warn!(
@@ -1543,12 +1318,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 u32::MAX - 20
             }
         };
-        let mut builder = Builder::<TestNetwork, _>::new(
+        let mut builder = Builder::<TestNetwork, _>::new_with_rng(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
             // use from the masp crate to specify the expiration better
             expiration_height.into(),
+            rng,
         );
 
         // Convert transaction amount into MASP types
@@ -1800,18 +1576,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let prover = context.shielded().await.utils.local_tx_prover();
         #[cfg(feature = "testing")]
         let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
-        let (masp_tx, metadata) = builder.build(
-            &prover,
-            &FeeRule::non_standard(U64Sum::zero()),
-            &mut rng,
-            &mut RngBuildParams::new(OsRng),
-        )?;
+        let (masp_tx, metadata) =
+            builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
 
         if update_ctx {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(context, &masp_tx)
+                .pre_cache_transaction(
+                    context, &masp_tx, source, target, token, epoch,
+                )
                 .await?;
         }
 
@@ -1824,14 +1598,30 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     // Updates the internal state with the data of the newly generated
-    // transaction. More specifically invalidate the spent notes, but do not
-    // cache the newly produced output descriptions and therefore the merkle
-    // tree
+    // transaction. More specifically invalidate the spent notes and the
+    // transparent balances, but do not cache the newly produced output
+    // descriptions and therefore the merkle tree
     async fn pre_cache_transaction(
         &mut self,
         context: &impl Namada,
         masp_tx: &Transaction,
+        source: &TransferSource,
+        target: &TransferTarget,
+        token: &Address,
+        epoch: Epoch,
     ) -> Result<(), Error> {
+        // Need to mock the changed balance keys
+        let mut changed_balance_keys = BTreeSet::default();
+        match (source.effective_address(), target.effective_address()) {
+            // Shielded transactions don't write balance keys
+            (MASP, MASP) => (),
+            (source, target) => {
+                changed_balance_keys.insert(balance_key(token, &source));
+                changed_balance_keys.insert(balance_key(token, &target));
+            }
+        }
+
+        let native_token = query_native_token(context.client()).await?;
         let vks: Vec<_> = context
             .wallet()
             .await
@@ -1850,10 +1640,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             },
             |indexed| IndexedTx {
                 height: indexed.height,
-                index: indexed
-                    .index
-                    .checked_add(1)
-                    .expect("Tx index shouldn't overflow"),
+                index: indexed.index + 1,
                 is_wrapper: false,
             },
         );
@@ -1861,7 +1648,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in vks {
             self.vk_heights.entry(vk).or_default();
 
-            self.scan_tx(indexed_tx, masp_tx, &vk)?;
+            self.scan_tx(
+                indexed_tx,
+                epoch,
+                &changed_balance_keys,
+                masp_tx,
+                &vk,
+                native_token.clone(),
+            )?;
         }
         // Save the speculative state for future usage
         self.save().await.map_err(|e| Error::Other(e.to_string()))?;
@@ -1929,10 +1723,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 }
 
-impl<U: ShieldedUtils + Send> ShieldedContext<U> {
+impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
+    #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<
         C: Client + Sync,
         IO: Io + Send + Sync,
@@ -1994,7 +1789,6 @@ impl<U: ShieldedUtils + Send> ShieldedContext<U> {
         let (task_scheduler, mut task_manager) =
             TaskManager::<U>::new(self.clone());
 
-
         std::thread::scope(|s| {
             loop {
                 let (fetch_send, fetch_recv) =
@@ -2053,5 +1847,139 @@ impl<U: ShieldedUtils + Send> ShieldedContext<U> {
                 }
             }
         })
+    }
+
+    /// Obtain the known effects of all accepted shielded and transparent
+    /// transactions. If an owner is specified, then restrict the set to only
+    /// transactions crediting/debiting the given owner. If token is specified,
+    /// then restrict set to only transactions involving the given token.
+    #[cfg(not(target_family = "wasm"))]
+    pub async fn query_tx_deltas<C: Client + Sync, IO: Io + Sync + Send>(
+        &mut self,
+        client: &C,
+        io: &IO,
+        query_owner: &Either<BalanceOwner, Vec<Address>>,
+        query_token: &Option<Address>,
+        viewing_keys: &HashMap<String, ExtendedViewingKey>,
+    ) -> Result<
+        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
+        Error,
+    > {
+        const TXS_PER_PAGE: u8 = 100;
+        let _ = self.load().await;
+        let vks = viewing_keys;
+        let fvks: Vec<_> = vks
+            .values()
+            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
+            .collect();
+        // Required for filtering out rejected transactions from Tendermint
+        // responses
+        let block_results = rpc::query_results(client).await?;
+        self.fetch(client, &DefaultLogger::new(io), None, None, 1, &[], &fvks)
+            .await?;
+        // Save the update state so that future fetches can be short-circuited
+        let _ = self.save().await;
+
+        let mut transfers = self.get_tx_deltas().clone();
+        // Construct the set of addresses relevant to user's query
+        let relevant_addrs = match &query_owner {
+            Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
+            // MASP objects are dealt with outside of tx_search
+            Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
+            Either::Left(BalanceOwner::PaymentAddress(_owner)) => vec![],
+            // Unspecified owner means all known addresses are considered
+            // relevant
+            Either::Right(addrs) => addrs.clone(),
+        };
+        // Find all transactions to or from the relevant address set
+        for addr in relevant_addrs {
+            for prop in ["transfer.source", "transfer.target"] {
+                // Query transactions involving the current address
+                let mut tx_query = Query::eq(prop, addr.encode());
+                // Elaborate the query if requested by the user
+                if let Some(token) = &query_token {
+                    tx_query =
+                        tx_query.and_eq("transfer.token", token.encode());
+                }
+                for page in 1.. {
+                    let txs = &client
+                        .tx_search(
+                            tx_query.clone(),
+                            true,
+                            page,
+                            TXS_PER_PAGE,
+                            Order::Ascending,
+                        )
+                        .await
+                        .map_err(|e| {
+                            Error::from(QueryError::General(format!(
+                                "for transaction: {e}"
+                            )))
+                        })?
+                        .txs;
+                    for response_tx in txs {
+                        let height = BlockHeight(response_tx.height.value());
+                        let idx = TxIndex(response_tx.index);
+                        // Only process yet unprocessed transactions which have
+                        // been accepted by node VPs
+                        // TODO: Check that wrappers shouldn't be considered
+                        // here
+                        let should_process =
+                            !transfers.contains_key(&IndexedTx {
+                                height,
+                                index: idx,
+                                is_wrapper: false,
+                            }) && block_results[u64::from(height) as usize]
+                                .is_accepted(idx.0 as usize);
+                        if !should_process {
+                            continue;
+                        }
+                        let tx = Tx::try_from(response_tx.tx.as_ref())
+                            .map_err(|e| Error::Other(e.to_string()))?;
+                        let mut wrapper = None;
+                        let mut transfer = None;
+                        extract_payload(tx, &mut wrapper, &mut transfer)?;
+                        // Epoch data is not needed for transparent transactions
+                        let epoch =
+                            wrapper.map(|x| x.epoch).unwrap_or_default();
+                        if let Some(transfer) = transfer {
+                            // Skip MASP addresses as they are already handled
+                            // by ShieldedContext
+                            if transfer.source == MASP
+                                || transfer.target == MASP
+                            {
+                                continue;
+                            }
+                            // Describe how a Transfer simply subtracts from one
+                            // account and adds the same to another
+
+                            let delta = TransferDelta::from([(
+                                transfer.source.clone(),
+                                MaspChange {
+                                    asset: transfer.token.clone(),
+                                    change: -transfer.amount.amount().change(),
+                                },
+                            )]);
+
+                            // No shielded accounts are affected by this
+                            // Transfer
+                            transfers.insert(
+                                IndexedTx {
+                                    height,
+                                    index: idx,
+                                    is_wrapper: false,
+                                },
+                                (epoch, delta, TransactionDelta::new()),
+                            );
+                        }
+                    }
+                    // An incomplete page signifies no more transactions
+                    if (txs.len() as u8) < TXS_PER_PAGE {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(transfers)
     }
 }
