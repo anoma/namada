@@ -1463,12 +1463,15 @@ where
 }
 
 /// Initialize a new account established address.
+#[allow(clippy::too_many_arguments)]
 pub fn tx_init_account<MEM, D, H, CA>(
     env: &TxVmEnv<MEM, D, H, CA>,
     code_hash_ptr: u64,
     code_hash_len: u64,
     code_tag_ptr: u64,
     code_tag_len: u64,
+    entropy_source_ptr: u64,
+    entropy_source_len: u64,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1493,6 +1496,12 @@ where
 
     tx_validate_vp_code_hash::<MEM, D, H, CA>(env, &code_hash, &code_tag)?;
 
+    let (entropy_source, gas) = env
+        .memory
+        .read_bytes(entropy_source_ptr, entropy_source_len as _)
+        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
+    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
+
     tracing::debug!("tx_init_account");
 
     let code_hash = Hash::try_from(&code_hash[..])
@@ -1500,7 +1509,7 @@ where
     let mut state = env.state();
     let (write_log, in_mem, _db) = state.split_borrow();
     let gen = &in_mem.address_gen;
-    let (addr, gas) = write_log.init_account(gen, code_hash);
+    let (addr, gas) = write_log.init_account(gen, code_hash, &entropy_source);
     let addr_bytes = addr.serialize_to_vec();
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let gas = env
