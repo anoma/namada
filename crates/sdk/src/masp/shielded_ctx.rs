@@ -61,7 +61,9 @@ use crate::masp::utils::{
     DefaultLogger, ExtractShieldedActionArg, FetchQueueSender, ProgressLogger,
     ShieldedUtils, TaskManager,
 };
-use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED, NETWORK};
+use crate::masp::NETWORK;
+#[cfg(any(test, feature = "testing"))]
+use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
 use crate::queries::Client;
 use crate::rpc::{
     query_block, query_conversion, query_denom, query_epoch_at_height,
@@ -1721,10 +1723,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 }
 
-impl<U: ShieldedUtils + Send> ShieldedContext<U> {
+impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
+    #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<
         C: Client + Sync,
         IO: Io + Send + Sync,
@@ -1785,7 +1788,6 @@ impl<U: ShieldedUtils + Send> ShieldedContext<U> {
 
         let (task_scheduler, mut task_manager) =
             TaskManager::<U>::new(self.clone());
-
 
         std::thread::scope(|s| {
             loop {
@@ -1851,6 +1853,7 @@ impl<U: ShieldedUtils + Send> ShieldedContext<U> {
     /// transactions. If an owner is specified, then restrict the set to only
     /// transactions crediting/debiting the given owner. If token is specified,
     /// then restrict set to only transactions involving the given token.
+    #[cfg(not(target_family = "wasm"))]
     pub async fn query_tx_deltas<C: Client + Sync, IO: Io + Sync + Send>(
         &mut self,
         client: &C,
