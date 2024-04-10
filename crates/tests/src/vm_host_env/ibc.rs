@@ -1,6 +1,5 @@
 use core::time::Duration;
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 use ibc_testkit::testapp::ibc::clients::mock::client_state::{
     client_type, MockClientState,
@@ -84,6 +83,7 @@ use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::Tx;
 use namada::vm::{wasm, WasmCacheRwAccess};
+use namada_core::collections::HashMap;
 use namada_core::validity_predicate::VpSentinel;
 use namada_sdk::state::StateRead;
 use namada_test_utils::TestWasms;

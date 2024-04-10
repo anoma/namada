@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
@@ -10,6 +9,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
     erc20_token_address, GasFee, PendingTransfer, TransferToEthereum,
@@ -1013,7 +1013,7 @@ mod recommendations {
         Uint::from_u64(
             voting_powers
                 .iter()
-                .filter_map(|(a, &p)| sigs.get(a).map(|_| p))
+                .filter_map(|(a, &p)| sigs.get(*a).map(|_| p))
                 .take_while(|p| {
                     if power <= FractionalVotingPower::TWO_THIRDS {
                         power += FractionalVotingPower::new(

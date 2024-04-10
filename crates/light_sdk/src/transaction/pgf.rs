@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
 use namada_sdk::address::Address;
+use namada_sdk::collections::HashMap;
 use namada_sdk::dec::Dec;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;

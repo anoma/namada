@@ -1,11 +1,12 @@
 //! Implementation of chain initialization for the Shell
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::ops::ControlFlow;
 
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::account::protocol_pk_key;
+use namada::core::collections::HashMap;
 use namada::core::hash::Hash as CodeHash;
 use namada::core::time::{TimeZone, Utc};
 use namada::ledger::parameters::Parameters;
@@ -312,7 +313,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<(), Vec<u8>> {
-        use std::collections::hash_map::Entry;
+        use namada::core::collections::hash_map::Entry;
         let Some(vp_filename) = self
             .validate(
                 genesis

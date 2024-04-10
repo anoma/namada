@@ -1,12 +1,12 @@
 //! [`Epoched`] and [`EpochedDelta`] are structures for data that is set for
 //! future (and possibly past) epochs.
 
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::storage::{self, Epoch};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

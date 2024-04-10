@@ -1,7 +1,6 @@
-use std::collections::{HashMap, HashSet};
-
 use eyre::Result;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::keccak::keccak_hash;
 use namada_core::key::{common, SignableEthMessage};
 use namada_core::storage::BlockHeight;

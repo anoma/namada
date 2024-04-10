@@ -1,11 +1,11 @@
 //! Test utilities for the Ethereum bridge crate.
 
-use std::collections::HashMap;
 use std::num::NonZeroU64;
 
 use namada_account::protocol_pk_key;
 use namada_core::address::testing::wnam;
 use namada_core::address::{self, Address};
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;

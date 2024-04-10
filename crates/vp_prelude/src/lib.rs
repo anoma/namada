@@ -13,7 +13,7 @@ pub mod ibc {
 
 // used in the VP input
 use core::slice;
-pub use std::collections::{BTreeSet, HashSet};
+pub use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 pub use namada_core::address::Address;
@@ -21,6 +21,7 @@ pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
+pub use namada_core::collections::HashSet;
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{

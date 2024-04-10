@@ -18,14 +18,16 @@ pub const DATA_SUBKEY: &str = "data";
 
 /// Lazy map.
 ///
-/// This can be used as an alternative to `std::collections::HashMap` and
-/// `BTreeMap`. In the lazy map, the elements do not reside in memory but are
+/// This can be used as an alternative to [`HashMap`] and
+/// [`BTreeMap`]. In the lazy map, the elements do not reside in memory but are
 /// instead read and written to storage sub-keys of the storage `key` used to
 /// construct the map.
 ///
 /// In the [`LazyMap`], the type of key `K` can be anything that implements
 /// [`storage::KeySeg`] and this trait is used to turn the keys into key
 /// segments.
+///
+/// [`HashMap`]: `namada_core::collections::HashMap`
 #[derive(Debug)]
 pub struct LazyMap<K, V, SON = super::Simple> {
     key: storage::Key,
