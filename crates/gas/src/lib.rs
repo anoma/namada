@@ -2,6 +2,7 @@
 //! validity predicates triggered by transactions.
 
 pub mod event;
+pub mod storage;
 
 use std::fmt::Display;
 use std::ops::Div;

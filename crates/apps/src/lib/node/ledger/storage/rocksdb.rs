@@ -16,6 +16,7 @@
 //!   - `pred`: predecessor values of the top-level keys of the same name
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!     - `commit_only_data_commitment`
 //!     - `update_epoch_blocks_delay`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
@@ -44,7 +45,6 @@
 //!     - `all`: the hashes included up to the last block
 //!     - `last`: the hashes included in the last block
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -55,6 +55,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
+use namada::core::collections::HashSet;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
@@ -64,7 +65,9 @@ use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::replay_protection;
-use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
+use namada::state::merkle_tree::{
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
+};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
@@ -76,6 +79,7 @@ use namada::storage::{
 };
 use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
+use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -475,6 +479,7 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
+            "commit_only_data_commitment",
             "update_epoch_blocks_delay",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
@@ -742,6 +747,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let commit_only_data: CommitOnlyData = match self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load commit only data commitment from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let conversion_state: ConversionState = match self
             .0
             .get_cf(state_cf, "conversion_state")
@@ -813,7 +831,8 @@ impl DB for RocksDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
-                    // Restore the base tree of Merkle tree
+                    // Restore the base tree and the CommitData tree of Merkle
+                    // tree
                     "tree" => match segments.get(2) {
                         Some(s) => {
                             let st = StoreType::from_str(s)?;
@@ -858,7 +877,11 @@ impl DB for RocksDB {
         // Restore subtrees of Merkle tree
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
-                let key_prefix = subtree_key_prefix(st, epoch);
+                if *st == StoreType::CommitData {
+                    // CommitData tree has been already restored
+                    continue;
+                }
+                let key_prefix = tree_key_prefix_with_epoch(st, epoch);
                 let root_key =
                     key_prefix.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self
@@ -903,6 +926,7 @@ impl DB for RocksDB {
                 address_gen,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -933,6 +957,7 @@ impl DB for RocksDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
+            commit_only_data,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -990,6 +1015,25 @@ impl DB for RocksDB {
             encode(&update_epoch_blocks_delay),
         );
 
+        // Commitment to the only data commit
+        if let Some(current_value) = self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            // Write the predecessor value for rollback
+            batch.0.put_cf(
+                state_cf,
+                "pred/commit_only_data_commitment",
+                current_value,
+            );
+        }
+        batch.0.put_cf(
+            state_cf,
+            "commit_only_data_commitment",
+            commit_only_data.serialize(),
+        );
+
         // Save the conversion state when the epoch is updated
         if is_full_commit {
             if let Some(current_value) = self
@@ -1019,15 +1063,18 @@ impl DB for RocksDB {
             .put_cf(state_cf, "eth_events_queue", encode(&eth_events_queue));
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
             for st in StoreType::iter() {
-                if *st == StoreType::Base || is_full_commit {
-                    let key_prefix = if *st == StoreType::Base {
-                        base_tree_key_prefix(height)
-                    } else {
-                        subtree_key_prefix(st, epoch)
+                if *st == StoreType::Base
+                    || *st == StoreType::CommitData
+                    || is_full_commit
+                {
+                    let key_prefix = match st {
+                        StoreType::Base | StoreType::CommitData => {
+                            tree_key_prefix_with_height(st, height)
+                        }
+                        _ => tree_key_prefix_with_epoch(st, epoch),
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
@@ -1045,7 +1092,9 @@ impl DB for RocksDB {
                 }
             }
         }
+
         // Block header
+        let prefix_key = Key::from(height.to_db_key());
         {
             if let Some(h) = header {
                 let key = prefix_key
@@ -1140,10 +1189,11 @@ impl DB for RocksDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if *st == StoreType::Base {
-                base_tree_key_prefix(base_height)
-            } else {
-                subtree_key_prefix(st, epoch)
+            let key_prefix = match st {
+                StoreType::Base | StoreType::CommitData => {
+                    tree_key_prefix_with_height(st, base_height)
+                }
+                _ => tree_key_prefix_with_epoch(st, epoch),
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self
@@ -1476,7 +1526,7 @@ impl DB for RocksDB {
         epoch: Epoch,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let key_prefix = subtree_key_prefix(store_type, epoch);
+        let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = key_prefix.clone().with_segment("root".to_owned());
         batch.0.delete_cf(block_cf, root_key.to_string());
         let store_key = key_prefix.with_segment("store".to_owned());
@@ -2617,6 +2667,7 @@ mod test {
         let address_gen = EstablishedAddressGen::new("whatever");
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
+        let commit_only_data = CommitOnlyData::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -2633,6 +2684,7 @@ mod test {
             address_gen: &address_gen,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
+            commit_only_data: &commit_only_data,
         };
 
         db.add_block_to_batch(block, batch, true)
