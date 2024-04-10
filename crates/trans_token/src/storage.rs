@@ -45,6 +45,25 @@ where
     Ok(balance)
 }
 
+/// Get the effective circulating total supply of native tokens.
+pub fn get_effective_total_native_supply<S>(
+    storage: &S,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let native_token = storage.get_native_token()?;
+    let pgf_address = Address::Internal(InternalAddress::Pgf);
+
+    let raw_total = read_total_supply(storage, &native_token)?;
+    let pgf_balance = read_balance(storage, &native_token, &pgf_address)?;
+
+    // Remove native balance in PGF address from the total supply
+    Ok(raw_total
+        .checked_sub(pgf_balance)
+        .expect("Raw total supply should be larger than PGF balance"))
+}
+
 /// Read the denomination of a given token, if any. Note that native
 /// transparent tokens do not have this set and instead use the constant
 /// [`token::NATIVE_MAX_DECIMAL_PLACES`].

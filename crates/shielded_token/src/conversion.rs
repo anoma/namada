@@ -10,8 +10,10 @@ use namada_core::hash::Hash;
 use namada_core::uint::Uint;
 use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
-use namada_trans_token::storage_key::{balance_key, minted_balance_key};
-use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
+use namada_trans_token::{
+    get_effective_total_native_supply, read_balance, read_denom, Amount,
+    DenominatedAmount, Denomination,
+};
 
 #[cfg(any(feature = "multicore", test))]
 use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
@@ -92,16 +94,11 @@ where
 
     // Query the storage for information -------------------------
 
-    let native_token = storage.get_native_token()?;
     //// information about the amount of native tokens on the chain
-    let total_native_tokens: Amount = storage
-        .read(&minted_balance_key(&native_token))?
-        .expect("the total supply key should be here");
+    let total_native_tokens = get_effective_total_native_supply(storage)?;
 
     // total locked amount in the Shielded pool
-    let total_tokens_in_masp: Amount = storage
-        .read(&balance_key(token, &masp_addr))?
-        .unwrap_or_default();
+    let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
 
     let epochs_per_year: u64 = storage
         .read(&parameters::storage::get_epochs_per_year_key())?
@@ -247,6 +244,7 @@ where
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
     use namada_storage::ResultExt;
+    use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -329,9 +327,8 @@ where
         let (reward, denom) = calculate_masp_rewards(storage, token)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal: Amount = storage
-            .read(&balance_key(token, &masp_addr))?
-            .unwrap_or_default();
+        let addr_bal = read_balance(storage, token, &masp_addr)?;
+
         // Get the last rewarded amount of the native token
         let normed_inflation = *storage
             .conversion_state_mut()
@@ -568,6 +565,7 @@ mod tests {
     use namada_core::dec::testing::arb_non_negative_dec;
     use namada_core::token::testing::arb_amount;
     use namada_storage::testing::TestStorage;
+    use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_trans_token::write_denom;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
