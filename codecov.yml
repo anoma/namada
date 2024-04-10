@@ -7,23 +7,33 @@ github_checks:
   annotations: false
 
 ignore:
-  - audits/*
-  - docker/*
-  - documentation/*
-  - examples/*
-  - genesis/*
-  - proto/*
-  - scripts/*
-  - *.hsb
-  - *.toml
-  - *.lock
-  - *.md
-  - *.yml
-  - .github/*
+  - audits
+  - docker
+  - documentation
+  - examples
+  - genesis
+  - proto
+  - scripts
+  - about.hsb
+  - rustfmt.toml
+  - rust-toolchain.toml
+  - rust-nightly-version
+  - release.toml
+  - about.toml
+  - README.md
+  - CONTRIBUTING
+  - CODE_OF_CONDUCT.md
+  - CHANGELOG.md
+  - Cargo.lock
+  - .gitignore
+  - .dockerignore
   - .vscode
-  - changelog/*
+  - .changelog
   - LICENSE
   - Makefile
   - crates/tests
   - crates/test_utils
   - crates/benches
+  - crates/apps/src/bin
+  - crates/apps/src/lib/cli
+  - crates/apps/src/lib/client
