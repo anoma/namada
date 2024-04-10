@@ -2,30 +2,19 @@
 resolver = "2"
 
 members = [
-    "tx_become_validator",
-    "tx_bond",
-    "tx_change_bridge_pool",
-    "tx_change_consensus_key",
-    "tx_change_validator_commission",
-    "tx_change_validator_metadata",
-    "tx_claim_rewards",
-    "tx_deactivate_validator",
-    "tx_ibc",
-    "tx_init_account",
-    "tx_init_proposal",
-    "tx_reactivate_validator",
-    "tx_redelegate",
-    "tx_resign_steward",
-    "tx_transfer",
-    "tx_unbond",
-    "tx_update_account",
-    "tx_reveal_pk",
-    "tx_update_steward_commission",
-    "tx_unjail_validator",
-    "tx_vote_proposal",
-    "tx_withdraw",
-    "vp_implicit",
-    "vp_user",
+    "tx_memory_limit",
+    "tx_no_op",
+    "tx_fail",
+    "tx_read_storage_key",
+    "tx_write",
+    "vp_always_false",
+    "vp_always_true",
+    "vp_eval",
+    "vp_memory_limit",
+    "vp_read_storage_key",
+    "tx_proposal_code",
+    "tx_proposal_masp_reward",
+    "tx_proposal_ibc_token_inflation",
 ]
 
 [workspace.package]
@@ -35,10 +24,9 @@ license = "GPL-3.0"
 version = "0.32.1"
 
 [workspace.dependencies]
+namada_test_utils = { path = "../crates/test_utils" }
 namada_tx_prelude = { path = "../crates/tx_prelude" }
 namada_vp_prelude = { path = "../crates/vp_prelude" }
-
-once_cell = { version = "1.8.0" }
 wee_alloc = "0.4.5"
 getrandom = { version = "0.2", features = ["custom"] }
 
