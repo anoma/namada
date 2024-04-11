@@ -31,6 +31,8 @@ tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "200000"
 tpknam1qpzrttnzfyt6xfu2vy092eruasll3z52rjfexwapdw0rdww5uktlk3j73dw = "200000"
+# validator-0-account-key
+tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "1000000"
 
 [token.BTC]
 # albert
@@ -59,6 +61,7 @@ tpknam1qzz4x4fammhdcfa0g8xw4udkq8s4n6kjhzlxh00ul3da05wuu9wkykqqvjm = "1000000"
 tpknam1qypvqpzu74nafjahlwyq272dj76qq9rz30dulyc94883tmj893mquqs74gxv4 = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+
 
 [token.DOT]
 # albert

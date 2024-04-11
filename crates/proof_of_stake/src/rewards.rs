@@ -502,7 +502,7 @@ where
         credit_tokens(
             storage,
             staking_token,
-            &address::GOV,
+            &address::PGF,
             reward_tokens_remaining,
         )?;
     }

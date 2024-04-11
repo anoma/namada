@@ -1398,8 +1398,8 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     // Read some data before applying rewards
     let pos_balance_pre =
         read_balance(&s, &staking_token, &address::POS).unwrap();
-    let gov_balance_pre =
-        read_balance(&s, &staking_token, &address::GOV).unwrap();
+    let pgf_balance_pre =
+        read_balance(&s, &staking_token, &address::PGF).unwrap();
 
     let num_consensus_validators = consensus_set.len() as u64;
     let accum_val = Dec::one() / num_consensus_validators;
@@ -1437,17 +1437,17 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
 
     let pos_balance_post =
         read_balance(&s, &staking_token, &address::POS).unwrap();
-    let gov_balance_post =
-        read_balance(&s, &staking_token, &address::GOV).unwrap();
+    let pgf_balance_post =
+        read_balance(&s, &staking_token, &address::PGF).unwrap();
 
     assert_eq!(
-        pos_balance_pre + gov_balance_pre + inflation,
-        pos_balance_post + gov_balance_post,
-        "Expected inflation to be minted to PoS and left-over amount to Gov"
+        pos_balance_pre + pgf_balance_pre + inflation,
+        pos_balance_post + pgf_balance_post,
+        "Expected inflation to be minted to PoS and left-over amount to PGF"
     );
 
     let pos_credit = pos_balance_post - pos_balance_pre;
-    let gov_credit = gov_balance_post - gov_balance_pre;
+    let gov_credit = pgf_balance_post - pgf_balance_pre;
     assert!(
         pos_credit > gov_credit,
         "PoS must receive more tokens than Gov, but got {} in PoS and {} in \

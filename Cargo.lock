@@ -4935,6 +4935,7 @@ name = "namada_tests"
 version = "0.32.1"
 dependencies = [
  "assert_cmd",
+ "assert_matches",
  "async-trait",
  "borsh 1.2.1",
  "borsh-ext",

@@ -59,6 +59,8 @@ pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
+/// Internal Public Goods funding address
+pub const PGF: Address = Address::Internal(InternalAddress::Pgf);
 /// Internal MASP address
 pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 /// Internal Multitoken address

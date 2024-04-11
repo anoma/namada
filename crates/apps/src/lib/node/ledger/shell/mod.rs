@@ -546,7 +546,7 @@ where
 
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
-    pub fn last_state(&mut self) -> response::Info {
+    pub fn last_state(&self) -> response::Info {
         if ledger::migrating_state().is_some() {
             // When migrating state, return a height of 0, such
             // that CometBFT calls InitChain and subsequently
