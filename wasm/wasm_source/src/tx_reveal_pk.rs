@@ -14,7 +14,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         err
     })?;
     let pk = common::PublicKey::try_from_slice(&data[..])
-        .wrap_err("failed to decode common::PublicKey from tx_data")?;
+        .wrap_err("Failed to decode public key to reveal from the tx data")?;
     debug_log!("tx_reveal_pk called with pk: {pk}");
     key::reveal_pk(ctx, &pk)
+        .wrap_err("Failed to reveal the implicit account's public key")
 }

@@ -39,11 +39,18 @@ const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
+/// The error type returned by transactions.
+// TODO: move this to `core`, to be shared with the wasm vm,
+// and make it an `enum` of different variants
+type TxError = String;
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("VP error: {0}")]
     VpError(VpError),
+    #[error("Transaction error: {0}")]
+    TxError(TxError),
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("Memory error: {0}")]
@@ -183,6 +190,7 @@ where
         PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
@@ -198,6 +206,7 @@ where
         tx_index,
         &mut verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         vp_wasm_cache,
         tx_wasm_cache,
     );
@@ -225,12 +234,12 @@ where
         .exports
         .get_function(TX_ENTRYPOINT)
         .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64), ()>()
+        .native::<(u64, u64), u64>()
         .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
             entrypoint: TX_ENTRYPOINT,
             error,
         })?;
-    apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
+    let ok = apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
         tracing::debug!("Tx WASM failed with {}", err);
         match *sentinel.borrow() {
             TxSentinel::None => Error::RuntimeError(err),
@@ -241,7 +250,28 @@ where
         }
     })?;
 
-    Ok(verifiers)
+    if ok == 1 {
+        Ok(verifiers)
+    } else {
+        // NB: drop imports so we can safely access the
+        // `&mut` ptrs we shared with the guest
+        _ = (instance, imports);
+
+        let err = yielded_value.take().map_or_else(
+            || Ok("Execution ended abruptly with an unknown error".to_owned()),
+            |borsh_encoded_err| {
+                let tx_err = TxError::try_from_slice(&borsh_encoded_err)
+                    .map_err(|e| Error::ConversionError(e.to_string()))?;
+                Ok(tx_err)
+            },
+        )?;
+
+        Err(match *sentinel.borrow() {
+            TxSentinel::None => Error::TxError(err),
+            TxSentinel::OutOfGas => Error::GasError(err),
+            TxSentinel::InvalidCommitment => Error::MissingSection(err),
+        })
+    }
 }
 
 /// Execute a validity predicate code. Returns whether the validity
@@ -872,11 +902,10 @@ mod tests {
             r#"
             (module
                 (import "env" "namada_tx_read" (func (param i64 i64) (result i64)))
-                (func (param i64 i64)
+                (func (param i64 i64) (result i64)
                     i64.const 18446744073709551615
                     i64.const 1
                     (call 0)
-                    drop
                 )
                 (memory 16)
                 (export "memory" (memory 0))
@@ -1784,27 +1813,25 @@ mod tests {
             format!(
                 r#"
             (module
-                (type (;0;) (func (param i64 i64)))
+                (type (;0;) (func (param i64 i64) (result i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
                 (if
                 (result i64)
                 (i64.eqz (get_local 0))
-                (then (get_local 0))
+                (then (i64.const 1))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $_apply_tx (type 0) (param i64 i64)
-                (call $loop (i64.const {}))
-                drop)
+                (func $_apply_tx (type 0) (param i64 i64) (result i64)
+                (call $loop (i64.const {loops})))
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
                 (export "_apply_tx" (func $_apply_tx)))
-            "#,
-                loops
+            "#
             )
             .as_bytes(),
         )
