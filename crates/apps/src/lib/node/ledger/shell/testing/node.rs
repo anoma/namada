@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
@@ -11,6 +10,7 @@ use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
 use namada::control_flow::time::Duration;
+use namada::core::collections::HashMap;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
 use namada::core::hash::Hash;

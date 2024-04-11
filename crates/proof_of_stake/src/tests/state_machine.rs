@@ -1,12 +1,13 @@
 //! Test PoS transitions with a state machine
 
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::Deref;
 
 use assert_matches::assert_matches;
 use itertools::Itertools;
 use namada_core::address::{self, Address};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key;
 use namada_core::key::common::PublicKey;
@@ -2602,7 +2603,7 @@ impl ReferenceStateMachine for AbstractPosState {
                             .below_threshold_set
                             .entry(current_epoch + offset)
                             .or_default()
-                            .remove(address);
+                            .swap_remove(address);
                         debug_assert!(removed);
                     } else {
                         // Just make sure the validator is already jailed
@@ -3753,7 +3754,7 @@ impl AbstractPosState {
             ValidatorState::BelowThreshold => {
                 // We know that this validator will be promoted into one of the
                 // higher sets, so first remove from the below-threshold set.
-                below_thresh_set.remove(validator);
+                below_thresh_set.swap_remove(validator);
 
                 let num_consensus =
                     consensus_set.iter().fold(0, |sum, (_, validators)| {

@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use eyre::eyre;
 use itertools::Itertools;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::BlockHeight;
 use namada_core::token;
 use namada_proof_of_stake::pos_queries::PosQueries;

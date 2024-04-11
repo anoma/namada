@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs::File;
 
 use borsh::BorshDeserialize;
@@ -7,6 +6,7 @@ use ledger_namada_rs::{BIP44Path, NamadaApp};
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use namada::core::address::{Address, ImplicitAddress};
+use namada::core::collections::HashSet;
 use namada::core::dec::Dec;
 use namada::core::key::{self, *};
 use namada::governance::cli::onchain::{

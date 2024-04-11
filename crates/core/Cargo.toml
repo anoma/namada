@@ -47,6 +47,7 @@ ibc.workspace = true
 ics23.workspace = true
 impl-num-traits = "0.1.2"
 index-set.workspace = true
+indexmap.workspace = true
 k256.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true

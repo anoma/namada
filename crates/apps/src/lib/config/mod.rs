@@ -5,13 +5,13 @@ pub mod genesis;
 pub mod global;
 pub mod utils;
 
-use std::collections::HashMap;
 use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
 use namada::core::chain::ChainId;
+use namada::core::collections::HashMap;
 use namada::core::storage::BlockHeight;
 use namada::core::time::Rfc3339String;
 use serde::{Deserialize, Serialize};

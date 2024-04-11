@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -51,7 +50,7 @@ pub mod tests {
         ) -> UpdateStewardCommission {
             UpdateStewardCommission {
                 steward,
-                commission,
+                commission: commission.into_iter().collect(),
             }
         }
     }

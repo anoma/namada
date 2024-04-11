@@ -1,9 +1,8 @@
 //! Code for handling validator set update protocol txs.
 
-use std::collections::{HashMap, HashSet};
-
 use eyre::Result;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::Amount;

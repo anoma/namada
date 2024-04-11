@@ -1,7 +1,8 @@
 //! Native VP for multitokens
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
+use namada_core::collections::HashMap;
 use namada_governance::is_proposal_accepted;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;

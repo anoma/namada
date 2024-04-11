@@ -1,11 +1,12 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use masp_primitives::sapling::Node;
 use namada::core::address::{self, Address, InternalAddress};
+use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::masp::{TransferSource, TransferTarget};
 use namada::eth_bridge::storage::whitelist;
