@@ -50,7 +50,7 @@ pub trait WalletIo: Sized + Clone {
     }
 
     /// Read the password for decryption from the file/env/stdin.
-    fn read_password(_confirm: bool, alias Option<String>) -> Zeroizing<String> {
+    fn read_password(_confirm: bool, alias: Option<String>) -> Zeroizing<String> {
         panic!("attempted to prompt for password in non-interactive mode");
     }
 

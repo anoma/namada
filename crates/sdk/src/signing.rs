@@ -291,9 +291,12 @@ where
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
                 user_data,
             )
-            .await.map_err(|_| {
-                Err(format!("unable to sign transaction"))
-            })?;
+            .await?.map_err(|_| {
+                Err(Error::Other(format!(
+                    "unable to sign transaction with {}",
+                    pubkey
+                )))
+            });
         }
     }
     Ok(())
