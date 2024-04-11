@@ -352,7 +352,7 @@ impl CliApi {
                         )
                         .await?;
                     }
-                    // Eth bridge
+                    #[cfg(feature = "namada-eth-bridge")]
                     Sub::AddToEthBridgePool(args) => {
                         let args = args.0;
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -365,6 +365,13 @@ impl CliApi {
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_bridge_pool_tx(&namada, args).await?;
+                    }
+                    #[cfg(not(feature = "namada-eth-bridge"))]
+                    Sub::AddToEthBridgePool(_) => {
+                        display_line!(
+                            &io,
+                            "The Namada Ethereum bridge is disabled"
+                        );
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();

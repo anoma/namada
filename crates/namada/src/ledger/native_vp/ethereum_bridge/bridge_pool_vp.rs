@@ -22,6 +22,7 @@ use namada_core::hints;
 use namada_ethereum_bridge::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
 };
+use namada_ethereum_bridge::storage::eth_bridge_queries::is_bridge_active_at;
 use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
 use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
@@ -543,6 +544,17 @@ where
             verifiers_len = _verifiers.len(),
             "Ethereum Bridge Pool VP triggered",
         );
+        if !is_bridge_active_at(
+            &self.ctx.pre(),
+            self.ctx.state.in_mem().get_current_epoch().0,
+        )
+        .map_err(Error)?
+        {
+            tracing::debug!(
+                "Rejecting transaction, since the Ethereum bridge is disabled."
+            );
+            return Ok(false);
+        }
         let Some(tx_data) = tx.data() else {
             return Err(native_vp::Error::SimpleMessage(
                 "No transaction data found",
@@ -649,7 +661,7 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "namada-eth-bridge"))]
 mod test_bridge_pool_vp {
     use std::cell::RefCell;
     use std::env::temp_dir;

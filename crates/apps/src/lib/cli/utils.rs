@@ -22,6 +22,7 @@ use crate::cli::context::FromContext;
 /// keys are stored.
 // TODO: remove this in favor of getting eth keys from
 // namadaw, ledger, or something more secure
+#[cfg_attr(not(feature = "namada-eth-bridge"), allow(dead_code))]
 const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";
 
 // We only use static strings
@@ -431,6 +432,7 @@ pub fn safe_exit(_: i32) -> ! {
 }
 
 /// Load an Ethereum wallet from the environment.
+#[cfg_attr(not(feature = "namada-eth-bridge"), allow(dead_code))]
 fn get_eth_signer_from_env(chain_id: u64) -> Option<impl Signer> {
     let relayer_key = std::env::var(RELAYER_KEY_ENV_VAR).ok()?;
     let relayer_key = HEXLOWER_PERMISSIVE.decode(relayer_key.as_ref()).ok()?;
@@ -443,6 +445,7 @@ fn get_eth_signer_from_env(chain_id: u64) -> Option<impl Signer> {
 }
 
 /// Return an Ethereum RPC client.
+#[cfg_attr(not(feature = "namada-eth-bridge"), allow(dead_code))]
 pub async fn get_eth_rpc_client(url: &str) -> Arc<impl Middleware> {
     let client = Provider::<Http>::try_from(url)
         .expect("Failed to instantiate Ethereum RPC client");

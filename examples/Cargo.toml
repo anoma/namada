@@ -24,6 +24,9 @@ path = "tx_schema.rs"
 name = "make-db-migration"
 path = "make-db-migration.rs"
 
+[features]
+namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
+
 [dev-dependencies]
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
 namada_apps = {path = "../crates/apps", features = ["migrations"]}

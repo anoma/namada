@@ -200,7 +200,10 @@ jobs:
         nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
-          - name: ABCI
+          - name: Run unit tests without Ethereum bridge enabled
+            command: make test-unit-with-coverage
+          - name: Run unit tests with Ethereum bridge enabled
+            command: make test-unit-with-eth-bridge
 
     env:
       RUSTC_WRAPPER: sccache
@@ -264,8 +267,8 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Check crates build with default features
         run: make check-crates
-      - name: Run unit tests
-        run: make test-unit-with-coverage
+      - name: ${{ matrix.make.name }}
+        run: ${{ matrix.make.command }}
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
