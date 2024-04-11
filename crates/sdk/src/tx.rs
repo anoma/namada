@@ -58,7 +58,7 @@ use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
-use namada_tx::data::pos::BecomeValidator;
+use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
 use rand_core::{OsRng, RngCore};
@@ -530,6 +530,71 @@ pub async fn save_initialized_accounts<N: Namada>(
             };
         }
     }
+}
+
+/// Submit validator commission rate change
+pub async fn build_change_consensus_key(
+    context: &impl Namada,
+    args::ConsensusKeyChange {
+        tx: tx_args,
+        validator,
+        consensus_key,
+        tx_code_path,
+        unsafe_dont_encrypt: _,
+    }: &args::ConsensusKeyChange,
+) -> Result<(Tx, SigningTxData)> {
+    let consensus_key = if let Some(consensus_key) = consensus_key {
+        consensus_key
+    } else {
+        edisplay_line!(context.io(), "Consensus key must must be present.");
+        return Err(Error::from(TxSubmitError::Other(
+            "Consensus key must must be present.".to_string(),
+        )));
+    };
+
+    // Check that the new consensus key is unique
+    let consensus_keys = rpc::get_consensus_keys(context.client()).await?;
+
+    if consensus_keys.contains(consensus_key) {
+        edisplay_line!(
+            context.io(),
+            "The consensus key is already being used."
+        );
+        return Err(Error::from(TxSubmitError::ConsensusKeyNotUnique));
+    }
+
+    let data = ConsensusKeyChange {
+        validator: validator.clone(),
+        consensus_key: consensus_key.clone(),
+    };
+
+    let signing_data = signing::init_validator_signing_data(
+        context,
+        tx_args,
+        vec![consensus_key.clone()],
+    )
+    .await?;
+
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            tx_args,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        unshield,
+        fee_amount,
+        &signing_data.fee_payer,
+    )
+    .await
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit validator commission rate change

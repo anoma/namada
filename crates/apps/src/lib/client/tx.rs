@@ -13,11 +13,9 @@ use namada::governance::cli::onchain::{
 };
 use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::tx::data::pos::ConsensusKeyChange;
 use namada::tx::{CompressedSignature, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
-use namada_sdk::signing::validate_fee_and_gen_unshield;
 use namada_sdk::wallet::alias::validator_consensus_key;
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -26,10 +24,7 @@ use tokio::sync::RwLock;
 
 use super::rpc;
 use crate::cli::{args, safe_exit};
-use crate::client::rpc::query_wasm_code_hash;
-use crate::client::tx::signing::{
-    default_sign, init_validator_signing_data, SigningTxData,
-};
+use crate::client::tx::signing::{default_sign, SigningTxData};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -315,22 +310,10 @@ where
 
 pub async fn submit_change_consensus_key(
     namada: &impl Namada,
-    config: &mut crate::config::Config,
-    args::ConsensusKeyChange {
-        tx: tx_args,
-        validator,
-        consensus_key,
-        unsafe_dont_encrypt,
-        tx_code_path: _,
-    }: args::ConsensusKeyChange,
+    args: args::ConsensusKeyChange,
 ) -> Result<(), error::Error> {
-    let tx_args = args::Tx {
-        chain_id: tx_args
-            .clone()
-            .chain_id
-            .or_else(|| Some(config.ledger.chain_id.clone())),
-        ..tx_args.clone()
-    };
+    let validator = args.validator;
+    let consensus_key = args.consensus_key;
 
     // Determine the alias for the new key
     let mut wallet = namada.wallet_mut().await;
@@ -364,13 +347,13 @@ pub async fn submit_change_consensus_key(
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating new consensus key...");
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(args.unsafe_dont_encrypt);
             wallet
                 .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
                     SchemeType::Ed25519,
                     Some(consensus_key_alias.clone()),
-                    tx_args.wallet_alias_force,
+                    args.tx.wallet_alias_force,
                     password,
                     &mut OsRng,
                 )
@@ -378,66 +361,25 @@ pub async fn submit_change_consensus_key(
                 .1
                 .ref_to()
         });
+
     // To avoid wallet deadlocks in following operations
     drop(wallet);
 
-    // Check that the new consensus key is unique
-    let consensus_keys = rpc::query_consensus_keys(namada.client()).await;
-
-    if consensus_keys.contains(&new_key) {
-        edisplay_line!(namada.io(), "The consensus key is already being used.");
-        safe_exit(1)
-    }
-
-    let tx_code_hash =
-        query_wasm_code_hash(namada, args::TX_CHANGE_CONSENSUS_KEY_WASM)
-            .await
-            .unwrap();
-
-    let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
-
-    let data = ConsensusKeyChange {
+    let args = namada::sdk::args::ConsensusKeyChange {
         validator: validator.clone(),
-        consensus_key: new_key.clone(),
+        consensus_key: Some(new_key.clone()),
+        ..args
     };
 
-    tx.add_code_from_hash(
-        tx_code_hash,
-        Some(args::TX_CHANGE_CONSENSUS_KEY_WASM.to_string()),
-    )
-    .add_data(data);
+    let (mut tx, signing_data) = args.build(namada).await?;
 
-    if let Some(memo) = &tx_args.memo {
-        tx.add_memo(memo);
-    };
-
-    let signing_data =
-        init_validator_signing_data(namada, &tx_args, vec![new_key]).await?;
-    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
-        namada,
-        &tx_args,
-        &signing_data.fee_payer,
-    )
-    .await?;
-
-    tx::prepare_tx(
-        namada.client(),
-        &tx_args,
-        &mut tx,
-        unshield,
-        fee_amount,
-        signing_data.fee_payer.clone(),
-    )
-    .await?;
-
-    if tx_args.dump_tx {
-        tx::dump_tx(namada.io(), &tx_args, tx);
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        sign(namada, &mut tx, &tx_args, signing_data).await?;
-        let resp = namada.submit(tx, &tx_args).await?;
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        let resp = namada.submit(tx, &args.tx).await?;
 
-        if !tx_args.dry_run {
+        if !args.tx.dry_run {
             if resp.is_applied_and_valid().is_some() {
                 namada.wallet_mut().await.save().unwrap_or_else(|err| {
                     edisplay_line!(namada.io(), "{}", err)
