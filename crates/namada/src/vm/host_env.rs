@@ -2054,10 +2054,7 @@ where
 {
     use std::rc::Rc;
 
-    use namada_ibc::{
-        CompatibleIbcTxHostEnvState, IbcActions, NftTransferModule,
-        TransferModule,
-    };
+    use namada_ibc::{IbcActions, NftTransferModule, TransferModule};
 
     let tx = unsafe { env.ctx.tx.get() };
     let tx_data = tx.data().ok_or_else(|| {
@@ -2065,7 +2062,7 @@ where
         sentinel.borrow_mut().set_invalid_commitment();
         TxRuntimeError::MissingTxData
     })?;
-    let state = Rc::new(RefCell::new(CompatibleIbcTxHostEnvState(env.state())));
+    let state = Rc::new(RefCell::new(env.state()));
     let mut actions = IbcActions::new(state.clone());
     let module = TransferModule::new(state.clone());
     actions.add_transfer_module(module);

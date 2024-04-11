@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
 
-pub use actions::{transfer_over_ibc, CompatibleIbcTxHostEnvState};
+pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
