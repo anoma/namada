@@ -17,6 +17,10 @@ name = "generate-txs"
 path = "generate_txs.rs"
 
 [[example]]
+name = "tx-schema"
+path = "tx_schema.rs"
+
+[[example]]
 name = "make-db-migration"
 path = "make-db-migration.rs"
 

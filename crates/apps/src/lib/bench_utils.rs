@@ -73,7 +73,7 @@ use namada::ledger::queries::{
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{Fee, TxResult, VpsResult};
-use namada::tx::{Code, Data, Section, Signature, Tx};
+use namada::tx::{Authorization, Code, Data, Section, Tx};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -317,7 +317,7 @@ impl BenchShell {
         }
 
         for signer in signers {
-            tx.add_section(Section::Signature(Signature::new(
+            tx.add_section(Section::Authorization(Authorization::new(
                 vec![tx.raw_header_hash()],
                 [(0, signer.clone())].into_iter().collect(),
                 None,
@@ -613,7 +613,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         }
         .serialize_to_vec(),
     ));
-    tx.add_section(Section::Signature(Signature::new(
+    tx.add_section(Section::Authorization(Authorization::new(
         vec![tx.raw_header_hash()],
         [(0, signer.clone())].into_iter().collect(),
         None,

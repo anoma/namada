@@ -408,7 +408,7 @@ pub enum Signer {
     Serialize,
     Deserialize,
 )]
-pub struct Signature {
+pub struct Authorization {
     /// The hash of the section being signed
     pub targets: Vec<namada_core::hash::Hash>,
     /// The public keys against which the signatures should be verified
@@ -417,7 +417,7 @@ pub struct Signature {
     pub signatures: BTreeMap<u8, common::Signature>,
 }
 
-impl Signature {
+impl Authorization {
     /// Sign the given section hash with the given key and return a section
     pub fn new(
         targets: Vec<namada_core::hash::Hash>,
@@ -567,7 +567,7 @@ impl CompressedSignature {
     /// Decompress this signature object with respect to the given transaction
     /// by looking up the necessary section hashes. Used by constrained hardware
     /// wallets.
-    pub fn expand(self, tx: &Tx) -> Signature {
+    pub fn expand(self, tx: &Tx) -> Authorization {
         let mut targets = Vec::new();
         for idx in self.targets {
             if idx == 0 {
@@ -580,7 +580,7 @@ impl CompressedSignature {
                 targets.push(tx.sections[idx as usize - 1].get_hash());
             }
         }
-        Signature {
+        Authorization {
             targets,
             signer: self.signer,
             signatures: self.signatures,
@@ -753,7 +753,7 @@ pub enum Section {
     /// Transaction code. Sending to hardware wallets optional
     Code(Code),
     /// A transaction header/protocol signature
-    Signature(Signature),
+    Authorization(Authorization),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
     Ciphertext(Ciphertext),
     /// Embedded MASP transaction section
@@ -781,7 +781,7 @@ impl Section {
             Self::Data(data) => data.hash(hasher),
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
-            Self::Signature(signature) => signature.hash(hasher),
+            Self::Authorization(signature) => signature.hash(hasher),
             Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
@@ -845,8 +845,8 @@ impl Section {
     }
 
     /// Extract the signature from this section if possible
-    pub fn signature(&self) -> Option<Signature> {
-        if let Self::Signature(data) = self {
+    pub fn signature(&self) -> Option<Authorization> {
+        if let Self::Authorization(data) = self {
             Some(data.clone())
         } else {
             None
@@ -1215,7 +1215,7 @@ impl Tx {
         threshold: u8,
         max_signatures: Option<u8>,
         mut consume_verify_sig_gas: F,
-    ) -> std::result::Result<Vec<&Signature>, VerifySigError>
+    ) -> std::result::Result<Vec<&Authorization>, VerifySigError>
     where
         F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
@@ -1226,7 +1226,7 @@ impl Tx {
         let mut witnesses = Vec::new();
 
         for section in &self.sections {
-            if let Section::Signature(signatures) = section {
+            if let Section::Authorization(signatures) = section {
                 // Check that the hashes being checked are a subset of those in
                 // this section. Also ensure that all the sections the signature
                 // signs over are present.
@@ -1283,7 +1283,7 @@ impl Tx {
         &self,
         public_key: &common::PublicKey,
         hashes: &[namada_core::hash::Hash],
-    ) -> Result<&Signature, VerifySigError> {
+    ) -> Result<&Authorization, VerifySigError> {
         self.verify_signatures(
             hashes,
             AccountPublicKeysMap::from_iter([public_key.clone()]),
@@ -1304,7 +1304,7 @@ impl Tx {
     ) -> Vec<SignatureIndex> {
         let targets = vec![self.raw_header_hash()];
         let mut signatures = Vec::new();
-        let section = Signature::new(
+        let section = Authorization::new(
             targets,
             public_keys_index_map.index_secret_keys(secret_keys.to_vec()),
             signer,
@@ -1350,7 +1350,7 @@ impl Tx {
     /// 2. The signature is valid
     pub fn validate_tx(
         &self,
-    ) -> std::result::Result<Option<&Signature>, TxError> {
+    ) -> std::result::Result<Option<&Authorization>, TxError> {
         match &self.header.tx_type {
             // verify signature and extract signed data
             TxType::Wrapper(wrapper) => self
@@ -1521,7 +1521,7 @@ impl Tx {
     /// Add fee payer keypair to the tx builder
     pub fn sign_wrapper(&mut self, keypair: common::SecretKey) -> &mut Self {
         self.protocol_filter();
-        self.add_section(Section::Signature(Signature::new(
+        self.add_section(Section::Authorization(Authorization::new(
             self.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1546,7 +1546,7 @@ impl Tx {
             (0..).zip(keypairs).collect()
         };
 
-        self.add_section(Section::Signature(Signature::new(
+        self.add_section(Section::Authorization(Authorization::new(
             hashes,
             secret_keys,
             signer,
@@ -1560,7 +1560,7 @@ impl Tx {
         signatures: Vec<SignatureIndex>,
     ) -> &mut Self {
         self.protocol_filter();
-        let mut pk_section = Signature {
+        let mut pk_section = Authorization {
             targets: vec![self.raw_header_hash()],
             signatures: BTreeMap::new(),
             signer: Signer::PubKeys(vec![]),
@@ -1571,10 +1571,12 @@ impl Tx {
             if let Some((addr, idx)) = &signature.index {
                 // Add the signature under the given multisig address
                 let section =
-                    sections.entry(addr.clone()).or_insert_with(|| Signature {
-                        targets: vec![self.raw_header_hash()],
-                        signatures: BTreeMap::new(),
-                        signer: Signer::Address(addr.clone()),
+                    sections.entry(addr.clone()).or_insert_with(|| {
+                        Authorization {
+                            targets: vec![self.raw_header_hash()],
+                            signatures: BTreeMap::new(),
+                            signer: Signer::Address(addr.clone()),
+                        }
                     });
                 section.signatures.insert(*idx, signature.signature);
             } else if let Signer::PubKeys(pks) = &mut pk_section.signer {
@@ -1587,7 +1589,7 @@ impl Tx {
         }
         for section in std::iter::once(pk_section).chain(sections.into_values())
         {
-            self.add_section(Section::Signature(section));
+            self.add_section(Section::Authorization(section));
         }
         self
     }

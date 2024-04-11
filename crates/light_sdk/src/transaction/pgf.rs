@@ -6,7 +6,7 @@ use namada_sdk::key::common;
 use namada_sdk::storage::Epoch;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
-use namada_sdk::tx::{Signature, Tx, TxError};
+use namada_sdk::tx::{Authorization, Tx, TxError};
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
@@ -80,7 +80,7 @@ impl ResignSteward {
     }
 
     /// Validate this wrapper transaction
-    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+    pub fn validate_tx(&self) -> Result<Option<&Authorization>, TxError> {
         self.0.validate_tx()
     }
 }
@@ -162,7 +162,7 @@ impl UpdateStewardCommission {
     }
 
     /// Validate this wrapper transaction
-    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+    pub fn validate_tx(&self) -> Result<Option<&Authorization>, TxError> {
         self.0.validate_tx()
     }
 }

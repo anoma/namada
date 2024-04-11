@@ -398,7 +398,7 @@ mod tests {
     use namada_state::StorageRead;
     use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
-    use namada_tx::{Code, Data, Section, Signature};
+    use namada_tx::{Authorization, Code, Data, Section};
     use prost::Message;
     use sha2::Digest;
 
@@ -898,7 +898,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1209,7 +1209,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1541,7 +1541,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1639,7 +1639,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1765,7 +1765,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -1890,7 +1890,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
@@ -2000,7 +2000,7 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
             None,
