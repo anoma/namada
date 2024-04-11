@@ -1,5 +1,6 @@
 //! PoS rewards distribution.
 
+use namada_controller::PDController;
 use namada_core::address::{self, Address};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
@@ -19,8 +20,8 @@ use crate::storage::{
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
 };
+use crate::token::credit_tokens;
 use crate::token::storage_key::minted_balance_key;
-use crate::token::{credit_tokens, inflation};
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
@@ -47,6 +48,36 @@ pub enum RewardsError {
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
     CoeffsNotSet,
+}
+
+/// Compute PoS inflation amount
+#[allow(clippy::too_many_arguments)]
+pub fn compute_inflation(
+    locked_amount: token::Amount,
+    total_native_amount: token::Amount,
+    max_reward_rate: Dec,
+    last_inflation_amount: token::Amount,
+    p_gain_nom: Dec,
+    d_gain_nom: Dec,
+    epochs_per_year: u64,
+    target_ratio: Dec,
+    last_ratio: Dec,
+) -> namada_storage::Result<token::Amount> {
+    let controller = PDController::new(
+        total_native_amount.into(),
+        max_reward_rate,
+        last_inflation_amount.into(),
+        p_gain_nom,
+        d_gain_nom,
+        epochs_per_year,
+        target_ratio,
+        last_ratio,
+    );
+    let metric = Dec::from(locked_amount) / Dec::from(total_native_amount);
+    let control_coeff = controller.get_total_native_dec() * max_reward_rate
+        / controller.get_epochs_per_year();
+    let amount_uint = controller.compute_inflation(control_coeff, metric);
+    token::Amount::from_uint(amount_uint, 0).into_storage_result()
 }
 
 /// Holds coefficients for the three different ways to get PoS rewards
@@ -313,44 +344,36 @@ where
         .expect("Epochs per year should exist in parameters storage");
 
     let staking_token = staking_token_address(storage);
-    let total_tokens: token::Amount = storage
+    let total_amount: token::Amount = storage
         .read(&minted_balance_key(&staking_token))?
         .expect("Total NAM balance should exist in storage");
 
     // Read from PoS storage
     let params = read_pos_params(storage)?;
-    let pos_locked_supply = read_total_stake(storage, &params, last_epoch)?;
+    let locked_amount = read_total_stake(storage, &params, last_epoch)?;
 
-    let pos_last_staked_ratio = read_last_staked_ratio(storage)?
+    let last_staked_ratio = read_last_staked_ratio(storage)?
         .expect("Last staked ratio should exist in PoS storage");
-    let pos_last_inflation_amount = read_last_pos_inflation_amount(storage)?
+    let last_inflation_amount = read_last_pos_inflation_amount(storage)?
         .expect("Last inflation amount should exist in PoS storage");
 
-    let pos_locked_ratio_target = params.target_staked_ratio;
-    let pos_max_inflation_rate = params.max_inflation_rate;
-    let pos_p_gain_nom = params.rewards_gain_p;
-    let pos_d_gain_nom = params.rewards_gain_d;
+    let locked_ratio_target = params.target_staked_ratio;
+    let max_inflation_rate = params.max_inflation_rate;
+    let p_gain_nom = params.rewards_gain_p;
+    let d_gain_nom = params.rewards_gain_d;
 
-    // Run rewards PD controller
-    let pos_controller = inflation::PosRewardsController {
-        locked_tokens: pos_locked_supply.raw_amount(),
-        total_native_tokens: total_tokens.raw_amount(),
-        locked_ratio_target: pos_locked_ratio_target,
-        locked_ratio_last: pos_last_staked_ratio,
-        max_reward_rate: pos_max_inflation_rate,
-        last_inflation_amount: pos_last_inflation_amount.raw_amount(),
-        p_gain_nom: pos_p_gain_nom,
-        d_gain_nom: pos_d_gain_nom,
+    // Compute the new inflation
+    let inflation = compute_inflation(
+        locked_amount,
+        total_amount,
+        max_inflation_rate,
+        last_inflation_amount,
+        p_gain_nom,
+        d_gain_nom,
         epochs_per_year,
-    };
-    // Run the rewards controllers
-    let inflation::PosValsToUpdate {
-        locked_ratio,
-        inflation,
-    } = pos_controller.run();
-
-    let inflation =
-        token::Amount::from_uint(inflation, 0).into_storage_result()?;
+        locked_ratio_target,
+        last_staked_ratio,
+    )?;
 
     // Mint inflation and partition rewards among all accounts that earn a
     // portion of it
@@ -361,11 +384,15 @@ where
         num_blocks_in_last_epoch,
         inflation,
         &staking_token,
-        total_tokens,
+        total_amount,
     )?;
 
     // Write new rewards parameters that will be used for the inflation of
     // the current new epoch
+    let locked_amount = Dec::from(locked_amount);
+    let total_amount = Dec::from(total_amount);
+    let locked_ratio = locked_amount / total_amount;
+
     write_last_staked_ratio(storage, locked_ratio)?;
     write_last_pos_inflation_amount(storage, inflation)?;
 
@@ -589,4 +616,279 @@ where
 {
     let key = storage_key::rewards_counter_key(source, validator);
     Ok(storage.read::<token::Amount>(&key)?.unwrap_or_default())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_inflation_calc_up() {
+        let locked_amount = token::Amount::native_whole(2_000_000_000);
+        let total_native_amount =
+            token::Amount::native_whole(4_000_000_000_u64);
+        let max_reward_rate = Dec::from_str("0.1").unwrap();
+        let p_gain_nom = Dec::from_str("0.1").unwrap();
+        let d_gain_nom = Dec::from_str("0.1").unwrap();
+        let epochs_per_year = 365;
+        let target_ratio = Dec::from_str("0.66666666").unwrap();
+
+        let inflation_0 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            token::Amount::zero(),
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            Dec::from_str("0.5").unwrap(),
+        )
+        .unwrap();
+        let locked_ratio_0 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+
+        println!(
+            "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
+        );
+        assert_eq!(locked_ratio_0, Dec::from_str("0.5").unwrap());
+        assert_eq!(inflation_0, token::Amount::from_u64(18264839452));
+
+        let locked_amount = locked_amount + inflation_0;
+        let last_inflation_amount = inflation_0;
+        let last_locked_ratio = locked_ratio_0;
+
+        let inflation_1 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            last_locked_ratio,
+        )
+        .unwrap();
+
+        // BUG: DIDN'T ADD TO TOTAL AMOUNT
+
+        let locked_ratio_1 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+
+        println!(
+            "Round 1: Locked ratio: {locked_ratio_1}, inflation: {inflation_1}"
+        );
+        assert!(locked_ratio_1 > locked_ratio_0);
+        assert!(locked_ratio_1 > Dec::from_str("0.5").unwrap());
+        assert!(locked_ratio_1 < Dec::from_str("0.51").unwrap());
+        assert_eq!(inflation_1, token::Amount::from_u64(36529678904));
+
+        let locked_amount = locked_amount + inflation_1;
+        let last_inflation_amount = inflation_1;
+        let last_locked_ratio = locked_ratio_1;
+
+        let inflation_2 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            last_locked_ratio,
+        )
+        .unwrap();
+
+        let locked_ratio_2 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        println!(
+            "Round 2: Locked ratio: {locked_ratio_2}, inflation: {inflation_2}",
+        );
+        assert!(locked_ratio_2 > locked_ratio_1);
+        assert!(locked_ratio_2 > Dec::from_str("0.5").unwrap());
+        assert!(locked_ratio_2 < Dec::from_str("0.51").unwrap());
+        assert_eq!(inflation_2, token::Amount::from_u64(54794017950));
+    }
+
+    #[test]
+    fn test_inflation_calc_down() {
+        let locked_amount = token::Amount::native_whole(900_000_000);
+        let total_native_amount =
+            token::Amount::native_whole(1_000_000_000_u64);
+        let max_reward_rate = Dec::from_str("0.1").unwrap();
+        let p_gain_nom = Dec::from_str("0.1").unwrap();
+        let d_gain_nom = Dec::from_str("0.1").unwrap();
+        let epochs_per_year = 365;
+        let target_ratio = Dec::from_str("0.66666666").unwrap();
+
+        let inflation_0 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            token::Amount::native_whole(10_000),
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            Dec::from_str("0.9").unwrap(),
+        )
+        .unwrap();
+        let locked_ratio_0 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+
+        println!(
+            "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
+        );
+        assert_eq!(locked_ratio_0, Dec::from_str("0.9").unwrap());
+        assert_eq!(inflation_0, token::Amount::from_u64(3607305753));
+
+        let locked_amount = locked_amount + inflation_0;
+        let last_inflation_amount = inflation_0;
+        let last_locked_ratio = locked_ratio_0;
+
+        let inflation_1 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            last_locked_ratio,
+        )
+        .unwrap();
+
+        // BUG: DIDN'T ADD TO TOTAL AMOUNT
+
+        let locked_ratio_1 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+
+        println!(
+            "Round 1: Locked ratio: {locked_ratio_1}, inflation: {inflation_1}"
+        );
+        assert!(locked_ratio_1 > locked_ratio_0);
+        assert!(locked_ratio_1 > Dec::from_str("0.9").unwrap());
+        assert!(locked_ratio_1 < Dec::from_str("0.91").unwrap());
+        assert_eq!(inflation_1, token::Amount::zero());
+
+        let locked_amount = locked_amount + inflation_1;
+        let last_inflation_amount = inflation_1;
+        let last_locked_ratio = locked_ratio_1;
+
+        let inflation_2 = compute_inflation(
+            locked_amount,
+            total_native_amount,
+            max_reward_rate,
+            last_inflation_amount,
+            p_gain_nom,
+            d_gain_nom,
+            epochs_per_year,
+            target_ratio,
+            last_locked_ratio,
+        )
+        .unwrap();
+
+        let locked_ratio_2 =
+            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        println!(
+            "Round 2: Locked ratio: {locked_ratio_2}, inflation: {inflation_2}",
+        );
+        assert_eq!(locked_ratio_2, locked_ratio_1);
+        assert_eq!(inflation_2, token::Amount::zero());
+    }
+
+    #[test]
+    fn test_pos_inflation_playground() {
+        let epochs_per_year = 365_u64;
+
+        let init_locked_ratio = Dec::from_str("0.1").unwrap();
+        let mut last_locked_ratio = init_locked_ratio;
+        let total_native_tokens = 1_000_000_000_u64;
+        let locked_amount = u64::try_from(
+            (init_locked_ratio * total_native_tokens).to_uint().unwrap(),
+        )
+        .unwrap();
+        let mut locked_amount = token::Amount::native_whole(locked_amount);
+        let mut last_inflation_amount = token::Amount::zero();
+        let mut total_native_tokens =
+            token::Amount::native_whole(total_native_tokens);
+
+        let max_reward_rate = Dec::from_str("0.1").unwrap();
+        let target_ratio = Dec::from_str("0.66666666").unwrap();
+        let p_gain_nom = Dec::from_str("0.25").unwrap();
+        let d_gain_nom = Dec::from_str("0.25").unwrap();
+
+        let staking_growth = Dec::from_str("0.04").unwrap();
+        // let mut do_add = true;
+
+        let num_rounds = 50;
+
+        for round in 0..num_rounds {
+            let inflation = compute_inflation(
+                locked_amount,
+                total_native_tokens,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                target_ratio,
+                last_locked_ratio,
+            )
+            .unwrap();
+            let locked_ratio =
+                Dec::from(locked_amount) / Dec::from(total_native_tokens);
+
+            let rate = Dec::from(inflation) * Dec::from(epochs_per_year)
+                / Dec::from(total_native_tokens);
+            println!(
+                "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
+                 {rate}",
+            );
+
+            last_inflation_amount = inflation;
+            total_native_tokens += inflation;
+            last_locked_ratio = locked_ratio;
+
+            // if rate.abs_diff(&controller.max_reward_rate)
+            //     < Dec::from_str("0.01").unwrap()
+            // {
+            //     controller.locked_tokens = controller.total_tokens;
+            // }
+
+            let tot_tokens =
+                Dec::try_from(total_native_tokens.raw_amount()).unwrap();
+            let change_staked_tokens =
+                token::Amount::from(staking_growth * tot_tokens);
+
+            locked_amount = std::cmp::min(
+                total_native_tokens,
+                locked_amount + change_staked_tokens,
+            );
+
+            // if locked_ratio > Dec::from_str("0.8").unwrap()
+            //     && locked_ratio - controller.locked_ratio_last >= Dec::zero()
+            // {
+            //     do_add = false;
+            // } else if locked_ratio < Dec::from_str("0.4").unwrap()
+            //     && locked_ratio - controller.locked_ratio_last < Dec::zero()
+            // {
+            //     do_add = true;
+            // }
+
+            // controller.locked_tokens = std::cmp::min(
+            //     if do_add {
+            //         controller.locked_tokens + change_staked_tokens
+            //     } else {
+            //         controller.locked_tokens - change_staked_tokens
+            //     },
+            //     controller.total_tokens,
+            // );
+        }
+    }
 }
