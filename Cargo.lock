@@ -1633,6 +1633,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
+name = "drain_filter_polyfill"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "669a445ee724c5c69b1b06fe0b63e70a1c84bc9bb7d9696cd4f4e3ec45050408"
+
+[[package]]
 name = "dtoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4247,6 +4253,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "directories",
+ "drain_filter_polyfill",
  "ed25519-consensus 1.2.1",
  "ethabi",
  "ethbridge-bridge-events",
