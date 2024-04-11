@@ -90,9 +90,8 @@ where
         );
 
         // Erroneous transactions were detected when processing
-        // the leader's proposal. We allow txs that do not
-        // deserialize properly, that have invalid signatures
-        // and that have invalid wasm code to reach FinalizeBlock.
+        // the leader's proposal. We allow txs that are invalid at runtime
+        // (wasm) to reach FinalizeBlock.
         let invalid_txs = tx_results.iter().any(|res| {
             let error = ResultCode::from_u32(res.code).expect(
                 "All error codes returned from process_single_tx are valid",
@@ -404,13 +403,7 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
-                // Account for gas and space. This is done even if the
-                // transaction is later deemed invalid, to
-                // incentivize the proposer to include only
-                // valid transaction and avoid wasting block
-                // resources (ABCI only)
-
-                // Account for the tx's resources even in case of an error.
+                // Account for the tx's resources
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
@@ -421,6 +414,17 @@ where
                         code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
                             .to_string(),
+                    };
+                }
+
+                // Tx allowlist
+                if let Err(err) = check_tx_allowed(&tx, &self.state) {
+                    return TxResult {
+                        code: ResultCode::TxNotAllowlisted.into(),
+                        info: format!(
+                            "Tx code didn't pass the allowlist check: {}",
+                            err
+                        ),
                     };
                 }
 
