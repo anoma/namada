@@ -121,10 +121,10 @@ where
                 _ => Ok(false),
             };
             match &result {
-                Err(err) => tracing::info!(
+                Err(err) => tracing::debug!(
                     "Key {key_type:?} rejected with error: {err:#?}."
                 ),
-                Ok(false) => tracing::info!("Key {key_type:?} rejected"),
+                Ok(false) => tracing::debug!("Key {key_type:?} rejected"),
                 Ok(true) => {}
             }
             result.unwrap_or(false)
@@ -424,7 +424,10 @@ where
                     && are_continuous_fundings_unique
                     && are_targets_unique)
             }
-            _ => Ok(true), // default proposal
+            // Default proposal condition are checked already for all other
+            // proposals.
+            // default_with_wasm proposal needs to check only for valid code
+            _ => Ok(true),
         }
     }
 
@@ -434,7 +437,7 @@ where
         let proposal_type: ProposalType =
             self.force_read(&proposal_type_key, ReadType::Post)?;
 
-        if !proposal_type.is_default() {
+        if !proposal_type.is_default_with_wasm() {
             return Ok(false);
         }
 
@@ -488,7 +491,7 @@ where
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
         if !has_post_committing_epoch {
-            tracing::info!("Committing proposal key is missing present");
+            return Ok(false);
         }
 
         let is_valid_grace_epoch = end_epoch < grace_epoch
@@ -849,5 +852,1814 @@ impl KeyType {
         } else {
             KeyType::UNKNOWN
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+    use std::collections::BTreeSet;
+
+    use borsh_ext::BorshSerializeExt;
+    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_governance::storage::keys::{
+        get_author_key, get_committing_proposals_key, get_content_key,
+        get_counter_key, get_funds_key, get_grace_epoch_key,
+        get_proposal_type_key, get_vote_proposal_key, get_voting_end_epoch_key,
+        get_voting_start_epoch_key,
+    };
+    use namada_governance::{ProposalType, ProposalVote, ADDRESS};
+    use namada_proof_of_stake::bond_tokens;
+    use namada_sdk::address::testing::{
+        established_address_1, established_address_3, nam,
+    };
+    use namada_sdk::key::testing::keypair_1;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::time::DateTimeUtc;
+    use namada_sdk::token;
+    use namada_sdk::validity_predicate::VpSentinel;
+    use namada_state::mockdb::MockDB;
+    use namada_state::testing::TestState;
+    use namada_state::{
+        BlockHash, BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher,
+        State, StorageRead, TxIndex,
+    };
+    use namada_token::storage_key::balance_key;
+    use namada_tx::data::TxType;
+    use namada_tx::{Code, Data, Section, Signature, Tx};
+
+    use crate::core::address::Address;
+    use crate::ledger::governance::GovernanceVp;
+    use crate::ledger::native_vp::ibc::{
+        get_dummy_genesis_validator, get_dummy_header,
+    };
+    use crate::ledger::native_vp::{Ctx, NativeVp};
+    use crate::ledger::pos;
+    use crate::vm::wasm;
+
+    const TX_GAS_LIMIT: u64 = 1_000_000;
+
+    fn init_storage() -> TestState {
+        let mut state = TestState::default();
+
+        pos::test_utils::test_init_genesis(
+            &mut state,
+            namada_proof_of_stake::OwnedPosParams::default(),
+            vec![get_dummy_genesis_validator()].into_iter(),
+            Epoch(1),
+        )
+        .unwrap();
+
+        state
+            .in_mem_mut()
+            .set_header(get_dummy_header())
+            .expect("Setting a dummy header shouldn't fail");
+        state
+            .in_mem_mut()
+            .begin_block(BlockHash::default(), BlockHeight(1))
+            .unwrap();
+
+        state
+    }
+
+    #[test]
+    fn test_noop() {
+        let state = init_storage();
+        let keys_changed = BTreeSet::new();
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address]);
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    fn initialize_account_balance<S>(
+        state: &mut S,
+        address: &Address,
+        amount: token::Amount,
+    ) where
+        S: State,
+    {
+        let balance_key = balance_key(&nam(), address);
+        state
+            .write_log_mut()
+            .write(&balance_key, amount.serialize_to_vec())
+            .expect("write failed");
+        state.write_log_mut().commit_tx();
+    }
+
+    fn update_epoch_to(
+        state: &mut FullAccessState<MockDB, Sha256Hasher>,
+        total_epochs: u64,
+        height: BlockHeight,
+    ) {
+        state.in_mem_mut().update_epoch_blocks_delay = Some(1);
+        for _ in 0..total_epochs {
+            state.in_mem_mut().update_epoch_blocks_delay = Some(1);
+            state
+                .update_epoch(
+                    height,
+                    DateTimeUtc::now()
+                        .next_second()
+                        .next_second()
+                        .next_second()
+                        .next_second()
+                        .next_second(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn get_proposal_keys(proposal_id: u64, grace_epoch: u64) -> BTreeSet<Key> {
+        let counter_key = get_counter_key();
+        let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
+        let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
+        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let content_key = get_content_key(proposal_id);
+        let author_key = get_author_key(proposal_id);
+        let proposal_type_key = get_proposal_type_key(proposal_id);
+        let funds_key = get_funds_key(proposal_id);
+        let commiting_key =
+            get_committing_proposals_key(proposal_id, grace_epoch);
+
+        BTreeSet::from([
+            counter_key.clone(),
+            funds_key.clone(),
+            content_key.clone(),
+            author_key.clone(),
+            proposal_type_key.clone(),
+            voting_start_epoch_key.clone(),
+            voting_end_epoch_key.clone(),
+            grace_epoch_key.clone(),
+            commiting_key.clone(),
+        ])
+    }
+
+    fn transfer<S>(
+        state: &mut S,
+        source: &Address,
+        target: &Address,
+        amount: u64,
+    ) where
+        S: State,
+    {
+        let source_balance_key = balance_key(&nam(), source);
+        let target_balance_key = balance_key(&nam(), target);
+        let amount = token::Amount::native_whole(amount);
+
+        let mut current_source: token::Amount =
+            state.read(&source_balance_key).unwrap().unwrap();
+        let mut current_target: token::Amount =
+            state.read(&target_balance_key).unwrap().unwrap();
+
+        current_source.spend(&amount).unwrap();
+        current_target.receive(&amount).unwrap();
+
+        state
+            .write_log_mut()
+            .write(&source_balance_key, current_source.serialize_to_vec())
+            .expect("write failed");
+
+        state
+            .write_log_mut()
+            .write(&target_balance_key, current_target.serialize_to_vec())
+            .expect("write failed");
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn init_proposal<S>(
+        state: &mut S,
+        proposal_id: u64,
+        funds: u64,
+        start_epoch: u64,
+        end_epoch: u64,
+        grace_epoch: u64,
+        signer_address: &Address,
+        no_commiting_key: bool,
+    ) where
+        S: State,
+    {
+        let counter_key = get_counter_key();
+        let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
+        let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
+        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let content_key = get_content_key(proposal_id);
+        let author_key = get_author_key(proposal_id);
+        let proposal_type_key = get_proposal_type_key(proposal_id);
+        let funds_key = get_funds_key(proposal_id);
+        let commiting_key =
+            get_committing_proposals_key(proposal_id, grace_epoch);
+        // let governance_balance_key = balance_key(&nam(), &ADDRESS);
+        // let author_balance_key = balance_key(&nam(), signer_address);
+
+        transfer(state, signer_address, &ADDRESS, funds);
+
+        state
+            .write_log_mut()
+            .write(&counter_key, (proposal_id + 1).serialize_to_vec())
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(&voting_end_epoch_key, Epoch(end_epoch).serialize_to_vec())
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(
+                &voting_start_epoch_key,
+                Epoch(start_epoch).serialize_to_vec(),
+            )
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(&grace_epoch_key, Epoch(grace_epoch).serialize_to_vec())
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(&content_key, vec![1, 2, 3, 4])
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(&author_key, signer_address.serialize_to_vec())
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(&proposal_type_key, ProposalType::Default.serialize_to_vec())
+            .unwrap();
+        state
+            .write_log_mut()
+            .write(
+                &funds_key,
+                token::Amount::native_whole(funds).serialize_to_vec(),
+            )
+            .unwrap();
+        if !no_commiting_key {
+            state
+                .write_log_mut()
+                .write(&commiting_key, ().serialize_to_vec())
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_goverance_proposal_accepted() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let governance_balance_key = balance_key(&nam(), &ADDRESS);
+        let amount: token::Amount =
+            state.read(&governance_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(500));
+
+        let author_balance_key = balance_key(&nam(), &signer_address);
+        let amount: token::Amount =
+            state.read(&author_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(10));
+
+        let governance_counter_key = get_counter_key();
+        let counter: u64 =
+            state.read(&governance_counter_key).unwrap().unwrap();
+        assert_eq!(counter, 1);
+    }
+
+    #[test]
+    fn test_governance_proposal_not_enough_funds_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(500),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            499,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        let vp_result = governance_vp
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed");
+        assert!(!vp_result);
+
+        if !vp_result {
+            state.write_log_mut().drop_tx();
+        } else {
+            state.write_log_mut().commit_tx();
+        }
+        state.commit_block().unwrap();
+
+        let governance_balance_key = balance_key(&nam(), &ADDRESS);
+        let amount: token::Amount =
+            state.read(&governance_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(0));
+
+        let author_balance_key = balance_key(&nam(), &signer_address);
+        let amount: token::Amount =
+            state.read(&author_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(500));
+
+        let governance_counter_key = get_counter_key();
+        let counter: u64 =
+            state.read(&governance_counter_key).unwrap().unwrap();
+        assert_eq!(counter, 0);
+    }
+
+    #[test]
+    fn test_governance_proposal_more_funds_accepted() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            509,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        let vp_result = governance_vp
+            .validate_tx(&tx, &keys_changed, &verifiers)
+            .expect("validation failed");
+        assert!(vp_result);
+
+        if !vp_result {
+            state.write_log_mut().drop_tx();
+        } else {
+            state.write_log_mut().commit_tx();
+        }
+        state.commit_block().unwrap();
+
+        let governance_balance_key = balance_key(&nam(), &ADDRESS);
+        let amount: token::Amount =
+            state.read(&governance_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(509));
+
+        let author_balance_key = balance_key(&nam(), &signer_address);
+        let amount: token::Amount =
+            state.read(&author_balance_key).unwrap().unwrap();
+        assert_eq!(amount, token::Amount::native_whole(1));
+
+        let governance_counter_key = get_counter_key();
+        let counter: u64 =
+            state.read(&governance_counter_key).unwrap().unwrap();
+        assert_eq!(counter, 1);
+    }
+
+    #[test]
+    fn test_governance_too_small_voting_period_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            509,
+            3,
+            8,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_governance_too_small_grace_period_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 12;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            509,
+            3,
+            9,
+            12,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_governance_too_big_voting_window_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 40;
+
+        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            509,
+            3,
+            9,
+            40,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_governance_no_committing_key_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let counter_key = get_counter_key();
+        let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
+        let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
+        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let content_key = get_content_key(proposal_id);
+        let author_key = get_author_key(proposal_id);
+        let proposal_type_key = get_proposal_type_key(proposal_id);
+        let funds_key = get_funds_key(proposal_id);
+
+        let keys_changed = BTreeSet::from([
+            counter_key.clone(),
+            funds_key.clone(),
+            content_key.clone(),
+            author_key.clone(),
+            proposal_type_key.clone(),
+            voting_start_epoch_key.clone(),
+            voting_end_epoch_key.clone(),
+            grace_epoch_key.clone(),
+        ]);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            509,
+            3,
+            9,
+            grace_epoch,
+            &signer_address,
+            true,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_governance_invalid_start_epoch_failed() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let counter_key = get_counter_key();
+        let voting_end_epoch_key = get_voting_end_epoch_key(proposal_id);
+        let voting_start_epoch_key = get_voting_start_epoch_key(proposal_id);
+        let grace_epoch_key = get_grace_epoch_key(proposal_id);
+        let content_key = get_content_key(proposal_id);
+        let author_key = get_author_key(proposal_id);
+        let proposal_type_key = get_proposal_type_key(proposal_id);
+        let funds_key = get_funds_key(proposal_id);
+
+        let keys_changed = BTreeSet::from([
+            counter_key.clone(),
+            funds_key.clone(),
+            content_key.clone(),
+            author_key.clone(),
+            proposal_type_key.clone(),
+            voting_start_epoch_key.clone(),
+            voting_end_epoch_key.clone(),
+            grace_epoch_key.clone(),
+        ]);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            0,
+            9,
+            grace_epoch,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_validator_success() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (7 * 2);
+
+        update_epoch_to(&mut state, 7, height);
+
+        let validator_address = established_address_1();
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            validator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(validator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_validator_out_of_voting_window_fail() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (7 * 2);
+
+        update_epoch_to(&mut state, 10, height);
+
+        let validator_address = established_address_1();
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            validator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(validator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_validator_fail() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+        // this should return true because state has been stored
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (7 * 2);
+
+        update_epoch_to(&mut state, 8, height);
+
+        let validator_address = established_address_1();
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            validator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(validator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_delegator_success() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (9 * 2);
+
+        let validator_address = established_address_1();
+        let delegator_address = established_address_3();
+
+        initialize_account_balance(
+            &mut state,
+            &delegator_address,
+            token::Amount::native_whole(1000000),
+        );
+
+        bond_tokens(
+            &mut state,
+            Some(&delegator_address),
+            &validator_address,
+            token::Amount::from_u64(10000),
+            Epoch(1),
+            None,
+        )
+        .unwrap();
+
+        update_epoch_to(&mut state, 9, height);
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            delegator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(delegator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_delegator_fail() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (10 * 2);
+
+        let validator_address = established_address_1();
+        let delegator_address = established_address_3();
+
+        initialize_account_balance(
+            &mut state,
+            &delegator_address,
+            token::Amount::native_whole(1000000),
+        );
+
+        bond_tokens(
+            &mut state,
+            Some(&delegator_address),
+            &validator_address,
+            token::Amount::from_u64(10000),
+            Epoch(1),
+            None,
+        )
+        .unwrap();
+
+        update_epoch_to(&mut state, 10, height);
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            delegator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(delegator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+    }
+
+    #[test]
+    fn test_goverance_vote_invalid_verifier_fail() {
+        let mut state = init_storage();
+
+        let proposal_id = 0;
+        let grace_epoch = 19;
+
+        let mut keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) =
+            wasm::compilation_cache::common::testing::cache();
+
+        let tx_index = TxIndex::default();
+        let sentinel = RefCell::new(VpSentinel::default());
+
+        let signer = keypair_1();
+        let signer_address = Address::from(&signer.clone().ref_to());
+        let mut verifiers = BTreeSet::from([signer_address.clone()]);
+
+        initialize_account_balance(
+            &mut state,
+            &signer_address.clone(),
+            token::Amount::native_whole(510),
+        );
+        initialize_account_balance(
+            &mut state,
+            &ADDRESS,
+            token::Amount::native_whole(0),
+        );
+        state.commit_block().unwrap();
+
+        let tx_code = vec![];
+        let tx_data = vec![];
+
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.header.chain_id = state.in_mem().chain_id.clone();
+        tx.set_code(Code::new(tx_code, None));
+        tx.set_data(Data::new(tx_data));
+        tx.add_section(Section::Signature(Signature::new(
+            vec![tx.header_hash()],
+            [(0, keypair_1())].into_iter().collect(),
+            None,
+        )));
+
+        init_proposal(
+            &mut state,
+            proposal_id,
+            500,
+            3,
+            9,
+            19,
+            &signer_address,
+            false,
+        );
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache.clone(),
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
+
+        state.write_log_mut().commit_tx();
+        state.commit_block().unwrap();
+
+        let height = state.in_mem().get_block_height().0 + (10 * 2);
+
+        let validator_address = established_address_1();
+        let delegator_address = established_address_3();
+
+        initialize_account_balance(
+            &mut state,
+            &delegator_address,
+            token::Amount::native_whole(1000000),
+        );
+
+        bond_tokens(
+            &mut state,
+            Some(&delegator_address),
+            &validator_address,
+            token::Amount::from_u64(10000),
+            Epoch(1),
+            None,
+        )
+        .unwrap();
+
+        update_epoch_to(&mut state, 10, height);
+
+        let vote_key = get_vote_proposal_key(
+            0,
+            delegator_address.clone(),
+            validator_address.clone(),
+        );
+        state
+            .write_log_mut()
+            .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
+            .unwrap();
+
+        keys_changed.clear();
+        keys_changed.insert(vote_key);
+
+        verifiers.clear();
+        verifiers.insert(validator_address);
+
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &tx_index,
+            &gas_meter,
+            &sentinel,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let governance_vp = GovernanceVp { ctx };
+
+        assert!(
+            !governance_vp
+                .validate_tx(&tx, &keys_changed, &verifiers)
+                .expect("validation failed")
+        );
     }
 }
