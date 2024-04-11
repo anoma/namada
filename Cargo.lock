@@ -4557,6 +4557,7 @@ dependencies = [
  "criterion",
  "lazy_static",
  "masp_primitives",
+ "masp_proofs",
  "namada",
  "namada_apps_lib",
  "namada_node",
