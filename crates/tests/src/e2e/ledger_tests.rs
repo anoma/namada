@@ -3222,7 +3222,7 @@ pub fn prepare_proposal_data(
             "author": source,
             "voting_start_epoch": start_epoch,
             "voting_end_epoch": start_epoch + 12_u64,
-            "grace_epoch": start_epoch + 12u64 + 6_u64,
+            "activation_epoch": start_epoch + 12u64 + 6_u64,
         },
         "data": data
     });

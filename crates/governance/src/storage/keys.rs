@@ -14,7 +14,7 @@ struct Keys {
     content: &'static str,
     start_epoch: &'static str,
     end_epoch: &'static str,
-    grace_epoch: &'static str,
+    activation_epoch: &'static str,
     funds: &'static str,
     proposal_code: &'static str,
     committing_epoch: &'static str,
@@ -23,7 +23,7 @@ struct Keys {
     min_period: &'static str,
     max_period: &'static str,
     max_content: &'static str,
-    min_grace_epoch: &'static str,
+    min_grace_epochs: &'static str,
     counter: &'static str,
     pending: &'static str,
     result: &'static str,
@@ -90,17 +90,17 @@ pub fn is_proposal_code_key(key: &Key) -> bool {
     }
 }
 
-/// Check if key is grace epoch key
-pub fn is_grace_epoch_key(key: &Key) -> bool {
+/// Check if key is activation epoch key
+pub fn is_activation_epoch_key(key: &Key) -> bool {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(prefix),
             DbKeySeg::StringSeg(id),
-            DbKeySeg::StringSeg(grace_epoch),
+            DbKeySeg::StringSeg(activation_epoch),
         ] if addr == &ADDRESS
             && prefix == Keys::VALUES.proposal
-            && grace_epoch == Keys::VALUES.grace_epoch =>
+            && activation_epoch == Keys::VALUES.activation_epoch =>
         {
             id.parse::<u64>().is_ok()
         }
@@ -247,7 +247,7 @@ pub fn is_max_proposal_period_key(key: &Key) -> bool {
              && max_proposal_period_param == Keys::VALUES.max_period)
 }
 
-/// Check if key is a min grace epoch key
+/// Check if key is a min grace epochs key
 pub fn is_commit_proposal_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
         DbKeySeg::AddressSeg(addr),
@@ -262,12 +262,12 @@ pub fn is_commit_proposal_key(key: &Key) -> bool {
 }
 
 /// Check if key is a commit proposal key
-pub fn is_min_grace_epoch_key(key: &Key) -> bool {
+pub fn is_min_grace_epochs_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
                     DbKeySeg::AddressSeg(addr),
-                    DbKeySeg::StringSeg(min_grace_epoch_param),
+                    DbKeySeg::StringSeg(min_grace_epochs_param),
                 ] if addr == &ADDRESS
-                    && min_grace_epoch_param == Keys::VALUES.min_grace_epoch)
+                    && min_grace_epochs_param == Keys::VALUES.min_grace_epochs)
 }
 
 /// Check if key is parameter key
@@ -277,7 +277,7 @@ pub fn is_parameter_key(key: &Key) -> bool {
         || is_max_proposal_code_size_key(key)
         || is_min_proposal_voting_period_key(key)
         || is_max_proposal_period_key(key)
-        || is_min_grace_epoch_key(key)
+        || is_min_grace_epochs_key(key)
 }
 
 /// Check if key is start epoch or end epoch key
@@ -327,10 +327,10 @@ pub fn get_max_proposal_content_key() -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get min grace epoch proposal key
-pub fn get_min_proposal_grace_epoch_key() -> Key {
+/// Get min grace epochs proposal key
+pub fn get_min_proposal_grace_epochs_key() -> Key {
     Key::from(ADDRESS.to_db_key())
-        .push(&Keys::VALUES.min_grace_epoch.to_owned())
+        .push(&Keys::VALUES.min_grace_epochs.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
@@ -395,12 +395,12 @@ pub fn get_funds_key(id: u64) -> Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Get proposal grace epoch key
-pub fn get_grace_epoch_key(id: u64) -> Key {
+/// Get proposal activation epoch key
+pub fn get_activation_epoch_key(id: u64) -> Key {
     proposal_prefix()
         .push(&id.to_string())
         .expect("Cannot obtain a storage key")
-        .push(&Keys::VALUES.grace_epoch.to_owned())
+        .push(&Keys::VALUES.activation_epoch.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

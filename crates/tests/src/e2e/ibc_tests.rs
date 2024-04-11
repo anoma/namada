@@ -427,8 +427,8 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     submit_votes(&test_a)?;
 
     // wait for the grace
-    let grace_epoch = start_epoch + 12u64 + 6u64 + 1u64;
-    while epoch <= grace_epoch {
+    let activation_epoch = start_epoch + 12u64 + 6u64 + 1u64;
+    while epoch <= activation_epoch {
         sleep(5);
         epoch = get_epoch(&test_a, &rpc_a).unwrap();
     }
@@ -1905,7 +1905,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
             "author": albert,
             "voting_start_epoch": start_epoch,
             "voting_end_epoch": start_epoch + 3_u64,
-            "grace_epoch": start_epoch + 6_u64,
+            "activation_epoch": start_epoch + 6_u64,
         },
         "data": TestWasms::TxProposalIbcTokenInflation.read_bytes()
     });

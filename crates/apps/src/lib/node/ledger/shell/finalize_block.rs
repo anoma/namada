@@ -102,7 +102,12 @@ where
         // Sub-system updates:
         // - Governance - applied first in case a proposal changes any of the
         //   other syb-systems
-        governance::finalize_block(self, emit_events, new_epoch)?;
+        governance::finalize_block(
+            self,
+            emit_events,
+            current_epoch,
+            new_epoch,
+        )?;
         // - Token
         token::finalize_block(&mut self.state, emit_events, new_epoch)?;
         // - PoS
@@ -1225,14 +1230,13 @@ mod test_finalize_block {
         // Add a proposal to be executed on next epoch change.
         let mut add_proposal = |proposal_id, vote| {
             let validator = shell.mode.get_validator_address().unwrap().clone();
-            shell.proposal_data.insert(proposal_id);
 
             let proposal = InitProposalData {
                 content: Hash::default(),
                 author: validator.clone(),
                 voting_start_epoch: Epoch::default(),
                 voting_end_epoch: Epoch::default().next(),
-                grace_epoch: Epoch::default().next(),
+                activation_epoch: Epoch::default().next(),
                 r#type: ProposalType::Default,
             };
 

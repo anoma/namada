@@ -25,7 +25,7 @@ impl InitProposal {
         r#type: ProposalType,
         voting_start_epoch: Epoch,
         voting_end_epoch: Epoch,
-        grace_epoch: Epoch,
+        activation_epoch: Epoch,
         args: GlobalArgs,
     ) -> Self {
         let init_proposal = namada_sdk::governance::InitProposalData {
@@ -34,7 +34,7 @@ impl InitProposal {
             r#type,
             voting_start_epoch,
             voting_end_epoch,
-            grace_epoch,
+            activation_epoch,
         };
 
         Self(transaction::build_tx(
