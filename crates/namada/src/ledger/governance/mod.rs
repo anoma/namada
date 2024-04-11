@@ -989,6 +989,7 @@ mod test {
         state.write_log_mut().commit_tx();
     }
 
+    #[cfg(test)]
     fn update_epoch_to(
         state: &mut FullAccessState<MockDB, Sha256Hasher>,
         total_epochs: u64,
@@ -1000,6 +1001,7 @@ mod test {
             state
                 .update_epoch(
                     height,
+                    #[allow(clippy::disallowed_methods)]
                     DateTimeUtc::now()
                         .next_second()
                         .next_second()

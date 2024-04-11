@@ -406,6 +406,7 @@ where
             &*eth_client,
             io,
             BlockOnEthSync {
+                #[allow(clippy::disallowed_methods)]
                 deadline: Instant::now() + Duration::from_secs(60),
                 delta_sleep: Duration::from_secs(1),
             },

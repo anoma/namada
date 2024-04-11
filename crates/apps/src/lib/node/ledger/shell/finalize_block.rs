@@ -1206,7 +1206,10 @@ mod test_finalize_block {
         )
         .unwrap();
         shell.state.in_mem_mut().next_epoch_min_start_height = BlockHeight(5);
-        shell.state.in_mem_mut().next_epoch_min_start_time = DateTimeUtc::now();
+        shell.state.in_mem_mut().next_epoch_min_start_time = {
+            #[allow(clippy::disallowed_methods)]
+            DateTimeUtc::now()
+        };
 
         let txs_key = gen_keypair();
         // Add unshielded balance for fee payment
@@ -4608,7 +4611,10 @@ mod test_finalize_block {
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
-        req.header.time = namada::core::time::DateTimeUtc::now();
+        req.header.time = {
+            #[allow(clippy::disallowed_methods)]
+            namada::core::time::DateTimeUtc::now()
+        };
         let current_decision_height = shell.get_current_decision_height();
         if let Some(b) = shell.state.in_mem_mut().last_block.as_mut() {
             b.height = current_decision_height + 11;
