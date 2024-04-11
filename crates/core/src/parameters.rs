@@ -59,6 +59,8 @@ pub struct Parameters {
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
+    /// Enable the native token transfer if it is true
+    pub is_native_token_transferable: bool,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
