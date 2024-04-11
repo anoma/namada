@@ -41,7 +41,7 @@ impl FsWalletStorage for CliWalletUtils {
 impl WalletIo for CliWalletUtils {
     type Rng = OsRng;
 
-    fn read_password(confirm: bool) -> Zeroizing<String> {
+    fn read_password(confirm: bool, alias: Option<String>) -> Zeroizing<String> {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
             Ok(path) => Zeroizing::new(
                 fs::read_to_string(path)
@@ -50,7 +50,7 @@ impl WalletIo for CliWalletUtils {
             Err(_) => match env::var("NAMADA_WALLET_PASSWORD") {
                 Ok(password) => Zeroizing::new(password),
                 Err(_) if confirm => {
-                    let prompt = "Enter your encryption password: ";
+                    let prompt = format!("Enter your encryption password for {alias}: ");
                     read_and_confirm_passphrase_tty(prompt).unwrap_or_else(
                         |e| {
                             eprintln!("{e}");
@@ -62,7 +62,7 @@ impl WalletIo for CliWalletUtils {
                     )
                 }
                 Err(_) => {
-                    let prompt = "Enter your decryption password: ";
+                    let prompt = format!("Enter your decryption password for {alias}: ");
                     rpassword::read_password_from_tty(Some(prompt))
                         .map(Zeroizing::new)
                         .expect("Failed reading password from tty.")
@@ -275,12 +275,13 @@ pub fn exists(store_dir: &Path) -> bool {
 /// confirmation if read from stdin.
 pub fn read_and_confirm_encryption_password(
     unsafe_dont_encrypt: bool,
+    alias: Option<String>,
 ) -> Option<Zeroizing<String>> {
     if unsafe_dont_encrypt {
         println!("Warning: The keypair will NOT be encrypted.");
         None
     } else {
-        Some(CliWalletUtils::read_password(true))
+        Some(CliWalletUtils::read_password(true, alias))
     }
 }
 

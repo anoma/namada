@@ -225,7 +225,6 @@ pub async fn submit_reveal_aux(
                 tx::build_reveal_pk(context, &args, &public_key).await?;
 
             sign(context, &mut tx, &args, signing_data).await?;
-
             context.submit(tx, &args).await?;
         }
     }
@@ -369,7 +368,7 @@ pub async fn submit_change_consensus_key(
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating new consensus key...");
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
             wallet
                 .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
@@ -597,7 +596,7 @@ pub async fn submit_become_validator(
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating consensus key...");
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
             wallet
                 .gen_store_secret_key(
                     // Note that TM only allows ed25519 for consensus key
@@ -626,7 +625,7 @@ pub async fn submit_become_validator(
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating Eth cold key...");
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
             wallet
                 .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
@@ -655,7 +654,7 @@ pub async fn submit_become_validator(
         .unwrap_or_else(|| {
             display_line!(namada.io(), "Generating Eth hot key...");
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
             wallet
                 .gen_store_secret_key(
                     // Note that ETH only allows secp256k1
@@ -689,7 +688,7 @@ pub async fn submit_become_validator(
     // Store the protocol key in the wallet so that we can sign the tx with it
     // to verify ownership
     display_line!(namada.io(), "Storing protocol key in the wallet...");
-    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
     namada
         .wallet_mut()
         .await

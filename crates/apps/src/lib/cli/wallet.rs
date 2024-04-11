@@ -260,7 +260,7 @@ fn shielded_key_gen(
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
-    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
+    let password = read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
     let alias = if raw {
         wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
     } else {
@@ -365,7 +365,7 @@ fn shielded_key_address_add(
         }
         MaspValue::ExtendedSpendingKey(spending_key) => {
             let password =
-                read_and_confirm_encryption_password(unsafe_dont_encrypt);
+                read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
             let alias = wallet
                 .insert_spending_key(
                     alias,
@@ -467,7 +467,7 @@ async fn transparent_key_and_address_derive(
     let alias = alias.to_lowercase();
     let alias = if !use_device {
         let encryption_password =
-            read_and_confirm_encryption_password(unsafe_dont_encrypt);
+            read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
         wallet
             .derive_store_key_from_mnemonic_code(
                 scheme,
@@ -561,7 +561,7 @@ fn transparent_key_and_address_gen(
     let alias = alias.to_lowercase();
     let mut wallet = load_wallet(ctx);
     let encryption_password =
-        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
     let alias = if raw {
         wallet.gen_store_secret_key(
             scheme,
@@ -1351,7 +1351,7 @@ fn transparent_secret_key_add(
 ) {
     let mut wallet = load_wallet(ctx);
     let encryption_password =
-        read_and_confirm_encryption_password(unsafe_dont_encrypt);
+        read_and_confirm_encryption_password(unsafe_dont_encrypt, alias);
     let alias = wallet
         .insert_keypair(alias, alias_force, sk, encryption_password, None, None)
         .unwrap_or_else(|| {
