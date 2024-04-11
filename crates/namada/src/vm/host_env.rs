@@ -2054,7 +2054,10 @@ where
 {
     use std::rc::Rc;
 
-    use namada_ibc::{CompatibleIbcTxHostEnvState, IbcActions, TransferModule};
+    use namada_ibc::{
+        CompatibleIbcTxHostEnvState, IbcActions, NftTransferModule,
+        TransferModule,
+    };
 
     let tx_data = unsafe { env.ctx.tx.get().data() }.ok_or_else(|| {
         let sentinel = unsafe { env.ctx.sentinel.get() };
@@ -2063,8 +2066,10 @@ where
     })?;
     let state = Rc::new(RefCell::new(CompatibleIbcTxHostEnvState(env.state())));
     let mut actions = IbcActions::new(state.clone());
-    let module = TransferModule::new(state);
-    actions.add_transfer_module(module.module_id(), module);
+    let module = TransferModule::new(state.clone());
+    actions.add_transfer_module(module);
+    let module = NftTransferModule::new(state);
+    actions.add_transfer_module(module);
     actions.execute(&tx_data)?;
 
     Ok(())

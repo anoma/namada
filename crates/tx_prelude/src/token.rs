@@ -14,9 +14,8 @@ pub fn transfer(
     src: &Address,
     dest: &Address,
     token: &Address,
-    amount: DenominatedAmount,
+    amount: Amount,
 ) -> TxResult {
-    let amount = denom_to_amount(amount, token, ctx)?;
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);

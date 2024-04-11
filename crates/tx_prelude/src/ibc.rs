@@ -5,12 +5,12 @@ use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
 pub use namada_core::ibc::{IbcEvent, IbcShieldedTransfer};
-use namada_core::token::DenominatedAmount;
+use namada_core::token::Amount;
 pub use namada_ibc::storage::{ibc_token, is_ibc_key};
 pub use namada_ibc::{
-    IbcActions, IbcCommonContext, IbcStorageContext, ProofSpec, TransferModule,
+    IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
+    ProofSpec, TransferModule,
 };
-use namada_token::denom_to_amount;
 use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
@@ -20,8 +20,10 @@ use crate::{Ctx, Error};
 pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<Ctx> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone());
-    let module = TransferModule::new(ctx);
-    actions.add_transfer_module(module.module_id(), module);
+    let module = TransferModule::new(ctx.clone());
+    actions.add_transfer_module(module);
+    let module = NftTransferModule::new(ctx);
+    actions.add_transfer_module(module);
     actions
 }
 
@@ -45,7 +47,7 @@ impl IbcStorageContext for Ctx {
         src: &Address,
         dest: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> std::result::Result<(), Error> {
         transfer(self, src, dest, token, amount)
     }
@@ -63,14 +65,14 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error> {
         mint(
             self,
             &Address::Internal(InternalAddress::Ibc),
             target,
             token,
-            denom_to_amount(amount, token, self)?,
+            amount,
         )
     }
 
@@ -78,9 +80,9 @@ impl IbcStorageContext for Ctx {
         &mut self,
         target: &Address,
         token: &Address,
-        amount: DenominatedAmount,
+        amount: Amount,
     ) -> Result<(), Error> {
-        burn(self, target, token, denom_to_amount(amount, token, self)?)
+        burn(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {

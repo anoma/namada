@@ -20,7 +20,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         &transfer.source,
         &transfer.target,
         &transfer.token,
-        transfer.amount,
+        transfer.amount.amount(),
     )?;
 
     let shielded = transfer

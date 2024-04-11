@@ -3,6 +3,7 @@
 use std::str::FromStr;
 
 use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
+use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
@@ -21,7 +22,9 @@ const CLIENTS_COUNTER_PREFIX: &str = "clients";
 const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
 const CHANNELS_COUNTER_PREFIX: &str = "channelEnds";
 const COUNTER_SEG: &str = "counter";
-const DENOM: &str = "ibc_denom";
+const TRACE: &str = "ibc_trace";
+const NFT_CLASS: &str = "nft_class";
+const NFT_METADATA: &str = "nft_meta";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -208,6 +211,20 @@ pub fn client_update_height_key(client_id: &ClientId) -> Key {
     ibc_key(path).expect("Creating a key for the ack shouldn't fail")
 }
 
+/// Returns a key for the NFT class
+pub fn nft_class_key(class_id: &PrefixedClassId) -> Key {
+    let ibc_token = ibc_token(class_id.to_string());
+    let path = format!("{NFT_CLASS}/{ibc_token}");
+    ibc_key(path).expect("Creating a key for the NFT class shouldn't fail")
+}
+
+/// Returns a key for the NFT metadata
+pub fn nft_metadata_key(class_id: &PrefixedClassId, token_id: &TokenId) -> Key {
+    let ibc_token = ibc_token_for_nft(class_id, token_id);
+    let path = format!("{NFT_METADATA}/{ibc_token}");
+    ibc_key(path).expect("Creating a key for the NFT metadata shouldn't fail")
+}
+
 /// Returns a client ID from the given client key `#IBC/clients/<client_id>`
 pub fn client_id(key: &Key) -> Result<ClientId> {
     match &key.segments[..] {
@@ -367,12 +384,12 @@ pub fn port_id(key: &Key) -> Result<PortId> {
     }
 }
 
-/// The storage key prefix to get the denom name with the hashed IBC denom. The
-/// address is given as string because the given address could be non-Namada
-/// token.
-pub fn ibc_denom_key_prefix(addr: Option<String>) -> Key {
+/// The storage key prefix to get the denom/class name with the hashed IBC
+/// denom/class. The address is given as string because the given address could
+/// be non-Namada token.
+pub fn ibc_trace_key_prefix(addr: Option<String>) -> Key {
     let prefix = Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
-        .push(&DENOM.to_string().to_db_key())
+        .push(&TRACE.to_string().to_db_key())
         .expect("Cannot obtain a storage key");
 
     if let Some(addr) = addr {
@@ -386,11 +403,11 @@ pub fn ibc_denom_key_prefix(addr: Option<String>) -> Key {
 
 /// The storage key to get the denom name with the hashed IBC denom. The address
 /// is given as string because the given address could be non-Namada token.
-pub fn ibc_denom_key(
+pub fn ibc_trace_key(
     addr: impl AsRef<str>,
     token_hash: impl AsRef<str>,
 ) -> Key {
-    ibc_denom_key_prefix(Some(addr.as_ref().to_string()))
+    ibc_trace_key_prefix(Some(addr.as_ref().to_string()))
         .push(&token_hash.as_ref().to_string().to_db_key())
         .expect("Cannot obtain a storage key")
 }
@@ -422,6 +439,14 @@ pub fn ibc_token(denom: impl AsRef<str>) -> Address {
     Address::Internal(InternalAddress::IbcToken(hash))
 }
 
+/// Obtain the IbcToken with the hash from the given NFT class ID and NFT ID
+pub fn ibc_token_for_nft(
+    class_id: &PrefixedClassId,
+    token_id: &TokenId,
+) -> Address {
+    ibc_token(format!("{class_id}/{token_id}"))
+}
+
 /// Returns true if the given key is for IBC
 pub fn is_ibc_key(key: &Key) -> bool {
     matches!(&key.segments[0],
@@ -429,7 +454,7 @@ pub fn is_ibc_key(key: &Key) -> bool {
 }
 
 /// Returns the owner and the token hash if the given key is the denom key
-pub fn is_ibc_denom_key(key: &Key) -> Option<(String, String)> {
+pub fn is_ibc_trace_key(key: &Key) -> Option<(String, String)> {
     match &key.segments[..] {
         [
             DbKeySeg::AddressSeg(addr),
@@ -438,7 +463,7 @@ pub fn is_ibc_denom_key(key: &Key) -> Option<(String, String)> {
             DbKeySeg::StringSeg(hash),
         ] => {
             if addr == &Address::Internal(InternalAddress::Ibc)
-                && prefix == DENOM
+                && prefix == TRACE
             {
                 Some((owner.clone(), hash.clone()))
             } else {

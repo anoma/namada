@@ -22,14 +22,19 @@ use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
+use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use namada_core::ibc::apps::nft_transfer::types::PrefixedClassId;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
-use namada_core::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
+use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_core::ibc::{
+    is_nft_trace, IbcShieldedTransfer, MsgNftTransfer, MsgTransfer,
+};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, TransferSource, TransferTarget};
 use namada_core::storage::Epoch;
@@ -2175,21 +2180,6 @@ pub async fn build_ibc_transfer(
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
 
-    let ibc_denom =
-        rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
-            .await;
-    let token = PrefixedCoin {
-        denom: ibc_denom.parse().expect("Invalid IBC denom"),
-        // Set the IBC amount as an integer
-        amount: validated_amount.into(),
-    };
-    let packet_data = PacketData {
-        token,
-        sender: source.to_string().into(),
-        receiver: args.receiver.clone().into(),
-        memo: args.memo.clone().unwrap_or_default().into(),
-    };
-
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
         Some(h) => {
@@ -2217,22 +2207,14 @@ pub async fn build_ibc_transfer(
         IbcTimestamp::none()
     };
 
-    let message = MsgTransfer {
-        port_id_on_a: args.port_id.clone(),
-        chan_id_on_a: args.channel_id.clone(),
-        packet_data,
-        timeout_height_on_b: timeout_height,
-        timeout_timestamp_on_b: timeout_timestamp,
-    };
-
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
     if let Some(memo) = &args.tx.memo {
         tx.add_memo(memo);
     }
 
-    let data = match shielded_parts {
-        Some((shielded_transfer, asset_types)) => {
+    let shielded_transfer =
+        shielded_parts.map(|(shielded_transfer, asset_types)| {
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
             let transfer = token::Transfer {
@@ -2253,23 +2235,79 @@ pub async fn build_ibc_transfer(
                 builder: shielded_transfer.builder,
                 target: masp_tx_hash,
             });
-            let shielded_transfer = IbcShieldedTransfer {
+            IbcShieldedTransfer {
                 transfer,
                 masp_tx: shielded_transfer.masp_tx,
-            };
-            MsgShieldedTransfer {
-                message,
-                shielded_transfer,
             }
-            .serialize_to_vec()
+        });
+
+    // Check the token and make the tx data
+    let ibc_denom =
+        rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
+            .await;
+    let data = if args.port_id == PortId::transfer() {
+        let token = PrefixedCoin {
+            denom: ibc_denom
+                .parse()
+                .map_err(|e| Error::Other(format!("Invalid IBC denom: {e}")))?,
+            // Set the IBC amount as an integer
+            amount: validated_amount.into(),
+        };
+        let packet_data = PacketData {
+            token,
+            sender: source.to_string().into(),
+            receiver: args.receiver.clone().into(),
+            memo: args.memo.clone().unwrap_or_default().into(),
+        };
+        let message = IbcMsgTransfer {
+            port_id_on_a: args.port_id.clone(),
+            chan_id_on_a: args.channel_id.clone(),
+            packet_data,
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+        MsgTransfer {
+            message,
+            shielded_transfer,
         }
-        None => {
-            let any_msg = message.to_any();
-            let mut data = vec![];
-            prost::Message::encode(&any_msg, &mut data)
-                .map_err(TxSubmitError::EncodeFailure)?;
-            data
+        .serialize_to_vec()
+    } else if let Some((trace_path, base_class_id, token_id)) =
+        is_nft_trace(&ibc_denom)
+    {
+        let class_id = PrefixedClassId {
+            trace_path,
+            base_class_id: base_class_id.parse().map_err(|_| {
+                Error::Other(format!("Invalid class ID: {base_class_id}"))
+            })?,
+        };
+        let token_ids = vec![token_id.clone()].try_into().map_err(|_| {
+            Error::Other(format!("Invalid token ID: {token_id}"))
+        })?;
+        let packet_data = NftPacketData {
+            class_id,
+            class_uri: None,
+            class_data: None,
+            token_ids,
+            token_uris: None,
+            token_data: None,
+            sender: source.to_string().into(),
+            receiver: args.receiver.clone().into(),
+            memo: args.memo.clone().map(|m| m.into()),
+        };
+        let message = IbcMsgNftTransfer {
+            port_id_on_a: args.port_id.clone(),
+            chan_id_on_a: args.channel_id.clone(),
+            packet_data,
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+        MsgNftTransfer {
+            message,
+            shielded_transfer,
         }
+        .serialize_to_vec()
+    } else {
+        return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
 
     tx.add_code_from_hash(
@@ -2837,11 +2875,8 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let prefixed_denom = ibc_denom
-        .parse()
-        .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
     let token = namada_ibc::received_ibc_token(
-        &prefixed_denom,
+        &ibc_denom,
         &src_port_id,
         &src_channel_id,
         &args.port_id,

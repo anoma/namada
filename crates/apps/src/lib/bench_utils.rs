@@ -27,7 +27,7 @@ use namada::core::time::DateTimeUtc;
 use namada::core::token::{Amount, DenominatedAmount, Transfer};
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::InitProposalData;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada::ibc::apps::transfer::types::packet::PacketData;
 use namada::ibc::apps::transfer::types::PrefixedCoin;
 use namada::ibc::clients::tendermint::client_state::ClientState;
@@ -52,15 +52,16 @@ use namada::ibc::core::connection::types::{
 };
 use namada::ibc::core::host::types::identifiers::{
     ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ClientType, ConnectionId, ConnectionId as NamadaConnectionId,
-    PortId as NamadaPortId, PortId,
+    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
+    PortId,
 };
 use namada::ibc::core::host::types::path::{
     ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
-use namada::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
+use namada::ibc::primitives::Timestamp as IbcTimestamp;
 use namada::ibc::storage::port_key;
+use namada::ibc::MsgTransfer;
 use namada::io::StdIo;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
@@ -327,7 +328,7 @@ impl BenchShell {
         tx
     }
 
-    pub fn generate_ibc_tx(&self, wasm_code_path: &str, msg: impl Msg) -> Tx {
+    pub fn generate_ibc_tx(&self, wasm_code_path: &str, data: Vec<u8>) -> Tx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
         let code_hash = self
@@ -338,10 +339,7 @@ impl BenchShell {
             Some(wasm_code_path.to_string()),
         ));
 
-        let mut data = vec![];
-        prost::Message::encode(&msg.to_any(), &mut data).unwrap();
         tx.set_data(Data::new(data));
-
         // NOTE: the Ibc VP doesn't actually check the signature
         tx
     }
@@ -367,7 +365,7 @@ impl BenchShell {
         let timeout_timestamp =
             (now + std::time::Duration::new(3600, 0)).unwrap();
 
-        let msg = MsgTransfer {
+        let message = IbcMsgTransfer {
             port_id_on_a: PortId::transfer(),
             chan_id_on_a: ChannelId::new(5),
             packet_data: PacketData {
@@ -380,7 +378,12 @@ impl BenchShell {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        self.generate_ibc_tx(TX_IBC_WASM, msg)
+        let msg = MsgTransfer {
+            message,
+            shielded_transfer: None,
+        };
+
+        self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
     }
 
     pub fn execute_tx(&mut self, tx: &Tx) {
@@ -425,9 +428,7 @@ impl BenchShell {
             .set_header(get_dummy_header())
             .unwrap();
         // Set client state
-        let client_id =
-            ClientId::new(ClientType::new("01-tendermint").unwrap(), 1)
-                .unwrap();
+        let client_id = ClientId::new("07-tendermint", 1).unwrap();
         let client_state_key = addr_key.join(&Key::from(
             IbcPath::ClientState(ClientStatePath(client_id.clone()))
                 .to_string()
