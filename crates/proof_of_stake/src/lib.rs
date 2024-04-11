@@ -68,8 +68,10 @@ use crate::storage::{
     validator_rewards_products_handle, validator_set_positions_handle,
     validator_slashes_handle, validator_state_handle,
     validator_total_redelegated_bonded_handle,
-    validator_total_redelegated_unbonded_handle, write_last_reward_claim_epoch,
-    write_pos_params, write_validator_address_raw_hash, write_validator_avatar,
+    validator_total_redelegated_unbonded_handle,
+    write_last_pos_inflation_amount, write_last_reward_claim_epoch,
+    write_last_staked_ratio, write_pos_params,
+    write_validator_address_raw_hash, write_validator_avatar,
     write_validator_description, write_validator_discord_handle,
     write_validator_email, write_validator_max_commission_rate_change,
     write_validator_metadata, write_validator_website,
@@ -114,6 +116,11 @@ where
     tracing::debug!("Initializing PoS genesis");
     write_pos_params(storage, params)?;
 
+    // Initialize values for PoS inflation
+    write_last_staked_ratio(storage, Dec::zero())?;
+    write_last_pos_inflation_amount(storage, token::Amount::zero())?;
+
+    // Initialize validator set data
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
@@ -2588,8 +2595,6 @@ pub mod test_utils {
             implicit_vp_code_hash: Some(Hash::default()),
             epochs_per_year: 10000000,
             max_signatures_per_transaction: 15,
-            staked_ratio: Dec::new(2, 3).unwrap(),
-            pos_inflation_amount: token::Amount::from_u64(1000),
             fee_unshielding_gas_limit: 10000,
             fee_unshielding_descriptions_limit: 15,
             minimum_gas_price: BTreeMap::new(),
