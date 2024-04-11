@@ -511,11 +511,11 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "1.2.1"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9897ef0f1bd2362169de6d7e436ea2237dc1085d7d1e4db75f4be34d86f309d1"
+checksum = "0901fc8eb0aca4c83be0106d6f2db17d86a08dfc2c25f0e84464bf381158add6"
 dependencies = [
- "borsh-derive 1.2.1",
+ "borsh-derive 1.4.0",
  "cfg_aliases",
 ]
 
@@ -534,12 +534,12 @@ dependencies = [
 
 [[package]]
 name = "borsh-derive"
-version = "1.2.1"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "478b41ff04256c5c8330f3dfdaaae2a5cc976a8e75088bafa4625b0d0208de8c"
+checksum = "51670c3aa053938b0ee3bd67c3817e471e626151131b934038e83c5bf8de48f5"
 dependencies = [
  "once_cell",
- "proc-macro-crate 2.0.1",
+ "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
  "syn 2.0.52",
@@ -562,7 +562,7 @@ name = "borsh-ext"
 version = "1.2.0"
 source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
 ]
 
 [[package]]
@@ -2994,7 +2994,7 @@ name = "index-set"
 version = "0.8.0"
 source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.1#b0d928f83cf0d465ccda299d131e8df2859b5184"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "serde",
 ]
 
@@ -3024,7 +3024,7 @@ name = "indexmap"
 version = "2.2.4"
 source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "equivalent",
  "hashbrown 0.14.3",
  "serde",
@@ -3306,7 +3306,7 @@ name = "masp_note_encryption"
 version = "1.0.0"
 source = "git+https://github.com/anoma/masp?rev=6cbc8bd90a71cc280492c44bc3415162093daa76#6cbc8bd90a71cc280492c44bc3415162093daa76"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "chacha20",
  "chacha20poly1305",
  "cipher",
@@ -3325,7 +3325,7 @@ dependencies = [
  "blake2b_simd",
  "blake2s_simd",
  "bls12_381",
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "byteorder",
  "ff",
  "fpe",
@@ -3490,7 +3490,7 @@ version = "0.32.1"
 dependencies = [
  "async-trait",
  "bimap",
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
  "clru",
@@ -3566,7 +3566,7 @@ dependencies = [
 name = "namada_account"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "linkme",
  "namada_core",
  "namada_macros",
@@ -3588,7 +3588,7 @@ name = "namada_core"
 version = "0.32.1"
 dependencies = [
  "bech32 0.8.1",
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "borsh-ext",
  "chrono",
  "data-encoding",
@@ -3634,7 +3634,7 @@ dependencies = [
 name = "namada_ethereum_bridge"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "ethabi",
  "ethers",
  "eyre",
@@ -3665,7 +3665,7 @@ dependencies = [
 name = "namada_gas"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "namada_core",
  "namada_macros",
  "serde",
@@ -3676,7 +3676,7 @@ dependencies = [
 name = "namada_governance"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "itertools 0.10.5",
  "linkme",
  "namada_core",
@@ -3696,7 +3696,7 @@ dependencies = [
 name = "namada_ibc"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "ibc",
  "ibc-derive",
  "ibc-testkit",
@@ -3735,7 +3735,7 @@ dependencies = [
 name = "namada_merkle_tree"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "eyre",
  "ics23",
  "namada_core",
@@ -3749,7 +3749,7 @@ dependencies = [
 name = "namada_migrations"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "data-encoding",
  "lazy_static",
  "linkme",
@@ -3761,7 +3761,7 @@ dependencies = [
 name = "namada_parameters"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "namada_core",
  "namada_macros",
  "namada_storage",
@@ -3772,7 +3772,7 @@ dependencies = [
 name = "namada_proof_of_stake"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "data-encoding",
  "derivative",
  "linkme",
@@ -3807,7 +3807,7 @@ dependencies = [
  "async-trait",
  "bimap",
  "bls12_381",
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
  "data-encoding",
@@ -3870,7 +3870,7 @@ dependencies = [
 name = "namada_shielded_token"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "masp_primitives",
  "namada_controller",
  "namada_core",
@@ -3885,7 +3885,7 @@ dependencies = [
 name = "namada_state"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "ics23",
  "itertools 0.10.5",
  "linkme",
@@ -3911,7 +3911,7 @@ dependencies = [
 name = "namada_storage"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "itertools 0.10.5",
  "linkme",
  "namada_core",
@@ -3931,7 +3931,7 @@ dependencies = [
 name = "namada_test_utils"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "namada_core",
  "strum 0.24.1",
 ]
@@ -3994,7 +3994,7 @@ version = "0.32.1"
 dependencies = [
  "ark-bls12-381",
  "bitflags 2.5.0",
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "data-encoding",
  "linkme",
  "masp_primitives",
@@ -4026,7 +4026,7 @@ dependencies = [
 name = "namada_tx_prelude"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "masp_primitives",
  "namada_account",
  "namada_core",
@@ -4048,7 +4048,7 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "masp_primitives",
  "namada_core",
 ]
@@ -4057,7 +4057,7 @@ dependencies = [
 name = "namada_vote_ext"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "linkme",
  "namada_core",
  "namada_macros",
@@ -4083,7 +4083,7 @@ dependencies = [
 name = "namada_vp_prelude"
 version = "0.32.1"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "namada_account",
  "namada_core",
  "namada_governance",
@@ -4098,23 +4098,6 @@ dependencies = [
  "namada_vp_env",
  "sha2 0.9.9",
  "thiserror",
-]
-
-[[package]]
-name = "namada_wasm"
-version = "0.32.1"
-dependencies = [
- "getrandom 0.2.11",
- "namada",
- "namada_test_utils",
- "namada_tests",
- "namada_tx_prelude",
- "namada_vp_prelude",
- "proptest",
- "test-log",
- "tracing",
- "tracing-subscriber",
- "wee_alloc",
 ]
 
 [[package]]
@@ -4297,7 +4280,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c11e44798ad209ccdd91fc192f0526a369a01234f7373e1b141c96d7cee4f0e"
 dependencies = [
- "proc-macro-crate 2.0.1",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.52",
@@ -4420,7 +4403,7 @@ version = "3.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be30eaf4b0a9fba5336683b38de57bb86d179a35862ba6bfcf57625d006bde5b"
 dependencies = [
- "proc-macro-crate 2.0.1",
+ "proc-macro-crate 2.0.0",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -4727,12 +4710,20 @@ dependencies = [
 
 [[package]]
 name = "proc-macro-crate"
-version = "2.0.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97dc5fea232fc28d2f597b37c4876b348a40e33f3b02cc975c8d006d78d94b1a"
+checksum = "7e8366a6159044a37876a2b9817124296703c586a5c92e2c53751fa06d8d43e8"
 dependencies = [
- "toml_datetime",
  "toml_edit 0.20.2",
+]
+
+[[package]]
+name = "proc-macro-crate"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d37c51ca738a55da99dc0c4a34860fd675453b8b36209178c2249bb13651284"
+dependencies = [
+ "toml_edit 0.21.1",
 ]
 
 [[package]]
@@ -5843,7 +5834,7 @@ name = "sparse-merkle-tree"
 version = "0.3.1-pre"
 source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=515687fe7884cb365067ac86c66ac3613de176bb#515687fe7884cb365067ac86c66ac3613de176bb"
 dependencies = [
- "borsh 1.2.1",
+ "borsh 1.4.0",
  "cfg-if 1.0.0",
  "ics23",
  "sha2 0.9.9",
@@ -6401,9 +6392,9 @@ dependencies = [
 
 [[package]]
 name = "toml_datetime"
-version = "0.6.3"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+checksum = "3550f4e9685620ac18a50ed434eb3aec30db8ba93b0287467bca5826ea25baf1"
 dependencies = [
  "serde",
 ]
@@ -6428,6 +6419,17 @@ dependencies = [
  "indexmap 2.1.0",
  "serde",
  "serde_spanned",
+ "toml_datetime",
+ "winnow",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8534fd7f78b5405e860340ad6575217ce99f38d4d5c8f2442cb5ecb50090e1"
+dependencies = [
+ "indexmap 2.1.0",
  "toml_datetime",
  "winnow",
 ]
@@ -6515,12 +6517,240 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
-name = "tx_template"
+name = "tx_become_validator"
 version = "0.32.1"
 dependencies = [
  "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_bond"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_bridge_pool"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_change_consensus_key"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_change_validator_commission"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_change_validator_metadata"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_claim_rewards"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_deactivate_validator"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_ibc"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_init_account"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_init_proposal"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_reactivate_validator"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_redelegate"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_resign_steward"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_reveal_pk"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_transfer"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_unbond"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_unjail_validator"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_update_account"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_update_steward_commission"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_vote_proposal"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_withdraw"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
  "wee_alloc",
 ]
 
@@ -6669,12 +6899,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "vp_template"
+name = "vp_implicit"
 version = "0.32.1"
 dependencies = [
  "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
  "namada_tests",
+ "namada_tx_prelude",
  "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+ "wee_alloc",
+]
+
+[[package]]
+name = "vp_user"
+version = "0.32.1"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada",
+ "namada_test_utils",
+ "namada_tests",
+ "namada_tx_prelude",
+ "namada_vp_prelude",
+ "proptest",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
  "wee_alloc",
 ]
 

@@ -45,7 +45,6 @@
 //!     - `all`: the hashes included up to the last block
 //!     - `last`: the hashes included in the last block
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -56,6 +55,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
+use namada::core::collections::HashSet;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
@@ -2105,9 +2105,7 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::core::address::{
-        gen_established_address, EstablishedAddressGen,
-    };
+    use namada::core::address::EstablishedAddressGen;
     use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
