@@ -60,7 +60,7 @@ use namada::ibc::core::host::types::path::{
 };
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::Timestamp as IbcTimestamp;
-use namada::ibc::storage::port_key;
+use namada::ibc::storage::{mint_limit_key, port_key, throughput_limit_key};
 use namada::ibc::MsgTransfer;
 use namada::io::StdIo;
 use namada::ledger::dry_run_tx;
@@ -543,6 +543,21 @@ impl BenchShell {
             channel_key(&NamadaPortId::transfer(), &NamadaChannelId::new(5));
         self.state
             .db_write(&channel_key, channel.encode_vec())
+            .unwrap();
+    }
+
+    pub fn enable_ibc_transfer(&mut self) {
+        let token = address::testing::nam();
+        let mint_limit_key = mint_limit_key(&token);
+        self.state
+            .db_write(&mint_limit_key, Amount::max_signed().serialize_to_vec())
+            .unwrap();
+        let throughput_limit_key = throughput_limit_key(&token);
+        self.state
+            .db_write(
+                &throughput_limit_key,
+                Amount::max_signed().serialize_to_vec(),
+            )
             .unwrap();
     }
 

@@ -15,8 +15,12 @@ use namada_core::ibc::core::host::types::path::{
 };
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
+use namada_core::token::Amount;
+use namada_state::{StorageRead, StorageResult};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::parameters::IbcParameters;
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
 const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
@@ -25,6 +29,12 @@ const COUNTER_SEG: &str = "counter";
 const TRACE: &str = "ibc_trace";
 const NFT_CLASS: &str = "nft_class";
 const NFT_METADATA: &str = "nft_meta";
+const PARAMS: &str = "params";
+const MINT_LIMIT: &str = "mint_limit";
+const MINT: &str = "mint";
+const THROUGHPUT_LIMIT: &str = "throughput_limit";
+const DEPOSIT: &str = "deposit";
+const WITHDRAW: &str = "withdraw";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -35,10 +45,6 @@ pub enum Error {
     InvalidKey(String),
     #[error("Port capability error: {0}")]
     InvalidPortCapability(String),
-    #[error("Denom error: {0}")]
-    Denom(String),
-    #[error("IBS signer error: {0}")]
-    IbcSigner(String),
 }
 
 /// IBC storage functions result
@@ -484,4 +490,97 @@ pub fn is_ibc_counter_key(key: &Key) -> bool {
                 || prefix == CONNECTIONS_COUNTER_PREFIX
                 || prefix == CHANNELS_COUNTER_PREFIX) && counter == COUNTER_SEG
             )
+}
+
+/// Returns a key of IBC parameters
+pub fn params_key() -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&PARAMS.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a key of the mint limit for the token
+pub fn mint_limit_key(token: &Address) -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&MINT_LIMIT.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the mint limit and the throughput limit for the token. If they don't
+/// exist in the storage, the default limits are loaded from IBC parameters
+pub fn get_limits<S: StorageRead>(
+    storage: &S,
+    token: &Address,
+) -> StorageResult<(Amount, Amount)> {
+    let mint_limit_key = mint_limit_key(token);
+    let mint_limit: Option<Amount> = storage.read(&mint_limit_key)?;
+    let throughput_limit_key = throughput_limit_key(token);
+    let throughput_limit: Option<Amount> =
+        storage.read(&throughput_limit_key)?;
+    Ok(match (mint_limit, throughput_limit) {
+        (Some(ml), Some(tl)) => (ml, tl),
+        _ => {
+            let params: IbcParameters = storage
+                .read(&params_key())?
+                .expect("Parameters should be stored");
+            (
+                mint_limit.unwrap_or(params.default_mint_limit),
+                throughput_limit
+                    .unwrap_or(params.default_per_epoch_throughput_limit),
+            )
+        }
+    })
+}
+
+/// Returns a key of the IBC mint amount for the token
+pub fn mint_amount_key(token: &Address) -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&MINT.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a key of the per-epoch throughput limit for the token
+pub fn throughput_limit_key(token: &Address) -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&THROUGHPUT_LIMIT.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a prefix of the per-epoch deposit
+pub fn deposit_prefix() -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&DEPOSIT.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a key of the per-epoch deposit for the token
+pub fn deposit_key(token: &Address) -> Key {
+    deposit_prefix()
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a prefix of the per-epoch withdraw
+pub fn withdraw_prefix() -> Key {
+    Key::from(Address::Internal(InternalAddress::Ibc).to_db_key())
+        .push(&WITHDRAW.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Returns a key of the per-epoch withdraw for the token
+pub fn withdraw_key(token: &Address) -> Key {
+    withdraw_prefix()
+        // Set as String to avoid checking the token address
+        .push(&token.to_string().to_db_key())
+        .expect("Cannot obtain a storage key")
 }

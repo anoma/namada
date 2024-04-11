@@ -23,9 +23,14 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
-use crate::ledger::ibc::storage::{calc_hash, is_ibc_key, is_ibc_trace_key};
+use crate::ledger::ibc::storage::{
+    calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
+    mint_amount_key, withdraw_key,
+};
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
+use crate::token::storage_key::is_any_token_balance_key;
+use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -43,6 +48,8 @@ pub enum Error {
     StateChange(String),
     #[error("IBC event error: {0}")]
     IbcEvent(String),
+    #[error("IBC rate limit: {0}")]
+    RateLimit(String),
 }
 
 /// IBC functions result
@@ -82,6 +89,9 @@ where
 
         // Validate the denom store if a denom key has been changed
         self.validate_trace(keys_changed)?;
+
+        // Check the limits
+        self.check_limits(keys_changed)?;
 
         Ok(true)
     }
@@ -212,6 +222,68 @@ where
         }
         Ok(())
     }
+
+    fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> VpResult<bool> {
+        let tokens: BTreeSet<&Address> = keys_changed
+            .iter()
+            .filter_map(|k| is_any_token_balance_key(k).map(|[key, _]| key))
+            .collect();
+        for token in tokens {
+            let (mint_limit, throughput_limit) =
+                get_limits(&self.ctx.pre(), token)
+                    .map_err(Error::NativeVpError)?;
+
+            // Check the supply
+            let mint_amount_key = mint_amount_key(token);
+            let minted: Amount = self
+                .ctx
+                .read_post(&mint_amount_key)
+                .map_err(Error::NativeVpError)?
+                .unwrap_or_default();
+            if mint_limit < minted {
+                return Err(Error::RateLimit(format!(
+                    "Transfer exceeding the mint limit is not allowed: Mint \
+                     limit {mint_limit}, minted amount {minted}"
+                )));
+            }
+
+            // Check the rate limit
+            let throughput = self.calc_throughput(token)?;
+            if throughput_limit < throughput {
+                return Err(Error::RateLimit(format!(
+                    "Transfer exceeding the per-epoch throughput limit is not \
+                     allowed: Per-epoch throughput limit {throughput_limit}, \
+                     actual throughput {throughput}"
+                )));
+            }
+        }
+        Ok(true)
+    }
+
+    fn calc_throughput(&self, token: &Address) -> VpResult<Amount> {
+        let deposit_key = deposit_key(token);
+        let deposit: Amount = self
+            .ctx
+            .read_post(&deposit_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        let withdraw_key = withdraw_key(token);
+        let withdraw: Amount = self
+            .ctx
+            .read_post(&withdraw_key)
+            .map_err(Error::NativeVpError)?
+            .unwrap_or_default();
+        let throughput = if deposit < withdraw {
+            withdraw
+                .checked_sub(deposit)
+                .expect("withdraw should be bigger than deposit")
+        } else {
+            deposit
+                .checked_sub(withdraw)
+                .expect("deposit should be bigger than withdraw")
+        };
+        Ok(throughput)
+    }
 }
 
 fn match_value(
@@ -267,7 +339,6 @@ pub fn get_dummy_genesis_validator()
     use crate::core::dec::Dec;
     use crate::core::key::testing::common_sk_from_simple_seed;
     use crate::key;
-    use crate::token::Amount;
 
     let address = established_address_1();
     let tokens = Amount::native_whole(1);
@@ -318,11 +389,13 @@ mod tests {
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+    use namada_core::address::InternalAddress;
     use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
+    use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Code, Data, Section, Signature};
     use prost::Message;
@@ -332,7 +405,6 @@ mod tests {
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
-    use crate::core::address::InternalAddress;
     use crate::core::ibc::{MsgNftTransfer, MsgTransfer};
     use crate::core::storage::Epoch;
     use crate::ibc::apps::nft_transfer::types::events::{
@@ -401,15 +473,17 @@ mod tests {
         ChannelId, ClientId, ConnectionId, PortId, Sequence,
     };
     use crate::ibc::core::router::types::event::ModuleEvent;
+    use crate::ibc::parameters::IbcParameters;
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
-        ack_key, channel_counter_key, channel_key, client_connections_key,
-        client_counter_key, client_state_key, client_update_height_key,
-        client_update_timestamp_key, commitment_key, connection_counter_key,
-        connection_key, consensus_state_key, ibc_trace_key,
-        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
-        nft_class_key, nft_metadata_key, receipt_key,
+        ack_key, calc_hash, channel_counter_key, channel_key,
+        client_connections_key, client_counter_key, client_state_key,
+        client_update_height_key, client_update_timestamp_key, commitment_key,
+        connection_counter_key, connection_key, consensus_state_key, ibc_token,
+        ibc_trace_key, mint_amount_key, next_sequence_ack_key,
+        next_sequence_recv_key, next_sequence_send_key, nft_class_key,
+        nft_metadata_key, receipt_key,
     };
     use crate::ibc::{NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
@@ -423,7 +497,6 @@ mod tests {
     use crate::tendermint::time::Time as TmTime;
     use crate::time::DurationSecs;
     use crate::token::storage_key::balance_key;
-    use crate::token::Amount;
     use crate::vm::wasm;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -442,6 +515,11 @@ mod tests {
         ibc::init_genesis_storage(&mut state);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut state).unwrap();
+        let ibc_params = IbcParameters {
+            default_mint_limit: Amount::native_whole(100),
+            default_per_epoch_throughput_limit: Amount::native_whole(100),
+        };
+        ibc_params.init_storage(&mut state).unwrap();
         pos::test_utils::test_init_genesis(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
@@ -2109,7 +2187,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: 100.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2139,6 +2217,19 @@ mod tests {
             .write(&commitment_key, bytes)
             .expect("write failed");
         keys_changed.insert(commitment_key);
+        // withdraw
+        let withdraw_key = withdraw_key(&nam());
+        let bytes = Amount::from_str(
+            msg.packet_data.token.amount.to_string(),
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap()
+        .serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&withdraw_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(withdraw_key);
         // event
         let transfer_event = TransferEvent {
             sender: msg.packet_data.sender.clone(),
@@ -2291,12 +2382,34 @@ mod tests {
             .write(&ack_key, bytes)
             .expect("write failed");
         keys_changed.insert(ack_key);
-        // denom
+
         let mut coin = transfer_msg.packet_data.token;
         coin.denom.add_trace_prefix(TracePrefix::new(
             packet.port_id_on_b.clone(),
             packet.chan_id_on_b.clone(),
         ));
+        // mint
+        let ibc_token = ibc_token(coin.denom.to_string());
+        let mint_key = mint_amount_key(&ibc_token);
+        let bytes = Amount::from_str(coin.amount.to_string(), 0)
+            .unwrap()
+            .serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&mint_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(mint_key);
+        // deposit
+        let deposit_key = deposit_key(&ibc_token);
+        let bytes = Amount::from_str(coin.amount.to_string(), 0)
+            .unwrap()
+            .serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&deposit_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(deposit_key);
+        // denom
         let trace_hash = calc_hash(coin.denom.to_string());
         let trace_key = ibc_trace_key(receiver.to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
@@ -2634,9 +2747,22 @@ mod tests {
             .delete(&commitment_key)
             .expect("delete failed");
         keys_changed.insert(commitment_key);
-        // event
+        // deposit
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
+        let deposit_key = deposit_key(&nam());
+        let bytes = Amount::from_str(
+            data.token.amount.to_string(),
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap()
+        .serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&deposit_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(deposit_key);
+        // event
         let timeout_event = TimeoutEvent {
             refund_receiver: data.sender,
             refund_denom: data.token.denom,
@@ -2787,9 +2913,22 @@ mod tests {
             .delete(&commitment_key)
             .expect("delete failed");
         keys_changed.insert(commitment_key);
-        // event
+        // deposit
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
+        let deposit_key = deposit_key(&nam());
+        let bytes = Amount::from_str(
+            data.token.amount.to_string(),
+            NATIVE_MAX_DECIMAL_PLACES,
+        )
+        .unwrap()
+        .serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&deposit_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(deposit_key);
+        // event
         let timeout_event = TimeoutEvent {
             refund_receiver: data.sender,
             refund_denom: data.token.denom,
@@ -2951,6 +3090,14 @@ mod tests {
             .write(&commitment_key, bytes)
             .expect("write failed");
         keys_changed.insert(commitment_key);
+        // withdraw
+        let withdraw_key = withdraw_key(&ibc_token);
+        let bytes = Amount::from_u64(1).serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&withdraw_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(withdraw_key);
         // event
         let transfer_event = NftTransferEvent {
             sender: msg.packet_data.sender.clone(),
@@ -3151,6 +3298,23 @@ mod tests {
             .write(&metadata_key, bytes)
             .expect("write failed");
         keys_changed.insert(metadata_key);
+        // mint
+        let ibc_token = ibc_token(&ibc_trace);
+        let mint_key = mint_amount_key(&ibc_token);
+        let bytes = Amount::from_u64(1).serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&mint_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(mint_key);
+        // deposit
+        let deposit_key = deposit_key(&ibc_token);
+        let bytes = Amount::from_u64(1).serialize_to_vec();
+        state
+            .write_log_mut()
+            .write(&deposit_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(deposit_key);
         // event
         let recv_event = NftRecvEvent {
             sender: sender.to_string().into(),
