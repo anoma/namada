@@ -20,10 +20,7 @@ pub use namada_core::storage::{
     EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_gas::{
-    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
-    STORAGE_WRITE_GAS_PER_BYTE,
-};
+use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
 use namada_merkle_tree::Error as MerkleTreeError;
 pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
@@ -577,11 +574,13 @@ where
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
     use namada_storage::tx_queue::ExpiredTxsQueue;
+    use storage::types::CommitOnlyData;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -634,6 +633,7 @@ pub mod testing {
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
+                commit_only_data: CommitOnlyData::default(),
             }
         }
     }
