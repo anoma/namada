@@ -1,5 +1,134 @@
 # CHANGELOG
 
+## v0.33.0
+
+Namada 0.33.0 is a minor release that contains various bug-fixes and improvements.
+
+### BUG FIXES
+
+- Fix the setting of the last update field in an Epoched data structure.
+  ([\#2667](https://github.com/anoma/namada/pull/2667))
+- Use `indexmap` maps and sets in favor of `std` collections, to avoid
+  iteration order related bugs in the state machine code of Namada.
+  ([\#2685](https://github.com/anoma/namada/pull/2685))
+- Fixed the `StorageRead` implementation and vp host functions to ignore
+  temporary writes. ([\#2735](https://github.com/anoma/namada/pull/2735))
+- Fix the balance query not to show ibc tokens as default
+  ([\#2809](https://github.com/anoma/namada/issues/2809))
+- Adjusts the tx allowlist check to not prevent fee payment.
+  ([\#2819](https://github.com/anoma/namada/pull/2819))
+- Reduce the gas cost of prefix iterator in IBC transactions
+  to match the cost of prefix iterator elsewhere.
+  ([\#2848](https://github.com/anoma/namada/pull/2848))
+- Fix client bug that now ensures that a validator with
+  delegations but no self-bonds can vote in governance.
+  ([\#2877](https://github.com/anoma/namada/pull/2877))
+- Only use addresses from first storage key segments to
+  determine which VPs should be triggered by storage changes.
+  ([\#2928](https://github.com/anoma/namada/pull/2928))
+- Replaced DB key-val diffs pruning of non-persisted keys that searched for the
+  last diffs and was degrading throughput with a separate DB column family that
+  is pruned on every block.
+  ([\#2964](https://github.com/anoma/namada/pull/2964))
+
+### FEATURES
+
+- Support NFT transfer over IBC
+  ([\#2316](https://github.com/anoma/namada/issues/2316))
+- IBC rate limit for deposits into and withdrawals out of Namada
+  ([\#2552](https://github.com/anoma/namada/issues/2552))
+- Add ibc-token command to get a list of IBC tokens
+  ([\#2729](https://github.com/anoma/namada/issues/2729))
+- Removes offline governance as a proposal option.
+  ([\#2803](https://github.com/anoma/namada/pull/2803))
+- Add a parameter to enable/disable native token transfers
+  ([\#2842](https://github.com/anoma/namada/issues/2842))
+- Added a utility to generate Borsh schemas for external collaborators.
+  ([\#2931](https://github.com/anoma/namada/pull/2931))
+- Prohibit jailed or inactive validators from voting in governance.
+  ([\#3004](https://github.com/anoma/namada/pull/3004))
+
+### IMPROVEMENTS
+
+- IBC shielded transfer with Hermes support
+  ([\#2449](https://github.com/anoma/namada/issues/2449))
+- Remove last staked ratio and pos inflation amount from
+  Parameters and initialize them in pos genesis initialization.
+  ([\#2559](https://github.com/anoma/namada/pull/2559))
+- Only process 1 slash per validator per block height.
+  ([\#2574](https://github.com/anoma/namada/pull/2574))
+- Refactor inflation with a standalone PD controller module. Then the
+  PoS and shielded inflation modules are wrappers around this controller.
+  ([\#2575](https://github.com/anoma/namada/pull/2575))
+- Instead of having every user tx be executed across two blocks, the first executing a wrapper and the 
+  second executing the main payload, this change makes it so that the entire tx is executed in a single
+  block (or rejected). ([\#2627](https://github.com/anoma/namada/pull/2627)) 
+- Only load governance proposals on a new epoch right before execution.
+  Decoupled the logic from the Shell and implemented in the gov crate.
+  ([\#2630](https://github.com/anoma/namada/pull/2630))
+- Adds a transaction's code and data section hashes as additional
+  sources of entropy, to compute an established account's address.
+  ([\#2781](https://github.com/anoma/namada/pull/2781))
+- Refactor the events code in Namada. Now, we emit events
+  with type safe wrappers around the events' attributes.
+  ([\#2787](https://github.com/anoma/namada/pull/2787))
+- Split up WASM transaction and validity-predicates into individual crates to
+  improve build time. ([\#2795](https://github.com/anoma/namada/pull/2795))
+- Avoid reconstructing wasm result buffer with unsafe code.
+  ([\#2813](https://github.com/anoma/namada/pull/2813))
+- Improved the gas metering system to track gas at runtime in wasm.
+  ([\#2838](https://github.com/anoma/namada/pull/2838))
+- Limit the character length of the validator metadata strings.
+  ([\#2845](https://github.com/anoma/namada/pull/2845))
+- Use clippy to disallow usage of fns to get current date/time unless explicitly
+  allowed. ([\#2849](https://github.com/anoma/namada/pull/2849))
+- Replace `eyre!()` errors with `namada_storage` errors.
+  ([\#2852](https://github.com/anoma/namada/pull/2852))
+- Commit gas costs of applied transactions to new commit-only merkle tree store.
+  ([\#2926](https://github.com/anoma/namada/pull/2926))
+- Remove unnecessary decimal digits in Ledger test vectors.
+  ([\#2932](https://github.com/anoma/namada/pull/2932))
+   This PR moves many e2e tests over to integration test. In the future, it may be possible to move more
+   tests over. Moving some of these tests over revealed issues and these have also been resolved, 
+   including \#2927. ([\#2933](https://github.com/anoma/namada/pull/2933))
+- Some transactions now use temporary storage (only kept for the duration of
+  the tx execution and VPs validation) to indicate what actions were applied to
+  validity predicates that use the information to decide who has to authorize
+  the transaction. ([\#2934](https://github.com/anoma/namada/pull/2934))
+- Change the return type of a VP's predicate function to a Result of unit or
+  some error. In case Namada users perform invalid state changes, they should
+  be met with more descriptive error messages explaining the cause of their tx's
+  rejection. ([\#2940](https://github.com/anoma/namada/pull/2940))
+- Return error messages from tx execution, instead of aborting execution with no
+  context. ([\#2958](https://github.com/anoma/namada/pull/2958))
+- Simplified gas metering for code compilation and validation.
+  ([\#2982](https://github.com/anoma/namada/pull/2982))
+- For inflation computations and the relevant RPC, don't
+  include the PGF balance in the total native supply
+  ([\#3002](https://github.com/anoma/namada/pull/3002))
+
+### MISCELLANEOUS
+
+- Disable Ethereum Bridge functionality at compile time.
+  ([\#2602](https://github.com/anoma/namada/pull/2602))
+
+### SDK
+
+- move query_ibc_tokens and lookup_ibc_token_alias to sdk
+  ([\#2729](https://github.com/anoma/namada/issues/2729))
+
+### SDK
+
+- Add a new method to the sdk to change a validator consensus key.
+  ([\#3037](https://github.com/anoma/namada/pull/3037))
+- Improve the function to update an enstablished address via the sdk.
+  ([\#3039](https://github.com/anoma/namada/pull/3039))
+
+### TESTING
+
+- Improved unit tests for fee payment.
+  ([\#2914](https://github.com/anoma/namada/pull/2914))
+
 ## v0.32.1
 
 Namada 0.32.1 is a patch release that permits state migration features in release builds.
