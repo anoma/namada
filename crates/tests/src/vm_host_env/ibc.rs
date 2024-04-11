@@ -149,7 +149,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         wasm::compilation_cache::common::testing::cache();
 
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new_from_sub_limit(1_000_000.into()),
+        &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
     ));
     let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(
@@ -189,7 +189,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         wasm::compilation_cache::common::testing::cache();
 
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new_from_sub_limit(1_000_000.into()),
+        &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
     ));
     let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(

@@ -73,7 +73,7 @@ impl Default for TestVpEnv {
             state,
             iterators: PrefixIterators::default(),
             gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
+                &TxGasMeter::new_from_sub_limit(1_000_000_000_000.into()),
             )),
             sentinel: RefCell::new(VpSentinel::default()),
             tx,

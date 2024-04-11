@@ -453,7 +453,7 @@ pub mod tests {
 
 #[allow(missing_docs)]
 /// Test helpers
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
     use proptest::prop_compose;
 
