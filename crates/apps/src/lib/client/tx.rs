@@ -227,7 +227,11 @@ pub async fn submit_reveal_aux(
             sign(context, &mut tx, &args, signing_data).await?;
 
             context.submit(tx, &args).await?;
-        }
+        } else {
+	    println!(
+		"Public key for address {address} already revealed."
+	    );
+	}
     }
 
     Ok(())
