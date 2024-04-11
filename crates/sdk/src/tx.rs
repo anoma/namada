@@ -68,8 +68,8 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_wasm_code_hash, validate_amount, InnerTxResult,
-    TxBroadcastData, TxResponse,
+    self, get_validator_stake, query_wasm_code_hash, validate_amount,
+    InnerTxResult, TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, validate_fee_and_gen_unshield, SigningTxData};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -1969,21 +1969,47 @@ pub async fn build_vote_proposal(
         }
     }
 
-    let delegations = rpc::get_delegators_delegation_at(
-        context.client(),
-        voter_address,
-        proposal.voting_start_epoch,
-    )
-    .await?
-    .keys()
-    .cloned()
-    .collect::<Vec<Address>>();
+    let delegations = if is_validator {
+        let stake =
+            get_validator_stake(context.client(), epoch, voter_address).await?;
 
-    if delegations.is_empty() {
-        return Err(Error::Other(
-            "Voter address must have delegations".to_string(),
-        ));
-    }
+        if stake.is_zero() {
+            eprintln!(
+                "Voter address {} is a validator but has no stake, so it has \
+                 no votes.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::Other(
+                    "Voter address must have delegations".to_string(),
+                ));
+            }
+        }
+        vec![voter_address.clone()]
+    } else {
+        let validators = rpc::get_delegators_delegation_at(
+            context.client(),
+            voter_address,
+            proposal.voting_start_epoch,
+        )
+        .await?
+        .keys()
+        .cloned()
+        .collect::<Vec<Address>>();
+
+        if validators.is_empty() {
+            eprintln!(
+                "Voter address {} does not have any delegations.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::Other(
+                    "Voter address must have delegations".to_string(),
+                ));
+            }
+        }
+        validators
+    };
 
     let data = VoteProposalData {
         id: *proposal_id,
