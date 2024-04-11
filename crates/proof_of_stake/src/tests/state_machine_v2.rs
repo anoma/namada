@@ -2691,6 +2691,7 @@ impl StateMachineTest for ConcretePosState {
                     &params,
                     current_epoch,
                     infraction_epoch,
+                    height,
                     slash_type,
                     &address,
                 );
@@ -3058,6 +3059,7 @@ impl ConcretePosState {
         params: &PosParams,
         current_epoch: Epoch,
         infraction_epoch: Epoch,
+        infraction_height: u64,
         slash_type: SlashType,
         validator: &Address,
     ) {
@@ -3102,7 +3104,7 @@ impl ConcretePosState {
         let slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(validator)
-            .back(&self.s)
+            .get(&self.s, &infraction_height)
             .unwrap();
         if let Some(slash) = slash {
             assert_eq!(slash.epoch, infraction_epoch);
@@ -4589,12 +4591,16 @@ fn arb_slash(state: &AbstractPosState) -> impl Strategy<Value = Transition> {
         .checked_sub(state.params.unbonding_len)
         .unwrap_or_default()..=current_epoch)
         .prop_map(Epoch::from);
-    (arb_validator, arb_type, arb_epoch).prop_map(
-        |(validator, slash_type, infraction_epoch)| Transition::Misbehavior {
-            address: validator,
-            slash_type,
-            infraction_epoch,
-            height: 0,
+    let arb_height = 0_u64..10_000_u64;
+
+    (arb_validator, arb_type, arb_epoch, arb_height).prop_map(
+        |(validator, slash_type, infraction_epoch, height)| {
+            Transition::Misbehavior {
+                address: validator,
+                slash_type,
+                infraction_epoch,
+                height,
+            }
         },
     )
 }
