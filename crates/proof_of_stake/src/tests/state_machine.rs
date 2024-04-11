@@ -140,7 +140,7 @@ struct AbstractPosState {
     /// Validator slashes post-processing
     validator_slashes: BTreeMap<Address, Vec<Slash>>,
     /// Enqueued slashes pre-processing
-    enqueued_slashes: BTreeMap<Epoch, BTreeMap<Address, Vec<Slash>>>,
+    enqueued_slashes: BTreeMap<Epoch, BTreeMap<Address, BTreeMap<u64, Slash>>>,
     /// The last epoch in which a validator committed an infraction
     validator_last_slash_epochs: BTreeMap<Address, Epoch>,
     /// Validator's total unbonded required for slashing.
@@ -1412,8 +1412,10 @@ impl ConcretePosState {
     ) {
         // Check the enqueued slashes
         let abs_enqueued = ref_state.enqueued_slashes.clone();
-        let mut conc_enqueued: BTreeMap<Epoch, BTreeMap<Address, Vec<Slash>>> =
-            BTreeMap::new();
+        let mut conc_enqueued: BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<u64, Slash>>,
+        > = BTreeMap::new();
         enqueued_slashes_handle()
             .get_data_handler()
             .iter(&self.s)
@@ -1425,7 +1427,7 @@ impl ConcretePosState {
                         nested_sub_key:
                             NestedSubKey::Data {
                                 key: address,
-                                nested_sub_key: _,
+                                nested_sub_key: SubKey::Data(height),
                             },
                     },
                     slash,
@@ -1435,7 +1437,7 @@ impl ConcretePosState {
                     .or_default()
                     .entry(address)
                     .or_default();
-                slashes.push(slash);
+                slashes.insert(height, slash);
             });
         assert_eq!(abs_enqueued, conc_enqueued);
     }
@@ -2502,7 +2504,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     .or_default()
                     .entry(address.clone())
                     .or_default()
-                    .push(slash);
+                    .insert(*height, slash);
 
                 // Remove the validator from either the consensus or
                 // below-capacity set and place it into the jailed validator set
@@ -3843,7 +3845,7 @@ impl AbstractPosState {
             |mut acc, (validator, slashes)| {
                 let mut tot_rate =
                     acc.get(validator).cloned().unwrap_or_default();
-                for slash in slashes {
+                for slash in slashes.values() {
                     debug_assert_eq!(slash.epoch, infraction_epoch);
                     let rate = cmp::max(
                         slash.r#type.get_slash_rate(&self.params),
@@ -3917,7 +3919,7 @@ impl AbstractPosState {
             let cur_slashes =
                 self.validator_slashes.entry(validator.clone()).or_default();
 
-            for slash in slashes {
+            for (_, slash) in slashes {
                 let rate = cmp::max(
                     slash.r#type.get_slash_rate(&self.params),
                     cubic_rate,
