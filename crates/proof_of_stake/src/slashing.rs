@@ -16,6 +16,7 @@ use namada_storage::collections::lazy_map::{
 };
 use namada_storage::collections::LazyMap;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::transfer;
 
 use crate::storage::{
     enqueued_slashes_handle, read_pos_params, read_validator_last_slash_epoch,
@@ -347,6 +348,16 @@ where
                 epoch,
                 Some(0),
                 !is_jailed_or_inactive,
+            )?;
+
+            // Transfer to slash pool
+            let native_token = storage.get_native_token()?;
+            transfer(
+                storage,
+                &native_token,
+                &crate::ADDRESS,
+                &crate::SLASH_POOL_ADDRESS,
+                slash_delta,
             )?;
         }
 
