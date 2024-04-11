@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use namada_core::address::Address;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
@@ -17,7 +18,7 @@ use crate::vm::WasmCacheAccess;
 
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
-#[error(transparent)]
+#[error("Ethereum Bridge VP error: {0}")]
 pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for the Ethereum bridge
@@ -38,47 +39,37 @@ where
     /// If the Ethereum bridge's escrow key was written to, we check
     /// that the NAM balance increased and that the Bridge pool VP has
     /// been triggered.
-    fn check_escrow(
-        &self,
-        verifiers: &BTreeSet<Address>,
-    ) -> Result<bool, Error> {
+    fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<(), Error> {
         let escrow_key = balance_key(
             &self.ctx.state.in_mem().native_token,
             &crate::ethereum_bridge::ADDRESS,
         );
 
         let escrow_pre: Amount =
-            if let Ok(Some(value)) = (&self.ctx).read_pre_value(&escrow_key) {
-                value
-            } else {
-                tracing::debug!(
-                    "Could not retrieve the Ethereum bridge VP's balance from \
-                     storage"
-                );
-                return Ok(false);
-            };
+            (&self.ctx).read_pre_value(&escrow_key)?.unwrap_or_default();
         let escrow_post: Amount =
-            if let Ok(Some(value)) = (&self.ctx).read_post_value(&escrow_key) {
-                value
-            } else {
-                tracing::debug!(
-                    "Could not retrieve the modified Ethereum bridge VP's \
-                     balance after applying tx"
-                );
-                return Ok(false);
-            };
+            (&self.ctx).must_read_post_value(&escrow_key)?;
 
         // The amount escrowed should increase.
         if escrow_pre < escrow_post {
             // NB: normally, we only escrow NAM under the Ethereum bridge
             // address in the context of a Bridge pool transfer
-            Ok(verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS))
+            let bridge_pool_is_verifier =
+                verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS);
+
+            bridge_pool_is_verifier.ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "Bridge pool VP was not marked as a verifier of the \
+                     transaction",
+                )
+                .into()
+            })
         } else {
-            tracing::info!(
-                "A normal tx cannot decrease the amount of Nam escrowed in \
-                 the Ethereum bridge"
-            );
-            Ok(false)
+            Err(native_vp::Error::new_const(
+                "User tx attempted to decrease the amount of native tokens \
+                 escrowed in the Ethereum Bridge's account",
+            )
+            .into())
         }
     }
 }
@@ -105,19 +96,17 @@ where
         _: &Tx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<bool, Self::Error> {
+    ) -> Result<(), Self::Error> {
         tracing::debug!(
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
             "Ethereum Bridge VP triggered",
         );
 
-        if !validate_changed_keys(
+        validate_changed_keys(
             &self.ctx.state.in_mem().native_token,
             keys_changed,
-        )? {
-            return Ok(false);
-        }
+        )?;
 
         self.check_escrow(verifiers)
     }
@@ -135,7 +124,7 @@ where
 fn validate_changed_keys(
     nam_addr: &Address,
     keys_changed: &BTreeSet<Key>,
-) -> Result<bool, Error> {
+) -> Result<(), Error> {
     // acquire all keys that either changed our account, or that touched
     // nam balances
     let keys_changed: HashSet<_> = keys_changed
@@ -157,10 +146,27 @@ fn validate_changed_keys(
         relevant_keys.len = keys_changed.len(),
         "Found keys changed under our account"
     );
-    Ok(keys_changed.contains(&escrow_key(nam_addr))
-        && keys_changed
-            .iter()
-            .all(|key| is_balance_key(nam_addr, key).is_some()))
+    let nam_escrow_addr_modified = keys_changed.contains(&escrow_key(nam_addr));
+    if !nam_escrow_addr_modified {
+        let error = native_vp::Error::new_const(
+            "The native token's escrow balance should have been modified",
+        )
+        .into();
+        tracing::debug!("{error}");
+        return Err(error);
+    }
+    let all_keys_are_nam_balance = keys_changed
+        .iter()
+        .all(|key| is_balance_key(nam_addr, key).is_some());
+    if !all_keys_are_nam_balance {
+        let error = native_vp::Error::new_const(
+            "Some modified keys were not a native token's balance key",
+        )
+        .into();
+        tracing::debug!("{error}");
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -169,7 +175,6 @@ mod tests {
     use std::env::temp_dir;
 
     use namada_core::borsh::BorshSerializeExt;
-    use namada_core::validity_predicate::VpSentinel;
     use namada_gas::TxGasMeter;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
@@ -245,7 +250,6 @@ mod tests {
         tx: &'a Tx,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
-        sentinel: &'a RefCell<VpSentinel>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
     ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
@@ -255,7 +259,6 @@ mod tests {
             tx,
             &TxIndex(0),
             gas_meter,
-            sentinel,
             keys_changed,
             verifiers,
             VpCache::new(temp_dir(), 100usize),
@@ -271,7 +274,7 @@ mod tests {
 
         let result = validate_changed_keys(&nam(), &keys_changed);
 
-        assert_matches!(result, Ok(true));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -290,7 +293,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
         {
             let keys_changed = BTreeSet::from_iter(vec![
@@ -301,7 +304,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
     }
 
@@ -313,7 +316,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
 
         {
@@ -326,7 +329,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
 
         {
@@ -343,7 +346,7 @@ mod tests {
 
             let result = validate_changed_keys(&nam(), &keys_changed);
 
-            assert_matches!(result, Ok(false));
+            assert!(result.is_err());
         }
     }
 
@@ -386,20 +389,12 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(res.expect("Test failed"));
+        assert!(res.is_ok());
     }
 
     /// Test that escrowing must increase the balance
@@ -439,20 +434,12 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(!res.expect("Test failed"));
+        assert!(res.is_err());
     }
 
     /// Test that the VP checks that the bridge pool vp will
@@ -495,19 +482,11 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let vp = EthBridge {
-            ctx: setup_ctx(
-                &tx,
-                &state,
-                &gas_meter,
-                &sentinel,
-                &keys_changed,
-                &verifiers,
-            ),
+            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
         };
 
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
-        assert!(!res.expect("Test failed"));
+        assert!(res.is_err());
     }
 }

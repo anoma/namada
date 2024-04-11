@@ -84,7 +84,6 @@ use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::Tx;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
-use namada_core::validity_predicate::VpSentinel;
 use namada_sdk::state::StateRead;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerializeExt;
@@ -103,7 +102,7 @@ impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
         tx_data: &Tx,
-    ) -> std::result::Result<bool, namada::ledger::native_vp::ibc::Error> {
+    ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
         self.ibc.validate_tx(
             tx_data,
             self.ibc.ctx.keys_changed,
@@ -120,7 +119,7 @@ impl<'a> TestMultitokenVp<'a> {
     pub fn validate(
         &self,
         tx: &Tx,
-    ) -> std::result::Result<bool, MultitokenVpError> {
+    ) -> std::result::Result<(), MultitokenVpError> {
         self.multitoken_vp.validate_tx(
             tx,
             self.multitoken_vp.ctx.keys_changed,
@@ -133,7 +132,7 @@ impl<'a> TestMultitokenVp<'a> {
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
-) -> std::result::Result<bool, namada::ledger::native_vp::ibc::Error> {
+) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()
@@ -151,14 +150,12 @@ pub fn validate_ibc_vp_from_tx<'a>(
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(
         &ADDRESS,
         &tx_env.state,
         tx,
         &TxIndex(0),
         &gas_meter,
-        &sentinel,
         &keys_changed,
         &verifiers,
         vp_wasm_cache,
@@ -173,7 +170,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     tx: &'a Tx,
     target: &Key,
-) -> std::result::Result<bool, MultitokenVpError> {
+) -> std::result::Result<(), MultitokenVpError> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()
@@ -191,14 +188,12 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(10_000_000_000.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let ctx = Ctx::new(
         &ADDRESS,
         &tx_env.state,
         tx,
         &TxIndex(0),
         &gas_meter,
-        &sentinel,
         &keys_changed,
         &verifiers,
         vp_wasm_cache,

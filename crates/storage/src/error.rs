@@ -58,6 +58,12 @@ impl Error {
         Self::SimpleMessage(msg)
     }
 
+    /// Create an [`enum@Error`] from a heap allocated message.
+    #[inline]
+    pub const fn new_alloc(msg: String) -> Self {
+        Self::AllocMessage(msg)
+    }
+
     /// Wrap another [`std::error::Error`] with a static message.
     pub fn wrap<E>(msg: &'static str, error: E) -> Self
     where
