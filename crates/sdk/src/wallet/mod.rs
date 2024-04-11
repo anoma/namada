@@ -917,7 +917,7 @@ impl<U: WalletIo> Wallet<U> {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
                 let password =
-                    password.unwrap_or_else(|| U::read_password(false, alias));
+                    password.unwrap_or_else(|| U::read_password(false, alias.to_string()));
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;

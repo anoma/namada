@@ -290,13 +290,8 @@ where
                 signing_data.fee_payer.clone(),
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
                 user_data,
-            )
-            .await?.map_err(|_| {
-                Err(Error::Other(format!(
-                    "unable to sign transaction with {}",
-                    pubkey
-                )))
-            });
+            ).await?
+            Err(Error::Other("unable to sign transaction"))
         }
     }
     Ok(())
