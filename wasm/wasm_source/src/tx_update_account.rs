@@ -17,6 +17,9 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     let owner = &tx_data.addr;
     debug_log!("update VP for: {:#?}", tx_data.addr);
 
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(owner)?;
+
     if let Some(hash) = tx_data.vp_code_hash {
         let vp_code_sec = signed
             .get_section(&hash)
