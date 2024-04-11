@@ -62,6 +62,7 @@ where
             // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
+            "namada_tx_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read_temp),
             "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
             "namada_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
             "namada_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),

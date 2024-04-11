@@ -462,6 +462,7 @@ mod native_tx_host_env {
     // Implement all the exported functions from
     // [`namada_vm_env::imports::tx`] `extern "C"` section.
     native_host_fn!(tx_read(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(tx_read_temp(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_result_buffer(result_ptr: u64));
     native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_write(

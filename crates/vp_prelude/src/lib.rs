@@ -44,6 +44,7 @@ pub use sha2::{Digest, Sha256, Sha384, Sha512};
 pub use {
     namada_account as account, namada_parameters as parameters,
     namada_proof_of_stake as proof_of_stake, namada_token as token,
+    namada_tx as tx,
 };
 
 pub fn sha256(bytes: &[u8]) -> Hash {
@@ -396,6 +397,17 @@ impl<'view> VpEnv<'view> for Ctx {
     fn charge_gas(&self, used_gas: u64) -> Result<(), StorageError> {
         unsafe { namada_vp_charge_gas(used_gas) };
         Ok(())
+    }
+}
+
+impl namada_tx::action::Read for Ctx {
+    type Err = StorageError;
+
+    fn read_temp<T: BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        VpEnv::read_temp(self, key)
     }
 }
 

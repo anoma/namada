@@ -6,6 +6,7 @@ pub mod parameters;
 pub mod storage;
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -87,6 +88,7 @@ where
 {
     ctx: IbcContext<C>,
     router: IbcRouter<'a>,
+    verifiers: Rc<RefCell<BTreeSet<Address>>>,
 }
 
 impl<'a, C> IbcActions<'a, C>
@@ -94,10 +96,14 @@ where
     C: IbcCommonContext + Debug,
 {
     /// Make new IBC actions
-    pub fn new(ctx: Rc<RefCell<C>>) -> Self {
+    pub fn new(
+        ctx: Rc<RefCell<C>>,
+        verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    ) -> Self {
         Self {
             ctx: IbcContext::new(ctx),
             router: IbcRouter::new(),
+            verifiers,
         }
     }
 
@@ -119,8 +125,10 @@ where
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
-                let mut token_transfer_ctx =
-                    TokenTransferContext::new(self.ctx.inner.clone());
+                let mut token_transfer_ctx = TokenTransferContext::new(
+                    self.ctx.inner.clone(),
+                    self.verifiers.clone(),
+                );
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
@@ -322,11 +330,17 @@ where
 
     /// Validate according to the message in IBC VP
     pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
         let message = decode_message(tx_data)?;
         match message {
             IbcMessage::Transfer(msg) => {
-                let token_transfer_ctx =
-                    TokenTransferContext::new(self.ctx.inner.clone());
+                let token_transfer_ctx = TokenTransferContext::new(
+                    self.ctx.inner.clone(),
+                    verifiers.clone(),
+                );
                 send_transfer_validate(
                     &self.ctx,
                     &token_transfer_ctx,

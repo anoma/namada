@@ -1,5 +1,6 @@
 //! A tx to create a governance proposal.
 
+use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -13,6 +14,10 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
 
     // The tx must be authorized by the author address
     ctx.insert_verifier(&tx_data.author)?;
+
+    ctx.push_action(Action::Gov(GovAction::InitProposal {
+        author: tx_data.author.clone(),
+    }))?;
 
     // Get the content from the referred to section
     let content = tx

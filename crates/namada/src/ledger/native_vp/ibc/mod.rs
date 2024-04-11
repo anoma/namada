@@ -110,9 +110,12 @@ where
     ) -> VpResult<()> {
         let exec_ctx = PseudoExecutionContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let mut actions = IbcActions::new(ctx.clone());
-        let module = TransferModule::new(ctx.clone());
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
         let module = NftTransferModule::new(ctx.clone());
         actions.add_transfer_module(module);
@@ -156,11 +159,14 @@ where
     fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let mut actions = IbcActions::new(ctx.clone());
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(self.validation_params()?);
 
-        let module = TransferModule::new(ctx.clone());
+        let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
         let module = NftTransferModule::new(ctx);
         actions.add_transfer_module(module);
