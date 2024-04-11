@@ -355,11 +355,16 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxBecomeValidator builder from the given minimum set of arguments
+    #[allow(clippy::too_many_arguments)]
     fn new_become_validator(
         &self,
         address: Address,
         commission_rate: Dec,
         max_commission_rate_change: Dec,
+        consesus_key: common::PublicKey,
+        eth_cold_key: common::PublicKey,
+        eth_hot_key: common::PublicKey,
+        protocol_key: common::PublicKey,
         email: String,
     ) -> args::TxBecomeValidator {
         args::TxBecomeValidator {
@@ -367,10 +372,10 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             commission_rate,
             max_commission_rate_change,
             scheme: SchemeType::Ed25519,
-            consensus_key: None,
-            eth_cold_key: None,
-            eth_hot_key: None,
-            protocol_key: None,
+            consensus_key: Some(consesus_key),
+            eth_cold_key: Some(eth_cold_key),
+            eth_hot_key: Some(eth_hot_key),
+            protocol_key: Some(protocol_key),
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_BECOME_VALIDATOR_WASM),
             tx: self.tx_builder(),
