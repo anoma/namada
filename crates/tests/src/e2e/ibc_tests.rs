@@ -2244,7 +2244,6 @@ fn check_shielded_balances(
 
     // Check the balance on Chain B
     // PA(B) on Chain B has received BTC on chain A
-    let token_addr = find_address(test_a, BTC)?.to_string();
     shielded_sync(test_b, AB_VIEWING_KEY)?;
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
@@ -2253,7 +2252,7 @@ fn check_shielded_balances(
         "--owner",
         AB_VIEWING_KEY,
         "--token",
-        &token_addr,
+        &ibc_denom,
         "--no-conversions",
         "--node",
         &rpc_b,
