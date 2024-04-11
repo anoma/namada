@@ -186,6 +186,15 @@ pub enum TxSubmitError {
     /// No bonds found
     #[error("No bonds found")]
     NoBondFound,
+    /// No delegations found at epoch
+    #[error("The account {0} has no active delegations found at epoch {1}")]
+    NoDelegationsFound(Address, Epoch),
+    /// Cannot vote in governance
+    #[error(
+        "Validator {0} cannot vote in governance because the validator is \
+         either jailed or inactive at the current epoch {1}"
+    )]
+    CannotVoteInGovernance(Address, Epoch),
     /// Lower bond amount than the unbond
     #[error(
         "The total bonds of the source {0} is lower than the amount to be \
