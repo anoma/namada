@@ -270,7 +270,6 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
-                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -353,8 +352,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
-            let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -407,7 +404,6 @@ pub mod cmds {
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
-                .or(gen_ibc_shielded)
                 .or(utils)
         }
     }
@@ -496,7 +492,6 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
-        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -2168,29 +2163,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransfer(
-        pub args::GenIbcShieldedTransfer<args::CliTypes>,
-    );
-
-    impl SubCmd for GenIbcShieldedTransfer {
-        const CMD: &'static str = "ibc-gen-shielded";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
-                    matches,
-                ))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct EpochSleep(pub args::Query<args::CliTypes>);
 
     impl SubCmd for EpochSleep {
@@ -3242,6 +3214,9 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const REFUND: ArgFlag = flag("refund");
+    pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
+        arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -4222,6 +4197,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4239,6 +4215,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let refund_target = REFUND_TARGET.parse(matches);
             let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
@@ -4254,6 +4231,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                refund_target,
                 memo,
                 tx_code_path,
             }
@@ -4278,6 +4256,10 @@ pub mod args {
                         .help("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
+                .arg(REFUND_TARGET.def().help(
+                    "The refund target address when IBC shielded transfer \
+                     failure.",
+                ))
                 .arg(
                     IBC_TRANSFER_MEMO_PATH
                         .def()
@@ -5955,6 +5937,7 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
+                refund: self.refund,
             }
         }
     }
@@ -5968,6 +5951,7 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -5976,6 +5960,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
+                refund,
             }
         }
 
@@ -5996,6 +5981,11 @@ pub mod args {
                     CHANNEL_ID.def().help(
                         "The channel ID via which the token is received.",
                     ),
+                )
+                .arg(
+                    REFUND
+                        .def()
+                        .help("Generate the shielded transfer for refunding."),
                 )
         }
     }

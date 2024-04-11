@@ -2045,7 +2045,7 @@ where
 // workaround wasm issue.
 pub fn tx_ibc_execute<MEM, D, H, CA>(
     env: &TxVmEnv<MEM, D, H, CA>,
-) -> TxResult<()>
+) -> TxResult<i64>
 where
     MEM: VmMemory,
     D: 'static + DB + for<'iter> DBIter<'iter>,
@@ -2059,7 +2059,8 @@ where
         TransferModule,
     };
 
-    let tx_data = unsafe { env.ctx.tx.get().data() }.ok_or_else(|| {
+    let tx = unsafe { env.ctx.tx.get() };
+    let tx_data = tx.data().ok_or_else(|| {
         let sentinel = unsafe { env.ctx.sentinel.get() };
         sentinel.borrow_mut().set_invalid_commitment();
         TxRuntimeError::MissingTxData
@@ -2070,9 +2071,16 @@ where
     actions.add_transfer_module(module);
     let module = NftTransferModule::new(state);
     actions.add_transfer_module(module);
-    actions.execute(&tx_data)?;
+    let transfer = actions.execute(&tx_data)?;
 
-    Ok(())
+    let value = transfer.serialize_to_vec();
+    let len: i64 = value
+        .len()
+        .try_into()
+        .map_err(TxRuntimeError::NumConversionError)?;
+    let result_buffer = unsafe { env.ctx.result_buffer.get() };
+    result_buffer.replace(value);
+    Ok(len)
 }
 
 /// Validate a VP WASM code hash in a tx environment.

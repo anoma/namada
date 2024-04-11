@@ -656,7 +656,7 @@ pub fn msg_transfer(
     };
     MsgTransfer {
         message,
-        shielded_transfer: None,
+        transfer: None,
     }
 }
 
