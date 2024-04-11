@@ -291,8 +291,8 @@ where
                 HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
                 user_data,
             )
-            .awaitmap_err(|_| {
-                Err(namada_sdk::error::Error::Other(format!("unable to sign transaction with {pubkey}",)))
+            .await.map_err(|_| {
+                Err(format!("unable to sign transaction"))
             })?;
         }
     }
