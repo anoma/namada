@@ -366,6 +366,12 @@ fn ibc_namada_gaia() -> Result<()> {
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
