@@ -17,16 +17,48 @@ use crate::collections::HashMap;
 use crate::ethereum_structs::EthBridgeEvent;
 use crate::ibc::IbcEvent;
 
-// TODO: remove this
-macro_rules! event_type {
-    ($domain:expr, $($subdomain:expr),*) => {
-        EventType {
-            domain: EventSegment::new($domain),
-            sub_domain: Cow::Owned(vec![$(EventSegment::new($subdomain)),*]),
-        }
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __event_type_impl {
+    ($domain:ty) => {
+        <$domain as $crate::event::EventToEmit>::DOMAIN
     };
+    ($domain:ty, $($subdomain:expr),*) => {
+        ::konst::string::str_join!(
+            "/",
+            &[
+                $crate::__event_type_impl!($domain),
+                $($subdomain),*
+            ],
+        )
+    };
+    // TODO: remove these variants of the macro
     ($domain:expr) => {
-        event_type!($domain,)
+        $domain
+    };
+    ($domain:expr, $($subdomain:expr),*) => {
+        ::konst::string::str_join!(
+            "/",
+            &[
+                $crate::__event_type_impl!($domain),
+                $($subdomain),*
+            ],
+        )
+    };
+}
+
+/// Instantiate a new [`EventType`] in const contexts. Mostly
+/// useful to define new event types in the protocol.
+///
+/// # Example
+///
+/// ```ignore
+/// const RELAYED: EventType = event_type!(EthBridgeEvent, "bridge-pool", "relayed");
+/// ```
+#[macro_export]
+macro_rules! event_type {
+    ($($tt:tt)*) => {
+        $crate::event::EventType::new($crate::__event_type_impl!($($tt)*))
     };
 }
 
@@ -35,32 +67,19 @@ pub trait EventToEmit: Into<Event> {
     /// The domain of the event to emit.
     ///
     /// This may be used to group events of a certain kind.
-    const DOMAIN: EventSegment;
-}
-
-/// Create a new constant event type.
-pub const fn new_event_type_of<E>(
-    sub_domain: Cow<'static, [EventSegment]>,
-) -> EventType
-where
-    E: EventToEmit,
-{
-    EventType {
-        domain: E::DOMAIN,
-        sub_domain,
-    }
+    const DOMAIN: &'static str;
 }
 
 impl EventToEmit for Event {
-    const DOMAIN: EventSegment = EventSegment::new_static("unknown");
+    const DOMAIN: &'static str = "unknown";
 }
 
 impl EventToEmit for IbcEvent {
-    const DOMAIN: EventSegment = EventSegment::new_static("ibc");
+    const DOMAIN: &'static str = "ibc";
 }
 
 impl EventToEmit for EthBridgeEvent {
-    const DOMAIN: EventSegment = EventSegment::new_static("eth-bridge");
+    const DOMAIN: &'static str = "eth-bridge";
 }
 
 /// Used in sub-systems that may emit events.
@@ -128,60 +147,6 @@ impl Display for EventLevel {
     }
 }
 
-/// Logical segmentation of an ABCI event kind.
-#[derive(
-    Clone,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-)]
-#[repr(transparent)]
-pub struct EventSegment {
-    inner: Cow<'static, str>,
-}
-
-impl EventSegment {
-    /// Instantiate a new [`EventSegment`].
-    #[inline]
-    pub fn new<S>(segment: S) -> Self
-    where
-        S: Into<Cow<'static, str>>,
-    {
-        Self {
-            inner: segment.into(),
-        }
-    }
-
-    /// Instantiate a new [`EventSegment`] from a static string.
-    pub const fn new_static(domain: &'static str) -> Self {
-        Self {
-            inner: Cow::Borrowed(domain),
-        }
-    }
-}
-
-impl Deref for EventSegment {
-    type Target = str;
-
-    #[inline(always)]
-    fn deref(&self) -> &str {
-        &self.inner
-    }
-}
-
-impl Display for EventSegment {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.inner.fmt(f)
-    }
-}
-
 /// ABCI event type.
 ///
 /// It is comprised of an event domain and sub-domain, plus any other
@@ -199,43 +164,48 @@ impl Display for EventSegment {
     BorshDeserializer,
 )]
 pub struct EventType {
-    /// The domain of an [`Event`]. Usually, this is equivalent to the
-    /// protocol subsystem the event originated from (e.g. IBC, Ethereum
-    /// Bridge).
-    pub domain: EventSegment,
-    /// Further describes the event with a sub-domain.
-    pub sub_domain: Cow<'static, [EventSegment]>,
+    inner: Cow<'static, str>,
+}
+
+impl Deref for EventType {
+    type Target = str;
+
+    #[inline(always)]
+    fn deref(&self) -> &str {
+        &self.inner
+    }
 }
 
 impl EventType {
+    /// Create a new event type.
+    pub const fn new(event_type: &'static str) -> Self {
+        Self {
+            inner: Cow::Borrowed(event_type),
+        }
+    }
+
+    /// Retrieve the domain of some event.
+    #[inline]
+    pub fn domain(&self) -> &str {
+        self.inner
+            .split_once('/')
+            .map(|(domain, _sub_domain)| domain)
+            .unwrap_or("unknown")
+    }
+
     /// Retrieve the sub-domain of some event.
-    pub fn sub_domain(&self) -> String {
-        let mut output = String::new();
-        let mut segments = self.sub_domain.iter();
-
-        if let Some(segment) = segments.next() {
-            output.push_str(segment);
-        } else {
-            return output;
-        }
-
-        for segment in segments {
-            output.push('/');
-            output.push_str(segment);
-        }
-
-        output
+    #[inline]
+    pub fn sub_domain(&self) -> &str {
+        self.inner
+            .split_once('/')
+            .map(|(_domain, sub_domain)| sub_domain)
+            .unwrap_or("")
     }
 }
 
 impl Display for EventType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { domain, sub_domain } = self;
-        write!(f, "{domain}")?;
-        for segment in sub_domain.iter() {
-            write!(f, "/{segment}")?;
-        }
-        Ok(())
+        write!(f, "{}", self.inner)
     }
 }
 
@@ -243,20 +213,62 @@ impl FromStr for EventType {
     type Err = EventError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut segments = s.split('/');
+        s.split_once('/').ok_or(EventError::MissingDomain)?;
+        Ok(Self {
+            inner: Cow::Owned(s.into()),
+        })
+    }
+}
 
-        let domain = segments
-            .next()
-            .map(String::from)
-            .map(EventSegment::new)
-            .ok_or(EventError::MissingDomain)?;
-        let sub_domain = segments
-            .map(String::from)
-            .map(EventSegment::new)
-            .collect::<Vec<_>>()
-            .into();
+/// Build an [`EventType`] segment by segment.
+pub struct EventTypeBuilder {
+    inner: String,
+}
 
-        Ok(Self { domain, sub_domain })
+impl EventTypeBuilder {
+    /// Create a new [`EventTypeBuilder`] with the given domain.
+    #[inline]
+    pub fn new_with_domain(domain: impl Into<String>) -> Self {
+        Self {
+            inner: domain.into(),
+        }
+    }
+
+    /// Create a new [`EventTypeBuilder`] with the domain of the
+    /// given event type.
+    #[inline]
+    pub fn new_of<E: EventToEmit>() -> Self {
+        Self::new_with_domain(E::DOMAIN)
+    }
+
+    /// Append a new segment to the final [`EventType`] and return
+    /// a mutable reference to the builder.
+    #[inline]
+    pub fn append_segment(&mut self, segment: impl AsRef<str>) -> &mut Self {
+        let segment = segment.as_ref();
+
+        if !segment.is_empty() {
+            self.inner.push('/');
+            self.inner.push_str(segment.as_ref());
+        }
+
+        self
+    }
+
+    /// Append a new segment to the final [`EventType`] and return
+    /// the builder.
+    #[inline]
+    pub fn with_segment(mut self, segment: impl AsRef<str>) -> Self {
+        self.append_segment(segment);
+        self
+    }
+
+    /// Build the final [`EventType`].
+    #[inline]
+    pub fn build(self) -> EventType {
+        EventType {
+            inner: Cow::Owned(self.inner),
+        }
     }
 }
 
@@ -387,7 +399,9 @@ impl From<&EthBridgeEvent> for Event {
 impl From<IbcEvent> for Event {
     fn from(ibc_event: IbcEvent) -> Self {
         Self {
-            event_type: event_type!("ibc", ibc_event.event_type),
+            event_type: EventTypeBuilder::new_of::<IbcEvent>()
+                .with_segment(ibc_event.event_type)
+                .build(),
             level: EventLevel::Tx,
             attributes: ibc_event.attributes,
         }

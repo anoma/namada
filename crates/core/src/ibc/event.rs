@@ -34,19 +34,14 @@ use crate::tendermint::abci::Event as AbciEvent;
 pub mod types {
     //! IBC event types.
 
-    use std::borrow::Cow;
-
     use super::IbcEvent;
-    use crate::event::{new_event_type_of, EventSegment, EventType};
+    use crate::event::EventType;
+    use crate::event_type;
     use crate::ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
 
     /// Update client.
     pub const UPDATE_CLIENT: EventType =
-        new_event_type_of::<IbcEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] =
-                &[EventSegment::new_static(UPDATE_CLIENT_EVENT)];
-            SEGMENT
-        }));
+        event_type!(IbcEvent, UPDATE_CLIENT_EVENT);
 }
 
 /// Wrapped IbcEvent
@@ -73,14 +68,14 @@ impl TryFrom<Event> for IbcEvent {
     type Error = EventError;
 
     fn try_from(namada_event: Event) -> std::result::Result<Self, Self::Error> {
-        if namada_event.event_type.domain != IbcEvent::DOMAIN {
+        if namada_event.event_type.domain() != IbcEvent::DOMAIN {
             return Err(EventError::InvalidEventType);
         }
 
         let event_type = namada_event.event_type.sub_domain();
 
         if !matches!(
-            event_type.as_str(),
+            event_type,
             // TODO: add other ibc event types that we use in namada
             "update_client" | "send_packet" | "write_acknowledgement"
         ) {
@@ -88,7 +83,7 @@ impl TryFrom<Event> for IbcEvent {
         }
 
         Ok(Self {
-            event_type,
+            event_type: event_type.to_owned(),
             attributes: namada_event.attributes,
         })
     }

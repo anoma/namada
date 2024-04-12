@@ -3,7 +3,7 @@
 use namada_core::collections::HashMap;
 use namada_governance::utils::TallyResult as GovTallyResult;
 use namada_sdk::events::extend::{EventAttributeEntry, ExtendAttributesMap};
-use namada_sdk::events::{Event, EventLevel, EventSegment, EventToEmit};
+use namada_sdk::events::{Event, EventLevel, EventToEmit};
 use thiserror::Error;
 
 pub(super) enum ReadType {
@@ -29,9 +29,7 @@ pub enum Error {
 pub mod event_types {
     //! Proposal event types.
 
-    use std::borrow::Cow;
-
-    use namada_sdk::events::{new_event_type_of, EventSegment, EventType};
+    use namada_sdk::events::EventType;
 
     use super::ProposalEvent;
 
@@ -40,43 +38,35 @@ pub mod event_types {
 
     /// Proposal rejected.
     pub const PROPOSAL_REJECTED: EventType =
-        new_event_type_of::<ProposalEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] = &[
-                EventSegment::new_static(PROPOSAL_SUBDOMAIN),
-                EventSegment::new_static("rejected"),
-            ];
-            SEGMENT
-        }));
+        namada_core::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "rejected");
 
     /// Proposal passed.
     pub const PROPOSAL_PASSED: EventType =
-        new_event_type_of::<ProposalEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] = &[
-                EventSegment::new_static(PROPOSAL_SUBDOMAIN),
-                EventSegment::new_static("passed"),
-            ];
-            SEGMENT
-        }));
+        namada_core::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "passed");
 
     /// PGF steward proposal.
-    pub const PROPOSAL_PGF_STEWARD: EventType =
-        new_event_type_of::<ProposalEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] = &[
-                EventSegment::new_static(PROPOSAL_SUBDOMAIN),
-                EventSegment::new_static("pgf-steward"),
-            ];
-            SEGMENT
-        }));
+    pub const PROPOSAL_PGF_STEWARD: EventType = namada_core::event_type!(
+        ProposalEvent,
+        PROPOSAL_SUBDOMAIN,
+        "pgf-steward"
+    );
 
     /// PGF payments proposal.
-    pub const PROPOSAL_PGF_PAYMENTS: EventType =
-        new_event_type_of::<ProposalEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] = &[
-                EventSegment::new_static(PROPOSAL_SUBDOMAIN),
-                EventSegment::new_static("pgf-payments"),
-            ];
-            SEGMENT
-        }));
+    pub const PROPOSAL_PGF_PAYMENTS: EventType = namada_core::event_type!(
+        ProposalEvent,
+        PROPOSAL_SUBDOMAIN,
+        "pgf-payments"
+    );
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_gov_event_type_as_str() {
+            assert_eq!(&*PROPOSAL_PASSED, "governance/proposal/passed");
+        }
+    }
 }
 
 /// Governance proposal event.
@@ -170,7 +160,7 @@ impl From<ProposalEvent> for Event {
 }
 
 impl EventToEmit for ProposalEvent {
-    const DOMAIN: EventSegment = EventSegment::new_static("governance");
+    const DOMAIN: &'static str = "governance";
 }
 
 impl ProposalEvent {

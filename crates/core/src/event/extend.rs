@@ -162,7 +162,7 @@ where
     E: EventToEmit,
     DATA: ExtendEvent,
 {
-    const DOMAIN: EventSegment = E::DOMAIN;
+    const DOMAIN: &'static str = E::DOMAIN;
 }
 
 /// Extend a [`HashMap`] of string to string with event attributed
@@ -446,13 +446,16 @@ impl EventAttributeEntry<'static> for Success {
 }
 
 /// Extend an [`Event`] with a new domain.
-pub struct Domain(pub EventSegment);
+pub struct Domain(pub Cow<'static, str>);
 
 impl ExtendEvent for Domain {
     #[inline]
     fn extend_event(self, event: &mut Event) {
         let Self(domain) = self;
-        event.event_type.domain = domain;
+
+        event.event_type = EventTypeBuilder::new_with_domain(domain)
+            .with_segment(event.event_type.sub_domain())
+            .build();
     }
 }
 
@@ -582,20 +585,19 @@ mod event_composition_tests {
         .with(Height(300.into()))
         .with(TxHash(Hash::default()));
 
-        fn event_domain<E: EventToEmit>(_: &E) -> EventSegment {
+        fn event_domain<E: EventToEmit>(_: &E) -> &'static str {
             E::DOMAIN
         }
 
-        assert_eq!(&*event_domain(&composite_event), "ibc");
+        assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
     }
 
     #[test]
     fn test_event_compose_change_domain() {
-        let composite: Event = Event::applied_tx()
-            .with(Domain(EventSegment::new_static("sparta")))
-            .into();
+        let composite: Event =
+            Event::applied_tx().with(Domain("sparta".into())).into();
 
-        assert_eq!(&*composite.event_type.domain, "sparta");
+        assert_eq!(composite.event_type.domain(), "sparta");
     }
 
     #[test]

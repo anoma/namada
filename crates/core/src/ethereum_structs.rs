@@ -136,30 +136,17 @@ impl EthBridgeEvent {
 pub mod event_types {
     //! Ethereum bridge event types.
 
-    use std::borrow::Cow;
-
     use super::EthBridgeEvent;
-    use crate::event::{new_event_type_of, EventSegment, EventType};
+    use crate::event::EventType;
+    use crate::event_type;
 
     /// Bridge pool relay event.
     pub const BRIDGE_POOL_RELAYED: EventType =
-        new_event_type_of::<EthBridgeEvent>(Cow::Borrowed({
-            const SEGMENTS: &[EventSegment] = &[
-                EventSegment::new_static("bridge-pool"),
-                EventSegment::new_static("relayed"),
-            ];
-            SEGMENTS
-        }));
+        event_type!(EthBridgeEvent, "bridge-pool", "relayed");
 
     /// Bridge pool expiration event.
     pub const BRIDGE_POOL_EXPIRED: EventType =
-        new_event_type_of::<EthBridgeEvent>(Cow::Borrowed({
-            const SEGMENTS: &[EventSegment] = &[
-                EventSegment::new_static("bridge-pool"),
-                EventSegment::new_static("expired"),
-            ];
-            SEGMENTS
-        }));
+        event_type!(EthBridgeEvent, "bridge-pool", "expired");
 }
 
 // TODO: move to `namada_ethereum_bridge::event` or

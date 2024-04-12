@@ -4,7 +4,7 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::event::extend::{
     ComposeEvent, EventAttributeEntry, Height, Log, TxHash,
 };
-use namada_core::event::{Event, EventSegment, EventToEmit};
+use namada_core::event::{Event, EventToEmit};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -34,33 +34,22 @@ impl From<TxEvent> for Event {
 }
 
 impl EventToEmit for TxEvent {
-    const DOMAIN: EventSegment = EventSegment::new_static("tx");
+    const DOMAIN: &'static str = "tx";
 }
 
 pub mod types {
     //! Transaction event types.
 
-    use std::borrow::Cow;
-
-    use namada_core::event::{new_event_type_of, EventSegment, EventType};
+    use namada_core::event::EventType;
 
     use super::TxEvent;
 
     /// Accepted transaction.
     pub const ACCEPTED: EventType =
-        new_event_type_of::<TxEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] =
-                &[EventSegment::new_static("accepted")];
-            SEGMENT
-        }));
+        namada_core::event_type!(TxEvent, "accepted");
 
     /// Applied transaction.
-    pub const APPLIED: EventType =
-        new_event_type_of::<TxEvent>(Cow::Borrowed({
-            const SEGMENT: &[EventSegment] =
-                &[EventSegment::new_static("applied")];
-            SEGMENT
-        }));
+    pub const APPLIED: EventType = namada_core::event_type!(TxEvent, "applied");
 }
 
 /// Creates a new event with the hash and height of the transaction
