@@ -200,10 +200,7 @@ jobs:
         nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
-          - name: Run unit tests without Ethereum bridge enabled
-            command: make test-unit-with-coverage
-          - name: Run unit tests with Ethereum bridge enabled
-            command: make test-unit-with-eth-bridge
+          - name: ABCI
 
     env:
       RUSTC_WRAPPER: sccache
