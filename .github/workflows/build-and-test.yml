@@ -264,8 +264,8 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Check crates build with default features
         run: make check-crates
-      - name: ${{ matrix.make.name }}
-        run: ${{ matrix.make.command }}
+      - name: Run unit tests
+        run: make test-unit-with-coverage
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
