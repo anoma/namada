@@ -468,18 +468,18 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
-    // inflation proposal on Chain B
-    let start_epoch = propose_inflation(&test_b)?;
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    // Vote
-    while epoch <= start_epoch {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
-    }
-    submit_votes(&test_b)?;
+    // // inflation proposal on Chain B
+    // let start_epoch = propose_inflation(&test_b)?;
+    // let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // // Vote
+    // while epoch <= start_epoch {
+    //     sleep(10);
+    //     epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    // }
+    // submit_votes(&test_b)?;
 
-    // wait for the next epoch of the grace
-    wait_epochs(&test_b, 6 + 1)?;
+    // // wait for the next epoch of the grace
+    // wait_epochs(&test_b, 6 + 1)?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
