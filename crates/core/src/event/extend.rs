@@ -212,8 +212,8 @@ where
     const DOMAIN: &'static str = E::DOMAIN;
 }
 
-/// Extend a [`HashMap`] of string to string with event attributed
-/// related methods.
+/// Extend an [`AttributesMap`] implementation with the ability
+/// to add new attributes from domain types.
 pub trait ExtendAttributesMap: Sized {
     /// Insert a new attribute into a map of event attributes.
     fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
