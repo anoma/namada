@@ -16,7 +16,7 @@ use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
-use namada_tx::Tx;
+use namada_tx::{Commitments, Tx};
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -1068,8 +1068,8 @@ where
     }
 
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
-        tx.data().map_or_else(
+    pub fn is_valid_parameter(&self, tx: &Tx, cmt: &Commitments) -> Result<()> {
+        tx.data(cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
                     "Governance parameter changes require tx data to be \

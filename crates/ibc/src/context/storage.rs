@@ -5,6 +5,7 @@ use namada_core::address::Address;
 use namada_core::ibc::IbcEvent;
 use namada_core::token::Amount;
 use namada_storage::{Error, StorageRead, StorageWrite};
+use namada_tx::Commitments;
 
 /// IBC context trait to be implemented in integration that can read and write
 pub trait IbcStorageContext: StorageRead + StorageWrite {
@@ -30,7 +31,7 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<&str>,
+        pin_key: Option<(&str, Commitments)>,
     ) -> Result<(), Error>;
 
     /// Mint token

@@ -342,6 +342,56 @@ where
             );
 
             match tx_result {
+                // FIXME: I need to be able to track the events/result of the
+                // single tx inside a bundle FIXME: probably
+                // need to do this match directly in dispatch_tx
+                // FIXME: even though looping in here is probably easier -> Yes
+                // seems like so FIXME: or I could extend
+                // TxResult to be collection of results and then manage them
+                // here. Ah but I also need to commit or dump the state which is
+                // ok for atmoic bnundles but for non-atomic ones I need to
+                // decide that per-tx so I cannot wait until I've executed
+                // everything (unless I want to apply major changes to the write
+                // log) FIXME: ok let's loop here, it's easier.
+                // The tx queue removal might be adjusted because of the fee
+                // issue which would make this solution easy even in that case.
+                // If it doesn't get updated I can come up with a workaround,
+                // I'd have to execute only the wrapper first, then change it's
+                // type to TxType::Raw and loop on that
+                // FIXME: actually no, I'd need to pattern match on the TxType
+                // here which we alread ydo in dispatch_tx, better if I can
+                // justiterate directly in dispatch. But than how do I update
+                // the state accordingly? I'd need to pass a mut ref to the
+                // state FIXME: ok I can do like this, I pass a
+                // mut ref to the state and I extract this whole result match
+                // into a separate function that then I call from dispatch_tx
+                // FIXME: last thing to decide is how to organize the logs, onw
+                // log for every tx in the bundle or one log for the bundle with
+                // specific sections? The gas used could be hard to track
+                // separately, at the same time I'm not sure I can create
+                // sections inside a log, it's just a list of key/values, I'd
+                // need something similar to a dictionary FIXME:
+                // in theory since I use a single gas meter and a single hash it
+                // would be better to use them also in the logs, but I still
+                // need to tell which tx succeeded and which one did not. Also,
+                // is_valid_masp goes for every single tx possibly. One log per
+                // tx, mock some sort hash for the single txs. Make sure we can
+                // recover masp data from the client, i.e. make sure that from
+                // the log we can recover the actual tx data. Well the tx data
+                // is just one, the bundle, yes but the bundle couls carry more
+                // than one Transaction objects and only a few of them could be
+                // valid (applied) so I need to know which ones are to be
+                // extracted. Also I need to match the Transaction object with
+                // the corresponding tx to match the balance changed keys -> Ok
+                // so I need a log for every transaction and in the client I
+                // need to iterate on the logs. The hash to identify the
+                // specific tx in the bundle could just be the hash of the
+                // Commitments object? Probaly not, could collide with other,
+                // better to create a Hash with the header object and a mocked
+                // commitments section that only carries that specific
+                // commitment
+                // FIXME: so also need to pass the tx event so that I can
+                // populate it on the other side
                 Ok(result) => {
                     if result.is_accepted() {
                         if wrapper_args

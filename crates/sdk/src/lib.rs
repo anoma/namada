@@ -82,7 +82,7 @@ impl<T> MaybeSend for T where T: ?Sized {}
 /// An interface for high-level interaction with the Namada SDK
 pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// A client with async request dispatcher method
-    type Client: queries::Client + MaybeSend + Sync;
+    type Client: queries::Client + MaybeSend + Sync + Clone;
     /// Captures the interactive parts of the wallet's functioning
     type WalletUtils: WalletIo + WalletStorage + MaybeSend + MaybeSync;
     /// Abstracts platform specific details away from the logic of shielded pool
@@ -699,7 +699,7 @@ where
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + MaybeSend + Sync,
+    C: queries::Client + MaybeSend + Sync + Clone,
     U: WalletIo + WalletStorage + MaybeSync + MaybeSend,
     V: ShieldedUtils + MaybeSend + MaybeSync,
     I: Io + MaybeSend + MaybeSync,
@@ -821,7 +821,8 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Authorization, Code, Commitment, Header, MaspBuilder, Section,
+        Authorization, Code, Commitment, Commitments, Header, MaspBuilder,
+        Section,
     };
 
     #[derive(Debug, Clone)]
@@ -992,15 +993,21 @@ pub mod testing {
             code_hash in arb_hash(),
             data_hash in arb_hash(),
             memo_hash in arb_hash(),
+            atomic in proptest::bool::ANY,
             tx_type in arb_tx_type(),
         ) -> Header {
             Header {
                 chain_id,
                 expiration,
                 timestamp,
-                data_hash,
-                code_hash,
+                //FIXME: arbitrary number of commitments
+                commitments: vec![Commitments{
+
+                 data_hash,
+                 code_hash,
                 memo_hash,
+                    }],
+                atomic,
                 tx_type,
             }
         }

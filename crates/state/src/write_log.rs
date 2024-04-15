@@ -140,6 +140,7 @@ pub struct WriteLog {
     /// write/update/delete should ever happen on this field, this log should
     /// only be populated through a dump of the `tx_write_log` and should be
     /// cleaned either when committing or dumping the `tx_write_log`
+    // FIXME: can I use this field to rpecommit txs in an atomic bundle?
     pub(crate) tx_precommit_write_log:
         HashMap<storage::Key, StorageModification>,
     /// The IBC events for the current transaction

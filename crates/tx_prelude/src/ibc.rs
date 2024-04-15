@@ -12,6 +12,7 @@ pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
+use namada_tx::Commitments;
 use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
@@ -61,7 +62,7 @@ impl IbcStorageContext for Ctx {
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<&str>,
+        pin_key: Option<(&str, Commitments)>,
     ) -> Result<(), Error> {
         namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
         namada_token::utils::update_note_commitment_tree(self, shielded)

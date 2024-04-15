@@ -24,6 +24,7 @@ namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
+namada_tx = { path = "../tx"}
 
 borsh.workspace = true
 ibc.workspace = true

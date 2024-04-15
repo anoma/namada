@@ -340,7 +340,7 @@ fn iterable_to_string<T: fmt::Display>(
 pub enum TxType {
     /// An ordinary tx
     Raw,
-    /// A Tx that contains an encrypted raw tx
+    /// A Tx that contains a payload in the form of a raw tx
     Wrapper(Box<WrapperTx>),
     /// Txs issued by validators as part of internal protocols
     Protocol(Box<ProtocolTx>),
@@ -409,7 +409,10 @@ mod test_process_tx {
         outer_tx.validate_tx().expect("Test failed");
         match outer_tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(code_sec.get_hash(), outer_tx.header.code_hash,)
+                assert_eq!(
+                    code_sec.get_hash(),
+                    outer_tx.header.commitments[0].code_hash,
+                )
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -431,8 +434,14 @@ mod test_process_tx {
         tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
-                assert_eq!(data_sec.get_hash(), tx.header().data_hash,);
+                assert_eq!(
+                    code_sec.get_hash(),
+                    tx.header().commitments[0].code_hash,
+                );
+                assert_eq!(
+                    data_sec.get_hash(),
+                    tx.header().commitments[0].data_hash,
+                );
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -458,8 +467,14 @@ mod test_process_tx {
         tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(code_sec.get_hash(), tx.header().code_hash,);
-                assert_eq!(data_sec.get_hash(), tx.header().data_hash,);
+                assert_eq!(
+                    code_sec.get_hash(),
+                    tx.header().commitments[0].code_hash,
+                );
+                assert_eq!(
+                    data_sec.get_hash(),
+                    tx.header().commitments[0].data_hash,
+                );
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }

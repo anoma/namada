@@ -20,7 +20,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;
-use namada_core::storage::Epoch;
+use namada_core::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -891,8 +891,14 @@ impl Section {
     BorshSchema,
     Serialize,
     Deserialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
 )]
 pub struct Commitments {
+    // FIXME: should put these fields as private? Yes if possible. Maybe not
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
@@ -903,6 +909,28 @@ pub struct Commitments {
     /// byte array filled with zeroes is present instead
     pub memo_hash: namada_core::hash::Hash,
 }
+
+impl Commitments {
+    /// Get the hash of this transaction's code
+    pub fn code_sechash(&self) -> &namada_core::hash::Hash {
+        &self.code_hash
+    }
+
+    /// Get the transaction data hash
+    pub fn data_sechash(&self) -> &namada_core::hash::Hash {
+        &self.data_hash
+    }
+
+    /// Get the hash of this transaction's memo
+    pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
+        &self.memo_hash
+    }
+}
+
+// FIXME: for safet yreasons it would be better to not expose a function that
+// allows computing the Hash of the header over a single tx of the bundle
+// because in this case it could be possible for the caller to sign only a
+// single tx that could then be replayed
 
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
@@ -924,8 +952,39 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     // FIXME: this could be empty, is this a problem?
+    // FIXME: rename this to bundle?
+    // FIXME: this should be the safe version of an HashSet to avoid duplicated
+    // txs
     /// The commitments to the transaction's sections
+    // FIXME: rename the field to bundle
     pub commitments: Vec<Commitments>,
+    // FIXME: how does a signature work on this thing? The inner txs can have
+    // different sources so I need multiple signatures but they sign the same
+    // exact header, including the different commits! (this shouldn't be a
+    // problem) FIXME: I'm ok with everything, just woul like the signature
+    // to be limited to its own commitment. It is also true thoug, that if the
+    // signer is the same for all transactions (might be the case) than I just
+    // need a single signautre, savign space FIXME: actually what happens
+    // if the tx carries more signatures than needed? Do we reject it? Probably
+    // not and also this is hard to tell because we evaluate sigs only in wasm
+    // when we can't reject them anymore FIXME: is there any problem with
+    // multisig? I guess it's goin to be hard to batch them cause we'd need to
+    // send the entire header with also the commitments to other txs. But given
+    // what we said I'd expect batched multisig txs to be txs coming from the
+    // same multisig accounts, so I can just send the other members the batched
+    // transactions and request a single singature FIXME: maybe we can find
+    // a way to only sign the header + your spefici Commtiemnt, instead of all?
+    // But again this would lead to a signature per transaction avoiding the
+    // possibility to optimize it down to a single one FIXME: is it a
+    // problem if I sign a header containing other transactions to be signed by
+    // another account? Not really, just maybe a bit strange. Oh actually this
+    // might be exploited to get a signature from someone else without him
+    // nopticing??? This would be bad. Yes but a user is always supposed to
+    // look at what they are signing, also the only use case here is the
+    // multisig accounts, for the rest an inner tx (or batch of them) is always
+    // creted by a single user FIXME: let's go for the "signe the entire
+    // header hash" solution, which is also the one requireing less code (it's
+    // exactly like we are doing thing right now)
     /// Whether the inner txs should be executed atomically
     pub atomic: bool,
     /// The type of this transaction
@@ -1053,7 +1112,7 @@ impl Tx {
         HEXUPPER.encode(&tx_bytes)
     }
 
-    // Deserialize from hex encoding
+    /// Deserialize from hex encoding
     pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
         if let Ok(hex) = serde_json::from_slice::<String>(data) {
             match HEXUPPER.decode(hex.as_bytes()) {
@@ -1064,6 +1123,11 @@ impl Tx {
         } else {
             Err(DecodeError::InvalidJsonString)
         }
+    }
+
+    /// Add new default commitments to the transaction
+    pub fn new_commitments(&mut self) {
+        self.header.commitments.push(Commitments::default())
     }
 
     /// Get the transaction header
@@ -1130,22 +1194,15 @@ impl Tx {
         }
     }
 
-    /// Get the hash of this transaction's memo from the header at the specified
-    /// index, if present
-    pub fn memo_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
-        self.header.commitments.get(idx).map(|cmt| &cmt.memo_hash)
-    }
-
     /// Get the memo designated by the memo hash in the header for the specified
-    /// index
-    pub fn memo(&self, idx: usize) -> Option<Vec<u8>> {
-        match self.memo_sechash(idx) {
-            Some(memo) if memo != &namada_core::hash::Hash::default() => {
-                match self.get_section(memo).as_ref().map(Cow::as_ref) {
-                    Some(Section::ExtraData(section)) => section.code.id(),
-                    _ => None,
-                }
-            }
+    /// commitment
+    pub fn memo(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+        if &cmt.memo_hash == &namada_core::hash::Hash::default() {
+            return None;
+        }
+
+        match self.get_section(&cmt.memo_hash).as_ref().map(Cow::as_ref) {
+            Some(Section::ExtraData(section)) => section.code.id(),
             _ => None,
         }
     }
@@ -1154,12 +1211,6 @@ impl Tx {
     pub fn add_section(&mut self, section: Section) -> &mut Section {
         self.sections.push(section);
         self.sections.last_mut().unwrap()
-    }
-
-    /// Get the hash of this transaction's code from the header at the specified
-    /// index, if present
-    pub fn code_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
-        self.header.commitments.get(idx).map(|cmt| &cmt.code_hash)
     }
 
     /// Set the last transaction code hash stored in the header
@@ -1173,15 +1224,13 @@ impl Tx {
         }
     }
 
-    /// Get the code designated by the transaction code hash in the header at
-    /// the specified index, if present
-    pub fn code(&self, idx: usize) -> Option<Vec<u8>> {
-        self.code_sechash(idx).and_then(|code| {
-            match self.get_section(code).as_ref().map(Cow::as_ref) {
-                Some(Section::Code(section)) => section.code.id(),
-                _ => None,
-            }
-        })
+    /// Get the code designated by the transaction code hash in the header for
+    /// the specified commitment
+    pub fn code(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+        match self.get_section(&cmt.code_hash).as_ref().map(Cow::as_ref) {
+            Some(Section::Code(section)) => section.code.id(),
+            _ => None,
+        }
     }
 
     /// Add the given code to the transaction and set code hash in the header
@@ -1190,12 +1239,6 @@ impl Tx {
         self.set_code_sechash(sec.get_hash());
         self.sections.push(sec);
         self.sections.last_mut().unwrap()
-    }
-
-    /// Get the transaction data hash stored in the header at the specified
-    /// index, if present
-    pub fn data_sechash(&self, idx: usize) -> Option<&namada_core::hash::Hash> {
-        self.header.commitments.get(idx).map(|cmt| &cmt.data_hash)
     }
 
     /// Set the last transaction data hash stored in the header
@@ -1218,14 +1261,12 @@ impl Tx {
     }
 
     /// Get the data designated by the transaction data hash in the header at
-    /// the specified index, id present
-    pub fn data(&self, idx: usize) -> Option<Vec<u8>> {
-        self.data_sechash(idx).and_then(|data| {
-            match self.get_section(data).as_ref().map(Cow::as_ref) {
-                Some(Section::Data(data)) => Some(data.data.clone()),
-                _ => None,
-            }
-        })
+    /// the specified commitment
+    pub fn data(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+        match self.get_section(&cmt.data_hash).as_ref().map(Cow::as_ref) {
+            Some(Section::Data(data)) => Some(data.data.clone()),
+            _ => None,
+        }
     }
 
     /// Convert this transaction into protobufs bytes
@@ -1628,5 +1669,58 @@ impl Tx {
             self.add_section(Section::Authorization(section));
         }
         self
+    }
+}
+
+/// The type of an indexed transaction, wrapper or inner. If the latter, then
+/// also carries the specific commitment in the bundle
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub enum IndexedTxType {
+    Wrapper,
+    Inner(Commitments),
+}
+
+/// Represents the pointers of an indexed tx, which are the block height, the
+/// index inside that block and the commitment inside the tx bundle (if inner
+/// tx)
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct IndexedTx {
+    /// The block height of the indexed tx
+    pub height: BlockHeight,
+    /// The index in the block of the tx
+    pub index: TxIndex,
+    /// This indicates if the tx is the wrapper or the inner
+    pub tx_type: IndexedTxType,
+}
+
+impl Default for IndexedTx {
+    fn default() -> Self {
+        Self {
+            height: BlockHeight::first(),
+            index: TxIndex(0),
+            tx_type: IndexedTxType::Wrapper,
+        }
     }
 }

@@ -11,7 +11,7 @@ use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::StorageWrite;
+use namada_state::{FullAccessState, StorageWrite};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
@@ -165,10 +165,6 @@ pub struct WrapperArgs<'a> {
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
-///
-/// If the given tx is a successfully decrypted payload apply the necessary
-/// vps. Otherwise, we include the tx on chain with the gas charge added
-/// but no further validations.
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: Tx,
@@ -179,6 +175,8 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
+    // FIXME: since we evaluate the TxResult in a function called here there's
+    // probably no need to return it
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -198,7 +196,12 @@ where
             },
         ),
         TxType::Protocol(protocol_tx) => {
-            apply_protocol_tx(protocol_tx.tx, tx.data(), state)
+            apply_protocol_tx(
+                protocol_tx.tx,
+                // No bundles of protocol transactions, only take the first one
+                tx.header.commitments.first().map(|cmt| tx.data(cmt)),
+                state,
+            )
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
@@ -217,18 +220,98 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
-            let mut inner_res = apply_wasm_tx(
-                tx,
-                &tx_index,
-                ShellParams {
-                    tx_gas_meter,
-                    state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                },
-            )?;
+            // FIXME: I need to itreate on the transactions, should I do that
+            // here or in finalize block where I call this? Probably less code
+            // to change if I iterate in finalzie block but it would be slightly
+            // preferable here in terms of scope/readbility
+            // FIXME: problem is that once I merge with tx queue removal PR
+            // iterating in finalize block doesn't work anymore, unless I do
+            // some sort of trick and change the tx type from wrapper to raw,
+            // but I believe it's better to do everything here
+            // FIXME: the only things I really need to merge in between two
+            // inners are the gas meter (easy) and replay protection (more
+            // complicated. Specifically, I need to see if one of the previous
+            // txs had the same hash of this one and if that was committed or
+            // not based on the possible errors) FIXME: actually,
+            // can I have in a bundle more than one tx with the same hash??? yes
+            // I can unless I change the vector with an HashSet(or better the
+            // deterministic version of it). But even in this case I could have
+            // two commitments with the same code and data but different memo,
+            // so overall a different header hash. In case, should I prevent
+            // this, does it make sense? FIXME: wait I'm actually
+            // doing reprot based on the tx header hash but now the header
+            // contains all the txs! THIS IS WRONG! I need a resolution to the
+            // single tx hash -> this also invalidates the topic on the
+            // signature, I need to sign only the minimal hash (not necessary
+            // actually, I could still sign everything)
+            // FIXME: so for reprot I have to mock the old version of the tx
+            // Header, with only one Commitment FIXME: actually
+            // wait, maybe if I sign the entire header (with all the
+            // commitments), I can only use the complete hash, instead of the
+            // mocked single ones, because replying a single tx extracted from
+            // here would be impossible since the signature is done on the
+            // entire set. Yes but:
+            //    - I still need replay protection INSIDE the bundle (do I?
+            //      Isn't this up to the user creating and signign the bundle to
+            //      not duplicate transactions? Also because it's useless, if
+            //      the first tx fails because of logic the same will be for the
+            //      second, and if they fail because of gas or signature same
+            //      will be for the second, so no reason to put two exact txs in
+            //      there. What about the memo? Well the memo would lead to a
+            //      different hash anyway so they are considered two different
+            //      txs)
+            //    - Makes reprot a little less intuitive, what if I have a
+            //      non.atomic bundle in which 3 transactions pass and two fails
+            //      because of gas? I'd still need to write the hash of the
+            //      entire bundle. This should be fine, the two failed txs will
+            //      be put in another bundle with a different hash and
+            //      reexecuted
+            // FIXME: I'm in favor of a single hash even though it might seem a
+            // little bit dirtier, if it's safe to use. Alos. if I use multiple
+            // hashes, the logic for removing the wrapper hash become a bit less
+            // intuitive, when would we be allowed to remove it? When at least
+            // one of the inner txs has its hash committed? Probably yes
+            // FIXME: for the single hash we'll definetely need the hashset
+            // though and signatures on the entire hash FIXME: but
+            // let's say only one of the txs fails and it fails because of
+            // invalid section commitment, in this case I should remove the
+            // inner hash and leave the wrapper one, correct? Not anymore
+            // becuase I would end up replaying the valid transactions if the
+            // bundle was non-atomic IMPORTANT! REMOVAL LOGIC FOR BUNDLE
+            // (REFARDLESS OF IT BEING ATOMIC OR NOT): IF AT LEAST ONE OF THE
+            // TXS SHOULD HAVE ITS HASH COMMITTED, THAN COMMIT THE HASH OF THE
+            // BUNDLE, OTHERWISE NOT FIXME: do it alltogether, the
+            // reason is that removing hashes of replay protection ease
+            // rewrapping and resubmission but in this case one shouold
+            // eliminate the extra section anyway FIXME: especially
+            // review the trick to remove the hash of the wrapper if I commit
+            // the inner in the context of the bundle, is it still doable? If
+            // yes with both the approaches? If yes does it need any
+            // modifications? The atomicity of the tx changes anything? Probably
+            // yes FIXME: do a single hash for the entire bundle, at
+            // least for now, this way you can easily rebundle single failing
+            // txs
+            for cmt in tx.header.commitments {
+                let mut inner_res = apply_wasm_tx(
+                    tx,
+                    &tx_index,
+                    ShellParams {
+                        tx_gas_meter,
+                        state,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    },
+                )?;
 
-            inner_res.wrapper_changed_keys = changed_keys;
+                // FIXME: when to commit the hash of the bundle and when not?
+
+                // FIXME: how to manage the changed keys of the wrapper?
+                inner_res.wrapper_changed_keys = changed_keys;
+
+                // FIXME: call the function to handle the state and the logs
+                // here
+            }
+
             Ok(inner_res)
         }
     }
@@ -600,11 +683,13 @@ where
         tx_wasm_cache,
     } = shell_params;
 
+    // FIXME: check that this is the hash of the bundle, i.e. that it contains
+    // all the commitments (it should already be the case)
     let tx_hash = tx.raw_header_hash();
     if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
     {
-        // If the same transaction has already been applied in this block, skip
-        // execution and return
+        // If the same transaction (or bundle) has already been committed in
+        // this block, skip execution and return
         return Err(Error::ReplayAttempt(tx_hash));
     }
 
@@ -626,6 +711,7 @@ where
         vp_wasm_cache,
     })?;
 
+    // FIXME: all these must be managed per single tx in the bundle
     let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
