@@ -2963,8 +2963,14 @@ where
         if let Some(end) = end {
             // Add the `last_range` pair to the `prev_ranges` and make a new
             // `last_range`
-            delegations.prev_ranges.push((start, end));
-            delegations.last_range = (epoch, None);
+            if epoch == end {
+                // This case would occur if in the same epoch, the bond was
+                // fully unbonded, followed by the bonding of new tokens
+                delegations.last_range.1 = None;
+            } else {
+                delegations.prev_ranges.insert(start, end);
+                delegations.last_range = (epoch, None);
+            }
             bond_holders.insert(
                 storage,
                 validator.clone(),
