@@ -5,7 +5,9 @@ use namada_core::hash::Hash;
 use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
 
-use crate::events::extend::{ExtendAttributesMap, TxHash as TxHashAttr};
+use crate::events::extend::{
+    ExtendAttributesMap, ExtendEventAttributes, TxHash as TxHashAttr,
+};
 use crate::events::{Event, EventType, EventTypeBuilder};
 use crate::ibc::core::client::types::Height as IbcHeight;
 use crate::ibc::core::host::types::identifiers::{
@@ -27,11 +29,39 @@ pub struct QueryMatcher {
     attributes: HashMap<String, String>,
 }
 
+impl ExtendAttributesMap for QueryMatcher {
+    fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: ExtendEventAttributes,
+    {
+        data.extend_event_attributes(&mut self.attributes);
+        self
+    }
+}
+
 impl QueryMatcher {
     /// Returns the event type that this [`QueryMatcher`]
     /// attempts to match.
     pub fn event_type(&self) -> &EventType {
         &self.event_type
+    }
+
+    /// Create a new [`QueryMatcher`] with the given event type.
+    pub fn with_event_type(event_type: EventType) -> Self {
+        Self {
+            event_type,
+            attributes: Default::default(),
+        }
+    }
+
+    /// Add a new attribute to the [`QueryMatcher`].
+    #[inline]
+    pub fn and_attribute<DATA>(mut self, data: DATA) -> Self
+    where
+        DATA: ExtendEventAttributes,
+    {
+        self.with_attribute(data);
+        self
     }
 
     /// Checks if this [`QueryMatcher`] validates the
@@ -45,38 +75,23 @@ impl QueryMatcher {
 
     /// Returns a query matching the given relayed Bridge pool transaction hash.
     pub fn bridge_pool_relayed(tx_hash: &KeccakHash) -> Self {
-        let mut attributes = HashMap::new();
-        attributes.with_attribute(
-            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
-        );
-        Self {
-            event_type:
-                namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED,
-            attributes,
-        }
+        Self::with_event_type(
+            namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED,
+        )
+        .and_attribute(namada_core::ethereum_structs::BridgePoolTxHash(tx_hash))
     }
 
     /// Returns a query matching the given expired Bridge pool transaction hash.
     pub fn bridge_pool_expired(tx_hash: &KeccakHash) -> Self {
-        let mut attributes = HashMap::new();
-        attributes.with_attribute(
-            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
-        );
-        Self {
-            event_type:
-                namada_core::ethereum_structs::event_types::BRIDGE_POOL_EXPIRED,
-            attributes,
-        }
+        Self::with_event_type(
+            namada_core::ethereum_structs::event_types::BRIDGE_POOL_EXPIRED,
+        )
+        .and_attribute(namada_core::ethereum_structs::BridgePoolTxHash(tx_hash))
     }
 
     /// Returns a query matching the given applied transaction hash.
     pub fn applied(tx_hash: Hash) -> Self {
-        let mut attributes = HashMap::new();
-        attributes.with_attribute(TxHashAttr(tx_hash));
-        Self {
-            event_type: APPLIED_TX,
-            attributes,
-        }
+        Self::with_event_type(APPLIED_TX).and_attribute(TxHashAttr(tx_hash))
     }
 
     /// Returns a query matching the given IBC UpdateClient parameters
@@ -84,18 +99,11 @@ impl QueryMatcher {
         client_id: ClientId,
         consensus_height: BlockHeight,
     ) -> Self {
-        let mut attributes = HashMap::new();
-
-        attributes
-            .with_attribute(ClientIdAttr(client_id))
-            .with_attribute(ConsensusHeights(
+        Self::with_event_type(UPDATE_CLIENT)
+            .and_attribute(ClientIdAttr(client_id))
+            .and_attribute(ConsensusHeights(
                 IbcHeight::new(0, consensus_height.0).expect("invalid height"),
-            ));
-
-        Self {
-            event_type: UPDATE_CLIENT,
-            attributes,
-        }
+            ))
     }
 
     /// Returns a query matching the given IBC packet parameters
@@ -107,21 +115,16 @@ impl QueryMatcher {
         destination_channel: ChannelId,
         sequence: Sequence,
     ) -> Self {
-        let mut attributes = HashMap::new();
-
-        attributes
-            .with_attribute(PacketSrcPort(source_port))
-            .with_attribute(PacketSrcChannel(source_channel))
-            .with_attribute(PacketDstPort(destination_port))
-            .with_attribute(PacketDstChannel(destination_channel))
-            .with_attribute(PacketSequence(sequence));
-
-        Self {
-            event_type: EventTypeBuilder::new_of::<IbcEvent>()
+        Self::with_event_type(
+            EventTypeBuilder::new_of::<IbcEvent>()
                 .with_segment(event_type.0)
                 .build(),
-            attributes,
-        }
+        )
+        .and_attribute(PacketSrcPort(source_port))
+        .and_attribute(PacketSrcChannel(source_channel))
+        .and_attribute(PacketDstPort(destination_port))
+        .and_attribute(PacketDstChannel(destination_channel))
+        .and_attribute(PacketSequence(sequence))
     }
 }
 
