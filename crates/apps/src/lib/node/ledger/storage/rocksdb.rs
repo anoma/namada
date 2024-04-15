@@ -55,10 +55,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::core::collections::HashSet;
-use namada::core::storage::{
-    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
-};
-use namada::core::time::DateTimeUtc;
+use namada::core::storage::{BlockHeight, Epoch, Header, Key, KeySeg};
 use namada::core::{decode, encode, ethereum_events};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
