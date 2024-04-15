@@ -1,13 +1,8 @@
-//! Silly simple Tendermint query parser
-//!
-//! This parser will only work with simple queries of the form:
-//!
-//! ```text
-//! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
-//! ```
+//! Silly simple event matcher.
 
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
 
 use crate::events::extend::{ExtendAttributesMap, TxHash as TxHashAttr};
@@ -51,6 +46,32 @@ impl QueryMatcher {
                 None => false,
             }
         })
+    }
+
+    /// Returns a query matching the given relayed Bridge pool transaction hash.
+    pub fn bridge_pool_relayed(tx_hash: &KeccakHash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.with_attribute(
+            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
+        );
+        Self {
+            event_type:
+                namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED,
+            attributes,
+        }
+    }
+
+    /// Returns a query matching the given expired Bridge pool transaction hash.
+    pub fn bridge_pool_expired(tx_hash: &KeccakHash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.with_attribute(
+            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
+        );
+        Self {
+            event_type:
+                namada_core::ethereum_structs::event_types::BRIDGE_POOL_EXPIRED,
+            attributes,
+        }
     }
 
     /// Returns a query matching the given applied transaction hash.
@@ -111,7 +132,6 @@ impl QueryMatcher {
 mod tests {
     use super::*;
     use crate::events::EventLevel;
-    use crate::tx::event::types::ACCEPTED as ACCEPTED_TX;
 
     /// Test if query matching is working as expected.
     #[test]
@@ -124,13 +144,13 @@ mod tests {
         let mut attributes = HashMap::new();
         attributes.with_attribute(TxHashAttr(tx_hash));
         let matcher = QueryMatcher {
-            event_type: ACCEPTED_TX,
+            event_type: APPLIED_TX,
             attributes,
         };
 
         let tests = {
             let event_1 = Event {
-                event_type: ACCEPTED_TX,
+                event_type: UPDATE_CLIENT,
                 level: EventLevel::Block,
                 attributes: {
                     let mut attrs = namada_core::collections::HashMap::new();
@@ -138,7 +158,7 @@ mod tests {
                     attrs
                 },
             };
-            let accepted_1 = true;
+            let applied_1 = false;
 
             let event_2 = Event {
                 event_type: APPLIED_TX,
@@ -149,9 +169,9 @@ mod tests {
                     attrs
                 },
             };
-            let accepted_2 = false;
+            let applied_2 = true;
 
-            [(event_1, accepted_1), (event_2, accepted_2)]
+            [(event_1, applied_1), (event_2, applied_2)]
         };
 
         for (ref ev, status) in tests {

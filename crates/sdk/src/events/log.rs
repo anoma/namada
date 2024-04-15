@@ -143,7 +143,10 @@ impl<'log> WithMatcher<'log> {
 
 #[cfg(test)]
 mod event_log_tests {
+    use namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED;
+    use namada_core::ethereum_structs::BridgePoolTxHash;
     use namada_core::hash::Hash;
+    use namada_core::keccak::KeccakHash;
 
     use super::*;
     use crate::events::extend::{ComposeEvent, TxHash};
@@ -161,9 +164,11 @@ mod event_log_tests {
     }
 
     /// An applied tx hash query.
-    macro_rules! applied {
+    macro_rules! bridge_pool_relayed {
         ($hash:expr) => {
-            dumb_queries::QueryMatcher::applied(Hash::try_from($hash).unwrap())
+            dumb_queries::QueryMatcher::bridge_pool_relayed(
+                &KeccakHash::try_from($hash).unwrap(),
+            )
         };
     }
 
@@ -175,12 +180,18 @@ mod event_log_tests {
             attributes: Default::default(),
         }
         .with(TxHash(Hash::try_from(hash.as_ref()).unwrap()))
+        .with(BridgePoolTxHash(
+            &KeccakHash::try_from(hash.as_ref()).unwrap(),
+        ))
         .into()
     }
 
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
-        vec![mock_event(ACCEPTED_TX, hash), mock_event(APPLIED_TX, hash)]
+        vec![
+            mock_event(BRIDGE_POOL_RELAYED, hash),
+            mock_event(APPLIED_TX, hash),
+        ]
     }
 
     /// Test adding a couple of events to the event log, and
@@ -201,8 +212,11 @@ mod event_log_tests {
         // inspect log
         assert_eq!(log.iter().count(), NUM_HEIGHTS * events.len());
 
-        let events_in_log: Vec<_> =
-            log.with_matcher(applied!(HASH)).iter().cloned().collect();
+        let events_in_log: Vec<_> = log
+            .with_matcher(bridge_pool_relayed!(HASH))
+            .iter()
+            .cloned()
+            .collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 

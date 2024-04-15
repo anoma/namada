@@ -44,10 +44,6 @@ pub mod types {
 
     use super::TxEvent;
 
-    /// Accepted transaction.
-    pub const ACCEPTED: EventType =
-        namada_core::event_type!(TxEvent, "accepted");
-
     /// Applied transaction.
     pub const APPLIED: EventType = namada_core::event_type!(TxEvent, "applied");
 }

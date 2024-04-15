@@ -58,7 +58,7 @@ use namada::ibc::core::host::types::identifiers::{
 };
 use namada::ibc::event as ibc_events;
 use namada::ibc::primitives::proto::Any;
-use namada::ibc::primitives::{Signer, Timestamp, ToProto};
+use namada::ibc::primitives::{Signer, ToProto};
 use namada::ledger::events::EventType;
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
@@ -79,7 +79,6 @@ use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
-use namada_core::collections::HashMap;
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;

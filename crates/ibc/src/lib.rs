@@ -54,7 +54,6 @@ use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::core::router::types::error::RouterError;
-use namada_core::ibc::event as ibc_events;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
@@ -222,7 +221,7 @@ where
                 return Ok(());
             }
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -247,7 +246,7 @@ where
                 })
                 .collect();
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -321,14 +320,18 @@ where
                     Error::Trace("Reading the IBC event failed".to_string())
                 })?;
         }
-        Ok(receive_event
-            .first()
-            .as_ref()
-            .and_then(|event| {
-                SuccessAttr::read_opt_from_event_attributes(&event.attributes)
-            })
-            .transpose()?
-            .map_or_else(|| false, |success| success))
+        receive_event.first().as_ref().map_or_else(
+            || Ok(false),
+            |event| {
+                let success = SuccessAttr::read_opt_from_event_attributes(
+                    &event.attributes,
+                )
+                .map_err(|err| {
+                    Error::Trace(format!("Reading the IBC event failed: {err}"))
+                })?;
+                Ok(success.unwrap_or(false))
+            },
+        )
     }
 
     /// Validate according to the message in IBC VP

@@ -338,7 +338,9 @@ where
                             .unwrap_or_default()
                             || is_masp_tx(&result.changed_keys)
                         {
-                            tx_event.extend(ValidMaspTx(tx_index));
+                            tx_event.extend(ValidMaspTx(
+                                TxIndex::must_from_usize(tx_index),
+                            ));
                         }
                         tracing::trace!(
                             "all VPs accepted transaction {} storage \
@@ -402,7 +404,9 @@ where
                             .map(|args| args.is_committed_fee_unshield)
                             .unwrap_or_default()
                         {
-                            tx_event.extend(ValidMaspTx(tx_index));
+                            tx_event.extend(ValidMaspTx(
+                                TxIndex::must_from_usize(tx_index),
+                            ));
                         }
 
                         // If an inner tx failed for any reason but invalid
@@ -499,7 +503,9 @@ where
                         .map(|args| args.is_committed_fee_unshield)
                         .unwrap_or_default()
                     {
-                        tx_event.extend(ValidMaspTx(tx_index));
+                        tx_event.extend(ValidMaspTx(TxIndex::must_from_usize(
+                            tx_index,
+                        )));
                     }
                     tx_event.extend(Code(ResultCode::WasmRuntimeError));
                 }
@@ -3105,9 +3111,10 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(event.event_type, APPLIED_TX);
+        let code = CodeAttr::read_from_event_attributes(&event.attributes)
+            .expect("Test failed");
+        assert_eq!(code, ResultCode::WasmRuntimeError);
 
         let new_signer_balance = namada::token::read_balance(
             &shell.state,

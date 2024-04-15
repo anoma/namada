@@ -68,7 +68,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::data::WrapperTx;
+use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::event::InnerTx as InnerTxAttr;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -927,23 +927,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // because those are what the masp validity predicate works on
         let (wrapper_changed_keys, changed_keys) =
             if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
-                let tx_result_str = tx_event
-                    .attributes
-                    .iter()
-                    .find_map(|attr| {
-                        if attr.key == "inner_tx" {
-                            Some(&attr.value)
-                        } else {
-                            None
-                        }
-                    })
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing required tx result in event".to_string(),
-                        )
-                    })?;
-                let result = TxResult::from_str(tx_result_str)
-                    .map_err(|e| Error::Other(e.to_string()))?;
+                let result = InnerTxAttr::read_from_event_attributes(
+                    &tx_event.attributes,
+                )
+                .map_err(|err| {
+                    Error::Other(format!("Failed to extract masp tx: {err}"))
+                })?;
                 (result.wrapper_changed_keys, result.changed_keys)
             } else {
                 (Default::default(), Default::default())
@@ -2762,25 +2751,9 @@ async fn get_receiving_result<C: Client + Sync>(
 fn get_tx_result(
     tx_event: &crate::tendermint::abci::Event,
 ) -> Result<TxResult, Error> {
-    tx_event
-        .attributes
-        .iter()
-        .find_map(|attribute| {
-            if attribute.key == "inner_tx" {
-                let tx_result = TxResult::from_str(&attribute.value)
-                    .expect("The event value should be parsable");
-                Some(tx_result)
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| {
-            Error::Other(
-                "Couldn't find changed keys in the event for the provided \
-                 transaction"
-                    .to_string(),
-            )
-        })
+    InnerTxAttr::read_from_event_attributes(&tx_event.attributes).map_err(
+        |err| Error::Other(format!("Failed to parse tx result: {err}")),
+    )
 }
 
 mod tests {
