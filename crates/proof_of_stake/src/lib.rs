@@ -26,6 +26,7 @@ use core::fmt::Debug;
 use std::cmp::{self};
 use std::collections::{BTreeMap, BTreeSet};
 
+use epoched::EpochOffset;
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::collections::HashSet;
@@ -533,6 +534,7 @@ where
     if bonds_total.is_zero() {
         remove_delegation_target(
             storage,
+            &params,
             source,
             validator,
             pipeline_epoch,
@@ -2982,7 +2984,7 @@ where
     } else {
         // Make a new delegation to this source-validator pair
         let first_delegation = DelegationEpochs {
-            prev_ranges: vec![],
+            prev_ranges: BTreeMap::new(),
             last_range: (epoch, None),
         };
         bond_holders.insert(storage, validator.clone(), first_delegation)?;
@@ -2996,10 +2998,11 @@ where
 
 fn remove_delegation_target<S>(
     storage: &mut S,
+    params: &PosParams,
     delegator: &Address,
     validator: &Address,
     epoch: Epoch,
-    _current_epoch: Epoch,
+    current_epoch: Epoch,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -3013,12 +3016,42 @@ where
               right now!!"
         );
         *end = Some(epoch);
+        prune_old_delegations(params, delegation, current_epoch)?;
         validators.insert(storage, validator.clone(), delegation.clone())?;
     } else {
         panic!("Delegation should exist since we are removing it right now!!!");
     }
 
-    // TODO: possibly update the data by pruning old pairs or validators??
+    Ok(())
+}
+
+fn prune_old_delegations(
+    params: &PosParams,
+    delegations: &mut DelegationEpochs,
+    current_epoch: Epoch,
+) -> namada_storage::Result<()> {
+    let delta =
+        crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus::value(
+            params,
+        );
+    let oldest_to_keep = current_epoch.checked_sub(delta).unwrap_or_default();
+
+    let to_remove = delegations
+        .prev_ranges
+        .iter()
+        .filter_map(|(start, end)| {
+            if start < &oldest_to_keep && end < &oldest_to_keep {
+                Some(start)
+            } else {
+                None
+            }
+        })
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    for start_epoch in to_remove {
+        delegations.prev_ranges.remove(&start_epoch);
+    }
 
     Ok(())
 }

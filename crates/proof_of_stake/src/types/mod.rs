@@ -268,8 +268,8 @@ pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 /// which the bond ceased to exist (exclusive).
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct DelegationEpochs {
-    /// Previous ranges during which a bond existed
-    pub prev_ranges: Vec<(Epoch, Epoch)>,
+    /// Previous ranges during which a bond existed (Map<start, end>)
+    pub prev_ranges: BTreeMap<Epoch, Epoch>,
     /// The last range during which a bond existed
     pub last_range: (Epoch, Option<Epoch>),
 }

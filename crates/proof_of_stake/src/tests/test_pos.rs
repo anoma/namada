@@ -20,6 +20,7 @@ use proptest::test_runner::Config;
 use test_log::test;
 use token::get_effective_total_native_supply;
 
+use crate::epoched::EpochOffset;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
 use crate::queries::{
@@ -31,7 +32,8 @@ use crate::rewards::{
 };
 use crate::slashing::{process_slashes, slash};
 use crate::storage::{
-    get_consensus_key_set, liveness_sum_missed_votes_handle,
+    delegation_targets_handle, get_consensus_key_set,
+    liveness_sum_missed_votes_handle,
     read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, rewards_accumulator_handle,
@@ -2081,4 +2083,77 @@ fn test_delegation_targets() {
         del_delegatees.get(&validator2).unwrap(),
         &token::Amount::native_whole(3)
     );
+
+    // Advance enough epochs for a relevant action to prune old data
+    let num_to_advance =
+        crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus::value(
+            &params,
+        );
+    for _ in 0..num_to_advance {
+        advance_epoch(&mut storage, &params);
+    }
+    current_epoch = storage.in_mem().block.epoch;
+
+    // Redelegate fully from validator1 to validator2
+    redelegate_tokens(
+        &mut storage,
+        &delegator,
+        &validator1,
+        &validator2,
+        current_epoch,
+        token::Amount::native_whole(6),
+    )
+    .unwrap();
+
+    let de_d1 = delegation_targets_handle(&delegator)
+        .get(&storage, &validator1)
+        .unwrap()
+        .unwrap();
+    let de_d2 = delegation_targets_handle(&delegator)
+        .get(&storage, &validator2)
+        .unwrap()
+        .unwrap();
+    assert!(de_d1.prev_ranges.is_empty());
+    assert_eq!(
+        de_d1.last_range.1,
+        Some(current_epoch + params.pipeline_len)
+    );
+    assert!(de_d2.prev_ranges.is_empty());
+    assert!(de_d2.last_range.1.is_none());
+
+    // Fully self-unbond validator2 to see if old data is pruned
+    unbond_tokens(
+        &mut storage,
+        None,
+        &validator2,
+        token::Amount::native_whole(1),
+        current_epoch,
+        false,
+    )
+    .unwrap();
+
+    let de_2 = delegation_targets_handle(&validator2)
+        .get(&storage, &validator2)
+        .unwrap()
+        .unwrap();
+    assert!(de_2.prev_ranges.is_empty());
+    assert_eq!(de_2.last_range.1, Some(current_epoch + params.pipeline_len));
+
+    // Self-bond validator2 to check that no data is pushed to `prev_ranges`
+    bond_tokens(
+        &mut storage,
+        None,
+        &validator2,
+        token::Amount::native_whole(2),
+        current_epoch,
+        None,
+    )
+    .unwrap();
+
+    let de_2 = delegation_targets_handle(&validator2)
+        .get(&storage, &validator2)
+        .unwrap()
+        .unwrap();
+    assert!(de_2.prev_ranges.is_empty());
+    assert_eq!(de_2.last_range.1, None);
 }
