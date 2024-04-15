@@ -2464,6 +2464,7 @@ fn check_funded_balances(
     dest_channel_id: &ChannelId,
     test_b: &Test,
 ) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     // Check the balances on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
