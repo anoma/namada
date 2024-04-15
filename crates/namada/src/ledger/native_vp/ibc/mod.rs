@@ -24,6 +24,7 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
+use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::{
     calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
     mint_amount_key, withdraw_key,
@@ -143,9 +144,15 @@ where
             match_value(key, actual, ctx.borrow().get_changed_value(key))?;
         }
 
-        // check the event
-        let actual = self.ctx.state.write_log().get_ibc_events();
-        if *actual != ctx.borrow().event {
+        // check the events
+        let actual: BTreeSet<_> = self
+            .ctx
+            .state
+            .write_log()
+            .get_ibc_events()
+            .filter_map(|event| IbcEvent::try_from(event).ok())
+            .collect();
+        if actual != ctx.borrow().event {
             return Err(Error::IbcEvent(format!(
                 "The IBC event is invalid: Actual {:?}, Expected {:?}",
                 actual,

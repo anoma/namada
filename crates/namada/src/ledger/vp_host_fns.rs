@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
+use namada_core::event::EventTypeBuilder;
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
@@ -331,12 +332,14 @@ pub fn get_ibc_events<S>(
 where
     S: StateRead + Debug,
 {
+    let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+        .with_segment(event_type)
+        .build();
+
     Ok(state
         .write_log()
-        .get_ibc_events()
-        .iter()
-        .filter(|event| event.event_type == event_type)
-        .cloned()
+        .lookup_events_with_prefix(&event_type)
+        .filter_map(|event| IbcEvent::try_from(event).ok())
         .collect())
 }
 

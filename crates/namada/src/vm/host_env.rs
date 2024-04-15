@@ -10,6 +10,7 @@ use borsh_ext::BorshSerializeExt;
 use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
+use namada_core::event::EventTypeBuilder;
 use namada_core::internal::KeyVal;
 use namada_core::storage::TX_INDEX_LENGTH;
 use namada_gas::{
@@ -1057,13 +1058,17 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let state = env.state();
-    let events: Vec<IbcEvent> = state
-        .write_log()
-        .get_ibc_events()
-        .iter()
-        .filter(|event| event.event_type == event_type)
-        .cloned()
-        .collect();
+    let events: Vec<IbcEvent> = {
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type)
+            .build();
+
+        state
+            .write_log()
+            .lookup_events_with_prefix(&event_type)
+            .filter_map(|event| IbcEvent::try_from(event).ok())
+            .collect()
+    };
     let value = events.serialize_to_vec();
     let len: i64 = value
         .len()

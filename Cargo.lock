@@ -4932,6 +4932,7 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "namada_tx",
+ "patricia_tree",
  "pretty_assertions",
  "proptest",
  "sha2 0.9.9",

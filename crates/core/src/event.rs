@@ -465,6 +465,16 @@ impl Event {
         data.extend_event(self);
         self
     }
+
+    /// Compute the gas cost of emitting this event.
+    #[inline]
+    pub fn emission_gas_cost(&self, cost_per_byte: u64) -> u64 {
+        let len = self
+            .attributes
+            .iter()
+            .fold(0, |acc, (k, v)| acc + k.len() + v.len());
+        len as u64 * cost_per_byte
+    }
 }
 
 impl From<EthBridgeEvent> for Event {

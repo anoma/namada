@@ -369,23 +369,7 @@ where
                                 .accept(tx_index);
                         }
                         // events from other sources
-                        response.events.extend(
-                            // ibc events
-                            result
-                                .ibc_events
-                                .iter()
-                                .cloned()
-                                .map(|ibc_event| {
-                                    ibc_event.with(Height(height)).into()
-                                })
-                                // eth bridge events
-                                .chain(
-                                    result
-                                        .eth_bridge_events
-                                        .iter()
-                                        .map(Event::from),
-                                ),
-                        );
+                        response.events.extend(result.events.iter().cloned());
                     } else {
                         // this branch can only be reached by inner txs
                         tracing::trace!(
@@ -632,11 +616,10 @@ where
             namada::ibc::transfer_over_ibc,
         )?;
 
-        // Take IBC events that may be emitted from PGF
-        for ibc_event in self.state.write_log_mut().take_ibc_events() {
-            // Add the height for IBC event query
+        // Take events that may be emitted from PGF
+        for event in self.state.write_log_mut().take_events() {
             events.emit(
-                ibc_event.with(Height(
+                event.with(Height(
                     self.state.in_mem().get_last_block_height() + 1,
                 )),
             );
@@ -743,6 +726,7 @@ mod test_finalize_block {
     use namada::core::collections::{HashMap, HashSet};
     use namada::core::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::core::ethereum_events::{EthAddress, Uint as ethUint};
+    use namada::core::event::Event;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
     use namada::core::key::testing::common_sk_from_simple_seed;

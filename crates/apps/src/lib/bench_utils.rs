@@ -889,8 +889,7 @@ impl Client for BenchShell {
                             changed_keys: changed_keys.to_owned(),
                             vps_result: VpsResult::default(),
                             initialized_accounts: vec![],
-                            ibc_events: BTreeSet::default(),
-                            eth_bridge_events: BTreeSet::default(),
+                            events: BTreeSet::default(),
                         };
                         namada::tendermint::abci::Event {
                             kind: "applied".to_string(),

@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::event::EventTypeBuilder;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
@@ -128,12 +129,14 @@ where
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, StorageError> {
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type)
+            .build();
+
         Ok(self
             .write_log()
-            .get_ibc_events()
-            .iter()
-            .filter(|event| event.event_type == event_type.as_ref())
-            .cloned()
+            .lookup_events_with_prefix(&event_type)
+            .filter_map(|event| IbcEvent::try_from(event).ok())
             .collect())
     }
 
@@ -202,13 +205,15 @@ where
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, StorageError> {
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type)
+            .build();
+
         Ok(self
             .state
             .write_log()
-            .get_ibc_events()
-            .iter()
-            .filter(|event| event.event_type == event_type.as_ref())
-            .cloned()
+            .lookup_events_with_prefix(&event_type)
+            .filter_map(|event| IbcEvent::try_from(event).ok())
             .collect())
     }
 
