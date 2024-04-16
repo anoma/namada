@@ -2602,7 +2602,7 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
+                WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -2626,27 +2626,27 @@ mod test_finalize_block {
             },
             keypair_2.ref_to(),
             Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
+            WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             vec![new_wrapper.raw_header_hash()],
             [(0, keypair_2.clone())].into_iter().collect(),
             None,
         )));
         // This is a signature coming from the wrong signer which will be
         // rejected by the vp
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             vec![wrapper.raw_header_hash()],
             [(0, keypair.clone())].into_iter().collect(),
             None,
         )));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
         )));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,

@@ -683,7 +683,7 @@ impl WriteLog {
 
     /// Remove the transaction hash because redundant
     pub(crate) fn redundant_tx_hash(&mut self, hash: &Hash) -> Result<()> {
-        if !self.replay_protection.remove(hash) {
+        if !self.replay_protection.swap_remove(hash) {
             return Err(Error::ReplayProtection(format!(
                 "Requested a redundant modification on hash {hash} which is \
                  unknown"
@@ -940,9 +940,11 @@ mod tests {
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3"] {
             let hash = Hash::sha256(tx.as_bytes());
-            assert!(state
-                .has_replay_protection_entry(&hash)
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&hash)
+                    .expect("read failed")
+            );
         }
 
         {
@@ -969,13 +971,17 @@ mod tests {
 
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3", "tx5", "tx6"] {
-            assert!(state
-                .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
         }
-        assert!(!state
-            .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
-            .expect("read failed"));
+        assert!(
+            !state
+                .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
+                .expect("read failed")
+        );
         {
             let write_log = state.write_log_mut();
             write_log
@@ -983,10 +989,12 @@ mod tests {
                 .unwrap();
 
             // mark as redundant a missing hash and check that it fails
-            assert!(state
-                .write_log
-                .redundant_tx_hash(&Hash::sha256("tx8".as_bytes()))
-                .is_err());
+            assert!(
+                state
+                    .write_log
+                    .redundant_tx_hash(&Hash::sha256("tx8".as_bytes()))
+                    .is_err()
+            );
 
             // Do not assert the state of replay protection because this
             // error will actually trigger a shut down of the node. Also, since

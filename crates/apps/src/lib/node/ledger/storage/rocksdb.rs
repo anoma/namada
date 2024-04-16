@@ -2308,16 +2308,13 @@ mod test {
                 persist_diffs,
             )
             .unwrap();
-            db.write_replay_protection_entry(
-                &mut batch,
-                &replay_protection::key(&Hash::sha256(tx)),
-            )
-            .unwrap();
             for tx in [b"tx1", b"tx2"] {
                 db.write_replay_protection_entry(
                     &mut batch,
                     &replay_protection::key(&Hash::sha256(tx)),
                 )
+                .unwrap();
+            }
 
             for tx in [b"tx3", b"tx4"] {
                 db.write_replay_protection_entry(
@@ -2369,8 +2366,8 @@ mod test {
             )
             .unwrap();
 
-
-    db.move_current_replay_protection_entries(&mut batch).unwrap();
+            db.move_current_replay_protection_entries(&mut batch)
+                .unwrap();
 
             for tx in [b"tx5", b"tx6"] {
                 db.write_replay_protection_entry(
