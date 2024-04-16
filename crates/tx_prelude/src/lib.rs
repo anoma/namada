@@ -24,6 +24,7 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::ethereum_events::EthAddress;
+use namada_core::event::{Event, EventToEmit, EventType};
 use namada_core::internal::HostEnvResult;
 use namada_core::key::common;
 use namada_core::storage::TxIndex;
@@ -336,9 +337,13 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
-        let event = borsh::to_vec(event).unwrap();
+    fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<(), Error> {
+        let event: Event = event.into();
+        // TODO: remove this line
+        let event: ibc::IbcEvent = event.try_into().unwrap();
+        let event = borsh::to_vec(&event).unwrap();
         unsafe {
+            // TODO: change this to `namada_tx_emit_event`
             namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
         };
         Ok(())
@@ -349,11 +354,10 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<ibc::IbcEvent>, Error> {
-        let event_type = event_type.as_ref().to_string();
+    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>, Error> {
+        // TODO: change this simply to `.to_string()`
+        let event_type = event_type.sub_domain().to_string();
+        // TODO: change this to `namada_tx_get_events`
         let read_result = unsafe {
             namada_tx_get_ibc_events(
                 event_type.as_ptr() as _,
@@ -361,8 +365,12 @@ impl TxEnv for Ctx {
             )
         };
         match read_from_buffer(read_result, namada_tx_result_buffer) {
+            // TODO: deserialize as `Vec<Event>`
             Some(value) => Ok(Vec::<ibc::IbcEvent>::try_from_slice(&value[..])
-                .expect("The conversion shouldn't fail")),
+                .expect("The conversion shouldn't fail")
+                .into_iter()
+                .map(Event::from)
+                .collect()),
             None => Ok(Vec::new()),
         }
     }
