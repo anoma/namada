@@ -610,11 +610,10 @@ where
                 .transparent_bundle()
                 .is_some_and(|bundle| !bundle.vin.is_empty())
             {
-                let error = native_vp::Error::new_alloc(format!(
+                let error = native_vp::Error::new_const(
                     "Transparent input to a transaction from the masp must be \
-                     0 but is {}",
-                    transp_bundle.vin.len()
-                ))
+                     0",
+                )
                 .into();
                 tracing::debug!("{error}");
                 return Err(error);
@@ -765,11 +764,10 @@ where
                 .transparent_bundle()
                 .is_some_and(|bundle| !bundle.vout.is_empty())
             {
-                let error = native_vp::Error::new_alloc(format!(
+                let error = native_vp::Error::new_const(
                     "Transparent output to a transaction from the masp must \
-                     be 0 but is {}",
-                    transp_bundle.vout.len()
-                ))
+                     be 0",
+                )
                 .into();
                 tracing::debug!("{error}");
                 return Err(error);
