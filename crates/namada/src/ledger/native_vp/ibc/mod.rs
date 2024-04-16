@@ -492,7 +492,7 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{NftClass, NftMetadata};
+    use crate::ibc::{IbcEventType, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
@@ -2189,6 +2189,11 @@ mod tests {
         state
             .write_log_mut()
             .emit_event::<IbcEvent>(event.try_into().unwrap());
+        let message_event =
+            RawIbcEvent::Message(MessageEvent::Module("transfer".to_owned()));
+        state
+            .write_log_mut()
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2538,6 +2543,16 @@ mod tests {
         state
             .write_log_mut()
             .emit_event::<IbcEvent>(event.try_into().unwrap());
+        state.write_log_mut().emit_event(IbcEvent {
+            event_type: IbcEventType("fungible_token_packet".to_owned()),
+            attributes: {
+                let mut attrs = namada_core::collections::HashMap::new();
+                // NB: fuck it, not worth adding a domain
+                // type for this
+                attrs.insert("success".to_owned(), "AQ==".to_owned());
+                attrs
+            },
+        });
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -3011,6 +3026,12 @@ mod tests {
             get_connection_id(),
         ));
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
+        state
+            .write_log_mut()
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            "nft_transfer".to_owned(),
+        ));
         state
             .write_log_mut()
             .emit_event::<IbcEvent>(message_event.try_into().unwrap());
