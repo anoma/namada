@@ -1036,7 +1036,7 @@ where
     let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
-    let gas = state.write_log_mut().emit_ibc_event(event);
+    let gas = state.write_log_mut().emit_event(event);
     tx_charge_gas::<MEM, D, H, CA>(env, gas)
 }
 

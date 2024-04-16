@@ -8,7 +8,6 @@ use namada_core::address::{Address, EstablishedAddressGen};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::event::{Event, EventToEmit, EventType};
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
 use patricia_tree::map::StringPatriciaMap;
@@ -424,12 +423,6 @@ impl WriteLog {
         gas_cost
     }
 
-    /// Set an IBC event and return the gas cost.
-    #[inline]
-    pub fn emit_ibc_event(&mut self, event: IbcEvent) -> u64 {
-        self.emit_event(event)
-    }
-
     /// Get the non-temporary storage keys changed and accounts keys initialized
     /// in the current transaction. The account keys point to the validity
     /// predicates of the newly created accounts. The keys in the precommit are
@@ -493,12 +486,6 @@ impl WriteLog {
             .into_iter()
             .flat_map(|(_, event_set)| event_set)
             .collect()
-    }
-
-    /// Get all IBC events emitted by the current transaction.
-    #[inline]
-    pub fn get_ibc_events(&self) -> impl Iterator<Item = &Event> {
-        self.get_events_of::<IbcEvent>()
     }
 
     /// Get events emitted by the current transaction of

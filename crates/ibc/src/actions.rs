@@ -120,7 +120,7 @@ where
     H: 'static + StorageHasher,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        let gas = self.write_log_mut().emit_ibc_event(event);
+        let gas = self.write_log_mut().emit_event(event);
         self.charge_gas(gas).into_storage_result()?;
         Ok(())
     }
@@ -196,7 +196,7 @@ where
     S: State,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        self.state.write_log_mut().emit_ibc_event(event);
+        self.state.write_log_mut().emit_event(event);
         Ok(())
     }
 
