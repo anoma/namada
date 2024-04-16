@@ -120,24 +120,13 @@ where
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
-                        let proposal_code =
-                            gov_api::get_proposal_code(&shell.state, id)?;
-                        let result = execute_default_proposal(
-                            shell,
-                            id,
-                            proposal_code.clone(),
-                        )?;
                         tracing::info!(
                             "Default Governance proposal {} has been executed \
                              and passed.",
                             id,
                         );
 
-                        ProposalEvent::default_proposal_event(
-                            id,
-                            proposal_code.is_some(),
-                            result,
-                        )
+                        ProposalEvent::default_proposal_event(id, false, false)
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =
@@ -370,6 +359,7 @@ where
                     shell.state.commit_tx();
                     Ok(true)
                 } else {
+                    shell.state.drop_tx();
                     Ok(false)
                 }
             }
