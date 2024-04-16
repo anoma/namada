@@ -386,7 +386,7 @@ pub fn tree_key_prefix_with_epoch(st: &StoreType, epoch: Epoch) -> Key {
 }
 
 /// Fake merkle tree just to commit extra data to the merkle tree
-#[derive(Default)]
+#[derive(Default, Copy, Clone, Debug)]
 pub struct CommitDataRoot(Hash);
 
 impl From<Hash> for CommitDataRoot {
@@ -600,6 +600,10 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             reconstructed.update(
                 H::hash(StoreType::BridgePool.to_string()).into(),
                 self.bridge_pool.root().into(),
+            )?;
+            reconstructed.update(
+                H::hash(StoreType::CommitData.to_string()).into(),
+                self.commit_data.0,
             )?;
             if self.base.root() == reconstructed.root() {
                 Ok(())
@@ -1156,6 +1160,11 @@ impl<'a> SubTreeRead for &'a CommitDataRoot {
     ) -> Result<MembershipProof> {
         unimplemented!("Commit data subspace hold only a single hash value.")
     }
+
+    fn validate(&self) -> bool {
+        // it is impossible for this tree to be invalid
+        true
+    }
 }
 
 impl<'a> SubTreeWrite for &'a mut CommitDataRoot {
@@ -1307,6 +1316,8 @@ mod test {
         let account_key_prefix: Key =
             Address::Internal(InternalAddress::Masp).to_db_key().into();
         let account_key = account_key_prefix.push(&"test".to_string()).unwrap();
+        let commit_data_key: Key =
+            DbKeySeg::StringSeg("commit_data".to_string()).into();
 
         let ibc_val = [1u8; 8].to_vec();
         tree.update(&ibc_key, ibc_val.clone()).unwrap();
@@ -1314,7 +1325,15 @@ mod test {
         tree.update(&pos_key, pos_val).unwrap();
         let account_val = [3u8; 16].to_vec();
         tree.update(&account_key, account_val).unwrap();
+        tree.update(&commit_data_key, [4u8; 8]).unwrap();
 
+        assert!(tree.validate().is_ok());
+        tree.commit_data = CommitDataRoot(Hash([0u8; 32]));
+        assert_matches!(
+            tree.validate().unwrap_err(),
+            Error::RootValidationError
+        );
+        tree.update(&commit_data_key, [4u8; 8]).unwrap();
         assert!(tree.validate().is_ok());
         let (store_type, sub_key) =
             StoreType::sub_key(&ibc_key).expect("Test failed");
