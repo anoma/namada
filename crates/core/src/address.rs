@@ -8,8 +8,10 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -57,12 +59,18 @@ pub const POS_SLASH_POOL: Address =
     Address::Internal(InternalAddress::PosSlashPool);
 /// Internal Governance address
 pub const GOV: Address = Address::Internal(InternalAddress::Governance);
+/// Internal Public Goods funding address
+pub const PGF: Address = Address::Internal(InternalAddress::Pgf);
 /// Internal MASP address
 pub const MASP: Address = Address::Internal(InternalAddress::Masp);
 /// Internal Multitoken address
 pub const MULTITOKEN: Address = Address::Internal(InternalAddress::Multitoken);
 /// Internal Eth bridge address
 pub const ETH_BRIDGE: Address = Address::Internal(InternalAddress::EthBridge);
+/// Address with temporary storage is used to pass data from txs to VPs which is
+/// never committed to DB
+pub const TEMP_STORAGE: Address =
+    Address::Internal(InternalAddress::TempStorage);
 
 /// Error from decoding address from string
 pub type DecodeError = string_encoding::DecodeError;
@@ -72,7 +80,14 @@ pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
 #[derive(
-    Clone, BorshSerialize, BorshDeserialize, BorshSchema, PartialEq, Eq, Hash,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    Hash,
 )]
 pub enum Address {
     /// An established address is generated on-chain
@@ -125,6 +140,9 @@ impl From<raw::Address<'_, raw::Validated>> for Address {
                 InternalAddress::IbcToken(IbcTokenHash(*raw_addr.data())),
             ),
             raw::Discriminant::Masp => Address::Internal(InternalAddress::Masp),
+            raw::Discriminant::TempStorage => {
+                Address::Internal(InternalAddress::TempStorage)
+            }
         }
     }
 }
@@ -219,6 +237,11 @@ impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
                     .validate()
                     .expect("This raw address is valid")
             }
+            Address::Internal(InternalAddress::TempStorage) => {
+                raw::Address::from_discriminant(raw::Discriminant::TempStorage)
+                    .validate()
+                    .expect("This raw address is valid")
+            }
         }
     }
 }
@@ -292,6 +315,11 @@ impl Address {
     /// If the address implicit?
     pub fn is_implicit(&self) -> bool {
         matches!(self, Address::Implicit(_))
+    }
+
+    /// If the address internal?
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Address::Internal(_))
     }
 }
 
@@ -379,6 +407,7 @@ impl TryFrom<Signer> for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -438,6 +467,7 @@ impl_display_and_from_str_via_format!(EstablishedAddress);
     Eq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -460,14 +490,14 @@ impl EstablishedAddressGen {
         &mut self,
         rng_source: impl AsRef<[u8]>,
     ) -> Address {
-        let gen_bytes = self.serialize_to_vec();
-        let bytes = [&gen_bytes, rng_source.as_ref()].concat();
-        let full_hash = Sha256::digest(&bytes);
-        // take first 20 bytes of the hash
-        let mut hash: [u8; HASH_LEN] = Default::default();
-        hash.copy_from_slice(&full_hash[..HASH_LEN]);
-        self.last_hash = full_hash.into();
-        Address::Established(EstablishedAddress { hash })
+        self.last_hash = {
+            let mut hasher_state = Sha256::new();
+            hasher_state.update(self.last_hash);
+            hasher_state.update(rng_source);
+            hasher_state.finalize()
+        }
+        .into();
+        Address::Established(self.last_hash.into())
     }
 }
 
@@ -478,6 +508,7 @@ impl EstablishedAddressGen {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -507,6 +538,7 @@ impl From<&key::common::PublicKey> for Address {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -543,6 +575,9 @@ pub enum InternalAddress {
     Pgf,
     /// Masp
     Masp,
+    /// Address with temporary storage is used to pass data from txs to VPs
+    /// which is never committed to DB
+    TempStorage,
 }
 
 impl Display for InternalAddress {
@@ -564,6 +599,7 @@ impl Display for InternalAddress {
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
                 Self::Masp => "MASP".to_string(),
+                Self::TempStorage => "TempStorage".to_string(),
             }
         )
     }
@@ -586,6 +622,7 @@ impl InternalAddress {
 
 #[cfg(test)]
 pub mod tests {
+    use borsh_ext::BorshSerializeExt;
     use proptest::prelude::*;
 
     use super::*;
@@ -652,17 +689,13 @@ pub fn gen_established_address(seed: impl AsRef<str>) -> Address {
     use rand::prelude::ThreadRng;
     use rand::{thread_rng, RngCore};
 
-    let mut key_gen = EstablishedAddressGen::new(seed);
+    EstablishedAddressGen::new(seed).generate_address({
+        let mut thread_local_rng: ThreadRng = thread_rng();
+        let mut buffer = [0u8; 32];
 
-    let mut rng: ThreadRng = thread_rng();
-    let mut rng_bytes = [0u8; 32];
-    rng.fill_bytes(&mut rng_bytes[..]);
-    let rng_source = rng_bytes
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<Vec<String>>()
-        .join("");
-    key_gen.generate_address(rng_source)
+        thread_local_rng.fill_bytes(&mut buffer[..]);
+        buffer
+    })
 }
 
 /// Generate a new established address. Unlike `gen_established_address`, this
@@ -673,13 +706,12 @@ pub fn gen_deterministic_established_address(seed: impl AsRef<str>) -> Address {
 }
 
 /// Helpers for testing with addresses.
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
-    use std::collections::HashMap;
-
     use proptest::prelude::*;
 
     use super::*;
+    use crate::collections::HashMap;
     use crate::key::*;
     use crate::token::Denomination;
 
@@ -788,8 +820,9 @@ pub mod testing {
             InternalAddress::Nut(_) => {}
             InternalAddress::Pgf => {}
             InternalAddress::Masp => {}
-            InternalAddress::Multitoken => {} /* Add new addresses in the
-                                               * `prop_oneof` below. */
+            InternalAddress::Multitoken => {}
+            InternalAddress::TempStorage => {} /* Add new addresses in the
+                                                * `prop_oneof` below. */
         };
         prop_oneof![
             Just(InternalAddress::PoS),
@@ -805,6 +838,7 @@ pub mod testing {
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
             Just(InternalAddress::Masp),
+            Just(InternalAddress::TempStorage),
         ]
     }
 

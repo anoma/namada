@@ -18,6 +18,7 @@ multicore = ["dep:rayon"]
 testing = ["multicore", "namada_core/testing"]
 
 [dependencies]
+namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_parameters = { path = "../parameters" }
 namada_storage = { path = "../storage" }
@@ -31,6 +32,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_storage = { path = "../storage", features = ["testing"] }
 
 proptest.workspace = true

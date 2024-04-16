@@ -64,6 +64,7 @@ where
 #[cfg(test)]
 mod test_queries {
     use namada::core::storage::{BlockHash, Epoch};
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada::proof_of_stake::types::WeightedValidator;
@@ -162,40 +163,48 @@ mod test_queries {
         };
     }
 
+    const fn send_valset(value: bool) -> bool {
+        if !is_bridge_comptime_enabled() {
+            false
+        } else {
+            value
+        }
+    }
+
     test_must_send_valset_upd! {
         epoch_assertions: [
-            // (current epoch, current block height, can send valset upd)
+            // (current epoch, current block height, must send valset upd)
             // NOTE: can send valset upd on every 2nd block of an epoch
-            (0, 1, false),
-            (0, 2, true),
-            (0, 3, false),
-            (0, 4, false),
-            (0, 5, false),
-            (0, 6, false),
-            (0, 7, false),
-            (0, 8, false),
-            (0, 9, false),
+            (0, 1, send_valset(false)),
+            (0, 2, send_valset(true)),
+            (0, 3, send_valset(false)),
+            (0, 4, send_valset(false)),
+            (0, 5, send_valset(false)),
+            (0, 6, send_valset(false)),
+            (0, 7, send_valset(false)),
+            (0, 8, send_valset(false)),
+            (0, 9, send_valset(false)),
             // we will change epoch here
-            (0, 10, false),
-            (1, 11, true),
-            (1, 12, false),
-            (1, 13, false),
-            (1, 14, false),
-            (1, 15, false),
-            (1, 16, false),
-            (1, 17, false),
-            (1, 18, false),
-            (1, 19, false),
+            (0, 10, send_valset(false)),
+            (1, 11, send_valset(true)),
+            (1, 12, send_valset(false)),
+            (1, 13, send_valset(false)),
+            (1, 14, send_valset(false)),
+            (1, 15, send_valset(false)),
+            (1, 16, send_valset(false)),
+            (1, 17, send_valset(false)),
+            (1, 18, send_valset(false)),
+            (1, 19, send_valset(false)),
             // we will change epoch here
-            (1, 20, false),
-            (2, 21, true),
-            (2, 22, false),
-            (2, 23, false),
-            (2, 24, false),
-            (2, 25, false),
-            (2, 26, false),
-            (2, 27, false),
-            (2, 28, false),
+            (1, 20, send_valset(false)),
+            (2, 21, send_valset(true)),
+            (2, 22, send_valset(false)),
+            (2, 23, send_valset(false)),
+            (2, 24, send_valset(false)),
+            (2, 25, send_valset(false)),
+            (2, 26, send_valset(false)),
+            (2, 27, send_valset(false)),
+            (2, 28, send_valset(false)),
         ],
     }
 }

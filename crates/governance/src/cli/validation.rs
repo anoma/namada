@@ -26,16 +26,16 @@ pub enum ProposalValidation {
          a multiple of {0}"
     )]
     InvalidStartEndDifference(u64, u64),
-    /// The proposal difference between end and grace epoch is invalid
+    /// The proposal difference between end and activation epoch is invalid
     #[error(
-        "Invalid proposal grace epoch: difference between proposal grace and \
-         end epoch must be at least {0}, but found {1}"
+        "Invalid proposal activation epoch: difference between proposal \
+         activation and end epoch must be at least {0}, but found {1}"
     )]
-    InvalidEndGraceDifference(u64, u64),
-    /// The proposal difference between end and grace epoch is invalid
+    InvalidEndActivationDifference(u64, u64),
+    /// The proposal difference between end and activation epoch is invalid
     #[error(
-        "Invalid proposal period: difference between proposal start and grace \
-         epoch must be at most {1}, but found {0}"
+        "Invalid proposal period: difference between proposal start and \
+         activation epoch must be at most {1}, but found {0}"
     )]
     InvalidProposalPeriod(u64, u64),
     /// The proposal author does not have enough balance to pay for proposal
@@ -51,12 +51,6 @@ pub enum ProposalValidation {
          but maximum is {1}"
     )]
     InvalidContentLength(u64, u64),
-    /// Invalid offline proposal tally epoch
-    #[error(
-        "Invalid proposal tally epoch: tally epoch ({0}) must be less than \
-         current epoch ({1})"
-    )]
-    InvalidTallyEPoch(Epoch, Epoch),
     /// The proposal wasm code is not valid
     #[error(
         "Invalid proposal extra data: file doesn't exist or content size \
@@ -130,18 +124,18 @@ pub fn is_valid_end_epoch(
     }
 }
 
-pub fn is_valid_grace_epoch(
-    proposal_grace_epoch: Epoch,
+pub fn is_valid_activation_epoch(
+    proposal_activation_epoch: Epoch,
     proposal_end_epoch: Epoch,
-    min_proposal_grace_epoch: u64,
+    min_proposal_grace_epochs: u64,
 ) -> Result<(), ProposalValidation> {
-    let grace_period = proposal_grace_epoch.0 - proposal_end_epoch.0;
+    let grace_period = proposal_activation_epoch.0 - proposal_end_epoch.0;
 
-    if grace_period > 0 && grace_period >= min_proposal_grace_epoch {
+    if grace_period > 0 && grace_period >= min_proposal_grace_epochs {
         Ok(())
     } else {
-        Err(ProposalValidation::InvalidEndGraceDifference(
-            min_proposal_grace_epoch,
+        Err(ProposalValidation::InvalidEndActivationDifference(
+            min_proposal_grace_epochs,
             grace_period,
         ))
     }
@@ -149,10 +143,10 @@ pub fn is_valid_grace_epoch(
 
 pub fn is_valid_proposal_period(
     proposal_start_epoch: Epoch,
-    proposal_grace_epoch: Epoch,
+    proposal_activation_epoch: Epoch,
     max_proposal_period: u64,
 ) -> Result<(), ProposalValidation> {
-    let proposal_period = proposal_grace_epoch.0 - proposal_start_epoch.0;
+    let proposal_period = proposal_activation_epoch.0 - proposal_start_epoch.0;
 
     if proposal_period > 0 && proposal_period <= max_proposal_period {
         Ok(())
@@ -183,20 +177,6 @@ pub fn is_valid_content(
         Err(ProposalValidation::InvalidContentLength(
             proposal_content_length,
             max_content_length,
-        ))
-    }
-}
-
-pub fn is_valid_tally_epoch(
-    tally_epoch: Epoch,
-    current_epoch: Epoch,
-) -> Result<(), ProposalValidation> {
-    if tally_epoch <= current_epoch {
-        Ok(())
-    } else {
-        Err(ProposalValidation::InvalidTallyEPoch(
-            tally_epoch,
-            current_epoch,
         ))
     }
 }

@@ -2,17 +2,19 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::error::Error as _;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 
 use borsh::BorshDeserialize;
-use namada_core::validity_predicate::VpSentinel;
+use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
-use namada_state::write_log::StorageModification;
-use namada_state::{DBIter, State, StateRead, StorageHasher, DB};
-use namada_tx::data::TxSentinel;
+use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
+use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{Commitment, Section, Tx};
-use parity_wasm::elements;
+use parity_wasm::elements::Instruction::*;
+use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
 use wasmer::{BaseTunables, Module, Store};
 
@@ -22,6 +24,7 @@ use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
 use crate::internal::HostEnvResult;
 use crate::ledger::gas::VpGasMeter;
+use crate::ledger::vp_host_fns;
 use crate::storage::{Key, TxIndex};
 use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::vm::prefix_iter::PrefixIterators;
@@ -29,16 +32,25 @@ use crate::vm::types::VpInput;
 use crate::vm::wasm::host_env::{tx_imports, vp_imports};
 use crate::vm::wasm::{memory, Cache, CacheName, VpCache};
 use crate::vm::{
-    validate_untrusted_wasm, WasmCacheAccess, WasmValidationError,
+    validate_untrusted_wasm, MutHostRef, WasmCacheAccess, WasmValidationError,
 };
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
+/// The error type returned by transactions.
+// TODO: move this to `core`, to be shared with the wasm vm,
+// and make it an `enum` of different variants
+type TxError = String;
+
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("VP error: {0}")]
+    VpError(VpError),
+    #[error("Transaction error: {0}")]
+    TxError(TxError),
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("Memory error: {0}")]
@@ -82,12 +94,38 @@ pub enum Error {
     GasError(String),
     #[error("Failed type conversion: {0}")]
     ConversionError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    #[error("Tx is not allowed in allowlist parameter")]
+    DisallowedTx,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
 }
 
 /// Result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
+/// `Hash` is not included in the `tx_allowlist` parameter.
+pub fn check_tx_allowed<S>(tx: &Tx, storage: &S) -> Result<()>
+where
+    S: StorageRead,
+{
+    if let TxType::Wrapper(_) = tx.header().tx_type {
+        if let Some(code_sec) = tx
+            .get_section(tx.code_sechash())
+            .and_then(|x| Section::code_sec(&x))
+        {
+            if crate::parameters::is_tx_allowed(storage, &code_sec.code.hash())
+                .map_err(|e| Error::StorageError(e.to_string()))?
+            {
+                return Ok(());
+            }
+        }
+        return Err(Error::DisallowedTx);
+    }
+    Ok(())
+}
 
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
@@ -101,13 +139,18 @@ pub fn tx<S, CA>(
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
 where
-    S: StateRead + State,
+    S: StateRead + State + StorageRead,
     CA: 'static + WasmCacheAccess,
 {
     let tx_code = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .ok_or(Error::MissingSection(tx.code_sechash().to_string()))?;
+
+    // Check if the tx code is allowed (to be done after the check on the code
+    // section commitment to let the replay protection mechanism run some
+    // optimizations)
+    check_tx_allowed(tx, state)?;
 
     // If the transaction code has a tag, ensure that the tag hash equals the
     // transaction code's hash.
@@ -147,6 +190,7 @@ where
         PrefixIterators::default();
     let mut verifiers = BTreeSet::new();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
@@ -162,6 +206,7 @@ where
         tx_index,
         &mut verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         vp_wasm_cache,
         tx_wasm_cache,
     );
@@ -189,12 +234,12 @@ where
         .exports
         .get_function(TX_ENTRYPOINT)
         .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64), ()>()
+        .native::<(u64, u64), u64>()
         .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
             entrypoint: TX_ENTRYPOINT,
             error,
         })?;
-    apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
+    let ok = apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
         tracing::debug!("Tx WASM failed with {}", err);
         match *sentinel.borrow() {
             TxSentinel::None => Error::RuntimeError(err),
@@ -205,7 +250,28 @@ where
         }
     })?;
 
-    Ok(verifiers)
+    if ok == 1 {
+        Ok(verifiers)
+    } else {
+        // NB: drop imports so we can safely access the
+        // `&mut` ptrs we shared with the guest
+        _ = (instance, imports);
+
+        let err = yielded_value.take().map_or_else(
+            || Ok("Execution ended abruptly with an unknown error".to_owned()),
+            |borsh_encoded_err| {
+                let tx_err = TxError::try_from_slice(&borsh_encoded_err)
+                    .map_err(|e| Error::ConversionError(e.to_string()))?;
+                Ok(tx_err)
+            },
+        )?;
+
+        Err(match *sentinel.borrow() {
+            TxSentinel::None => Error::TxError(err),
+            TxSentinel::OutOfGas => Error::GasError(err),
+            TxSentinel::InvalidCommitment => Error::MissingSection(err),
+        })
+    }
 }
 
 /// Execute a validity predicate code. Returns whether the validity
@@ -222,7 +288,7 @@ pub fn vp<S, CA>(
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     mut vp_wasm_cache: VpCache<CA>,
-) -> Result<bool>
+) -> Result<()>
 where
     S: StateRead,
     CA: 'static + WasmCacheAccess,
@@ -238,13 +304,13 @@ where
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
     let mut result_buffer: Option<Vec<u8>> = None;
+    let mut yielded_value: Option<Vec<u8>> = None;
     let eval_runner =
         VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
             db: PhantomData,
             hasher: PhantomData,
             cache_access: PhantomData,
         };
-    let sentinel = RefCell::new(VpSentinel::default());
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
@@ -252,12 +318,12 @@ where
         state.in_mem(),
         state.db(),
         gas_meter,
-        &sentinel,
         tx,
         tx_index,
         &mut iterators,
         verifiers,
         &mut result_buffer,
+        &mut yielded_value,
         keys_changed,
         &eval_runner,
         &mut vp_wasm_cache,
@@ -265,9 +331,10 @@ where
 
     let initial_memory =
         memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
+    let yielded_value_borrow = env.ctx.yielded_value.clone();
     let imports = vp_imports(&store, initial_memory, env);
 
-    match run_vp(
+    run_vp(
         module,
         imports,
         &vp_code_hash,
@@ -275,46 +342,21 @@ where
         address,
         keys_changed,
         verifiers,
-    ) {
-        Ok(accept) => {
-            if sentinel.borrow().is_invalid_signature() {
-                if accept {
-                    // This is unexpected, if the signature is invalid the vp
-                    // should have rejected the tx. Something must be wrong with
-                    // the VP logic and we take the signature verification
-                    // result as the reference. In this case we override the vp
-                    // result and log the issue
-                    tracing::warn!(
-                        "VP of {address} accepted the transaction but \
-                         signaled that the signature was invalid. Overriding \
-                         the vp result to reject the transaction..."
-                    );
-                }
-                Err(Error::InvalidTxSignature)
-            } else {
-                Ok(accept)
-            }
-        }
-        Err(err) => {
-            if sentinel.borrow().is_out_of_gas() {
-                Err(Error::GasError(err.to_string()))
-            } else {
-                Err(err)
-            }
-        }
-    }
+        yielded_value_borrow,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
-    _vp_code_hash: &Hash,
+    vp_code_hash: &Hash,
     input_data: &Tx,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-) -> Result<bool> {
+    yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
+) -> Result<()> {
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,
@@ -364,9 +406,48 @@ fn run_vp(
             verifiers_ptr,
             verifiers_len,
         )
-        .map_err(Error::RuntimeError)?;
-    tracing::debug!("is_valid {}", is_valid);
-    Ok(is_valid == 1)
+        .map_err(|rt_error| {
+            let downcasted_err = || {
+                let source_err = rt_error.source()?;
+                let downcasted_vp_rt_err: &vp_host_fns::RuntimeError =
+                    source_err.downcast_ref()?;
+
+                match downcasted_vp_rt_err {
+                    vp_host_fns::RuntimeError::OutOfGas(_) => {
+                        Some(Error::GasError(rt_error.to_string()))
+                    }
+                    vp_host_fns::RuntimeError::InvalidSectionSignature(_) => {
+                        Some(Error::InvalidSectionSignature(
+                            rt_error.to_string(),
+                        ))
+                    }
+                    _ => None,
+                }
+            };
+            downcasted_err().unwrap_or(Error::RuntimeError(rt_error))
+        })?;
+    tracing::debug!(
+        is_valid,
+        %vp_code_hash,
+        "wasm vp"
+    );
+
+    if is_valid == 1 {
+        Ok(())
+    } else {
+        // NB: drop imports so we can safely access the
+        // `&mut` ptrs we shared with the guest
+        _ = (instance, vp_imports);
+
+        unsafe { yielded_value.get() }.take().map_or_else(
+            || Err(Error::VpError(VpError::Unspecified)),
+            |borsh_encoded_err| {
+                let vp_err = VpError::try_from_slice(&borsh_encoded_err)
+                    .map_err(|e| Error::ConversionError(e.to_string()))?;
+                Err(Error::VpError(vp_err))
+            },
+        )
+    }
 }
 
 /// Validity predicate wasm evaluator for `eval` host function calls.
@@ -402,13 +483,14 @@ where
         vp_code_hash: Hash,
         input_data: Tx,
     ) -> HostEnvResult {
-        match self.eval_native_result(ctx, vp_code_hash, input_data) {
-            Ok(ok) => HostEnvResult::from(ok),
-            Err(err) => {
-                tracing::warn!("VP eval error {}", err);
-                HostEnvResult::Fail
-            }
-        }
+        self.eval_native_result(ctx, vp_code_hash, input_data)
+            .map_or_else(
+                |err| {
+                    tracing::warn!("VP eval error {err}");
+                    HostEnvResult::Fail
+                },
+                |()| HostEnvResult::Success,
+            )
     }
 }
 
@@ -424,7 +506,7 @@ where
         ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: Tx,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let address = unsafe { ctx.address.get() };
         let keys_changed = unsafe { ctx.keys_changed.get() };
         let verifiers = unsafe { ctx.verifiers.get() };
@@ -446,6 +528,7 @@ where
             memory: WasmMemory::default(),
             ctx,
         };
+        let yielded_value_borrow = env.ctx.yielded_value.clone();
         let imports = vp_imports(&store, initial_memory, env);
 
         run_vp(
@@ -456,6 +539,7 @@ where
             address,
             keys_changed,
             verifiers,
+            yielded_value_borrow,
         )
     }
 }
@@ -479,7 +563,7 @@ pub fn prepare_wasm_code<T: AsRef<[u8]>>(code: T) -> Result<Vec<u8>> {
         wasm_instrument::gas_metering::host_function::Injector::new(
             "env", "gas",
         ),
-        &get_gas_rules(),
+        &GasRules,
     )
     .map_err(|_original_module| Error::GasMeterInjection)?;
     let module =
@@ -503,75 +587,23 @@ where
 {
     match code_or_hash {
         Commitment::Hash(code_hash) => {
-            let (module, store, tx_len) = match wasm_cache.fetch(code_hash)? {
-                Some((module, store)) => {
-                    // Gas accounting even if the compiled module is in cache
-                    let key = Key::wasm_code_len(code_hash);
-                    let tx_len = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            u64::try_from_slice(value).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            })
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code length failed from \
-                                     storage: key {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => u64::try_from_slice(&v).map_err(|e| {
-                                Error::ConversionError(e.to_string())
-                            }),
-                            None => Err(Error::LoadWasmCode(format!(
-                                "No wasm code length in storage: key {}",
-                                key
-                            ))),
-                        },
-                    }?;
+            let code_len_key = Key::wasm_code_len(code_hash);
+            let tx_len = state
+                .read::<u64>(&code_len_key)
+                .map_err(|e| {
+                    Error::LoadWasmCode(format!(
+                        "Read wasm code length failed: key {code_len_key}, \
+                         error {e}"
+                    ))
+                })?
+                .ok_or_else(|| {
+                    Error::LoadWasmCode(format!(
+                        "No wasm code length in storage: key {code_len_key}"
+                    ))
+                })?;
 
-                    (module, store, tx_len)
-                }
-                None => {
-                    let key = Key::wasm_code(code_hash);
-                    let code = match state.write_log().read(&key).0 {
-                        Some(StorageModification::Write { value }) => {
-                            value.clone()
-                        }
-                        _ => match state
-                            .db_read(&key)
-                            .map_err(|e| {
-                                Error::LoadWasmCode(format!(
-                                    "Read wasm code failed from storage: key \
-                                     {}, error {}",
-                                    key, e
-                                ))
-                            })?
-                            .0
-                        {
-                            Some(v) => v,
-                            None => {
-                                return Err(Error::LoadWasmCode(format!(
-                                    "No wasm code in storage: key {}",
-                                    key
-                                )));
-                            }
-                        },
-                    };
-                    let tx_len = u64::try_from(code.len())
-                        .map_err(|e| Error::ConversionError(e.to_string()))?;
-
-                    match wasm_cache.compile_or_fetch(code)? {
-                        Some((module, store)) => (module, store, tx_len),
-                        None => return Err(Error::NoCompiledWasmCode),
-                    }
-                }
-            };
-
+            // Gas accounting in any case, even if the compiled module is in
+            // cache
             gas_meter
                 .borrow_mut()
                 .add_wasm_load_from_storage_gas(tx_len)
@@ -580,6 +612,31 @@ where
                 .borrow_mut()
                 .add_compiling_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
+
+            let (module, store) = match wasm_cache.fetch(code_hash)? {
+                Some((module, store)) => (module, store),
+                None => {
+                    let key = Key::wasm_code(code_hash);
+                    let code = state
+                        .read_bytes(&key)
+                        .map_err(|e| {
+                            Error::LoadWasmCode(format!(
+                                "Read wasm code failed: key {key}, error {e}"
+                            ))
+                        })?
+                        .ok_or_else(|| {
+                            Error::LoadWasmCode(format!(
+                                "No wasm code in storage: key {key}"
+                            ))
+                        })?;
+
+                    match wasm_cache.compile_or_fetch(code)? {
+                        Some((module, store)) => (module, store),
+                        None => return Err(Error::NoCompiledWasmCode),
+                    }
+                }
+            };
+
             Ok((module, store))
         }
         Commitment::Id(code) => {
@@ -602,18 +659,217 @@ where
     }
 }
 
-/// Get the gas rules used to meter wasm operations
-fn get_gas_rules() -> wasm_instrument::gas_metering::ConstantCostRules {
-    // NOTE: costs set to 0 don't actually trigger the injection of a call to
-    // the gas host function (no useless instructions are injected)
-    let instruction_cost = 0;
-    let memory_grow_cost = WASM_MEMORY_PAGE_GAS;
-    let call_per_local_cost = 0;
-    wasm_instrument::gas_metering::ConstantCostRules::new(
-        instruction_cost,
-        memory_grow_cost,
-        call_per_local_cost,
-    )
+struct GasRules;
+
+impl wasm_instrument::gas_metering::Rules for GasRules {
+    fn instruction_cost(
+        &self,
+        instruction: &wasm_instrument::parity_wasm::elements::Instruction,
+    ) -> Option<u32> {
+        // NOTE: costs set to 0 don't actually trigger the injection of a call
+        // to the gas host function (no useless instructions are
+        // injected)
+        // NOTE: these costs are taken from the benchmarks crate. None of them
+        // should be zero
+        let gas = match instruction {
+            Unreachable => 129_358,
+            // Just a flag, aribitrary cost of 1
+            End => 1,
+            // Just a flag, aribitrary cost of 1
+            Else => 1,
+            Nop => 1,
+            Block(_) => 1,
+            Loop(_) => 1,
+            If(_) => 4,
+            Br(_) => 27,
+            BrIf(_) => 36,
+            BrTable(_) => 70,
+            Return => 7,
+            Call(_) => 43,
+            CallIndirect(_, _) => 140,
+            Drop => 1,
+            Select => 37,
+            GetLocal(_) => 2,
+            SetLocal(_) => 2,
+            TeeLocal(_) => 2,
+            GetGlobal(_) => 3,
+            SetGlobal(_) => 4,
+            I32Load(_, _) => 5,
+            I64Load(_, _) => 5,
+            F32Load(_, _) => 6,
+            F64Load(_, _) => 6,
+            I32Load8S(_, _) => 5,
+            I32Load8U(_, _) => 5,
+            I32Load16S(_, _) => 5,
+            I32Load16U(_, _) => 5,
+            I64Load8S(_, _) => 5,
+            I64Load8U(_, _) => 5,
+            I64Load16S(_, _) => 5,
+            I64Load16U(_, _) => 5,
+            I64Load32S(_, _) => 5,
+            I64Load32U(_, _) => 5,
+            I32Store(_, _) => 5,
+            I64Store(_, _) => 7,
+            F32Store(_, _) => 5,
+            F64Store(_, _) => 6,
+            I32Store8(_, _) => 5,
+            I32Store16(_, _) => 15,
+            I64Store8(_, _) => 5,
+            I64Store16(_, _) => 15,
+            I64Store32(_, _) => 6,
+            CurrentMemory(_) => 108,
+            GrowMemory(_) => 394,
+            I32Const(_) => 1,
+            I64Const(_) => 1,
+            F32Const(_) => 1,
+            F64Const(_) => 1,
+            I32Eqz => 6,
+            I32Eq => 6,
+            I32Ne => 6,
+            I32LtS => 6,
+            I32LtU => 6,
+            I32GtS => 6,
+            I32GtU => 6,
+            I32LeS => 6,
+            I32LeU => 6,
+            I32GeS => 6,
+            I32GeU => 6,
+            I64Eqz => 7,
+            I64Eq => 7,
+            I64Ne => 7,
+            I64LtS => 7,
+            I64LtU => 7,
+            I64GtS => 7,
+            I64GtU => 7,
+            I64LeS => 7,
+            I64LeU => 7,
+            I64GeS => 7,
+            I64GeU => 7,
+            F32Eq => 8,
+            F32Ne => 8,
+            F32Lt => 8,
+            F32Gt => 8,
+            F32Le => 8,
+            F32Ge => 8,
+            F64Eq => 10,
+            F64Ne => 10,
+            F64Lt => 9,
+            F64Gt => 9,
+            F64Le => 9,
+            F64Ge => 9,
+            I32Clz => 35,
+            I32Ctz => 34,
+            I32Popcnt => 3,
+            I32Add => 3,
+            I32Sub => 3,
+            I32Mul => 5,
+            I32DivS => 17,
+            I32DivU => 17,
+            I32RemS => 41,
+            I32RemU => 17,
+            I32And => 3,
+            I32Or => 3,
+            I32Xor => 3,
+            I32Shl => 3,
+            I32ShrS => 3,
+            I32ShrU => 3,
+            I32Rotl => 3,
+            I32Rotr => 3,
+            I64Clz => 35,
+            I64Ctz => 34,
+            I64Popcnt => 3,
+            I64Add => 5,
+            I64Sub => 5,
+            I64Mul => 6,
+            I64DivS => 28,
+            I64DivU => 28,
+            I64RemS => 46,
+            I64RemU => 28,
+            I64And => 5,
+            I64Or => 5,
+            I64Xor => 5,
+            I64Shl => 4,
+            I64ShrS => 4,
+            I64ShrU => 4,
+            I64Rotl => 4,
+            I64Rotr => 4,
+            F32Abs => 4,
+            F32Neg => 3,
+            F32Ceil => 6,
+            F32Floor => 6,
+            F32Trunc => 6,
+            F32Nearest => 6,
+            F32Sqrt => 9,
+            F32Add => 6,
+            F32Sub => 6,
+            F32Mul => 6,
+            F32Div => 9,
+            F32Min => 50,
+            F32Max => 47,
+            F32Copysign => 6,
+            F64Abs => 6,
+            F64Neg => 4,
+            F64Ceil => 7,
+            F64Floor => 7,
+            F64Trunc => 7,
+            F64Nearest => 7,
+            F64Sqrt => 17,
+            F64Add => 7,
+            F64Sub => 7,
+            F64Mul => 7,
+            F64Div => 12,
+            F64Min => 52,
+            F64Max => 49,
+            F64Copysign => 11,
+            I32WrapI64 => 2,
+            I32TruncSF32 => 54,
+            I32TruncUF32 => 54,
+            I32TruncSF64 => 57,
+            I32TruncUF64 => 57,
+            I64ExtendSI32 => 2,
+            I64ExtendUI32 => 2,
+            I64TruncSF32 => 73,
+            I64TruncUF32 => 70,
+            I64TruncSF64 => 89,
+            I64TruncUF64 => 70,
+            F32ConvertSI32 => 12,
+            F32ConvertUI32 => 6,
+            F32ConvertSI64 => 6,
+            F32ConvertUI64 => 39,
+            F32DemoteF64 => 9,
+            F64ConvertSI32 => 12,
+            F64ConvertUI32 => 12,
+            F64ConvertSI64 => 12,
+            F64ConvertUI64 => 39,
+            F64PromoteF32 => 9,
+            I32ReinterpretF32 => 2,
+            I64ReinterpretF64 => 2,
+            F32ReinterpretI32 => 3,
+            F64ReinterpretI64 => 3,
+            SignExt(SignExtInstruction::I32Extend8S) => 1,
+            SignExt(SignExtInstruction::I32Extend16S) => 1,
+            SignExt(SignExtInstruction::I64Extend8S) => 1,
+            SignExt(SignExtInstruction::I64Extend16S) => 1,
+            SignExt(SignExtInstruction::I64Extend32S) => 1,
+        };
+
+        // We always return a cost, forbidden instructions should be rejected at
+        // validation time not here
+        Some(gas)
+    }
+
+    fn memory_grow_cost(
+        &self,
+    ) -> wasm_instrument::gas_metering::MemoryGrowCost {
+        wasm_instrument::gas_metering::MemoryGrowCost::Linear(
+            NonZeroU32::new(WASM_MEMORY_PAGE_GAS)
+                .expect("Memory grow gas cost should be non-zero"),
+        )
+    }
+
+    fn call_per_local_cost(&self) -> u32 {
+        1
+    }
 }
 
 #[cfg(test)]
@@ -624,7 +880,8 @@ mod tests {
     use itertools::Either;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
-    use namada_tx::data::TxType;
+    use namada_token::DenominatedAmount;
+    use namada_tx::data::{Fee, TxType};
     use namada_tx::{Code, Data};
     use test_log::test;
     use wasmer_vm::TrapCode;
@@ -635,7 +892,8 @@ mod tests {
     use crate::vm::host_env::TxRuntimeError;
     use crate::vm::wasm;
 
-    const TX_GAS_LIMIT: u64 = 10_000_000_000;
+    const TX_GAS_LIMIT: u64 = 10_000_000_000_000;
+    const OUT_OF_GAS_LIMIT: u64 = 10_000;
 
     /// Test that we sanitize accesses to invalid addresses in wasm memory.
     #[test]
@@ -644,11 +902,10 @@ mod tests {
             r#"
             (module
                 (import "env" "namada_tx_read" (func (param i64 i64) (result i64)))
-                (func (param i64 i64)
+                (func (param i64 i64) (result i64)
                     i64.const 18446744073709551615
                     i64.const 1
                     (call 0)
-                    drop
                 )
                 (memory 16)
                 (export "memory" (memory 0))
@@ -858,19 +1115,20 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        let passed = vp(
-            code_hash,
-            &outer_tx,
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache.clone(),
-        )
-        .unwrap();
-        assert!(passed);
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache.clone(),
+            )
+            .is_ok()
+        );
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -889,20 +1147,20 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        let passed = vp(
-            code_hash,
-            &outer_tx,
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache,
-        )
-        .unwrap();
-
-        assert!(!passed);
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1268,7 +1526,195 @@ mod tests {
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
-        let passed = vp(
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn test_apply_wasm_tx_allowlist() {
+        let mut state = TestState::default();
+
+        let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
+        // store the wasm code
+        let read_code_hash = Hash::sha256(&tx_read_key);
+        let code_len = (tx_read_key.len() as u64).serialize_to_vec();
+        let key = Key::wasm_code(&read_code_hash);
+        let len_key = Key::wasm_code_len(&read_code_hash);
+        state.write_bytes(&key, tx_read_key).unwrap();
+        state.write_bytes(&len_key, code_len).unwrap();
+
+        let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
+        let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(
+            namada_tx::data::WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: state.in_mem().native_token.clone(),
+                },
+                namada_core::key::testing::common_sk_from_simple_seed(0)
+                    .to_public(),
+                namada_state::Epoch(0),
+                0.into(),
+                None,
+            ),
+        )));
+        tx.add_code_from_hash(read_code_hash, None);
+        wrapper_tx.add_code_from_hash(read_code_hash, None);
+        tx.add_serialized_data(vec![]);
+        wrapper_tx.add_serialized_data(vec![]);
+
+        // Check that using a disallowed wrapper tx leads to an error, but a raw
+        // tx is ok even if not allowlisted
+        {
+            let allowlist = vec![format!("{}-bad", read_code_hash)];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut state, allowlist,
+            )
+            .unwrap();
+            state.commit_tx();
+
+            let result = check_tx_allowed(&wrapper_tx, &state);
+            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
+            let result = check_tx_allowed(&tx, &state);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
+
+        // Check that using an allowed wrapper tx doesn't lead to
+        // `Error::DisallowedTx`
+        {
+            let allowlist = vec![read_code_hash.to_string()];
+            crate::parameters::update_tx_allowlist_parameter(
+                &mut state, allowlist,
+            )
+            .unwrap();
+            state.commit_tx();
+
+            let result = check_tx_allowed(&wrapper_tx, &state);
+            if let Err(result) = result {
+                assert!(!matches!(result, Error::DisallowedTx));
+            }
+        }
+    }
+
+    /// Test that when a function runs out of gas in guest, the execution is
+    /// aborted
+    #[test]
+    fn test_tx_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a function runs out of gas in host, the execution is
+    /// aborted from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_tx_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
+            OUT_OF_GAS_LIMIT.into(),
+        ));
+        let tx_index = TxIndex::default();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::TxInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = tx(
+            &mut state,
+            &gas_meter,
+            &tx_index,
+            &outer_tx,
+            &mut vp_cache,
+            &mut tx_cache,
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in guest, the execution is aborted
+    #[test]
+    fn test_vp_out_of_gas_in_guest() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteGuestGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
             code_hash,
             &outer_tx,
             &tx_index,
@@ -1277,10 +1723,53 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_cache,
-        )
-        .unwrap();
-        assert!(!passed);
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    /// Test that when a vp runs out of gas in host, the execution is aborted
+    /// from the host env (no cooperation required by the guest).
+    #[test]
+    fn test_vp_out_of_gas_in_host() {
+        let mut state = TestState::default();
+        let tx_index = TxIndex::default();
+
+        let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+        ));
+        let keys_changed = BTreeSet::new();
+        let verifiers = BTreeSet::new();
+
+        // This code will charge gas in a host function indefinetely
+        let tx_code = TestWasms::VpInfiniteHostGas.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&tx_code);
+        let key = Key::wasm_code(&code_hash);
+        let len_key = Key::wasm_code_len(&code_hash);
+        let code_len = (tx_code.len() as u64).serialize_to_vec();
+        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.set_code(Code::new(tx_code.clone(), None));
+        outer_tx.set_data(Data::new(vec![]));
+        let result = vp(
+            code_hash,
+            &outer_tx,
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        );
+
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
     }
 
     fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {
@@ -1324,27 +1813,25 @@ mod tests {
             format!(
                 r#"
             (module
-                (type (;0;) (func (param i64 i64)))
+                (type (;0;) (func (param i64 i64) (result i64)))
 
                 ;; recursive loop, the param is the number of loops
                 (func $loop (param i64) (result i64)
                 (if
                 (result i64)
                 (i64.eqz (get_local 0))
-                (then (get_local 0))
+                (then (i64.const 1))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
-                (func $_apply_tx (type 0) (param i64 i64)
-                (call $loop (i64.const {}))
-                drop)
+                (func $_apply_tx (type 0) (param i64 i64) (result i64)
+                (call $loop (i64.const {loops})))
 
                 (table (;0;) 1 1 funcref)
                 (memory (;0;) 16)
                 (global (;0;) (mut i32) (i32.const 1048576))
                 (export "memory" (memory 0))
                 (export "_apply_tx" (func $_apply_tx)))
-            "#,
-                loops
+            "#
             )
             .as_bytes(),
         )
@@ -1354,7 +1841,7 @@ mod tests {
         execute_tx_with_code(tx_code)
     }
 
-    fn loop_in_vp_wasm(loops: u32) -> Result<bool> {
+    fn loop_in_vp_wasm(loops: u32) -> Result<()> {
         // A validity predicate with a recursive loop.
         // The boilerplate code is generated from vp_template.wasm using
         // `wasm2wat` and the loop code is hand-written.
@@ -1368,7 +1855,7 @@ mod tests {
                 (if
                 (result i64)
                 (i64.eqz (get_local 0))
-                (then (get_local 0))
+                (then (i64.const 1))
                 (else (call $loop (i64.sub (get_local 0) (i64.const 1))))))
 
                 (func $_validate_tx (type 0) (param i64 i64 i64 i64 i64 i64 i64 i64) (result i64)

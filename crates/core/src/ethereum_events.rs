@@ -10,6 +10,9 @@ use borsh_ext::BorshSerializeExt;
 use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
 use eyre::{eyre, Context};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
@@ -33,6 +36,7 @@ use crate::token::Amount;
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct Uint(pub [u64; 4]);
@@ -137,6 +141,7 @@ impl Sub<u64> for Uint {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 #[serde(try_from = "String")]
@@ -229,6 +234,7 @@ pub trait GetEventNonce {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct TransfersToNamada {
@@ -264,6 +270,7 @@ impl From<TransfersToNamada> for EthereumEvent {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub enum EthereumEvent {
@@ -325,6 +332,7 @@ impl EthereumEvent {
     Ord,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct TransferToNamada {
@@ -347,6 +355,7 @@ pub struct TransferToNamada {
     Ord,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -444,7 +453,7 @@ pub mod tests {
 
 #[allow(missing_docs)]
 /// Test helpers
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
     use proptest::prop_compose;
 

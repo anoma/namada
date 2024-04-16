@@ -3,13 +3,15 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::state::StorageWrite;
+use namada::state::{StorageRead, StorageWrite};
+use namada::token::storage_key::masp_token_map_key;
 use namada::token::{self, DenominatedAmount};
 use namada_apps::node::ledger::shell::testing::client::run;
 use namada_apps::node::ledger::shell::testing::node::NodeResults;
 use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
 use namada_apps::wallet::defaults::christel_keypair;
 use namada_core::dec::Dec;
+use namada_core::masp::TokenMap;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 
@@ -366,7 +368,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.359578"));
+    assert!(captured.contains("nam: 0.362747"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -386,7 +388,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.671183"));
+    assert!(captured.contains("nam: 0.674354"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -466,7 +468,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.725855"));
 
     node.next_epoch();
     // sync the shielded context
@@ -495,7 +497,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.58943"));
+    assert!(captured.contains("nam: 1.595775"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -586,7 +588,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.843775"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -638,7 +640,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.719514"));
+    assert!(captured.contains("nam: 0.725855"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -658,7 +660,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.83743"));
+    assert!(captured.contains("nam: 1.843775"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
@@ -683,7 +685,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "0.719514",
+            "0.725855",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -793,7 +795,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.004005"));
+    assert!(captured.contains("nam: 0.004009"));
 
     Ok(())
 }
@@ -2231,21 +2233,26 @@ fn dynamic_assets() -> Result<()> {
     let btc = BTC.to_lowercase();
     let nam = NAM.to_lowercase();
 
-    let tokens = {
+    let token_map_key = masp_token_map_key();
+    let test_tokens = {
         // Only distribute rewards for NAM tokens
-        let state = &mut node.shell.lock().unwrap().state;
-        let tokens = state.in_mem().conversion_state.tokens.clone();
-        state
-            .in_mem_mut()
-            .conversion_state
-            .tokens
-            .insert(btc.clone(), tokens[&btc].clone());
-        state
-            .in_mem_mut()
-            .conversion_state
-            .tokens
-            .retain(|k, _v| *k == nam);
-        tokens
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        let test_tokens = tokens.clone();
+        tokens.retain(|k, _v| *k == nam);
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens.clone())
+            .unwrap();
+        test_tokens
     };
     // add necessary viewing keys to shielded context
     run(
@@ -2330,12 +2337,21 @@ fn dynamic_assets() -> Result<()> {
     {
         // Start decoding and distributing shielded rewards for BTC in next
         // epoch
-        let state = &mut node.shell.lock().unwrap().state;
-        state
-            .in_mem_mut()
-            .conversion_state
-            .tokens
-            .insert(btc.clone(), tokens[&btc].clone());
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        tokens.insert(btc.clone(), test_tokens[&btc].clone());
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens)
+            .unwrap();
     }
 
     // Wait till epoch boundary
@@ -2505,7 +2521,9 @@ fn dynamic_assets() -> Result<()> {
         let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
-                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
+                &token::storage_key::masp_max_reward_rate_key(
+                    &test_tokens[&nam],
+                ),
                 Dec::zero(),
             )
             .unwrap();
@@ -2561,8 +2579,21 @@ fn dynamic_assets() -> Result<()> {
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
-        let state = &mut node.shell.lock().unwrap().state;
-        state.in_mem_mut().conversion_state.tokens.remove(&btc);
+        let mut tokens: TokenMap = node
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .read(&token_map_key)
+            .unwrap()
+            .unwrap_or_default();
+        tokens.remove(&btc);
+        node.shell
+            .lock()
+            .unwrap()
+            .state
+            .write(&token_map_key, tokens)
+            .unwrap();
     }
 
     // Wait till epoch boundary
@@ -2665,7 +2696,9 @@ fn dynamic_assets() -> Result<()> {
         let storage = &mut node.shell.lock().unwrap().state;
         storage
             .write(
-                &token::storage_key::masp_max_reward_rate_key(&tokens[&nam]),
+                &token::storage_key::masp_max_reward_rate_key(
+                    &test_tokens[&nam],
+                ),
                 Dec::from_str("0.1").unwrap(),
             )
             .unwrap();

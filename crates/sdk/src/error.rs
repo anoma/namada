@@ -156,6 +156,9 @@ pub enum TxSubmitError {
     /// The address is not a valid steward
     #[error("The address {0} is not a valid steward.")]
     InvalidSteward(Address),
+    /// Invalid bond pair
+    #[error("Invalid bond pair: source {0} cannot bond to validator {1}.")]
+    InvalidBondPair(Address, Address),
     /// Rate of epoch change too large for current epoch
     #[error(
         "New rate, {0}, is too large of a change with respect to the \
@@ -183,6 +186,15 @@ pub enum TxSubmitError {
     /// No bonds found
     #[error("No bonds found")]
     NoBondFound,
+    /// No delegations found at epoch
+    #[error("The account {0} has no active delegations found at epoch {1}")]
+    NoDelegationsFound(Address, Epoch),
+    /// Cannot vote in governance
+    #[error(
+        "Validator {0} cannot vote in governance because the validator is \
+         either jailed or inactive at the current epoch {1}"
+    )]
+    CannotVoteInGovernance(Address, Epoch),
     /// Lower bond amount than the unbond
     #[error(
         "The total bonds of the source {0} is lower than the amount to be \
@@ -265,7 +277,7 @@ pub enum TxSubmitError {
     ImplicitInternalError,
     /// Unexpected Error
     #[error("Unexpected behavior reading the unbonds data has occurred")]
-    UnboundError,
+    UnbondError,
     /// Epoch not in storage
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
@@ -306,6 +318,9 @@ pub enum TxSubmitError {
     /// An empty string was provided as a new email
     #[error("An empty string cannot be provided as a new email")]
     InvalidEmail,
+    /// The metadata string is too long
+    #[error("The provided metadata string is too long")]
+    MetadataTooLong,
     /// The consensus key is not Ed25519
     #[error("The consensus key must be an ed25519 key")]
     ConsensusKeyNotEd25519,

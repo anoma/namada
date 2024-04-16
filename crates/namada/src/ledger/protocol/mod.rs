@@ -6,15 +6,15 @@ use std::fmt::Debug;
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
+use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
-use namada_core::validity_predicate::VpSentinel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    DecryptedTx, GasLimit, TxResult, TxType, VpsResult, WrapperTx,
+    GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
 };
 use namada_tx::{Section, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -50,6 +50,8 @@ pub enum Error {
     StateError(namada_state::Error),
     #[error("Storage error: {0}")]
     StorageError(namada_state::StorageError),
+    #[error("Wrapper tx runner error: {0}")]
+    WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
@@ -62,8 +64,8 @@ pub enum Error {
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
     FeeError(String),
-    #[error("Invalid transaction signature")]
-    InvalidTxSignature,
+    #[error("Invalid transaction section signature: {0}")]
+    InvalidSectionSignature(String),
     #[error(
         "The decrypted transaction {0} has already been applied in this block"
     )]
@@ -96,8 +98,18 @@ pub enum Error {
     MaspNativeVpError(native_vp::masp::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
-    #[error("Tx is not allowed in allowlist parameter.")]
-    DisallowedTx,
+}
+
+impl Error {
+    /// Determine if the error originates from an invalid transaction
+    /// section signature. This is required for replay protection.
+    const fn invalid_section_signature_flag(&self) -> VpStatusFlags {
+        if matches!(self, Self::InvalidSectionSignature(_)) {
+            VpStatusFlags::INVALID_SIGNATURE
+        } else {
+            VpStatusFlags::empty()
+        }
+    }
 }
 
 /// Shell parameters for running wasm transactions.
@@ -174,8 +186,8 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     match tx.header().tx_type {
-        TxType::Raw => Err(Error::TxTypeError),
-        TxType::Decrypted(DecryptedTx::Decrypted) => apply_wasm_tx(
+        // Raw trasaction type is allowed only for governance proposals
+        TxType::Raw => apply_wasm_tx(
             tx,
             &tx_index,
             ShellParams {
@@ -192,7 +204,7 @@ where
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
             let changed_keys = apply_wrapper_tx(
-                tx,
+                tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
                 tx_bytes,
@@ -203,18 +215,21 @@ where
                     tx_wasm_cache,
                 },
                 wrapper_args,
+            )
+            .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+            let mut inner_res = apply_wasm_tx(
+                tx,
+                &tx_index,
+                ShellParams {
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
             )?;
-            Ok(TxResult {
-                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                changed_keys,
-                vps_result: VpsResult::default(),
-                initialized_accounts: vec![],
-                ibc_events: BTreeSet::default(),
-                eth_bridge_events: BTreeSet::default(),
-            })
-        }
-        TxType::Decrypted(DecryptedTx::Undecryptable) => {
-            Ok(TxResult::default())
+
+            inner_res.wrapper_changed_keys = changed_keys;
+            Ok(inner_res)
         }
     }
 }
@@ -658,35 +673,13 @@ where
 
     Ok(TxResult {
         gas_used,
+        wrapper_changed_keys: Default::default(),
         changed_keys,
         vps_result,
         initialized_accounts,
         ibc_events,
         eth_bridge_events: BTreeSet::default(),
     })
-}
-
-/// Returns [`Error::DisallowedTx`] when the given tx is inner (decrypted) tx
-/// and its code `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<D, H>(tx: &Tx, state: &WlState<D, H>) -> Result<()>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    if let TxType::Decrypted(DecryptedTx::Decrypted) = tx.header().tx_type {
-        if let Some(code_sec) = tx
-            .get_section(tx.code_sechash())
-            .and_then(|x| Section::code_sec(&x))
-        {
-            if crate::parameters::is_tx_allowed(state, &code_sec.code.hash())
-                .map_err(Error::StorageError)?
-            {
-                return Ok(());
-            }
-        }
-        return Err(Error::DisallowedTx);
-    }
-    Ok(())
 }
 
 /// Apply a derived transaction to storage based on some protocol transaction.
@@ -863,7 +856,7 @@ where
         .try_fold(VpsResult::default, |mut result, addr| {
             let gas_meter =
                 RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
-            let accept = match &addr {
+            let tx_accepted = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = state
                         .validity_predicate(addr)
@@ -876,11 +869,6 @@ where
                         return Err(Error::MissingAddress(addr.clone()));
                     };
 
-                    // NOTE: because of the whitelisted gas and the gas
-                    // metering for the exposed vm
-                    // env functions,    the first
-                    // signature verification (if any) is accounted
-                    // twice
                     wasm::run::vp(
                         vp_code_hash,
                         tx,
@@ -894,27 +882,25 @@ where
                     )
                     .map_err(|err| match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
-                        wasm::run::Error::InvalidTxSignature => {
-                            Error::InvalidTxSignature
+                        wasm::run::Error::InvalidSectionSignature(msg) => {
+                            Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
                     })
                 }
                 Address::Internal(internal_addr) => {
-                    let sentinel = RefCell::new(VpSentinel::default());
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
                         tx,
                         tx_index,
                         &gas_meter,
-                        &sentinel,
                         &keys_changed,
                         &verifiers,
                         vp_wasm_cache.clone(),
                     );
 
-                    let accepted: Result<bool> = match internal_addr {
+                    match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
                             pos.validate_tx(tx, &keys_changed, &verifiers)
@@ -970,64 +956,53 @@ where
                                 .validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::NutNativeVpError)
                         }
-                        InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_) => {
+                        internal_addr @ (InternalAddress::IbcToken(_)
+                        | InternalAddress::Erc20(_)) => {
                             // The address should be a part of a multitoken
                             // key
-                            Ok(verifiers.contains(&Address::Internal(
-                                InternalAddress::Multitoken,
-                            )))
+                            verifiers
+                                .contains(&Address::Internal(
+                                    InternalAddress::Multitoken,
+                                ))
+                                .ok_or_else(|| {
+                                    Error::AccessForbidden(
+                                        internal_addr.clone(),
+                                    )
+                                })
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };
                             masp.validate_tx(tx, &keys_changed, &verifiers)
                                 .map_err(Error::MaspNativeVpError)
                         }
-                    };
-
-                    accepted.map_err(|err| {
-                        // No need to check invalid sig because internal vps
-                        // don't check the signature
-                        if sentinel.borrow().is_out_of_gas() {
-                            Error::GasError(err.to_string())
-                        } else {
-                            err
-                        }
-                    })
+                        InternalAddress::TempStorage => Err(
+                            // Temp storage changes must never be committed
+                            Error::AccessForbidden((*internal_addr).clone()),
+                        ),
+                    }
                 }
             };
 
-            match accept {
-                Ok(accepted) => {
-                    if accepted {
-                        result.accepted_vps.insert(addr.clone());
-                    } else {
-                        result.rejected_vps.insert(addr.clone());
-                    }
-                }
-                Err(err) => match err {
-                    // Execution of VPs can (and must) be short-circuited
-                    // only in case of a gas overflow to prevent the
-                    // transaction from consuming resources that have not
-                    // been acquired in the corresponding wrapper tx. For
-                    // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult across all
-                    // nodes and find any invalid signatures
-                    Error::GasError(_) => {
-                        return Err(err);
-                    }
-                    Error::InvalidTxSignature => {
-                        result.invalid_sig = true;
-                        result.rejected_vps.insert(addr.clone());
-                        // Don't push the error since this is just a flag error
-                    }
-                    _ => {
-                        result.rejected_vps.insert(addr.clone());
-                        result.errors.push((addr.clone(), err.to_string()));
-                    }
+            tx_accepted.map_or_else(
+                |err| {
+                    result
+                        .status_flags
+                        .insert(err.invalid_section_signature_flag());
+                    result.rejected_vps.insert(addr.clone());
+                    result.errors.push((addr.clone(), err.to_string()));
                 },
-            }
+                |()| {
+                    result.accepted_vps.insert(addr.clone());
+                },
+            );
 
+            // Execution of VPs can (and must) be short-circuited
+            // only in case of a gas overflow to prevent the
+            // transaction from consuming resources that have not
+            // been acquired in the corresponding wrapper tx. For
+            // all the other errors we keep evaluating the vps. This
+            // allows to display a consistent VpsResult across all
+            // nodes and find any invalid signatures
             result
                 .gas_used
                 .set(gas_meter.into_inner())
@@ -1054,7 +1029,7 @@ fn merge_vp_results(
     rejected_vps.extend(b.rejected_vps);
     let mut errors = a.errors;
     errors.append(&mut b.errors);
-    let invalid_sig = a.invalid_sig || b.invalid_sig;
+    let status_flags = a.status_flags | b.status_flags;
     let mut gas_used = a.gas_used;
 
     gas_used
@@ -1066,17 +1041,15 @@ fn merge_vp_results(
         rejected_vps,
         gas_used,
         errors,
-        invalid_sig,
+        status_flags,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use borsh::BorshDeserialize;
     use eyre::Result;
-    use namada_core::chain::ChainId;
+    use namada_core::collections::HashMap;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_core::keccak::keccak_hash;
@@ -1229,42 +1202,83 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_wasm_tx_allowlist() {
+    fn test_native_vp_out_of_gas() {
         let (mut state, _validators) = test_utils::setup_default_storage();
 
-        let mut tx = Tx::new(ChainId::default(), None);
-        tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-        // pseudo-random code hash
-        let code = vec![1_u8, 2, 3];
-        let tx_hash = Hash::sha256(&code);
-        tx.set_code(namada_tx::Code::new(code, None));
+        // some random token address
+        let token_address = Address::Established([0xff; 20].into());
 
-        // Check that using a disallowed tx leads to an error
-        {
-            let allowlist = vec![format!("{}-bad", tx_hash)];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
+        let src_address = Address::Established([0xab; 20].into());
+        let dst_address = Address::Established([0xba; 20].into());
+
+        // supply an address with 1000 of said token
+        namada_token::credit_tokens(
+            &mut state,
+            &token_address,
+            &src_address,
+            1000.into(),
+        )
+        .unwrap();
+
+        // commit storage changes. this will act as the
+        // initial state of the chain
+        state.commit_tx();
+        state.commit_block().unwrap();
+
+        // "execute" a dummy tx, by manually performing its state changes
+        let (dummy_tx, changed_keys, verifiers) = {
+            let mut tx = Tx::from_type(TxType::Raw);
+            tx.set_code(namada_tx::Code::new(vec![], None));
+            tx.set_data(namada_tx::Data::new(vec![]));
+
+            // transfer half of the supply of src to dst
+            namada_token::transfer(
+                &mut state,
+                &token_address,
+                &src_address,
+                &dst_address,
+                500.into(),
             )
             .unwrap();
-            state.commit_tx();
 
-            let result = check_tx_allowed(&tx, &state);
-            assert_matches!(result.unwrap_err(), Error::DisallowedTx);
-        }
+            let changed_keys = {
+                let mut set = BTreeSet::new();
+                set.insert(namada_token::storage_key::balance_key(
+                    &token_address,
+                    &src_address,
+                ));
+                set.insert(namada_token::storage_key::balance_key(
+                    &token_address,
+                    &dst_address,
+                ));
+                set
+            };
 
-        // Check that using an allowed tx doesn't lead to `Error::DisallowedTx`
-        {
-            let allowlist = vec![tx_hash.to_string()];
-            crate::parameters::update_tx_allowlist_parameter(
-                &mut state, allowlist,
-            )
-            .unwrap();
-            state.commit_tx();
+            let verifiers = {
+                let mut set = BTreeSet::new();
+                set.insert(Address::Internal(InternalAddress::Multitoken));
+                set
+            };
 
-            let result = check_tx_allowed(&tx, &state);
-            if let Err(result) = result {
-                assert!(!matches!(result, Error::DisallowedTx));
-            }
-        }
+            (tx, changed_keys, verifiers)
+        };
+
+        // temp vp cache
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+
+        // gas meter with no gas left
+        let gas_meter = TxGasMeter::new(0);
+
+        let result = execute_vps(
+            verifiers,
+            changed_keys,
+            &dummy_tx,
+            &TxIndex::default(),
+            &state,
+            &gas_meter,
+            &mut vp_cache,
+        );
+        assert!(matches!(result.unwrap_err(), Error::GasError(_)));
     }
 }

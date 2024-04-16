@@ -1,8 +1,7 @@
 //! Validator set updates
 
-use std::collections::{HashMap, HashSet};
-
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::PublicKeyTmRawHash;
 use namada_core::storage::Epoch;
 use namada_core::token;
@@ -521,11 +520,13 @@ where
 /// consensus set already.
 pub fn promote_next_below_capacity_validator_to_consensus<S>(
     storage: &mut S,
-    epoch: Epoch,
+    current_epoch: Epoch,
+    offset: u64,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
+    let epoch = current_epoch + offset;
     let below_cap_set = below_capacity_validator_set_handle().at(&epoch);
     let max_below_capacity_amount =
         get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
@@ -550,8 +551,8 @@ where
         validator_state_handle(&promoted_validator).set(
             storage,
             ValidatorState::Consensus,
-            epoch,
-            0,
+            current_epoch,
+            offset,
         )?;
     }
 
@@ -828,6 +829,7 @@ where
             .at(&val_stake)
             .insert(storage, val_position, val_address)?;
     }
+
     // Purge consensus and below-capacity validator sets
     consensus_validator_set.update_data(storage, params, current_epoch)?;
     below_capacity_validator_set.update_data(storage, params, current_epoch)?;
@@ -847,7 +849,6 @@ where
         let prev = new_positions_handle.insert(storage, validator, position)?;
         debug_assert!(prev.is_none());
     }
-    validator_set_positions_handle.set_last_update(storage, current_epoch)?;
 
     // Purge old epochs of validator positions
     validator_set_positions_handle.update_data(

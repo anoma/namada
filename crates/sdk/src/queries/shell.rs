@@ -12,6 +12,7 @@ use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
+use namada_core::masp::TokenMap;
 use namada_core::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
@@ -19,6 +20,7 @@ use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
+use namada_token::storage_key::masp_token_map_key;
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
 
@@ -97,9 +99,6 @@ router! {SHELL,
 
     // Block results access - read bit-vec
     ( "results" ) -> Vec<BlockResults> = read_results,
-
-    // was the transaction accepted?
-    ( "accepted" / [tx_hash: Hash] ) -> Option<Event> = accepted,
 
     // was the transaction applied?
     ( "applied" / [tx_hash: Hash] ) -> Option<Event> = applied,
@@ -228,9 +227,11 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let tokens = ctx.state.in_mem().conversion_state.tokens.clone();
+    let token_map_key = masp_token_map_key();
+    let token_map: TokenMap =
+        ctx.state.read(&token_map_key)?.unwrap_or_default();
     let mut data = Vec::<MaspTokenRewardData>::new();
-    for (name, token) in tokens {
+    for (name, token) in token_map {
         let max_reward_rate = ctx
             .state
             .read::<Dec>(&namada_token::storage_key::masp_max_reward_rate_key(
@@ -505,23 +506,6 @@ where
 {
     let data = StorageRead::has_key(ctx.state, &storage_key)?;
     Ok(data)
-}
-
-fn accepted<D, H, V, T>(
-    ctx: RequestCtx<'_, D, H, V, T>,
-    tx_hash: Hash,
-) -> namada_storage::Result<Option<Event>>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let matcher = dumb_queries::QueryMatcher::accepted(tx_hash);
-    Ok(ctx
-        .event_log
-        .iter_with_matcher(matcher)
-        .by_ref()
-        .next()
-        .cloned())
 }
 
 fn applied<D, H, V, T>(

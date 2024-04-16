@@ -10,6 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
+use namada::vm::wasm::run::check_tx_allowed;
 use namada_sdk::state::StateRead;
 pub mod prepare_proposal;
 use namada::state::State;
@@ -51,14 +52,14 @@ use namada::ledger::protocol::{get_fee_unshielding_transaction, ShellParams};
 use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::read_pos_params;
-use namada::state::tx_queue::{ExpiredTx, TxInQueue};
+use namada::state::tx_queue::ExpiredTx;
 use namada::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx, WrapperTxErr};
+use namada::tx::data::{TxType, WrapperTx, WrapperTxErr};
 use namada::tx::{Section, Tx};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
@@ -73,6 +74,7 @@ use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
+use crate::node::ledger;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{storage, tendermint_node};
@@ -344,8 +346,6 @@ where
     /// limit the how many block heights in the past can the storage be
     /// queried for reading values.
     storage_read_past_height_limit: Option<u64>,
-    /// Proposal execution tracking
-    pub proposal_data: BTreeSet<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
 }
@@ -353,8 +353,11 @@ where
 /// Merkle tree storage key filter. Return `false` for keys that shouldn't be
 /// merklized.
 pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
-    !token::storage_key::is_masp_key(key)
-        && !namada::ibc::storage::is_ibc_counter_key(key)
+    !(token::storage_key::is_masp_key(key)
+        && *key != token::storage_key::masp_convert_anchor_key()
+        && *key != token::storage_key::masp_token_map_key()
+        && *key != token::storage_key::masp_assets_hash_key()
+        || namada::ibc::storage::is_ibc_counter_key(key))
 }
 
 /// Channels for communicating with an Ethereum oracle.
@@ -518,7 +521,6 @@ where
                 tx_wasm_compilation_cache as usize,
             ),
             storage_read_past_height_limit,
-            proposal_data: BTreeSet::new(),
             // TODO: config event log params
             event_log: EventLog::default(),
         };
@@ -538,15 +540,18 @@ where
         &mut self.event_log
     }
 
-    /// Iterate over the wrapper txs in order
-    #[allow(dead_code)]
-    fn iter_tx_queue(&mut self) -> impl Iterator<Item = &TxInQueue> {
-        self.state.in_mem().tx_queue.iter()
-    }
-
     /// Load the Merkle root hash and the height of the last committed block, if
     /// any. This is returned when ABCI sends an `info` request.
-    pub fn last_state(&mut self) -> response::Info {
+    pub fn last_state(&self) -> response::Info {
+        if ledger::migrating_state().is_some() {
+            // When migrating state, return a height of 0, such
+            // that CometBFT calls InitChain and subsequently
+            // updates the apphash in its state.
+            return response::Info {
+                last_block_height: 0u32.into(),
+                ..response::Info::default()
+            };
+        }
         let mut response = response::Info {
             last_block_height: tendermint::block::Height::from(0_u32),
             ..Default::default()
@@ -1038,11 +1043,22 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Tx allowlist
+                if let Err(err) = check_tx_allowed(&tx, &self.state) {
+                    response.code = ResultCode::TxNotAllowlisted.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction code didn't pass \
+                         the allowlist checks {}",
+                        err
+                    );
+                    return response;
+                }
+
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ResultCode::TxGasLimit.into();
-                    response.log = "{INVALID_MSG}: Wrapper transactions \
+                    response.log = "{INVALID_MSG}: Wrapper transaction \
                                     exceeds its gas limit"
                         .to_string();
                     return response;
@@ -1112,12 +1128,6 @@ where
                 response.log = format!(
                     "{INVALID_MSG}: Raw transactions cannot be accepted into \
                      the mempool"
-                );
-            }
-            TxType::Decrypted(_) => {
-                response.code = ResultCode::InvalidTx.into();
-                response.log = format!(
-                    "{INVALID_MSG}: Decrypted txs cannot be sent by clients"
                 );
             }
         }
@@ -1419,16 +1429,11 @@ mod test_utils {
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
     use namada::core::storage::{BlockHash, Epoch, Header};
-    use namada::core::time::DurationSecs;
-    use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
     use namada::state::{LastBlock, StorageWrite};
     use namada::tendermint::abci::types::VoteInfo;
-    use namada::token::conversion::update_allowed_conversions;
-    use namada::tx::data::Fee;
-    use namada::tx::{Code, Data};
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1439,12 +1444,10 @@ mod test_utils {
     use crate::facade::tendermint_proto::v0_37::abci::{
         RequestPrepareProposal, RequestProcessProposal,
     };
-    use crate::node::ledger::shell::token::DenominatedAmount;
     use crate::node::ledger::shims::abcipp_shim_types;
     use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
-    use crate::node::ledger::storage::{PersistentDB, PersistentStorageHasher};
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -1643,6 +1646,7 @@ mod test_utils {
             &self,
             req: ProcessProposal,
         ) -> std::result::Result<Vec<ProcessedTx>, TestError> {
+            #[allow(clippy::disallowed_methods)]
             let time = DateTimeUtc::now();
             let (resp, tx_results) =
                 self.shell.process_proposal(RequestProcessProposal {
@@ -1712,30 +1716,25 @@ mod test_utils {
             self.shell.prepare_proposal(req)
         }
 
-        /// Add a wrapper tx to the queue of txs to be decrypted
-        /// in the current block proposal. Takes the length of the encoded
-        /// wrapper as parameter.
-        #[cfg(test)]
-        pub fn enqueue_tx(&mut self, tx: Tx, inner_tx_gas: Gas) {
-            self.shell.state.in_mem_mut().tx_queue.push(TxInQueue {
-                tx,
-                gas: inner_tx_gas,
-            });
-        }
-
         /// Start a counter for the next epoch in `num_blocks`.
         pub fn start_new_epoch_in(&mut self, num_blocks: u64) {
             self.state.in_mem_mut().next_epoch_min_start_height =
                 self.state.in_mem().get_last_block_height() + num_blocks;
-            self.state.in_mem_mut().next_epoch_min_start_time =
-                DateTimeUtc::now();
+            self.state.in_mem_mut().next_epoch_min_start_time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
         }
 
         /// Simultaneously call the `FinalizeBlock` and
         /// `Commit` handlers.
         pub fn finalize_and_commit(&mut self, req: Option<FinalizeBlock>) {
             let mut req = req.unwrap_or_default();
-            req.header.time = DateTimeUtc::now();
+            req.header.time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
+
             self.finalize_block(req).expect("Test failed");
             self.commit();
         }
@@ -1882,6 +1881,7 @@ mod test_utils {
                 hash: BlockHash([0u8; 32]),
                 header: Header {
                     hash: Hash([0; 32]),
+                    #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash([0; 32]),
                 },
@@ -1908,130 +1908,6 @@ mod test_utils {
             .state
             .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
-    }
-
-    /// We test that on shell shutdown, the tx queue gets persisted in a DB, and
-    /// on startup it is read successfully
-    #[test]
-    fn test_tx_queue_persistence() {
-        let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
-        // we have to use RocksDB for this test
-        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let (_, eth_receiver) =
-            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-        let (control_sender, _) = oracle::control::channel();
-        let (_, last_processed_block_receiver) =
-            last_processed_block::channel();
-        let eth_oracle = EthereumOracleChannels::new(
-            eth_receiver,
-            control_sender,
-            last_processed_block_receiver,
-        );
-        let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
-        let native_token = address::testing::nam();
-        let mut shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir.clone(),
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            sender.clone(),
-            Some(eth_oracle),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
-        );
-        shell
-            .state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .expect("begin_block failed");
-        let keypair = gen_keypair();
-        // enqueue a wrapper tx
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: native_token,
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                300_000.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-
-        shell.state.in_mem_mut().tx_queue.push(TxInQueue {
-            tx: wrapper,
-            gas: u64::MAX.into(),
-        });
-        // Artificially increase the block height so that chain
-        // will read the new block when restarted
-        shell
-            .state
-            .in_mem_mut()
-            .block
-            .pred_epochs
-            .new_epoch(BlockHeight(1));
-        // initialize parameter storage
-        let params = Parameters {
-            max_tx_bytes: 1024 * 1024,
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 1,
-                min_duration: DurationSecs(3600),
-            },
-            max_expected_time_per_block: DurationSecs(3600),
-            max_proposal_bytes: Default::default(),
-            max_block_gas: 100,
-            vp_allowlist: vec![],
-            tx_allowlist: vec![],
-            implicit_vp_code_hash: Default::default(),
-            epochs_per_year: 365,
-            max_signatures_per_transaction: 10,
-            staked_ratio: Default::default(),
-            pos_inflation_amount: Default::default(),
-            fee_unshielding_gas_limit: 0,
-            fee_unshielding_descriptions_limit: 0,
-            minimum_gas_price: Default::default(),
-        };
-        parameters::init_storage(&params, &mut shell.state)
-            .expect("Test failed");
-        // make state to update conversion for a new epoch
-        update_allowed_conversions(&mut shell.state)
-            .expect("update conversions failed");
-        shell.state.commit_block().expect("commit failed");
-
-        // Drop the shell
-        std::mem::drop(shell);
-        let (_, eth_receiver) =
-            tokio::sync::mpsc::channel(ORACLE_CHANNEL_BUFFER_SIZE);
-        let (control_sender, _) = oracle::control::channel();
-        let (_, last_processed_block_receiver) =
-            last_processed_block::channel();
-        let eth_oracle = EthereumOracleChannels::new(
-            eth_receiver,
-            control_sender,
-            last_processed_block_receiver,
-        );
-        // Reboot the shell and check that the queue was restored from DB
-        let shell = Shell::<PersistentDB, PersistentStorageHasher>::new(
-            config::Ledger::new(
-                base_dir,
-                Default::default(),
-                TendermintMode::Validator,
-            ),
-            top_level_directory().join("wasm"),
-            sender,
-            Some(eth_oracle),
-            None,
-            vp_wasm_compilation_cache,
-            tx_wasm_compilation_cache,
-        );
-        assert!(!shell.state.in_mem().tx_queue.is_empty());
     }
 
     pub(super) fn get_pkh_from_address<S>(
@@ -2080,11 +1956,12 @@ mod test_utils {
 #[cfg(test)]
 mod shell_tests {
     use namada::core::storage::Epoch;
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Signature, Signed};
+    use namada::tx::{Authorization, Code, Data, Signed};
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
@@ -2100,6 +1977,12 @@ mod shell_tests {
     /// because the bridge is disabled).
     #[tokio::test]
     async fn test_broadcast_valset_upd_inspite_oracle_off() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         // this height should result in a validator set
         // update being broadcasted
         let (mut shell, mut broadcaster_rx, _, _) =
@@ -2137,6 +2020,12 @@ mod shell_tests {
     /// as expected.
     #[test]
     fn test_commit_broadcasts_expired_eth_events() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let (mut shell, mut broadcaster_rx, _, _) =
             test_utils::setup_at_height(5);
 
@@ -2184,6 +2073,12 @@ mod shell_tests {
         use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell
@@ -2313,6 +2208,12 @@ mod shell_tests {
     fn test_mempool_eth_events_vext_normal_op() {
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let (shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
 
         let (protocol_key, _) = wallet::defaults::validator_keys();
@@ -2374,7 +2275,7 @@ mod shell_tests {
             // invalid tx type, it doesn't match the
             // tx type declared in the header
             tx.set_data(Data::new(ext.serialize_to_vec()));
-            tx.add_section(Section::Signature(Signature::new(
+            tx.add_section(Section::Authorization(Authorization::new(
                 tx.sechashes(),
                 [(0, protocol_key)].into_iter().collect(),
                 None,
@@ -2451,11 +2352,13 @@ mod shell_tests {
             .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         invalid_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        invalid_wrapper.add_section(Section::Signature(Signature::new(
-            invalid_wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        invalid_wrapper.add_section(Section::Authorization(
+            Authorization::new(
+                invalid_wrapper.sechashes(),
+                [(0, keypair)].into_iter().collect(),
+                None,
+            ),
+        ));
 
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
@@ -2521,7 +2424,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2674,7 +2577,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2707,7 +2610,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -2746,7 +2649,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2781,7 +2684,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2817,7 +2720,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2853,7 +2756,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2901,7 +2804,7 @@ mod shell_tests {
             wrapper
                 .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
-            wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.add_section(Section::Authorization(Authorization::new(
                 wrapper.sechashes(),
                 [(0, keypair)].into_iter().collect(),
                 None,

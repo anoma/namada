@@ -1,12 +1,13 @@
 //! Test PoS transitions with a state machine
 
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::Deref;
 
 use assert_matches::assert_matches;
 use itertools::Itertools;
 use namada_core::address::{self, Address};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key;
 use namada_core::key::common::PublicKey;
@@ -140,7 +141,7 @@ struct AbstractPosState {
     /// Validator slashes post-processing
     validator_slashes: BTreeMap<Address, Vec<Slash>>,
     /// Enqueued slashes pre-processing
-    enqueued_slashes: BTreeMap<Epoch, BTreeMap<Address, Vec<Slash>>>,
+    enqueued_slashes: BTreeMap<Epoch, BTreeMap<Address, BTreeMap<u64, Slash>>>,
     /// The last epoch in which a validator committed an infraction
     validator_last_slash_epochs: BTreeMap<Address, Epoch>,
     /// Validator's total unbonded required for slashing.
@@ -737,6 +738,7 @@ impl StateMachineTest for ConcretePosState {
                     &params,
                     current_epoch,
                     infraction_epoch,
+                    height,
                     slash_type,
                     &address,
                 );
@@ -1355,6 +1357,7 @@ impl ConcretePosState {
         params: &PosParams,
         current_epoch: Epoch,
         infraction_epoch: Epoch,
+        infraction_height: u64,
         slash_type: SlashType,
         validator: &Address,
     ) {
@@ -1391,7 +1394,7 @@ impl ConcretePosState {
         let slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(validator)
-            .back(&self.s)
+            .get(&self.s, &infraction_height)
             .unwrap();
         if let Some(slash) = slash {
             assert_eq!(slash.epoch, infraction_epoch);
@@ -1410,8 +1413,10 @@ impl ConcretePosState {
     ) {
         // Check the enqueued slashes
         let abs_enqueued = ref_state.enqueued_slashes.clone();
-        let mut conc_enqueued: BTreeMap<Epoch, BTreeMap<Address, Vec<Slash>>> =
-            BTreeMap::new();
+        let mut conc_enqueued: BTreeMap<
+            Epoch,
+            BTreeMap<Address, BTreeMap<u64, Slash>>,
+        > = BTreeMap::new();
         enqueued_slashes_handle()
             .get_data_handler()
             .iter(&self.s)
@@ -1423,7 +1428,7 @@ impl ConcretePosState {
                         nested_sub_key:
                             NestedSubKey::Data {
                                 key: address,
-                                nested_sub_key: _,
+                                nested_sub_key: SubKey::Data(height),
                             },
                     },
                     slash,
@@ -1433,7 +1438,7 @@ impl ConcretePosState {
                     .or_default()
                     .entry(address)
                     .or_default();
-                slashes.push(slash);
+                slashes.insert(height, slash);
             });
         assert_eq!(abs_enqueued, conc_enqueued);
     }
@@ -2500,7 +2505,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     .or_default()
                     .entry(address.clone())
                     .or_default()
-                    .push(slash);
+                    .insert(*height, slash);
 
                 // Remove the validator from either the consensus or
                 // below-capacity set and place it into the jailed validator set
@@ -2602,7 +2607,7 @@ impl ReferenceStateMachine for AbstractPosState {
                             .below_threshold_set
                             .entry(current_epoch + offset)
                             .or_default()
-                            .remove(address);
+                            .swap_remove(address);
                         debug_assert!(removed);
                     } else {
                         // Just make sure the validator is already jailed
@@ -3753,7 +3758,7 @@ impl AbstractPosState {
             ValidatorState::BelowThreshold => {
                 // We know that this validator will be promoted into one of the
                 // higher sets, so first remove from the below-threshold set.
-                below_thresh_set.remove(validator);
+                below_thresh_set.swap_remove(validator);
 
                 let num_consensus =
                     consensus_set.iter().fold(0, |sum, (_, validators)| {
@@ -3841,7 +3846,7 @@ impl AbstractPosState {
             |mut acc, (validator, slashes)| {
                 let mut tot_rate =
                     acc.get(validator).cloned().unwrap_or_default();
-                for slash in slashes {
+                for slash in slashes.values() {
                     debug_assert_eq!(slash.epoch, infraction_epoch);
                     let rate = cmp::max(
                         slash.r#type.get_slash_rate(&self.params),
@@ -3915,7 +3920,7 @@ impl AbstractPosState {
             let cur_slashes =
                 self.validator_slashes.entry(validator.clone()).or_default();
 
-            for slash in slashes {
+            for (_, slash) in slashes {
                 let rate = cmp::max(
                     slash.r#type.get_slash_rate(&self.params),
                     cubic_rate,
@@ -5211,12 +5216,16 @@ fn arb_slash(state: &AbstractPosState) -> impl Strategy<Value = Transition> {
         .checked_sub(state.params.unbonding_len)
         .unwrap_or_default()..=current_epoch)
         .prop_map(Epoch::from);
-    (arb_validator, arb_type, arb_epoch).prop_map(
-        |(validator, slash_type, infraction_epoch)| Transition::Misbehavior {
-            address: validator,
-            slash_type,
-            infraction_epoch,
-            height: 0,
+    let arb_height = 0_u64..10_000_u64;
+
+    (arb_validator, arb_type, arb_epoch, arb_height).prop_map(
+        |(validator, slash_type, infraction_epoch, height)| {
+            Transition::Misbehavior {
+                address: validator,
+                slash_type,
+                infraction_epoch,
+                height,
+            }
         },
     )
 }

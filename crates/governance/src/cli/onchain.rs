@@ -5,39 +5,52 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::storage::Epoch;
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::validation::{
-    is_valid_author_balance, is_valid_content, is_valid_default_proposal_data,
-    is_valid_end_epoch, is_valid_grace_epoch, is_valid_pgf_funding_data,
-    is_valid_pgf_stewards_data, is_valid_proposal_period, is_valid_start_epoch,
-    ProposalValidation,
+    is_valid_activation_epoch, is_valid_author_balance, is_valid_content,
+    is_valid_default_proposal_data, is_valid_end_epoch,
+    is_valid_pgf_funding_data, is_valid_pgf_stewards_data,
+    is_valid_proposal_period, is_valid_start_epoch, ProposalValidation,
 };
 use crate::parameters::GovernanceParameters;
 use crate::storage::proposal::PGFTarget;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// The proposal structure
 pub struct OnChainProposal {
-    /// The proposal id
-    pub id: u64,
     /// The proposal content
     pub content: BTreeMap<String, String>,
     /// The proposal author address
     pub author: Address,
-    /// The epoch from which voting is allowed
+    /// The epoch in which voting begins
     pub voting_start_epoch: Epoch,
-    /// The epoch from which voting is stopped
+    /// The final epoch in which voting is allowed
     pub voting_end_epoch: Epoch,
-    /// The epoch from which this changes are executed
-    pub grace_epoch: Epoch,
+    /// The epoch in which any changes are executed and become active
+    pub activation_epoch: Epoch,
 }
 
 /// Pgf default proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct DefaultProposal {
     /// The proposal data
@@ -71,14 +84,14 @@ impl DefaultProposal {
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
-        is_valid_grace_epoch(
-            self.proposal.grace_epoch,
+        is_valid_activation_epoch(
+            self.proposal.activation_epoch,
             self.proposal.voting_end_epoch,
             governance_parameters.min_proposal_grace_epochs,
         )?;
         is_valid_proposal_period(
             self.proposal.voting_start_epoch,
-            self.proposal.grace_epoch,
+            self.proposal.activation_epoch,
             governance_parameters.max_proposal_period,
         )?;
         is_valid_author_balance(
@@ -149,14 +162,14 @@ impl PgfStewardProposal {
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
-        is_valid_grace_epoch(
-            self.proposal.grace_epoch,
+        is_valid_activation_epoch(
+            self.proposal.activation_epoch,
             self.proposal.voting_end_epoch,
             governance_parameters.min_proposal_grace_epochs,
         )?;
         is_valid_proposal_period(
             self.proposal.voting_start_epoch,
-            self.proposal.grace_epoch,
+            self.proposal.activation_epoch,
             governance_parameters.max_proposal_period,
         )?;
         is_valid_author_balance(
@@ -183,7 +196,13 @@ impl TryFrom<&[u8]> for PgfStewardProposal {
 
 /// Pgf funding proposal
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfFundingProposal {
     /// The proposal data
@@ -216,14 +235,14 @@ impl PgfFundingProposal {
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
-        is_valid_grace_epoch(
-            self.proposal.grace_epoch,
+        is_valid_activation_epoch(
+            self.proposal.activation_epoch,
             self.proposal.voting_end_epoch,
             governance_parameters.min_proposal_grace_epochs,
         )?;
         is_valid_proposal_period(
             self.proposal.voting_start_epoch,
-            self.proposal.grace_epoch,
+            self.proposal.activation_epoch,
             governance_parameters.max_proposal_period,
         )?;
         is_valid_content(
@@ -246,7 +265,13 @@ impl TryFrom<&[u8]> for PgfFundingProposal {
 
 /// Pgf stewards
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfSteward {
     /// Pgf action
@@ -257,7 +282,13 @@ pub struct PgfSteward {
 
 /// Pgf action
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub enum PgfAction {
     /// Add action
@@ -275,7 +306,13 @@ impl PgfAction {
 
 /// Pgf funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfFunding {
     /// Pgf continuous funding
@@ -304,7 +341,13 @@ impl Display for PgfFunding {
 
 /// Pgf continuous funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfContinuous {
     /// Pgf target
@@ -315,7 +358,13 @@ pub struct PgfContinuous {
 
 /// Pgf retro funding
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct PgfRetro {
     /// Pgf retro target

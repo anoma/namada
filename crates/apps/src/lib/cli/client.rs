@@ -1,7 +1,9 @@
+use std::io::Read;
+
 use color_eyre::eyre::Result;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::io::Io;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{display_line, Namada, NamadaImpl};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -283,25 +285,8 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let cli::context::ChainContext {
-                            wallet,
-                            mut config,
-                            shielded,
-                            native_token,
-                        } = ctx.take_chain_or_exit();
-                        let namada = NamadaImpl::native_new(
-                            client,
-                            wallet,
-                            shielded,
-                            io,
-                            native_token,
-                        );
-                        tx::submit_change_consensus_key(
-                            &namada,
-                            &mut config,
-                            args,
-                        )
-                        .await?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::submit_change_consensus_key(&namada, args).await?;
                     }
                     Sub::TxMetadataChange(TxMetadataChange(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -343,13 +328,14 @@ impl CliApi {
                             &client,
                             &io,
                             args.batch_size,
+                            args.start_query_height,
                             args.last_query_height,
                             &sks,
                             &vks,
                         )
                         .await?;
                     }
-                    // Eth bridge
+                    #[cfg(feature = "namada-eth-bridge")]
                     Sub::AddToEthBridgePool(args) => {
                         let args = args.0;
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -362,6 +348,13 @@ impl CliApi {
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_bridge_pool_tx(&namada, args).await?;
+                    }
+                    #[cfg(not(feature = "namada-eth-bridge"))]
+                    Sub::AddToEthBridgePool(_) => {
+                        display_line!(
+                            &io,
+                            "The Namada Ethereum bridge is disabled"
+                        );
                     }
                     Sub::TxUnjailValidator(TxUnjailValidator(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -529,6 +522,18 @@ impl CliApi {
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_balance(&namada, args).await;
+                    }
+                    Sub::QueryIbcToken(QueryIbcToken(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx);
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::query_ibc_tokens(&namada, args).await;
                     }
                     Sub::QueryBonds(QueryBonds(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -739,20 +744,6 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         tx::sign_tx(&namada, args).await?;
                     }
-                    Sub::GenIbcShieldedTransfer(GenIbcShieldedTransfer(
-                        args,
-                    )) => {
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        let ledger_address =
-                            chain_ctx.get(&args.query.ledger_address);
-                        let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&ledger_address)
-                        });
-                        client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
-                        tx::gen_ibc_shielded_transfer(&namada, args).await?;
-                    }
                 }
             }
             cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
@@ -806,6 +797,33 @@ impl CliApi {
                 }
                 Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
                     utils::sign_genesis_tx(global_args, args).await
+                }
+                Utils::ParseMigrationJson(MigrationJson(args)) => {
+                    #[cfg(feature = "migrations")]
+                    {
+                        let mut update_json = String::new();
+                        let mut file = std::fs::File::open(args.path).expect(
+                            "Could not fine updates file at the specified \
+                             path.",
+                        );
+                        file.read_to_string(&mut update_json)
+                            .expect("Unable to read the updates json file");
+                        let updates: namada_sdk::migrations::DbChanges =
+                            serde_json::from_str(&update_json).expect(
+                                "Could not parse the updates file as json",
+                            );
+                        for change in updates.changes {
+                            display_line!(io, "{}", change);
+                        }
+                    }
+                    #[cfg(not(feature = "migrations"))]
+                    {
+                        display_line!(
+                            io,
+                            "Can only use this function if compiled with \
+                             feature \"migrations\" enabled."
+                        )
+                    }
                 }
             },
         }

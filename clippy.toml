@@ -1,0 +1,11 @@
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "Non-deterministic iter - use indexmap::IndexMap instead" },
+  { path = "std::collections::HashSet", reason = "Non-deterministic iter - use indexmap::IndexSet instead" },
+]
+disallowed-methods = [
+  { path = "std::time::Instant::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "chrono::DateTime::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "chrono::Utc::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "namada_core::time::DateTimeUtc::now", reason = "Do not use current date/time in code that must be deterministic" },
+  { path = "wasmtimer::std::Instant", reason = "Do not use current date/time in code that must be deterministic" },
+]

@@ -3,18 +3,22 @@
 mod rev_order;
 
 use core::fmt::Debug;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::common;
 use namada_core::storage::{Epoch, KeySeg};
 use namada_core::token;
 use namada_core::token::Amount;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_storage::collections::lazy_map::NestedMap;
 use namada_storage::collections::{LazyMap, LazySet, LazyVec};
 pub use rev_order::ReverseOrdTokenAmount;
@@ -133,7 +137,7 @@ pub type ValidatorAddresses = crate::epoched::NestedEpoched<
 
 /// Slashes indexed by validator address and then block height (for easier
 /// retrieval and iteration when processing)
-pub type ValidatorSlashes = NestedMap<Address, Slashes>;
+pub type ValidatorSlashes = NestedMap<Address, LazyMap<u64, Slash>>;
 
 /// Epoched slashes, where the outer epoch key is the epoch in which the slash
 /// is processed
@@ -260,7 +264,14 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Eq, Hash, PartialEq,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Eq,
+    Hash,
+    PartialEq,
 )]
 /// Slashed amount of tokens.
 pub struct SlashedAmount {
@@ -270,7 +281,7 @@ pub struct SlashedAmount {
     pub epoch: Epoch,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
@@ -309,6 +320,7 @@ pub struct Redelegation {
     BorshSerialize,
     BorshSchema,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -343,6 +355,7 @@ pub struct GenesisValidator {
     BorshSerialize,
     BorshSchema,
     BorshDeserialize,
+    BorshDeserializer,
     Deserialize,
     Serialize,
     Eq,
@@ -406,6 +419,7 @@ pub struct ConsensusValidator {
     Ord,
     Hash,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
 )]
@@ -426,6 +440,7 @@ pub struct BondId {
     PartialOrd,
     Ord,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
 )]
@@ -462,6 +477,7 @@ impl Display for WeightedValidator {
     Clone,
     Copy,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     BorshSerialize,
 )]
@@ -509,6 +525,7 @@ impl Position {
     Clone,
     Copy,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -537,6 +554,7 @@ pub enum ValidatorState {
     Debug,
     Clone,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -566,6 +584,7 @@ pub type Slashes = LazyVec<Slash>;
     Clone,
     Copy,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     BorshSchema,
     PartialEq,
@@ -583,7 +602,7 @@ pub enum SlashType {
 
 /// VoteInfo inspired from tendermint for validators whose signature was
 /// included in the last block
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub struct VoteInfo {
     /// Validator address
     pub validator_address: Address,
@@ -607,7 +626,14 @@ pub struct ResultSlashing {
 pub type BondsAndUnbondsDetails = HashMap<BondId, BondsAndUnbondsDetail>;
 
 /// Bonds and unbonds with all details (slashes and rewards, if any)
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    BorshSchema,
+)]
 pub struct BondsAndUnbondsDetail {
     /// Bonds
     pub bonds: Vec<BondDetails>,
@@ -619,7 +645,13 @@ pub struct BondsAndUnbondsDetail {
 
 /// Bond with all its details
 #[derive(
-    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
 )]
 pub struct BondDetails {
     /// The first epoch in which this bond contributed to a stake
@@ -632,7 +664,13 @@ pub struct BondDetails {
 
 /// Unbond with all its details
 #[derive(
-    Debug, Clone, BorshDeserialize, BorshSerialize, BorshSchema, PartialEq,
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
 )]
 pub struct UnbondDetails {
     /// The first epoch in which the source bond of this unbond contributed to

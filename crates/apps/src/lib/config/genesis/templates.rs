@@ -16,6 +16,9 @@ use namada::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
 use namada::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
@@ -66,6 +69,7 @@ pub fn read_transactions(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -116,6 +120,7 @@ impl UndenominatedBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -131,6 +136,7 @@ pub struct DenominatedBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -146,6 +152,7 @@ pub struct RawTokenBalances(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -161,6 +168,7 @@ pub struct TokenBalances(
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -176,6 +184,7 @@ pub struct ValidityPredicates {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -190,6 +199,7 @@ pub struct WasmVpConfig {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -204,6 +214,7 @@ pub struct Tokens {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -229,6 +240,7 @@ pub struct Parameters<T: TemplateValidation> {
     pub gov_params: GovernanceParams,
     pub pgf_params: PgfParams<T>,
     pub eth_bridge_params: Option<EthBridgeParams>,
+    pub ibc_params: IbcParams,
 }
 
 #[derive(
@@ -248,6 +260,8 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Name of the native token - this must one of the tokens from
     /// `tokens.toml` file
     pub native_token: Alias,
+    /// Enable the native token transfer if it is true
+    pub is_native_token_transferable: bool,
     /// Minimum number of blocks per epoch.
     // TODO: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
@@ -299,6 +313,7 @@ impl ChainParams<Unvalidated> {
         let ChainParams {
             max_tx_bytes,
             native_token,
+            is_native_token_transferable,
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
@@ -344,6 +359,7 @@ impl ChainParams<Unvalidated> {
         Ok(ChainParams {
             max_tx_bytes,
             native_token,
+            is_native_token_transferable,
             min_num_of_blocks,
             max_expected_time_per_block,
             max_proposal_bytes,
@@ -366,6 +382,7 @@ impl ChainParams<Unvalidated> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -417,6 +434,7 @@ pub struct PosParams {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -432,7 +450,7 @@ pub struct GovernanceParams {
     pub max_proposal_period: u64,
     /// Maximum number of characters in the proposal content
     pub max_proposal_content_size: u64,
-    /// Minimum number of epoch between end and grace epoch
+    /// Minimum number of epochs between the end and activation epochs
     pub min_proposal_grace_epochs: u64,
 }
 
@@ -469,6 +487,7 @@ pub struct PgfParams<T: TemplateValidation> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -486,6 +505,23 @@ pub struct EthBridgeParams {
     pub contracts: Contracts,
 }
 
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Serialize,
+    BorshDeserialize,
+    BorshSerialize,
+    PartialEq,
+    Eq,
+)]
+pub struct IbcParams {
+    /// Default supply limit of each token
+    pub default_mint_limit: token::Amount,
+    /// Default per-epoch throughput limit of each token
+    pub default_per_epoch_throughput_limit: token::Amount,
+}
+
 impl TokenBalances {
     pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
         self.0.get(addr).map(|amt| amt.amount())
@@ -498,6 +534,7 @@ impl TokenBalances {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -512,6 +549,7 @@ pub struct Unvalidated {}
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -857,6 +895,7 @@ pub fn validate_parameters(
         gov_params,
         pgf_params,
         eth_bridge_params,
+        ibc_params,
     } = parameters;
     match parameters.denominate(tokens) {
         Err(e) => {
@@ -874,6 +913,7 @@ pub fn validate_parameters(
                 valid: Default::default(),
             },
             eth_bridge_params,
+            ibc_params,
         }),
     }
 }

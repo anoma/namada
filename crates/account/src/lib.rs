@@ -10,13 +10,22 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use namada_core::account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::key::common;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 pub use storage::*;
 pub use storage_key::*;
 pub use types::*;
 
 #[derive(
-    Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 /// Account data
 pub struct Account {
@@ -43,5 +52,10 @@ impl Account {
         public_key: &common::PublicKey,
     ) -> Option<u8> {
         self.public_keys_map.get_index_from_public_key(public_key)
+    }
+
+    /// Get all public keys of the account
+    pub fn get_all_public_keys(&self) -> Vec<common::PublicKey> {
+        self.public_keys_map.pk_to_idx.keys().cloned().collect()
     }
 }

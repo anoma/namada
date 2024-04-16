@@ -9,15 +9,16 @@ pub mod tendermint_node;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::thread;
 
 use byte_unit::Byte;
+use data_encoding::HEXUPPER;
 use futures::future::TryFutureExt;
-use namada::core::storage::Key;
+use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::governance::storage::keys as governance_storage;
+use namada::state::DB;
+use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
 use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
@@ -65,41 +66,17 @@ const ENV_VAR_RAYON_THREADS: &str = "NAMADA_RAYON_THREADS";
 //     }
 //```
 impl Shell {
-    fn load_proposals(&mut self) {
-        let proposals_key = governance_storage::get_commiting_proposals_prefix(
-            self.state.in_mem().last_epoch.0,
-        );
-
-        let (proposal_iter, _) = self.state.db_iter_prefix(&proposals_key);
-        for (key, _, _) in proposal_iter {
-            let key =
-                Key::from_str(key.as_str()).expect("Key should be parsable");
-            if governance_storage::get_commit_proposal_epoch(&key).unwrap()
-                != self.state.in_mem().last_epoch.0
-            {
-                // NOTE: `iter_prefix` iterate over the matching prefix. In this
-                // case  a proposal with grace_epoch 110 will be
-                // matched by prefixes  1, 11 and 110. Thus we
-                // have to skip to the next iteration of
-                //  the cycle for all the prefixes that don't actually match
-                //  the desired epoch.
-                continue;
-            }
-
-            let proposal_id = governance_storage::get_commit_proposal_id(&key);
-            if let Some(id) = proposal_id {
-                self.proposal_data.insert(id);
-            }
-        }
-    }
-
     fn call(&mut self, req: Request) -> Result<Response, Error> {
         match req {
             Request::InitChain(init) => {
                 tracing::debug!("Request InitChain");
                 self.init_chain(
                     init,
-                    #[cfg(any(test, feature = "testing"))]
+                    #[cfg(any(
+                        test,
+                        feature = "testing",
+                        feature = "benches"
+                    ))]
                     1,
                 )
                 .map(Response::InitChain)
@@ -128,7 +105,6 @@ impl Shell {
             }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
-                self.load_proposals();
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {
@@ -161,6 +137,13 @@ impl Shell {
             }
         }
     }
+}
+
+/// Determine if the ledger is migrating state.
+pub fn migrating_state() -> Option<BlockHeight> {
+    const ENV_INITIAL_HEIGHT: &str = "NAMADA_INITIAL_HEIGHT";
+    let height = std::env::var(ENV_INITIAL_HEIGHT).ok()?;
+    height.parse::<u64>().ok().map(BlockHeight)
 }
 
 /// Run the ledger with an async runtime
@@ -215,13 +198,96 @@ pub fn dump_db(
         historic,
     }: args::LedgerDumpDb,
 ) {
-    use namada::state::DB;
-
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
     db.dump_block(out_file_path, historic, block_height);
+}
+
+#[cfg(feature = "migrations")]
+pub fn query_db(
+    config: config::Ledger,
+    key: &namada::core::storage::Key,
+    type_hash: &[u8; 32],
+    cf: &DbColFam,
+) {
+    use namada_sdk::migrations::DBUpdateVisitor;
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    let db_visitor = storage::RocksDBUpdateVisitor::new(&db);
+    let bytes = db_visitor.read(key, cf).unwrap();
+
+    let deserializer = namada_migrations::get_deserializer(type_hash)
+        .unwrap_or_else(|| {
+            panic!(
+                "Could not find a deserializer for the type provided with key \
+                 <{}>",
+                key
+            )
+        });
+    let hex_bytes = HEXUPPER.encode(&bytes);
+    let value = deserializer(bytes).unwrap_or_else(|| {
+        panic!("Unable to deserialize the value under key <{}>", key)
+    });
+    tracing::info!(
+        "Key <{}>: {}\nThe value in bytes is {}",
+        key,
+        value,
+        hex_bytes
+    );
+}
+
+/// Change the funds of an account in-place. Use with
+/// caution, as this modifies state in storage without
+/// going through the consensus protocol.
+#[cfg(feature = "migrations")]
+pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
+    use std::io::Read;
+
+    let mut update_json = String::new();
+    let mut file = std::fs::File::open(updates)
+        .expect("Could not fine updates file at the specified path.");
+    file.read_to_string(&mut update_json)
+        .expect("Unable to read the updates json file");
+    let updates: namada_sdk::migrations::DbChanges =
+        serde_json::from_str(&update_json)
+            .expect("Could not parse the updates file as json");
+    let cometbft_path = config.cometbft_dir();
+    let chain_id = config.chain_id;
+    let db_path = config.shell.db_dir(&chain_id);
+
+    let db = storage::PersistentDB::open(db_path, None);
+    let mut db_visitor = storage::RocksDBUpdateVisitor::new(&db);
+
+    for change in &updates.changes {
+        match change.update(&mut db_visitor) {
+            Ok(status) => {
+                tracing::info!("{}", status);
+            }
+            e => {
+                tracing::error!(
+                    "Attempt to write to key/pattern <{}> failed.",
+                    change.pattern()
+                );
+                e.unwrap();
+            }
+        }
+    }
+    if !dry_run {
+        tracing::info!("Persisting DB changes...");
+        let batch = db_visitor.take_batch();
+        let mut db = db;
+        db.exec_batch(batch).expect("Failed to execute write batch");
+        db.flush(true).expect("Failed to flush data to disk");
+
+        // reset CometBFT's state, such that we can resume with a different appq
+        // hash
+        tendermint_node::reset_state(cometbft_path)
+            .expect("Failed to reset CometBFT state");
+    }
 }
 
 /// Roll Namada state back to the previous height

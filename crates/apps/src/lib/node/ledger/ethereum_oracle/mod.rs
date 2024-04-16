@@ -470,6 +470,7 @@ async fn process_events_in_block<C: RpcClient>(
     let last_processed_block_ref = oracle.last_processed_block.borrow();
     let last_processed_block = last_processed_block_ref.as_ref();
     let backoff = oracle.backoff;
+    #[allow(clippy::disallowed_methods)]
     let deadline = Instant::now() + oracle.ceiling;
     let latest_block = match oracle
         .client

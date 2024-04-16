@@ -1,26 +1,29 @@
-use std::collections::HashMap;
-
+use namada::core::collections::HashMap;
 use namada::core::encode;
 use namada::core::event::EmitEvents;
 use namada::core::storage::Epoch;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
-use namada::governance::storage::keys as gov_storage;
 use namada::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
+use namada::governance::storage::{keys as gov_storage, load_proposals};
 use namada::governance::utils::{
-    compute_proposal_result, ProposalVotes, TallyResult, TallyType, TallyVote,
-    VotePower,
+    compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
-use namada::governance::{storage as gov_api, ADDRESS as gov_address};
+use namada::governance::{
+    storage as gov_api, ProposalVote, ADDRESS as gov_address,
+};
 use namada::ibc;
+use namada::ledger::events::extend::{ComposeEvent, Height};
 use namada::ledger::governance::utils::ProposalEvent;
-use namada::ledger::pos::BondId;
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::read_total_stake;
+use namada::proof_of_stake::storage::{
+    read_total_active_stake, validator_state_handle,
+};
+use namada::proof_of_stake::types::{BondId, ValidatorState};
 use namada::state::StorageWrite;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
@@ -31,6 +34,7 @@ use super::*;
 pub fn finalize_block<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
+    current_epoch: Epoch,
     is_new_epoch: bool,
 ) -> Result<()>
 where
@@ -38,7 +42,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     if is_new_epoch {
-        execute_governance_proposals(shell, events)?;
+        load_and_execute_governance_proposals(shell, events, current_epoch)?;
     }
     Ok(())
 }
@@ -49,9 +53,27 @@ pub struct ProposalsResult {
     rejected: Vec<u64>,
 }
 
+pub fn load_and_execute_governance_proposals<D, H>(
+    shell: &mut Shell<D, H>,
+    events: &mut impl EmitEvents,
+    current_epoch: Epoch,
+) -> Result<ProposalsResult>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let proposal_ids = load_proposals(&shell.state, current_epoch)?;
+
+    let proposals_result =
+        execute_governance_proposals(shell, events, proposal_ids)?;
+
+    Ok(proposals_result)
+}
+
 fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
+    proposal_ids: BTreeSet<u64>,
 ) -> Result<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -59,7 +81,7 @@ where
 {
     let mut proposals_result = ProposalsResult::default();
 
-    for id in std::mem::take(&mut shell.proposal_data) {
+    for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
         let proposal_end_epoch_key = gov_storage::get_voting_end_epoch_key(id);
         let proposal_type_key = gov_storage::get_proposal_type_key(id);
@@ -77,8 +99,8 @@ where
         let is_steward = pgf::is_steward(&shell.state, &proposal_author)?;
 
         let params = read_pos_params(&shell.state)?;
-        let total_voting_power =
-            read_total_stake(&shell.state, &params, proposal_end_epoch)?;
+        let total_active_voting_power =
+            read_total_active_stake(&shell.state, &params, proposal_end_epoch)?;
 
         let tally_type = TallyType::from(proposal_type.clone(), is_steward);
         let votes = compute_proposal_votes(
@@ -87,14 +109,17 @@ where
             id,
             proposal_end_epoch,
         )?;
-        let proposal_result =
-            compute_proposal_result(votes, total_voting_power, tally_type);
+        let proposal_result = compute_proposal_result(
+            votes,
+            total_active_voting_power,
+            tally_type,
+        );
         gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
-                    ProposalType::Default(_) => {
+                    ProposalType::Default => {
                         let proposal_code =
                             gov_api::get_proposal_code(&shell.state, id)?;
                         let result = execute_default_proposal(
@@ -103,15 +128,9 @@ where
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "Governance proposal (default {} wasm) {} has \
-                             been executed ({}) and passed.",
-                            if proposal_code.is_some() {
-                                "with"
-                            } else {
-                                "without"
-                            },
+                            "Default Governance proposal {} has been executed \
+                             and passed.",
                             id,
-                            result
                         );
 
                         ProposalEvent::default_proposal_event(
@@ -119,7 +138,27 @@ where
                             proposal_code.is_some(),
                             result,
                         )
-                        .into()
+                    }
+                    ProposalType::DefaultWithWasm(_) => {
+                        let proposal_code =
+                            gov_api::get_proposal_code(&shell.state, id)?;
+                        let result = execute_default_proposal(
+                            shell,
+                            id,
+                            proposal_code.clone(),
+                        )?;
+                        tracing::info!(
+                            "DefaultWithWasm Governance proposal {} has been \
+                             executed and passed, wasm executiong was {}.",
+                            id,
+                            if result { "successful" } else { "unsuccessful" }
+                        );
+
+                        ProposalEvent::default_proposal_event(
+                            id,
+                            proposal_code.is_some(),
+                            result,
+                        )
                     }
                     ProposalType::PGFSteward(stewards) => {
                         let result = execute_pgf_steward_proposal(
@@ -133,7 +172,6 @@ where
                         );
 
                         ProposalEvent::pgf_steward_proposal_event(id, result)
-                            .into()
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
@@ -149,24 +187,19 @@ where
                             id
                         );
 
-                        for ibc_event in
-                            shell.state.write_log_mut().take_ibc_events()
-                        {
-                            let mut event = Event::from(ibc_event.clone());
-                            // Add the height for IBC event query
-                            let height =
-                                shell.state.in_mem().get_last_block_height()
-                                    + 1;
-                            event["height"] = height.to_string();
-                            events.emit(event);
-                        }
-
                         ProposalEvent::pgf_payments_proposal_event(id, result)
-                            .into()
                     }
                 };
                 events.emit(proposal_event);
                 proposals_result.passed.push(id);
+
+                // Take events that could have been emitted by PGF
+                // over IBC, governance proposal execution, etc
+                for event in shell.state.write_log_mut().take_ibc_events() {
+                    events.emit(event.with(Height(
+                        shell.state.in_mem().get_last_block_height() + 1,
+                    )));
+                }
 
                 gov_api::get_proposal_author(&shell.state, id)?
             }
@@ -188,8 +221,7 @@ where
                         );
                     }
                 }
-                let proposal_event =
-                    ProposalEvent::rejected_proposal_event(id).into();
+                let proposal_event = ProposalEvent::rejected_proposal_event(id);
                 events.emit(proposal_event);
                 proposals_result.rejected.push(id);
 
@@ -235,28 +267,40 @@ where
 {
     let votes = gov_api::get_proposal_votes(storage, proposal_id)?;
 
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut validator_voting_power: HashMap<Address, VotePower> =
         HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut delegator_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
     > = HashMap::default();
 
     for vote in votes {
+        // Skip votes involving jailed or inactive validators
+        let validator = vote.validator.clone();
+        let validator_state =
+            validator_state_handle(&validator).get(storage, epoch, params)?;
+        if matches!(
+            validator_state,
+            Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
+        ) {
+            continue;
+        }
+
+        // Tally the votes involving active validators
         if vote.is_validator() {
-            let validator = vote.validator.clone();
             let vote_data = vote.data.clone();
 
             let validator_stake =
                 read_validator_stake(storage, params, &validator, epoch)
                     .unwrap_or_default();
 
-            validators_vote.insert(validator.clone(), vote_data.into());
+            validators_vote.insert(validator.clone(), vote_data);
             validator_voting_power.insert(validator, validator_stake);
         } else {
-            let validator = vote.validator.clone();
             let delegator = vote.delegator.clone();
             let vote_data = vote.data.clone();
 
@@ -267,7 +311,7 @@ where
             let delegator_stake = bond_amount(storage, &bond_id, epoch);
 
             if let Ok(stake) = delegator_stake {
-                delegators_vote.insert(delegator.clone(), vote_data.into());
+                delegators_vote.insert(delegator.clone(), vote_data);
                 delegator_voting_power
                     .entry(delegator)
                     .or_default()
@@ -299,7 +343,7 @@ where
         let pending_execution_key = gov_storage::get_proposal_execution_key(id);
         shell.state.write(&pending_execution_key, ())?;
 
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));

@@ -1,9 +1,10 @@
 //! Queries router and handlers for PoS validity predicate
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::Epoch;
 use namada_core::token;
@@ -526,12 +527,12 @@ where
     for result in handle.iter(ctx.state)? {
         let (
             lazy_map::NestedSubKey::Data {
-                key: end,
-                nested_sub_key: lazy_map::SubKey::Data(_start),
+                key: _start,
+                nested_sub_key: lazy_map::SubKey::Data(withdrawable),
             },
             amount,
         ) = result?;
-        if end <= epoch {
+        if epoch >= withdrawable {
             total += amount;
         }
     }

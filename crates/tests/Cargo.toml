@@ -13,17 +13,27 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["wasm-runtime"]
+default = ["wasm-runtime", "migrations"]
 mainnet = [
   "namada/mainnet",
 ]
 wasm-runtime = ["namada/wasm-runtime"]
 integration = ["namada_apps/integration"]
+migrations = [
+  "namada/migrations",
+  "namada_sdk/migrations",
+  "namada_core/migrations",
+]
+namada-eth-bridge = [
+  "namada/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+  "namada_apps/namada-eth-bridge",
+]
 
 [dependencies]
 namada = {path = "../namada", features = ["testing"]}
 namada_core = {path = "../core", features = ["testing"]}
-namada_sdk = {path = "../sdk"}
+namada_sdk = {path = "../sdk", default-features = false, features = ["tendermint-rpc", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils"}
 namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
@@ -54,6 +64,7 @@ tracing.workspace = true
 namada_apps = {path = "../apps", features = ["testing"]}
 namada_vm_env = {path = "../vm_env"}
 assert_cmd.workspace = true
+assert_matches.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 color-eyre.workspace = true
@@ -69,6 +80,7 @@ pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
+test-log.workspace = true
 toml.workspace = true
 
 # This is used to enable logging from tests

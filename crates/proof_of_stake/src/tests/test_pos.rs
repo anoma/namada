@@ -1,9 +1,10 @@
 //! PoS system tests
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use assert_matches::assert_matches;
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
 use namada_core::key::RefTo;
@@ -17,6 +18,7 @@ use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
+use token::get_effective_total_native_supply;
 
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
@@ -223,7 +225,7 @@ fn test_test_init_genesis_aux(
     for (i, validator) in validators.into_iter().enumerate() {
         let addr = &validator.address;
         let self_bonds = bond_details
-            .remove(&BondId {
+            .swap_remove(&BondId {
                 source: addr.clone(),
                 validator: addr.clone(),
             })
@@ -1396,8 +1398,8 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     // Read some data before applying rewards
     let pos_balance_pre =
         read_balance(&s, &staking_token, &address::POS).unwrap();
-    let gov_balance_pre =
-        read_balance(&s, &staking_token, &address::GOV).unwrap();
+    let pgf_balance_pre =
+        read_balance(&s, &staking_token, &address::PGF).unwrap();
 
     let num_consensus_validators = consensus_set.len() as u64;
     let accum_val = Dec::one() / num_consensus_validators;
@@ -1414,6 +1416,8 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
             .unwrap();
     }
 
+    let total_native_tokens = get_effective_total_native_supply(&s).unwrap();
+
     // Distribute inflation into rewards
     let last_epoch = current_epoch.prev();
     let inflation = token::Amount::native_whole(10_000_000);
@@ -1424,22 +1428,23 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
         num_blocks_in_last_epoch,
         inflation,
         &staking_token,
+        total_native_tokens,
     )
     .unwrap();
 
     let pos_balance_post =
         read_balance(&s, &staking_token, &address::POS).unwrap();
-    let gov_balance_post =
-        read_balance(&s, &staking_token, &address::GOV).unwrap();
+    let pgf_balance_post =
+        read_balance(&s, &staking_token, &address::PGF).unwrap();
 
     assert_eq!(
-        pos_balance_pre + gov_balance_pre + inflation,
-        pos_balance_post + gov_balance_post,
-        "Expected inflation to be minted to PoS and left-over amount to Gov"
+        pos_balance_pre + pgf_balance_pre + inflation,
+        pos_balance_post + pgf_balance_post,
+        "Expected inflation to be minted to PoS and left-over amount to PGF"
     );
 
     let pos_credit = pos_balance_post - pos_balance_pre;
-    let gov_credit = gov_balance_post - gov_balance_pre;
+    let gov_credit = pgf_balance_post - pgf_balance_pre;
     assert!(
         pos_credit > gov_credit,
         "PoS must receive more tokens than Gov, but got {} in PoS and {} in \

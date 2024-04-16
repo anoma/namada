@@ -1,14 +1,18 @@
 //! Logic and data types relating to tallying validators' votes for pieces of
 //! data stored in the ledger, where those pieces of data should only be acted
 //! on once they have received enough votes
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use eyre::{eyre, Result};
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token;
 use namada_core::voting_power::FractionalVotingPower;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 
@@ -116,7 +120,14 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
 }
 
 #[derive(
-    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, BorshSchema,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
 )]
 /// Represents all the information needed to tally a piece of data that may be
 /// voted for over multiple epochs

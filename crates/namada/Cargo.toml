@@ -50,6 +50,7 @@ http-client = ["tendermint-rpc/http-client"]
 testing = [
   "namada_core/testing",
   "namada_ethereum_bridge/testing",
+  "namada_parameters/testing",
   "namada_proof_of_stake/testing",
   "namada_sdk/testing",
   "namada_state/testing",
@@ -65,6 +66,11 @@ namada-sdk = [
   "namada_sdk/rand",
 ]
 
+namada-eth-bridge = [
+  "namada_ethereum_bridge/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+]
+
 multicore = [
   "masp_proofs/multicore",
   "namada_sdk/multicore",
@@ -73,6 +79,11 @@ multicore = [
 # Download MASP params if they're not present
 download-params = ["namada_sdk/download-params"]
 rand = ["namada_sdk/rand"]
+migrations = [
+  "namada_migrations",
+  "linkme",
+]
+benches = ["namada_core/benches", "namada_state/benches"]
 
 [dependencies]
 namada_account = { path = "../account" }
@@ -81,6 +92,8 @@ namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false
 namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
+namada_macros = { path = "../macros" }
+namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_replay_protection = { path = "../replay_protection" }
@@ -106,6 +119,7 @@ ethers.workspace = true
 eyre.workspace = true
 futures.workspace = true
 itertools.workspace = true
+linkme = {workspace = true, optional = true}
 loupe = { version = "0.1.3", optional = true }
 masp_primitives.workspace = true
 masp_proofs.workspace = true
@@ -121,6 +135,7 @@ prost.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 rayon = { version = "=1.5.3", optional = true }
+regex.workspace = true
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -133,14 +148,12 @@ tiny-bip39.workspace = true
 tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
-wasm-instrument = { version = "0.4.0", features = [
-  "sign_ext",
-], optional = true }
-wasmer = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasm-instrument = { workspace = true, optional = true }
+wasmer = { workspace = true, optional = true }
 wasmer-cache = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
-wasmer-compiler-singlepass = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasmer-compiler-singlepass = { workspace = true, optional = true }
 wasmer-engine-dylib = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
-wasmer-engine-universal = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasmer-engine-universal = { workspace = true, optional = true }
 wasmer-vm = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
 #  Greater versions break in `test_tx_stack_limiter` and `test_vp_stack_limiter`
 wat = "=1.0.71"
@@ -156,6 +169,9 @@ wasmtimer = "0.2.0"
 
 [dev-dependencies]
 namada_core = { path = "../core", default-features = false, features = [
+  "testing",
+] }
+namada_parameters = { path = "../parameters", default-features = false, features = [
   "testing",
 ] }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false, features = [

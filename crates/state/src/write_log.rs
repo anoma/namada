@@ -1,18 +1,15 @@
 //! Write log is temporary storage for modifications performed by a transaction.
 //! before they are committed to the ledger's storage.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
+use namada_core::address::{Address, EstablishedAddressGen};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
-use namada_trans_token::storage_key::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    is_any_token_parameter_key,
-};
 use thiserror::Error;
 
 #[allow(missing_docs)]
@@ -31,8 +28,14 @@ pub enum Error {
     DeleteVp,
     #[error("Trying to write a temporary value after deleting")]
     WriteTempAfterDelete,
+    #[error("Trying to write a temporary value after writing")]
+    WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
+    #[error(
+        "Trying to cast a temporary write to a persistent storage modification"
+    )]
+    TempToPersistentModificationCast,
 }
 
 /// Result for functions that may fail
@@ -61,6 +64,51 @@ pub enum StorageModification {
         /// Value bytes
         value: Vec<u8>,
     },
+}
+
+/// A persistent storage modification. Associated data is present as a reference
+/// to the corresponding [`StorageModification`] present in the write log
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PersistentStorageModification<'wl> {
+    /// Write a new value
+    Write {
+        /// Value bytes
+        value: &'wl Vec<u8>,
+    },
+    /// Delete an existing key-value
+    Delete,
+    /// Initialize a new account with established address and a given validity
+    /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
+    /// point to its validity predicate.
+    InitAccount {
+        /// Validity predicate hash bytes
+        vp_code_hash: &'wl Hash,
+    },
+}
+
+impl<'wl> TryFrom<&'wl StorageModification>
+    for PersistentStorageModification<'wl>
+{
+    type Error = Error;
+
+    fn try_from(
+        value: &'wl StorageModification,
+    ) -> std::prelude::v1::Result<Self, Self::Error> {
+        match value {
+            StorageModification::Write { value } => {
+                Ok(PersistentStorageModification::Write { value })
+            }
+            StorageModification::Delete => {
+                Ok(PersistentStorageModification::Delete)
+            }
+            StorageModification::InitAccount { vp_code_hash } => {
+                Ok(PersistentStorageModification::InitAccount { vp_code_hash })
+            }
+            StorageModification::Temp { value: _ } => {
+                Err(Error::TempToPersistentModificationCast)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,6 +216,41 @@ impl WriteLog {
         }
     }
 
+    /// Read a non-temporary value at the given key and return the value and the
+    /// gas cost, returns [`None`] if the key is not present in the write
+    /// log
+    pub fn read_persistent(
+        &self,
+        key: &storage::Key,
+    ) -> (Option<PersistentStorageModification>, u64) {
+        for bucket in [
+            &self.tx_write_log,
+            &self.tx_precommit_write_log,
+            &self.block_write_log,
+        ] {
+            if let Some(modification) = bucket.get(key) {
+                let gas = match modification {
+                    StorageModification::Write { ref value } => {
+                        key.len() + value.len()
+                    }
+                    StorageModification::Delete => key.len(),
+                    StorageModification::InitAccount { ref vp_code_hash } => {
+                        key.len() + vp_code_hash.len()
+                    }
+                    StorageModification::Temp { .. } => continue,
+                };
+                return (
+                    Some(modification.try_into().expect(
+                        "Temporary value should have been filtered out",
+                    )),
+                    gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+                );
+            }
+        }
+
+        (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+    }
+
     /// Read a value before the latest tx execution at the given key and return
     /// the value and the gas cost, returns [`None`] if the key is not present
     /// in the write log
@@ -209,7 +292,8 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Write { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
@@ -217,6 +301,11 @@ impl WriteLog {
                 }
                 StorageModification::Delete => len as i64,
                 StorageModification::InitAccount { .. } => {
+                    // NOTE: errors from host functions force a shudown of the
+                    // wasm environment without the need for cooperation from
+                    // the wasm code (tx or vp), so there's no need to return
+                    // gas in case of an error because execution will terminate
+                    // anyway and this cannot be exploited to run the vm forever
                     return Err(Error::UpdateVpOfNewAccount);
                 }
                 StorageModification::Temp { .. } => {
@@ -227,6 +316,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Write { value });
+
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
     }
 
@@ -259,6 +352,8 @@ impl WriteLog {
     }
 
     /// Write a key and a value and return the gas cost and the size difference
+    /// Fails with [`Error::WriteTempAfterWrite`] when attempting to update a
+    /// temporary value after writing.
     /// Fails with [`Error::UpdateVpOfNewAccount`] when attempting to update a
     /// validity predicate of a new account that's not yet committed to storage.
     /// Fails with [`Error::WriteTempAfterDelete`] when attempting to update a
@@ -272,11 +367,13 @@ impl WriteLog {
         let gas = key.len() + len;
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Temp { value })
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
+                StorageModification::Write { .. } => {
+                    // Cannot overwrite a write request with a temporary one
+                    return Err(Error::WriteTempAfterWrite);
                 }
                 StorageModification::Delete => {
                     return Err(Error::WriteTempAfterDelete);
@@ -292,6 +389,10 @@ impl WriteLog {
             // the previous value exists on the storage
             None => len as i64,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Temp { value });
+
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
         Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
@@ -307,7 +408,8 @@ impl WriteLog {
         }
         let size_diff = match self
             .tx_write_log
-            .insert(key.clone(), StorageModification::Delete)
+            .get(key)
+            .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len() as i64,
@@ -321,6 +423,9 @@ impl WriteLog {
             // storage
             None => 0,
         };
+
+        self.tx_write_log
+            .insert(key.clone(), StorageModification::Delete);
         let gas = key.len() + size_diff as usize;
         Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
     }
@@ -353,13 +458,14 @@ impl WriteLog {
         &mut self,
         storage_address_gen: &EstablishedAddressGen,
         vp_code_hash: Hash,
+        entropy_source: &[u8],
     ) -> (Address, u64) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
-        let address_gen =
-            self.address_gen.get_or_insert(storage_address_gen.clone());
-        let addr =
-            address_gen.generate_address("TODO more randomness".as_bytes());
+        let address_gen = self
+            .address_gen
+            .get_or_insert_with(|| storage_address_gen.clone());
+        let addr = address_gen.generate_address(entropy_source);
         let key = storage::Key::validity_predicate(&addr);
         let gas = (key.len() + vp_code_hash.len()) as u64
             * STORAGE_WRITE_GAS_PER_BYTE;
@@ -378,12 +484,21 @@ impl WriteLog {
         len as u64 * MEMORY_ACCESS_GAS_PER_BYTE
     }
 
-    /// Get the storage keys changed and accounts keys initialized in the
-    /// current transaction. The account keys point to the validity predicates
-    /// of the newly created accounts. The keys in the precommit are not
-    /// included in the result of this function.
+    /// Get the non-temporary storage keys changed and accounts keys initialized
+    /// in the current transaction. The account keys point to the validity
+    /// predicates of the newly created accounts. The keys in the precommit are
+    /// not included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
-        self.tx_write_log.keys().cloned().collect()
+        self.tx_write_log
+            .iter()
+            .filter_map(|(key, modification)| match modification {
+                StorageModification::Write { .. } => Some(key.clone()),
+                StorageModification::Delete => Some(key.clone()),
+                StorageModification::InitAccount { .. } => Some(key.clone()),
+                // Skip temporary storage changes - they are never committed
+                StorageModification::Temp { .. } => None,
+            })
+            .collect()
     }
 
     /// Get the storage keys changed and accounts keys initialized in the
@@ -473,12 +588,13 @@ impl WriteLog {
         self.take_ibc_events();
     }
 
-    /// Drop the current transaction's write log and precommit when it's
-    /// declined by any of the triggered validity predicates. Starts a new
-    /// transaction write log.
+    /// Drop the current transaction's write log and IBC events and precommit
+    /// when it's declined by any of the triggered validity predicates.
+    /// Starts a new transaction write log.
     pub fn drop_tx(&mut self) {
         self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();
+        self.ibc_events.clear();
     }
 
     /// Drop the current transaction's write log but keep the precommit one.
@@ -505,39 +621,15 @@ impl WriteLog {
 
         // get changed keys grouped by the address
         for key in changed_keys.iter() {
-            // for token keys, trigger Multitoken VP and the owner's VP
-            //
-            // TODO: this should not be a special case, as it is error prone.
-            // any internal addresses corresponding to tokens which have
-            // native vp equivalents should be automatically added as verifiers
-            if let Some([token, owner]) = is_any_token_balance_key(key) {
-                if matches!(&token, Address::Internal(InternalAddress::Nut(_)))
+            if let Some(addr) = key.fst_address() {
+                // We can skip insert when the address has been added from the
+                // Tx above. Also skip if it's an address of a newly initialized
+                // account, because anything can be written into an account's
+                // storage in the same tx in which it's initialized (there is no
+                // VP in the state prior to tx execution).
+                if !verifiers_from_tx.contains(addr)
+                    && !initialized_accounts.contains(addr)
                 {
-                    verifiers.insert(token.clone());
-                }
-                verifiers
-                    .insert(Address::Internal(InternalAddress::Multitoken));
-                verifiers.insert(owner.clone());
-            } else if is_any_minted_balance_key(key).is_some()
-                || is_any_minter_key(key).is_some()
-                || is_any_token_parameter_key(key).is_some()
-            {
-                verifiers
-                    .insert(Address::Internal(InternalAddress::Multitoken));
-            } else {
-                for addr in key.iter_addresses() {
-                    if verifiers_from_tx.contains(addr)
-                        || initialized_accounts.contains(addr)
-                    {
-                        // We can skip this when the address has been added from
-                        // the Tx above.
-                        // Also skip if it's an address of a newly initialized
-                        // account, because anything can be written into an
-                        // account's storage in the same tx in which it's
-                        // initialized (there is no VP in the state prior to tx
-                        // execution).
-                        continue;
-                    }
                     // Add the address as a verifier
                     verifiers.insert(addr.clone());
                 }
@@ -566,14 +658,15 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        for (key, modification) in &self.block_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
-            }
-        }
-        for (key, modification) in &self.tx_write_log {
-            if key.split_prefix(prefix).is_some() {
-                matches.insert(key.to_string(), modification.clone());
+        for bucket in [
+            &self.block_write_log,
+            &self.tx_precommit_write_log,
+            &self.tx_write_log,
+        ] {
+            for (key, modification) in bucket {
+                if key.split_prefix(prefix).is_some() {
+                    matches.insert(key.to_string(), modification.clone());
+                }
             }
         }
 
@@ -607,24 +700,9 @@ impl WriteLog {
     }
 
     /// Remove the transaction hash
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        match self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Delete)
-        {
-            None => Ok(()),
-            // Allow overwriting a previous finalize request
-            Some(ReProtStorageModification::Finalize) => Ok(()),
-            Some(_) =>
-            // Cannot delete an hash that still has to be written to
-            // storage or has already been deleted
-            {
-                Err(Error::ReplayProtection(format!(
-                    "Requested a delete on hash {hash} not yet committed to \
-                     storage"
-                )))
-            }
-        }
+    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) {
+        self.replay_protection
+            .insert(hash, ReProtStorageModification::Delete);
     }
 
     /// Move the transaction hash of the previous block to the list of all
@@ -743,7 +821,7 @@ mod tests {
         // init
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, gas) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, gas) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
         assert_eq!(
             gas,
@@ -776,7 +854,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // update should fail
@@ -795,7 +873,7 @@ mod tests {
 
         let init_vp = "initialized".as_bytes().to_vec();
         let vp_hash = Hash::sha256(init_vp);
-        let (addr, _) = write_log.init_account(&address_gen, vp_hash);
+        let (addr, _) = write_log.init_account(&address_gen, vp_hash, &[]);
         let vp_key = storage::Key::validity_predicate(&addr);
 
         // delete should fail
@@ -830,7 +908,7 @@ mod tests {
 
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
-        let (addr1, _) = state.write_log.init_account(&address_gen, vp1);
+        let (addr1, _) = state.write_log.init_account(&address_gen, vp1, &[]);
         state.write_log.commit_tx();
 
         // write values
@@ -915,9 +993,7 @@ mod tests {
                 .unwrap();
 
             // delete previous hash
-            write_log
-                .delete_tx_hash(Hash::sha256("tx1".as_bytes()))
-                .unwrap();
+            write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
 
             // finalize previous hashes
             for tx in ["tx2", "tx3"] {
@@ -947,8 +1023,7 @@ mod tests {
         // try to delete finalized hash which shouldn't work
         state
             .write_log
-            .delete_tx_hash(Hash::sha256("tx2".as_bytes()))
-            .unwrap();
+            .delete_tx_hash(Hash::sha256("tx2".as_bytes()));
 
         // commit a block
         state.commit_block().expect("commit failed");
@@ -959,6 +1034,78 @@ mod tests {
                 .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
                 .expect("read failed")
         );
+    }
+
+    // Test that writing a value on top of a temporary write is not allowed
+    #[test]
+    fn test_write_after_temp_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write(&key1, val1.clone()),
+            Err(Error::UpdateTemporaryValue)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write(&key1, val1),
+            Err(Error::UpdateTemporaryValue)
+        ));
+    }
+
+    // Test that a temporary write on top of a write is not allowed
+    #[test]
+    fn test_write_temp_after_write_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterWrite)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.write(&key1, val1.clone()).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterWrite)
+        ));
+    }
+
+    // Test that a temporary write on top of a delete is not allowed
+    #[test]
+    fn test_write_temp_after_delete_disallowed() {
+        let mut state = crate::testing::TestState::default();
+
+        let key1 =
+            storage::Key::parse("key1").expect("cannot parse the key string");
+        let val1 = "val1".as_bytes().to_vec();
+        // Test from tx_write_log
+        state.write_log.delete(&key1).unwrap();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1.clone()),
+            Err(Error::WriteTempAfterDelete)
+        ));
+
+        // Test with a temporary write precommitted
+        state.write_log.delete(&key1).unwrap();
+        state.write_log.precommit_tx();
+        assert!(matches!(
+            state.write_log.write_temp(&key1, val1),
+            Err(Error::WriteTempAfterDelete)
+        ));
     }
 
     prop_compose! {
@@ -975,8 +1122,8 @@ mod tests {
         /// Test [`WriteLog::verifiers_changed_keys`] that:
         /// 1. Every address from `verifiers_from_tx` is included in the
         ///    verifiers set.
-        /// 2. Every address included in the changed storage keys is included in
-        ///    the verifiers set.
+        /// 2. Every address included in the first segment of changed storage
+        ///    keys is included in the verifiers set.
         /// 3. Addresses of newly initialized accounts are not verifiers, so
         ///    that anything can be written into an account's storage in the
         ///    same tx in which it's initialized.
@@ -998,12 +1145,12 @@ mod tests {
 
             let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
             for key in changed_keys.iter() {
-                    for addr_from_key in &key.find_addresses() {
-                        if !initialized_accounts.contains(addr_from_key) {
-                            // Test for 2.
-                            assert!(verifiers.contains(addr_from_key));
-                        }
+                if let Some(addr_from_key) = key.fst_address() {
+                    if !initialized_accounts.contains(addr_from_key) {
+                        // Test for 2.
+                        assert!(verifiers.contains(addr_from_key));
                     }
+                }
             }
 
             println!("verifiers {:#?}", verifiers);
@@ -1049,6 +1196,7 @@ pub mod testing {
                 arb_storage_modification(can_init_account),
                 0..100,
             )
+            .prop_map(|map| map.into_iter().collect())
         })
     }
 

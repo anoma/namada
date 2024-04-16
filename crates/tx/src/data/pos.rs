@@ -5,6 +5,9 @@ use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::dec::Dec;
 use namada_core::key::{common, secp256k1};
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// A tx data type to become a validator account.
@@ -14,6 +17,7 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -56,6 +60,7 @@ pub struct BecomeValidator {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -82,6 +87,7 @@ pub type Unbond = Bond;
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -103,6 +109,7 @@ pub struct Withdraw {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -124,6 +131,7 @@ pub struct ClaimRewards {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -148,6 +156,7 @@ pub struct Redelegation {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -168,6 +177,7 @@ pub struct CommissionChange {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,
@@ -198,6 +208,7 @@ pub struct MetaDataChange {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Hash,
     Eq,

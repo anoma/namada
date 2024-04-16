@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 30
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22-small
     container: 
       image: ghcr.io/anoma/namada:wasm-main
     strategy:
@@ -93,6 +94,7 @@ jobs:
     timeout-minutes: 30
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22-small
     needs: [build-wasm]
     container: 
       image: ghcr.io/anoma/namada:wasm-main
@@ -188,6 +190,7 @@ jobs:
   test-unit:
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -197,7 +200,10 @@ jobs:
         nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         make:
-          - name: ABCI
+          - name: Run unit tests without Ethereum bridge enabled
+            command: make test-unit-with-coverage
+          - name: Run unit tests with Ethereum bridge enabled
+            command: make test-unit-with-eth-bridge
 
     env:
       RUSTC_WRAPPER: sccache
@@ -261,16 +267,19 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Check crates build with default features
         run: make check-crates
-      - name: Run unit tests
-        run: make test-unit-with-coverage
+      - name: ${{ matrix.make.name }}
+        run: ${{ matrix.make.command }}
         env:
           NAMADA_MASP_PARAMS_DIR: /home/runner/.masp-params
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
-          files: lcov.info
           fail_ci_if_error: true
+          files: lcov.info
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       - name: Print sccache stats
         if: always()
         run: sccache --show-stats || true
@@ -285,6 +294,7 @@ jobs:
   test-integration:
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22-small
     timeout-minutes: 30
     needs: [build-wasm]
     strategy:
@@ -374,6 +384,7 @@ jobs:
   run-benchmarks:
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22
     timeout-minutes: 60
     needs: [build-wasm]
     strategy:
@@ -462,6 +473,7 @@ jobs:
   namada-release:
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22-big
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -562,6 +574,7 @@ jobs:
   namada-e2e:
     runs-on: 
       group: namada-runners
+      labels: ubuntu-22
     needs: [build-wasm, namada-release]
     # timeout-minutes: 80
     strategy:
@@ -571,12 +584,13 @@ jobs:
         nightly_version: [nightly-2024-02-10]
         mold_version: [2.4.0]
         comet_bft: [0.37.2]
-        hermes: [1.7.4-namada-beta7]
         make:
           - index: 0
           - index: 1
           - index: 2
           - index: 3
+          - index: 4
+          - index: 5
 
     env:
       RUSTC_WRAPPER: sccache
@@ -649,8 +663,10 @@ jobs:
           mv cometbft /usr/local/bin
       - name: Download Hermes
         run: |
-          curl -o hermes.tar.gz -LO https://github.com/heliaxdev/hermes/releases/download/v${{ matrix.hermes }}/hermes-v${{ matrix.hermes }}-x86_64-unknown-linux-gnu.tar.gz
-          tar -xvzf hermes.tar.gz
+          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.txt)
+          echo "Using hermes version: ${HERMES_VERSION}"
+          curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+          unzip hermes.zip
           mv hermes /usr/local/bin
       - name: Change permissions
         run: |

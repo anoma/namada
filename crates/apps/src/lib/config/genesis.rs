@@ -6,7 +6,7 @@ pub mod templates;
 pub mod transactions;
 pub mod utils;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -14,6 +14,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada::core::address::{Address, EstablishedAddress};
 use namada::core::chain::ProposalBytes;
+use namada::core::collections::HashMap;
 use namada::core::key::*;
 use namada::core::storage;
 use namada::core::string_encoding::StringEncoded;
@@ -25,6 +26,9 @@ use namada::ledger::eth_bridge::EthereumBridgeParams;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
 use namada::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
@@ -35,6 +39,7 @@ use crate::config::genesis::chain::{Finalized, FinalizedEstablishedAccountTx};
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     Ord,
@@ -144,7 +149,7 @@ impl FromStr for GenesisAddress {
     }
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 #[borsh(init=init)]
 pub struct Genesis {
     pub genesis_time: DateTimeUtc,
@@ -176,6 +181,7 @@ impl Genesis {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -200,7 +206,14 @@ pub struct Validator {
 }
 
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Derivative,
 )]
 #[derivative(PartialOrd, Ord)]
 pub struct EstablishedAccount {
@@ -218,7 +231,14 @@ pub struct EstablishedAccount {
 }
 
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq, Derivative,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Derivative,
 )]
 #[derivative(PartialOrd, Ord)]
 pub struct TokenAccount {
@@ -242,6 +262,7 @@ pub struct TokenAccount {
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -267,6 +288,7 @@ pub struct ImplicitAccount {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Parameters {
     /// Max payload size, in bytes, for a tx batch proposal.
@@ -289,10 +311,6 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// Maximum amount of signatures per transaction
     pub max_signatures_per_transaction: u8,
-    /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Dec,
-    /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: token::Amount,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
     /// Fee unshielding descriptions limit
@@ -340,6 +358,7 @@ pub fn make_dev_genesis(
     let mut genesis = finalize(
         templates,
         ChainIdPrefix::from_str("test").unwrap(),
+        #[allow(clippy::disallowed_methods)]
         DateTimeUtc::now(),
         Duration::from_secs(30).into(),
     );

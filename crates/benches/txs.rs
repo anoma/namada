@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada::account::{InitAccount, UpdateAccount};
 use namada::core::address::{self, Address};
+use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::hash::Hash;
 use namada::core::key::{
@@ -12,6 +12,7 @@ use namada::core::key::{
 };
 use namada::core::masp::{TransferSource, TransferTarget};
 use namada::core::storage::Key;
+use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::storage::vote::ProposalVote;
@@ -24,8 +25,9 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
+use namada::ibc::primitives::ToProto;
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::proof_of_stake::types::SlashType;
@@ -459,13 +461,12 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 0,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(None),
+                                    r#type: ProposalType::Default,
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
-                                    grace_epoch: 18.into(),
+                                    activation_epoch: 18.into(),
                                 },
                                 None,
                                 Some(vec![content_section]),
@@ -509,15 +510,14 @@ fn init_proposal(c: &mut Criterion) {
                             shell.generate_tx(
                                 TX_INIT_PROPOSAL_WASM,
                                 InitProposalData {
-                                    id: 1,
                                     content: content_section.get_hash(),
                                     author: defaults::albert_address(),
-                                    r#type: ProposalType::Default(Some(
+                                    r#type: ProposalType::DefaultWithWasm(
                                         wasm_code_section.get_hash(),
-                                    )),
+                                    ),
                                     voting_start_epoch: 12.into(),
                                     voting_end_epoch: 15.into(),
-                                    grace_epoch: 18.into(),
+                                    activation_epoch: 18.into(),
                                 },
                                 None,
                                 Some(vec![content_section, wasm_code_section]),
@@ -705,7 +705,7 @@ fn change_consensus_key(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -735,78 +735,107 @@ fn change_validator_metadata(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("tx_ibc");
-    let shell = BenchShell::default();
-
-    // Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
-
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
 
     // NOTE: Ibc encompass a variety of different messages that can be executed,
     // here we only benchmark a few of those
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 || {
-                    let mut shell = BenchShell::default();
+                    let mut shielded_ctx = BenchShieldedCtx::default();
                     // Initialize the state according to the target tx
-                    match bench_name {
+                    let (shielded_ctx, signed_tx) = match bench_name {
                         "open_connection" => {
-                            let _ = shell.init_ibc_client_state(
+                            let _ = shielded_ctx.shell.init_ibc_client_state(
                                 namada::core::storage::Key::from(
                                     Address::Internal(namada::core::address::InternalAddress::Ibc).to_db_key(),
                                 ),
                             );
+                            // Connection handshake
+                            let msg = MsgConnectionOpenInit {
+                                client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
+                                counterparty: Counterparty::new(
+                                    ClientId::from_str("07-tendermint-1").unwrap(),
+                                    None,
+                                    CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                                ),
+                                version: Some(Version::default()),
+                                delay_period: std::time::Duration::new(100, 0),
+                                signer: defaults::albert_address().to_string().into(),
+                            };
+                            let mut data = vec![];
+                            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+                            let open_connection = shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+                            (shielded_ctx, open_connection)
                         }
                         "open_channel" => {
-                            let _ = shell.init_ibc_connection();
+                            let _ = shielded_ctx.shell.init_ibc_connection();
+                            // Channel handshake
+                            let msg = MsgChannelOpenInit {
+                                port_id_on_a: PortId::transfer(),
+                                connection_hops_on_a: vec![ConnectionId::new(1)],
+                                port_id_on_b: PortId::transfer(),
+                                ordering: Order::Unordered,
+                                signer: defaults::albert_address().to_string().into(),
+                                version_proposal: ChannelVersion::new("ics20-1".to_string()),
+                            };
+
+                            // Avoid serializing the data again with borsh
+                            let mut data = vec![];
+                            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+                            let open_channel = shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+                            (shielded_ctx, open_channel)
                         }
-                        "outgoing_transfer" => shell.init_ibc_channel(),
+                        "outgoing_transfer" => {
+                            shielded_ctx.shell.init_ibc_channel();
+                            let outgoing_transfer = shielded_ctx.shell.generate_ibc_transfer_tx();
+                            (shielded_ctx, outgoing_transfer)
+                        }
+                        "outgoing_shielded_action" => {
+                            shielded_ctx.shell.init_ibc_channel();
+                            let albert_payment_addr = shielded_ctx
+                                .wallet
+                                .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+                                .unwrap()
+                                .to_owned();
+                            let albert_spending_key = shielded_ctx
+                                .wallet
+                                .find_spending_key(ALBERT_SPENDING_KEY, None)
+                                .unwrap()
+                                .to_owned();
+                            // Shield some tokens for Albert
+                            let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
+                                Amount::native_whole(500),
+                                TransferSource::Address(defaults::albert_address()),
+                                TransferTarget::PaymentAddress(albert_payment_addr),
+                            );
+                            shielded_ctx.shell.execute_tx(&shield_tx);
+                            shielded_ctx.shell.commit_masp_tx(shield_tx);
+                            shielded_ctx.shell.commit_block();
+
+                            shielded_ctx.generate_shielded_action(
+                                Amount::native_whole(10),
+                                TransferSource::ExtendedSpendingKey(albert_spending_key),
+                                TransferTarget::Address(defaults::bertha_address()),
+                            )
+                        }
                         _ => panic!("Unexpected bench test"),
-                    }
-                    shell
+                    };
+                    (shielded_ctx, signed_tx)
                 },
-                |shell| shell.execute_tx(signed_tx),
+                |(shielded_ctx, signed_tx)| shielded_ctx.shell.execute_tx(signed_tx),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -862,6 +891,10 @@ fn unjail_validator(c: &mut Criterion) {
 }
 
 fn tx_bridge_pool(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     let shell = BenchShell::default();
 
     let data = PendingTransfer {
@@ -973,7 +1006,7 @@ fn deactivate_validator(c: &mut Criterion) {
         b.iter_batched_ref(
             BenchShell::default,
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -1013,7 +1046,7 @@ fn reactivate_validator(c: &mut Criterion) {
                 shell
             },
             |shell| shell.execute_tx(&signed_tx),
-            criterion::BatchSize::LargeInput,
+            criterion::BatchSize::SmallInput,
         )
     });
 }
@@ -1066,7 +1099,7 @@ fn claim_rewards(c: &mut Criterion) {
                     shell
                 },
                 |shell| shell.execute_tx(signed_tx),
-                criterion::BatchSize::LargeInput,
+                criterion::BatchSize::SmallInput,
             )
         });
     }

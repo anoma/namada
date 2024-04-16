@@ -1,6 +1,6 @@
 //! Test PoS transitions with a state machine
 
-use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::{AddAssign, Deref};
 use std::{cmp, mem};
 
@@ -8,6 +8,7 @@ use assert_matches::assert_matches;
 use derivative::Derivative;
 use itertools::Itertools;
 use namada_core::address::{self, Address};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key;
 use namada_core::key::common::PublicKey;
@@ -768,7 +769,7 @@ impl AbstractPosState {
             ValidatorState::BelowThreshold => {
                 // We know that this validator will be promoted into one of the
                 // higher sets, so first remove from the below-threshold set.
-                below_thresh_set.remove(validator);
+                below_thresh_set.swap_remove(validator);
 
                 let num_consensus =
                     consensus_set.iter().fold(0, |sum, (_, validators)| {
@@ -2690,6 +2691,7 @@ impl StateMachineTest for ConcretePosState {
                     &params,
                     current_epoch,
                     infraction_epoch,
+                    height,
                     slash_type,
                     &address,
                 );
@@ -3057,6 +3059,7 @@ impl ConcretePosState {
         params: &PosParams,
         current_epoch: Epoch,
         infraction_epoch: Epoch,
+        infraction_height: u64,
         slash_type: SlashType,
         validator: &Address,
     ) {
@@ -3101,7 +3104,7 @@ impl ConcretePosState {
         let slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(validator)
-            .back(&self.s)
+            .get(&self.s, &infraction_height)
             .unwrap();
         if let Some(slash) = slash {
             assert_eq!(slash.epoch, infraction_epoch);
@@ -4072,7 +4075,7 @@ impl ReferenceStateMachine for AbstractPosState {
                             .below_threshold_set
                             .entry(current_epoch + offset)
                             .or_default()
-                            .remove(address);
+                            .swap_remove(address);
                         debug_assert!(removed);
                     } else {
                         // Just make sure the validator is already jailed
@@ -4588,12 +4591,16 @@ fn arb_slash(state: &AbstractPosState) -> impl Strategy<Value = Transition> {
         .checked_sub(state.params.unbonding_len)
         .unwrap_or_default()..=current_epoch)
         .prop_map(Epoch::from);
-    (arb_validator, arb_type, arb_epoch).prop_map(
-        |(validator, slash_type, infraction_epoch)| Transition::Misbehavior {
-            address: validator,
-            slash_type,
-            infraction_epoch,
-            height: 0,
+    let arb_height = 0_u64..10_000_u64;
+
+    (arb_validator, arb_type, arb_epoch, arb_height).prop_map(
+        |(validator, slash_type, infraction_epoch, height)| {
+            Transition::Misbehavior {
+                address: validator,
+                slash_type,
+                infraction_epoch,
+                height,
+            }
         },
     )
 }

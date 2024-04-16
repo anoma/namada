@@ -4,22 +4,20 @@ use std::cell::RefCell;
 
 use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
-use namada::core::hints;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::TxGasMeter;
 use namada::ledger::protocol::{self, ShellParams};
-use namada::ledger::storage::tx_queue::TxInQueue;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
-use namada::tx::data::{DecryptedTx, TxType, WrapperTx};
+use namada::tx::data::{TxType, WrapperTx};
 use namada::tx::Tx;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
 
 use super::super::*;
 use super::block_alloc::states::{
-    BuildingDecryptedTxBatch, BuildingProtocolTxBatch,
-    EncryptedTxBatchAllocator, NextState, TryAlloc,
+    BuildingNormalTxBatch, BuildingProtocolTxBatch, NextState, TryAlloc,
+    WithNormalTxs, WithoutNormalTxs,
 };
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 use crate::config::ValidatorLocalConfig;
@@ -40,17 +38,21 @@ where
     ///
     /// INVARIANT: Any changes applied in this method must be reverted if
     /// the proposal is rejected (unless we can simply overwrite
-    /// them in the next block).
+    /// them in the next block). Furthermore, protocol transactions cannot
+    /// affect the ability of a tx to pay its wrapper fees.
     pub fn prepare_proposal(
         &self,
-        req: RequestPrepareProposal,
+        mut req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
         let txs = if let ShellMode::Validator {
             ref local_config, ..
         } = self.mode
         {
             // start counting allotted space for txs
-            let alloc = self.get_encrypted_txs_allocator();
+            let alloc = self.get_protocol_txs_allocator();
+            // add initial protocol txs
+            let (alloc, mut txs) =
+                self.build_protocol_tx_with_normal_txs(alloc, &mut req.txs);
 
             // add encrypted txs
             let tm_raw_hash_string =
@@ -62,22 +64,17 @@ where
                         "Unable to find native validator address of block \
                          proposer from tendermint raw hash",
                     );
-            let (encrypted_txs, alloc) = self.build_encrypted_txs(
+            let (mut normal_txs, alloc) = self.build_normal_txs(
                 alloc,
                 &req.txs,
                 req.time,
                 &block_proposer,
                 local_config.as_ref(),
             );
-            let mut txs = encrypted_txs;
-            // decrypt the wrapper txs included in the previous block
-            let (mut decrypted_txs, alloc) = self.build_decrypted_txs(alloc);
-            txs.append(&mut decrypted_txs);
-
-            // add vote extension protocol txs
-            let mut protocol_txs = self.build_protocol_txs(alloc, &req.txs);
-            txs.append(&mut protocol_txs);
-
+            txs.append(&mut normal_txs);
+            let mut remaining_txs =
+                self.build_protocol_tx_without_normal_txs(alloc, &mut req.txs);
+            txs.append(&mut remaining_txs);
             txs
         } else {
             vec![]
@@ -92,47 +89,28 @@ where
         response::PrepareProposal { txs }
     }
 
-    /// Depending on the current block height offset within the epoch,
-    /// transition state accordingly, return a block space allocator
-    /// with or without encrypted txs.
-    ///
-    /// # How to determine which path to take in the states DAG
-    ///
-    /// If we are at the second or third block height offset within an
-    /// epoch, we do not allow encrypted transactions to be included in
-    /// a block, therefore we return an allocator wrapped in an
-    /// [`EncryptedTxBatchAllocator::WithoutEncryptedTxs`] value.
-    /// Otherwise, we return an allocator wrapped in an
-    /// [`EncryptedTxBatchAllocator::WithEncryptedTxs`] value.
+    /// Get the first state of the block allocator. This is for protocol
+    /// transactions.
     #[inline]
-    fn get_encrypted_txs_allocator(&self) -> EncryptedTxBatchAllocator {
-        let is_2nd_height_off = self.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.is_deciding_offset_within_epoch(2);
-
-        if hints::unlikely(is_2nd_height_off || is_3rd_height_off) {
-            tracing::warn!(
-                proposal_height =
-                    ?self.state.in_mem().block.height,
-                "No mempool txs are being included in the current proposal"
-            );
-            EncryptedTxBatchAllocator::WithoutEncryptedTxs(
-                (&*self.state).into(),
-            )
-        } else {
-            EncryptedTxBatchAllocator::WithEncryptedTxs((&*self.state).into())
-        }
+    fn get_protocol_txs_allocator(
+        &self,
+    ) -> BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>> {
+        self.state.read_only().into()
     }
 
     /// Builds a batch of encrypted transactions, retrieved from
-    /// Tendermint's mempool.
-    fn build_encrypted_txs(
+    /// CometBFT's mempool.
+    fn build_normal_txs(
         &self,
-        mut alloc: EncryptedTxBatchAllocator,
+        mut alloc: BlockAllocator<BuildingNormalTxBatch>,
         txs: &[TxBytes],
         block_time: Option<Timestamp>,
         block_proposer: &Address,
         proposer_local_config: Option<&ValidatorLocalConfig>,
-    ) -> (Vec<TxBytes>, BlockAllocator<BuildingDecryptedTxBatch>) {
+    ) -> (
+        Vec<TxBytes>,
+        BlockAllocator<BuildingProtocolTxBatch<WithoutNormalTxs>>,
+    ) {
         let block_time = block_time.and_then(|block_time| {
             // If error in conversion, default to last block datetime, it's
             // valid because of mempool check
@@ -193,85 +171,46 @@ where
         (txs, alloc)
     }
 
-    /// Builds a batch of DKG decrypted transactions.
-    // NOTE: we won't have frontrunning protection until V2 of the
-    // Anoma protocol; Namada runs V1, therefore this method is
-    // essentially a NOOP
-    //
-    // sources:
-    // - https://specs.namada.net/main/releases/v2.html
-    // - https://github.com/anoma/ferveo
-    fn build_decrypted_txs(
+    /// Allocate an initial set of protocol txs and advance to the
+    /// next allocation state.
+    fn build_protocol_tx_with_normal_txs(
         &self,
-        mut alloc: BlockAllocator<BuildingDecryptedTxBatch>,
-    ) -> (Vec<TxBytes>, BlockAllocator<BuildingProtocolTxBatch>) {
-        let txs = self
-            .state
-            .in_mem()
-            .tx_queue
-            .iter()
-            .map(
-                |TxInQueue {
-                     tx,
-                     gas: _,
-                }| {
-                    let mut tx = tx.clone();
-                    tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-                    tx.to_bytes().into()
-                },
-            )
-            // TODO: make sure all decrypted txs are accepted
-            .take_while(|tx_bytes: &TxBytes| {
-                alloc.try_alloc(&tx_bytes[..]).map_or_else(
-                    |status| match status {
-                        AllocFailure::Rejected { bin_resource_left: bin_space_left } => {
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_space_left,
-                                proposal_height =
-                                    ?self.get_current_decision_height(),
-                                "Dropping decrypted tx from the current proposal",
-                            );
-                            false
-                        }
-                        AllocFailure::OverflowsBin { bin_resource: bin_size } => {
-                            tracing::warn!(
-                                ?tx_bytes,
-                                bin_size,
-                                proposal_height =
-                                    ?self.get_current_decision_height(),
-                                "Dropping large decrypted tx from the current proposal",
-                            );
-                            true
-                        }
-                    },
-                    |()| true,
-                )
-            })
-            .collect();
-        let alloc = alloc.next_state();
+        alloc: BlockAllocator<BuildingProtocolTxBatch<WithNormalTxs>>,
+        txs: &mut Vec<TxBytes>,
+    ) -> (BlockAllocator<BuildingNormalTxBatch>, Vec<TxBytes>) {
+        let (alloc, txs) = self.build_protocol_txs(alloc, txs);
+        (alloc.next_state(), txs)
+    }
 
-        (txs, alloc)
+    /// Allocate protocol txs into any remaining space. After this, no
+    /// more allocation will take place.
+    fn build_protocol_tx_without_normal_txs(
+        &self,
+        alloc: BlockAllocator<BuildingProtocolTxBatch<WithoutNormalTxs>>,
+        txs: &mut Vec<TxBytes>,
+    ) -> Vec<TxBytes> {
+        let (_, txs) = self.build_protocol_txs(alloc, txs);
+        txs
     }
 
     /// Builds a batch of protocol transactions.
-    fn build_protocol_txs(
+    fn build_protocol_txs<M>(
         &self,
-        mut alloc: BlockAllocator<BuildingProtocolTxBatch>,
-        txs: &[TxBytes],
-    ) -> Vec<TxBytes> {
+        mut alloc: BlockAllocator<BuildingProtocolTxBatch<M>>,
+        txs: &mut Vec<TxBytes>,
+    ) -> (BlockAllocator<BuildingProtocolTxBatch<M>>, Vec<TxBytes>) {
         if self.state.in_mem().last_block.is_none() {
             // genesis should not contain vote extensions.
             //
             // this is because we have not decided any block through
             // consensus yet (hence height 0), which in turn means we
             // have not committed any vote extensions to a block either.
-            return vec![];
+            return (alloc, vec![]);
         }
 
-        let deserialized_iter = self.deserialize_vote_extensions(txs);
+        let mut deserialized_iter = self.deserialize_vote_extensions(txs);
 
-        deserialized_iter.take_while(|tx_bytes|
+        let taken = deserialized_iter.by_ref().take_while(|tx_bytes|
             alloc.try_alloc(&tx_bytes[..])
                 .map_or_else(
                     |status| match status {
@@ -309,7 +248,10 @@ where
                     |()| true,
                 )
         )
-        .collect()
+        .collect();
+        // avoid dropping the txs that couldn't be included in the block
+        deserialized_iter.keep_rest();
+        (alloc, taken)
     }
 }
 
@@ -425,12 +367,10 @@ where
 mod test_prepare_proposal {
     use std::collections::BTreeSet;
 
-    use borsh_ext::BorshSerializeExt;
     use namada::core::address;
     use namada::core::ethereum_events::EthereumEvent;
     use namada::core::key::RefTo;
     use namada::core::storage::{BlockHeight, InnerEthEventsQueue};
-    use namada::ledger::gas::Gas;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -441,7 +381,7 @@ mod test_prepare_proposal {
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Header, Section, Signature, Signed};
+    use namada::tx::{Authorization, Code, Data, Section, Signed};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
     use namada::{replay_protection, token};
     use namada_sdk::storage::StorageWrite;
@@ -477,7 +417,7 @@ mod test_prepare_proposal {
     #[test]
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
+        let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = shell.chain_id.clone();
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes().into()],
@@ -765,100 +705,6 @@ mod test_prepare_proposal {
         assert_eq!(signed_eth_ev_vote_extension, rsp_ext.0);
     }
 
-    /// Test that the decrypted txs are included
-    /// in the proposal in the same order as their
-    /// corresponding wrappers
-    #[test]
-    fn test_decrypted_txs_in_correct_order() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        let keypair = gen_keypair();
-        let mut expected_wrapper = vec![];
-        let mut expected_decrypted = vec![];
-
-        // Load some tokens to tx signer to pay fees
-        let balance_key = token::storage_key::balance_key(
-            &shell.state.in_mem().native_token,
-            &Address::from(&keypair.ref_to()),
-        );
-        shell
-            .state
-            .db_write(
-                &balance_key,
-                Amount::native_whole(1_000).serialize_to_vec(),
-            )
-            .unwrap();
-
-        let mut req = RequestPrepareProposal {
-            txs: vec![],
-            ..Default::default()
-        };
-        // create a request with two new wrappers from mempool and
-        // two wrappers from the previous block to be decrypted
-        for i in 0..2 {
-            let mut tx =
-                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                    Fee {
-                        amount_per_gas_unit: DenominatedAmount::native(
-                            1.into(),
-                        ),
-                        token: shell.state.in_mem().native_token.clone(),
-                    },
-                    keypair.ref_to(),
-                    Epoch(0),
-                    GAS_LIMIT_MULTIPLIER.into(),
-                    None,
-                ))));
-            tx.header.chain_id = shell.chain_id.clone();
-            tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-            tx.set_data(Data::new(
-                format!("transaction data: {}", i).as_bytes().to_owned(),
-            ));
-            tx.add_section(Section::Signature(Signature::new(
-                tx.sechashes(),
-                [(0, keypair.clone())].into_iter().collect(),
-                None,
-            )));
-
-            let gas = Gas::from(
-                tx.header().wrapper().expect("Wrong tx type").gas_limit,
-            )
-            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
-            .unwrap();
-            shell.enqueue_tx(tx.clone(), gas);
-            expected_wrapper.push(tx.clone());
-            req.txs.push(tx.to_bytes().into());
-            tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-            expected_decrypted.push(tx.clone());
-        }
-        // we extract the inner data from the txs for testing
-        // equality since otherwise changes in timestamps would
-        // fail the test
-        let expected_txs: Vec<Header> = expected_wrapper
-            .into_iter()
-            .chain(expected_decrypted)
-            .map(|tx| tx.header)
-            .collect();
-        let received: Vec<Header> = shell
-            .prepare_proposal(req)
-            .txs
-            .into_iter()
-            .map(|tx_bytes| {
-                Tx::try_from(tx_bytes.as_ref()).expect("Test failed").header
-            })
-            .collect();
-        // check that the order of the txs is correct
-        assert_eq!(
-            received
-                .iter()
-                .map(|x| x.serialize_to_vec())
-                .collect::<Vec<_>>(),
-            expected_txs
-                .iter()
-                .map(|x| x.serialize_to_vec())
-                .collect::<Vec<_>>(),
-        );
-    }
-
     /// Test that if the unsigned wrapper tx hash is known (replay attack), the
     /// transaction is not included in the block
     #[test]
@@ -880,7 +726,7 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -924,7 +770,7 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -961,7 +807,7 @@ mod test_prepare_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1009,7 +855,7 @@ mod test_prepare_proposal {
         let tx_data = Data::new("transaction data".as_bytes().to_owned());
         wrapper.set_data(tx_data);
         let mut new_wrapper = wrapper.clone();
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1025,7 +871,7 @@ mod test_prepare_proposal {
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         ))));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
@@ -1060,12 +906,13 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
         )));
 
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let block_time =
             namada::core::tendermint_proto::google::protobuf::Timestamp {
@@ -1108,7 +955,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1148,7 +995,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1174,10 +1021,9 @@ mod test_prepare_proposal {
         if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
             // Remove the allowed btc
             *local_config = Some(ValidatorLocalConfig {
-                accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::testing::nam(),
-                    Amount::from(1),
-                )]),
+                accepted_gas_tokens: namada::core::collections::HashMap::from(
+                    [(namada::core::address::testing::nam(), Amount::from(1))],
+                ),
             });
         }
 
@@ -1204,7 +1050,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1252,7 +1098,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1280,10 +1126,12 @@ mod test_prepare_proposal {
         if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
             // Remove btc and increase minimum for nam
             *local_config = Some(ValidatorLocalConfig {
-                accepted_gas_tokens: std::collections::HashMap::from([(
-                    namada::core::address::testing::nam(),
-                    Amount::from(100),
-                )]),
+                accepted_gas_tokens: namada::core::collections::HashMap::from(
+                    [(
+                        namada::core::address::testing::nam(),
+                        Amount::from(100),
+                    )],
+                ),
             });
         }
 
@@ -1302,7 +1150,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1342,7 +1190,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1383,7 +1231,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1424,7 +1272,7 @@ mod test_prepare_proposal {
         wrapper_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper_tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper_tx.add_section(Section::Signature(Signature::new(
+        wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()

@@ -1,4 +1,5 @@
 extern crate alloc;
+extern crate core;
 
 pub use namada_core::*;
 #[cfg(feature = "tendermint-rpc")]
@@ -24,10 +25,10 @@ pub mod error;
 pub mod events;
 pub(crate) mod internal_macros;
 pub mod io;
+pub mod migrations;
 pub mod queries;
 pub mod wallet;
 
-use std::collections::HashSet;
 #[cfg(feature = "async-send")]
 pub use std::marker::Send as MaybeSend;
 #[cfg(feature = "async-send")]
@@ -37,6 +38,7 @@ use std::str::FromStr;
 
 use args::{InputAmount, SdkTypes};
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -261,6 +263,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             port_id: PortId::from_str("transfer").unwrap(),
             timeout_height: None,
             timeout_sec_offset: None,
+            refund_target: None,
             memo: None,
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_IBC_WASM),
@@ -271,7 +274,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_init_proposal(&self, proposal_data: Vec<u8>) -> args::InitProposal {
         args::InitProposal {
             proposal_data,
-            is_offline: false,
             is_pgf_stewards: false,
             is_pgf_funding: false,
             tx_code_path: PathBuf::from(TX_INIT_PROPOSAL),
@@ -280,29 +282,33 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxUpdateAccount builder from the given minimum set of arguments
-    fn new_update_account(&self, addr: Address) -> args::TxUpdateAccount {
+    fn new_update_account(
+        &self,
+        addr: Address,
+        public_keys: Vec<common::PublicKey>,
+        threshold: u8,
+    ) -> args::TxUpdateAccount {
         args::TxUpdateAccount {
             addr,
             vp_code_path: None,
-            public_keys: vec![],
-            threshold: None,
+            public_keys,
+            threshold: Some(threshold),
             tx_code_path: PathBuf::from(TX_UPDATE_ACCOUNT_WASM),
             tx: self.tx_builder(),
         }
     }
 
     /// Make a VoteProposal builder from the given minimum set of arguments
-    fn new_vote_prposal(
+    fn new_proposal_vote(
         &self,
+        proposal_id: u64,
         vote: String,
-        voter: Address,
+        voter_address: Address,
     ) -> args::VoteProposal {
         args::VoteProposal {
             vote,
-            voter,
-            proposal_id: None,
-            is_offline: false,
-            proposal_data: None,
+            voter_address,
+            proposal_id,
             tx_code_path: PathBuf::from(TX_VOTE_PROPOSAL),
             tx: self.tx_builder(),
         }
@@ -327,10 +333,11 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_change_consensus_key(
         &self,
         validator: Address,
+        consensus_key: common::PublicKey,
     ) -> args::ConsensusKeyChange {
         args::ConsensusKeyChange {
             validator,
-            consensus_key: None,
+            consensus_key: Some(consensus_key),
             tx_code_path: PathBuf::from(TX_CHANGE_CONSENSUS_KEY_WASM),
             unsafe_dont_encrypt: false,
             tx: self.tx_builder(),
@@ -354,11 +361,16 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     }
 
     /// Make a TxBecomeValidator builder from the given minimum set of arguments
+    #[allow(clippy::too_many_arguments)]
     fn new_become_validator(
         &self,
         address: Address,
         commission_rate: Dec,
         max_commission_rate_change: Dec,
+        consesus_key: common::PublicKey,
+        eth_cold_key: common::PublicKey,
+        eth_hot_key: common::PublicKey,
+        protocol_key: common::PublicKey,
         email: String,
     ) -> args::TxBecomeValidator {
         args::TxBecomeValidator {
@@ -366,10 +378,10 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             commission_rate,
             max_commission_rate_change,
             scheme: SchemeType::Ed25519,
-            consensus_key: None,
-            eth_cold_key: None,
-            eth_hot_key: None,
-            protocol_key: None,
+            consensus_key: Some(consesus_key),
+            eth_cold_key: Some(eth_cold_key),
+            eth_hot_key: Some(eth_hot_key),
+            protocol_key: Some(protocol_key),
             unsafe_dont_encrypt: false,
             tx_code_path: PathBuf::from(TX_BECOME_VALIDATOR_WASM),
             tx: self.tx_builder(),
@@ -809,7 +821,7 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Code, Commitment, Header, MaspBuilder, Section, Signature,
+        Authorization, Code, Commitment, Header, MaspBuilder, Section,
     };
 
     #[derive(Debug, Clone)]
@@ -965,7 +977,6 @@ pub mod testing {
         // Generate an arbitrary transaction type
         pub fn arb_tx_type()(tx_type in prop_oneof![
             Just(TxType::Raw),
-            arb_decrypted_tx().prop_map(TxType::Decrypted),
             arb_wrapper_tx().prop_map(|x| TxType::Wrapper(Box::new(x))),
         ]) -> TxType {
             tx_type
@@ -1173,7 +1184,7 @@ pub mod testing {
             let mut tx = Tx { header, sections: vec![] };
             let content_hash = tx.add_section(Section::ExtraData(content_extra_data)).get_hash();
             init_proposal.content = content_hash;
-            if let ProposalType::Default(Some(hash)) = &mut init_proposal.r#type {
+            if let ProposalType::DefaultWithWasm(hash) = &mut init_proposal.r#type {
                 let type_hash = tx.add_section(Section::ExtraData(type_extra_data)).get_hash();
                 *hash = type_hash;
             }
@@ -1503,16 +1514,16 @@ pub mod testing {
                 1..3,
             ),
             signer in option::of(arb_non_internal_address()),
-        ) -> Signature {
+        ) -> Authorization {
             if signer.is_some() {
-                Signature::new(targets, secret_keys, signer)
+                Authorization::new(targets, secret_keys, signer)
             } else {
                 let secret_keys = secret_keys
                     .into_values()
                     .enumerate()
                     .map(|(k, v)| (k as u8, v))
                     .collect();
-                Signature::new(targets, secret_keys, signer)
+                Authorization::new(targets, secret_keys, signer)
             }
         }
     }
@@ -1525,7 +1536,7 @@ pub mod testing {
         ) -> (Tx, TxData) {
             for sig in sigs {
                 // Add all the generated signature sections
-                tx.0.add_section(Section::Signature(sig));
+                tx.0.add_section(Section::Authorization(sig));
             }
             (tx.0, tx.1)
         }

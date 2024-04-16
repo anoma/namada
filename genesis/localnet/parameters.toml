@@ -1,6 +1,7 @@
 # General protocol parameters.
 [parameters]
 native_token = "NAM"
+is_native_token_transferable = true
 # Minimum number of blocks in an epoch.
 min_num_of_blocks = 4
 # Maximum expected time per block (in seconds).
@@ -85,7 +86,7 @@ min_proposal_voting_period = 3
 max_proposal_period = 27
 # maximum number of characters in the proposal content
 max_proposal_content_size = 10000
-# minimum epochs between end and grace epoch
+# minimum epochs between end and activation epoch
 min_proposal_grace_epochs = 6
 
 # Public goods funding parameters
@@ -101,3 +102,10 @@ stewards = [
 pgf_inflation_rate = "0.1"
 # The pgf stewards inflation rate
 stewards_inflation_rate = "0.01"
+
+# IBC parameters
+[ibc_params]
+# default mint limit of each token
+default_mint_limit = "0"
+# default per-epoch throughput limit of each token
+default_per_epoch_throughput_limit = "0"

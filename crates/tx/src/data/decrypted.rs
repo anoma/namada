@@ -6,6 +6,9 @@ pub mod decrypted_tx {
     use namada_core::borsh::{
         BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
     };
+    use namada_macros::BorshDeserializer;
+    #[cfg(feature = "migrations")]
+    use namada_migrations::*;
     use sha2::{Digest, Sha256};
 
     #[derive(
@@ -13,11 +16,11 @@ pub mod decrypted_tx {
         Debug,
         BorshSerialize,
         BorshDeserialize,
+        BorshDeserializer,
         BorshSchema,
         serde::Serialize,
         serde::Deserialize,
     )]
-    #[allow(clippy::large_enum_variant)]
     /// Holds the result of attempting to decrypt
     /// a transaction and the data necessary for
     /// other validators to verify

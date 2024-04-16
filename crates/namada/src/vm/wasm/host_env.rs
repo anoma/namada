@@ -61,9 +61,8 @@ where
             "memory" => initial_memory,
             // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
-            // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
-            "namada_tx_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
+            "namada_tx_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read_temp),
             "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
             "namada_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
             "namada_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),
@@ -89,6 +88,7 @@ where
             "namada_tx_set_commitment_sentinel" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_set_commitment_sentinel),
             "namada_tx_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_verify_tx_section_signature),
             "namada_tx_update_masp_note_commitment_tree" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_masp_note_commitment_tree),
+            "namada_tx_yield_value" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_yield_value),
         },
     }
 }
@@ -112,8 +112,6 @@ where
             "memory" => initial_memory,
             // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
-            // Whitelisted gas exposed function, we need two different functions just because of colliding names in the vm_host_env macro to generate implementations
-            "namada_vp_charge_gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             "namada_vp_read_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_pre),
             "namada_vp_read_post" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_post),
             "namada_vp_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_temp),
@@ -132,6 +130,7 @@ where
             "namada_vp_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_block_epoch),
             "namada_vp_get_pred_epochs" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_pred_epochs),
             "namada_vp_get_ibc_events" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_ibc_events),
+            "namada_vp_yield_value" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_yield_value),
             "namada_vp_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_verify_tx_section_signature),
             "namada_vp_eval" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_eval),
             "namada_vp_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_get_native_token),

@@ -10,22 +10,23 @@ use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::hash::Hash;
 use namada_core::storage::{
-    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
+    BlockHeight, BlockResults, DbColFam, Epoch, EthEventsQueue, Header, Key,
+    KeySeg, KEY_SEGMENT_SEPARATOR,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{decode, encode, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
-    base_tree_key_prefix, subtree_key_prefix, MerkleTreeStoresRead, StoreType,
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
+    MerkleTreeStoresRead, StoreType,
 };
 use namada_replay_protection as replay_protection;
+use regex::Regex;
 
 use crate::conversion_state::ConversionState;
 use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
-use crate::tx_queue::TxQueue;
-use crate::types::{KVBytes, PrefixIterator};
+use crate::types::{CommitOnlyData, KVBytes, PatternIterator, PrefixIterator};
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -93,15 +94,16 @@ impl DB for MockDB {
                 Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
+        let commit_only_data: CommitOnlyData =
+            match self.0.borrow().get("commit_only_data") {
+                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+                None => return Ok(None),
+            };
         let conversion_state: ConversionState =
             match self.0.borrow().get("conversion_state") {
                 Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
                 None => return Ok(None),
             };
-        let tx_queue: TxQueue = match self.0.borrow().get("tx_queue") {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => return Ok(None),
-        };
 
         let ethereum_height: Option<ethereum_structs::BlockHeight> =
             match self.0.borrow().get("ethereum_height") {
@@ -177,7 +179,7 @@ impl DB for MockDB {
         // Restore subtrees of Merkle tree
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
-                let prefix_key = subtree_key_prefix(st, epoch);
+                let prefix_key = tree_key_prefix_with_epoch(st, epoch);
                 let root_key =
                     prefix_key.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
@@ -214,9 +216,9 @@ impl DB for MockDB {
                 address_gen,
                 results,
                 conversion_state,
-                tx_queue,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -247,7 +249,7 @@ impl DB for MockDB {
             conversion_state,
             ethereum_height,
             eth_events_queue,
-            tx_queue,
+            commit_only_data,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -271,20 +273,25 @@ impl DB for MockDB {
             .insert("eth_events_queue".into(), encode(&eth_events_queue));
         self.0
             .borrow_mut()
-            .insert("tx_queue".into(), encode(&tx_queue));
-        self.0
-            .borrow_mut()
             .insert("conversion_state".into(), encode(conversion_state));
+        self.0.borrow_mut().insert(
+            "commit_only_data_commitment".into(),
+            commit_only_data.serialize(),
+        );
 
         let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
             for st in StoreType::iter() {
-                if *st == StoreType::Base || is_full_commit {
-                    let key_prefix = if *st == StoreType::Base {
-                        base_tree_key_prefix(height)
-                    } else {
-                        subtree_key_prefix(st, epoch)
+                if *st == StoreType::Base
+                    || *st == StoreType::CommitData
+                    || is_full_commit
+                {
+                    let key_prefix = match st {
+                        StoreType::Base | StoreType::CommitData => {
+                            tree_key_prefix_with_height(st, height)
+                        }
+                        _ => tree_key_prefix_with_epoch(st, epoch),
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
@@ -387,10 +394,11 @@ impl DB for MockDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if *st == StoreType::Base {
-                base_tree_key_prefix(base_height)
-            } else {
-                subtree_key_prefix(st, epoch)
+            let key_prefix = match st {
+                StoreType::Base | StoreType::CommitData => {
+                    tree_key_prefix_with_height(st, base_height)
+                }
+                _ => tree_key_prefix_with_epoch(st, epoch),
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self.0.borrow().get(&root_key.to_string()).cloned();
@@ -525,7 +533,8 @@ impl DB for MockDB {
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
 
-        // Diffs
+        // Diffs - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
         let size_diff =
             match db.insert(subspace_key.to_string(), value.to_owned()) {
                 Some(prev_value) => {
@@ -584,6 +593,8 @@ impl DB for MockDB {
         let diff_prefix = Key::from(height.to_db_key());
         let mut db = self.0.borrow_mut();
 
+        // Diffs - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
         let size_diff = match db.remove(&subspace_key.to_string()) {
             Some(value) => {
                 let old_key = diff_prefix
@@ -624,7 +635,7 @@ impl DB for MockDB {
         store_type: &StoreType,
         epoch: Epoch,
     ) -> Result<()> {
-        let prefix_key = subtree_key_prefix(store_type, epoch);
+        let prefix_key = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = prefix_key
             .push(&"root".to_owned())
             .map_err(Error::KeyError)?;
@@ -674,9 +685,46 @@ impl DB for MockDB {
 
         Ok(())
     }
+
+    fn prune_replay_protection_buffer(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+    ) -> Result<()> {
+        let buffer_key = Key::parse("replay_protection")
+            .map_err(Error::KeyError)?
+            .push(&"buffer".to_string())
+            .map_err(Error::KeyError)?;
+        self.0
+            .borrow_mut()
+            .retain(|key, _| !key.starts_with(&buffer_key.to_string()));
+
+        Ok(())
+    }
+
+    fn prune_non_persisted_diffs(
+        &mut self,
+        _batch: &mut Self::WriteBatch,
+        _height: BlockHeight,
+    ) -> Result<()> {
+        // No-op - Note that this is different from RocksDB that has a separate
+        // CF for non-persisted diffs (ROLLBACK_CF)
+        Ok(())
+    }
+
+    fn overwrite_entry(
+        &self,
+        _batch: &mut Self::WriteBatch,
+        _height: Option<BlockHeight>,
+        _cf: &DbColFam,
+        _key: &Key,
+        _new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        unimplemented!()
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
+    type PatternIter = MockPatternIterator;
     type PrefixIter = MockPrefixIterator;
 
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> MockPrefixIterator {
@@ -697,6 +745,20 @@ impl<'iter> DBIter<'iter> for MockDB {
         );
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
+    }
+
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter {
+        MockPatternIterator {
+            inner: PatternIterator {
+                iter: self.iter_prefix(prefix),
+                pattern,
+            },
+            finished: false,
+        }
     }
 
     fn iter_results(&'iter self) -> MockPrefixIterator {
@@ -755,6 +817,16 @@ impl<'iter> DBIter<'iter> for MockDB {
         let iter = self.0.borrow().clone().into_iter();
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
+
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+        let stripped_prefix = format!(
+            "replay_protection/{}/",
+            replay_protection::buffer_prefix()
+        );
+        let prefix = stripped_prefix.clone();
+        let iter = self.0.borrow().clone().into_iter();
+        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
+    }
 }
 
 /// A prefix iterator base for the [`MockPrefixIterator`].
@@ -804,6 +876,31 @@ impl Iterator for PrefixIterator<MockIterator> {
                 }
             }
             None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MockPatternIterator {
+    inner: PatternIterator<MockPrefixIterator>,
+    finished: bool,
+}
+
+impl Iterator for MockPatternIterator {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        if self.finished {
+            return None;
+        }
+        loop {
+            let next_result = self.inner.iter.next()?;
+            if self.inner.pattern.is_match(&next_result.0) {
+                return Some(next_result);
+            } else {
+                self.finished = true;
+            }
         }
     }
 }

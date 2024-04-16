@@ -2,20 +2,44 @@
 //! inside a tx.
 
 use namada_core::address::Address;
-use namada_core::borsh::BorshSerialize;
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
 
 /// Transaction host functions
 pub trait TxEnv: StorageRead + StorageWrite {
+    /// Storage read temporary state Borsh encoded value (after tx execution).
+    /// It will try to read from only the write log and then decode it if
+    /// found.
+    fn read_temp<T: BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let bytes = self.read_bytes_temp(key)?;
+        match bytes {
+            Some(bytes) => {
+                let val = T::try_from_slice(&bytes).into_storage_result()?;
+                Ok(Some(val))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Storage read temporary state raw bytes (after tx execution). It will try
+    /// to read from only the write log.
+    fn read_bytes_temp(&self, key: &storage::Key) -> Result<Option<Vec<u8>>>;
+
     /// Write a temporary value to be encoded with Borsh at the given key to
     /// storage.
     fn write_temp<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,
         val: T,
-    ) -> Result<()>;
+    ) -> Result<()> {
+        let bytes = val.serialize_to_vec();
+        self.write_bytes_temp(key, bytes)
+    }
 
     /// Write a temporary value as bytes at the given key to storage.
     fn write_bytes_temp(
@@ -38,6 +62,7 @@ pub trait TxEnv: StorageRead + StorageWrite {
         &mut self,
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
+        entropy_source: &[u8],
     ) -> Result<Address>;
 
     /// Update a validity predicate

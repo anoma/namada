@@ -3,13 +3,13 @@ use std::str::FromStr;
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada_sdk::ibc::primitives::Msg;
+use namada_sdk::ibc::primitives::ToProto;
 use namada_sdk::key::common;
 use namada_sdk::storage::Epoch;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
-use namada_sdk::tx::{Signature, Tx, TxError};
+use namada_sdk::tx::{Authorization, Tx, TxError};
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
@@ -94,7 +94,7 @@ impl IbcTransfer {
     }
 
     /// Validate this wrapper transaction
-    pub fn validate_tx(&self) -> Result<Option<&Signature>, TxError> {
+    pub fn validate_tx(&self) -> Result<Option<&Authorization>, TxError> {
         self.0.validate_tx()
     }
 }

@@ -1,13 +1,18 @@
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use masp_primitives::sapling::Node;
+use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
+use masp_primitives::transaction::txid::TxIdDigester;
 use namada::core::address::{self, Address, InternalAddress};
+use namada::core::collections::HashMap;
 use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
 use namada::core::masp::{TransferSource, TransferTarget};
+use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
 use namada::eth_bridge::storage::whitelist;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::storage::proposal::ProposalType;
@@ -21,9 +26,10 @@ use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::host::types::identifiers::{
-    ClientId, ClientType, ConnectionId, PortId,
+    ClientId, ConnectionId, PortId,
 };
-use namada::ibc::{IbcActions, TransferModule};
+use namada::ibc::primitives::ToProto;
+use namada::ibc::{IbcActions, NftTransferModule, TransferModule};
 use namada::ledger::eth_bridge::read_native_erc20_address;
 use namada::ledger::gas::{TxGasMeter, VpGasMeter};
 use namada::ledger::governance::GovernanceVp;
@@ -40,13 +46,16 @@ use namada::ledger::pgf::PgfVp;
 use namada::ledger::pos::PosVP;
 use namada::proof_of_stake;
 use namada::proof_of_stake::KeySeg;
-use namada::sdk::masp::verify_shielded_tx;
+use namada::sdk::masp::{
+    check_convert, check_output, check_spend, partial_deauthorize,
+    preload_verifying_keys, PVKs,
+};
 use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
+use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{Code, Section, Tx};
-use namada::validity_predicate::VpSentinel;
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -119,13 +128,12 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: 0,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
-                        r#type: ProposalType::Default(None),
+                        r#type: ProposalType::Default,
                         voting_start_epoch,
                         voting_end_epoch: voting_start_epoch + 3_u64,
-                        grace_epoch: voting_start_epoch + 9_u64,
+                        activation_epoch: voting_start_epoch + 9_u64,
                     },
                     None,
                     Some(vec![content_section]),
@@ -171,15 +179,14 @@ fn governance(c: &mut Criterion) {
                 shell.generate_tx(
                     TX_INIT_PROPOSAL_WASM,
                     InitProposalData {
-                        id: 1,
                         content: content_section.get_hash(),
                         author: defaults::albert_address(),
-                        r#type: ProposalType::Default(Some(
+                        r#type: ProposalType::DefaultWithWasm(
                             wasm_code_section.get_hash(),
-                        )),
+                        ),
                         voting_start_epoch,
                         voting_end_epoch: voting_start_epoch + 3_u64,
-                        grace_epoch: voting_start_epoch + 9_u64,
+                        activation_epoch: voting_start_epoch + 9_u64,
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
@@ -190,17 +197,16 @@ fn governance(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let governance = GovernanceVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Governance),
@@ -208,7 +214,6 @@ fn governance(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -224,7 +229,7 @@ fn governance(c: &mut Criterion) {
                             governance.ctx.keys_changed,
                             governance.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
@@ -251,7 +256,7 @@ fn governance(c: &mut Criterion) {
 //              r#type: ProposalType::Default(None),
 //              voting_start_epoch: 12.into(),
 //              voting_end_epoch: 15.into(),
-//              grace_epoch: 18.into(),
+//              activation_epoch: 18.into(),
 //          },
 //          None,
 //          Some(vec![content_section]),
@@ -265,12 +270,12 @@ fn governance(c: &mut Criterion) {
 //          let mut shell = BenchShell::default();
 
 //          // Run the tx to validate
-//          shell.execute_tx(&tx);
+//          let verifiers_from_tx = shell.execute_tx(&tx);
 
 //          let (verifiers, keys_changed) = shell
 //              .state
 //              .write_log
-//              .verifiers_and_changed_keys(&BTreeSet::default());
+//              .verifiers_and_changed_keys(&verifiers_from_tx);
 
 //          let slash_fund = SlashFundVp {
 //              ctx: Ctx::new(
@@ -306,88 +311,132 @@ fn governance(c: &mut Criterion) {
 //      group.finish();
 //  }
 
+fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
+    match bench_name {
+        "open_connection" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.init_ibc_client_state(
+                namada::core::storage::Key::from(
+                    Address::Internal(InternalAddress::Ibc).to_db_key(),
+                ),
+            );
+            let msg = MsgConnectionOpenInit {
+                client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
+                counterparty: Counterparty::new(
+                    ClientId::from_str("07-tendermint-1").unwrap(),
+                    None,
+                    CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                ),
+                version: Some(Version::default()),
+                delay_period: std::time::Duration::new(100, 0),
+                signer: defaults::albert_address().to_string().into(),
+            };
+            let mut data = vec![];
+            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+            let open_connection =
+                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+
+            (shielded_ctx, open_connection)
+        }
+        "open_channel" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.init_ibc_connection();
+            // Channel handshake
+            let msg = MsgChannelOpenInit {
+                port_id_on_a: PortId::transfer(),
+                connection_hops_on_a: vec![ConnectionId::new(1)],
+                port_id_on_b: PortId::transfer(),
+                ordering: Order::Unordered,
+                signer: defaults::albert_address().to_string().into(),
+                version_proposal: ChannelVersion::new("ics20-1".to_string()),
+            };
+
+            // Avoid serializing the data again with borsh
+            let mut data = vec![];
+            prost::Message::encode(&msg.to_any(), &mut data).unwrap();
+            let open_channel =
+                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+
+            (shielded_ctx, open_channel)
+        }
+        "outgoing_transfer" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
+            let outgoing_transfer =
+                shielded_ctx.shell.generate_ibc_transfer_tx();
+
+            (shielded_ctx, outgoing_transfer)
+        }
+        "outgoing_shielded_action" => {
+            let mut shielded_ctx = BenchShieldedCtx::default();
+            shielded_ctx.shell.init_ibc_channel();
+            shielded_ctx.shell.enable_ibc_transfer();
+
+            let albert_payment_addr = shielded_ctx
+                .wallet
+                .find_payment_addr(ALBERT_PAYMENT_ADDRESS)
+                .unwrap()
+                .to_owned();
+            let albert_spending_key = shielded_ctx
+                .wallet
+                .find_spending_key(ALBERT_SPENDING_KEY, None)
+                .unwrap()
+                .to_owned();
+            // Shield some tokens for Albert
+            let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
+                Amount::native_whole(500),
+                TransferSource::Address(defaults::albert_address()),
+                TransferTarget::PaymentAddress(albert_payment_addr),
+            );
+            shielded_ctx.shell.execute_tx(&shield_tx);
+            shielded_ctx.shell.commit_masp_tx(shield_tx);
+            shielded_ctx.shell.commit_block();
+            shielded_ctx.generate_shielded_action(
+                Amount::native_whole(10),
+                TransferSource::ExtendedSpendingKey(albert_spending_key),
+                TransferTarget::Address(defaults::bertha_address()),
+            )
+        }
+        _ => panic!("Unexpected bench test"),
+    }
+}
+
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc");
-    let shell = BenchShell::default();
 
     // NOTE: Ibc encompass a variety of different messages that can be executed,
     // here we only benchmark a few of those Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
         // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => shell.init_ibc_channel(),
-            _ => panic!("Unexpected bench test"),
-        }
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        shell.execute_tx(signed_tx);
-        let (verifiers, keys_changed) = shell
+        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
 
@@ -395,11 +444,11 @@ fn ibc(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     ibc.validate_tx(
-                        signed_tx,
+                        &signed_tx,
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -435,16 +484,15 @@ fn vp_multitoken(c: &mut Criterion) {
         .zip(["foreign_key_write", "transfer"])
     {
         let mut shell = BenchShell::default();
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(signed_tx);
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let multitoken = MultitokenVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Multitoken),
@@ -452,7 +500,6 @@ fn vp_multitoken(c: &mut Criterion) {
                 signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -468,17 +515,18 @@ fn vp_multitoken(c: &mut Criterion) {
                             multitoken.ctx.keys_changed,
                             multitoken.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
     }
 }
 
-// Generate and run masp transaction to be verified
+// Generate and run masp transaction to be verified. Returns the verifier set
+// from tx and the tx.
 fn setup_storage_for_masp_verification(
     bench_name: &str,
-) -> (BenchShieldedCtx, Tx) {
+) -> (BenchShieldedCtx, BTreeSet<Address>, Tx) {
     let amount = Amount::native_whole(500);
     let mut shielded_ctx = BenchShieldedCtx::default();
 
@@ -504,6 +552,7 @@ fn setup_storage_for_masp_verification(
         TransferSource::Address(defaults::albert_address()),
         TransferTarget::PaymentAddress(albert_payment_addr),
     );
+
     shielded_ctx.shell.execute_tx(&shield_tx);
     shielded_ctx.shell.commit_masp_tx(shield_tx);
 
@@ -535,9 +584,9 @@ fn setup_storage_for_masp_verification(
         ),
         _ => panic!("Unexpected bench test"),
     };
-    shielded_ctx.shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
 
-    (shielded_ctx, signed_tx)
+    (shielded_ctx, verifiers_from_tx, signed_tx)
 }
 
 fn masp(c: &mut Criterion) {
@@ -545,18 +594,17 @@ fn masp(c: &mut Criterion) {
 
     for bench_name in ["shielding", "unshielding", "shielded"] {
         group.bench_function(bench_name, |b| {
-            let (shielded_ctx, signed_tx) =
+            let (shielded_ctx, verifiers_from_tx, signed_tx) =
                 setup_storage_for_masp_verification(bench_name);
             let (verifiers, keys_changed) = shielded_ctx
                 .shell
                 .state
                 .write_log()
-                .verifiers_and_changed_keys(&BTreeSet::default());
+                .verifiers_and_changed_keys(&verifiers_from_tx);
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
             ));
-            let sentinel = RefCell::new(VpSentinel::default());
             let masp = MaspVp {
                 ctx: Ctx::new(
                     &Address::Internal(InternalAddress::Masp),
@@ -564,7 +612,6 @@ fn masp(c: &mut Criterion) {
                     &signed_tx,
                     &TxIndex(0),
                     &gas_meter,
-                    &sentinel,
                     &keys_changed,
                     &verifiers,
                     shielded_ctx.shell.vp_wasm_cache.clone(),
@@ -578,7 +625,7 @@ fn masp(c: &mut Criterion) {
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 );
             })
         });
@@ -587,32 +634,187 @@ fn masp(c: &mut Criterion) {
     group.finish();
 }
 
-fn masp_verify_shielded_tx(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vp_masp_verify_shielded_tx");
+fn masp_check_spend(c: &mut Criterion) {
+    let spend_vk = &preload_verifying_keys().spend_vk;
 
-    for bench_name in ["shielding", "unshielding", "shielded"] {
-        group.bench_function(bench_name, |b| {
-            let (_, signed_tx) =
-                setup_storage_for_masp_verification(bench_name);
+    c.bench_function("vp_masp_check_spend", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, _verifiers_from_tx, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
 
-            let transaction = signed_tx
-                .sections
-                .into_iter()
-                .filter_map(|section| match section {
-                    Section::MaspTx(transaction) => Some(transaction),
-                    _ => None,
-                })
-                .collect::<Vec<Transaction>>()
-                .first()
-                .unwrap()
-                .to_owned();
-            b.iter(|| {
-                assert!(verify_shielded_tx(&transaction));
-            })
-        });
-    }
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let spend = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_spends
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+                let tx_data = transaction.deref();
+                // Partially deauthorize the transparent bundle
+                let unauth_tx_data = partial_deauthorize(tx_data).unwrap();
+                let txid_parts = unauth_tx_data.digest(TxIdDigester);
+                let sighash = signature_hash(
+                    &unauth_tx_data,
+                    &SignableInput::Shielded,
+                    &txid_parts,
+                );
 
-    group.finish();
+                (ctx, spend, sighash)
+            },
+            |(ctx, spend, sighash)| {
+                assert!(check_spend(spend, sighash.as_ref(), ctx, spend_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_convert(c: &mut Criterion) {
+    let convert_vk = &preload_verifying_keys().convert_vk;
+
+    c.bench_function("vp_masp_check_convert", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, _verifiers_from_tx, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let convert = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_converts
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+
+                (ctx, convert)
+            },
+            |(ctx, convert)| {
+                assert!(check_convert(convert, ctx, convert_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_check_output(c: &mut Criterion) {
+    let output_vk = &preload_verifying_keys().output_vk;
+
+    c.bench_function("masp_vp_check_output", |b| {
+        b.iter_batched_ref(
+            || {
+                let (_, _verifiers_from_tx, signed_tx) =
+                    setup_storage_for_masp_verification("shielded");
+
+                let transaction = signed_tx
+                    .sections
+                    .into_iter()
+                    .filter_map(|section| match section {
+                        Section::MaspTx(transaction) => Some(transaction),
+                        _ => None,
+                    })
+                    .collect::<Vec<Transaction>>()
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let output = transaction
+                    .sapling_bundle()
+                    .unwrap()
+                    .shielded_outputs
+                    .first()
+                    .unwrap()
+                    .to_owned();
+                let ctx = SaplingVerificationContext::new(true);
+
+                (ctx, output)
+            },
+            |(ctx, output)| {
+                assert!(check_output(output, ctx, output_vk));
+            },
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn masp_final_check(c: &mut Criterion) {
+    let PVKs {
+        spend_vk,
+        convert_vk,
+        output_vk,
+    } = preload_verifying_keys();
+
+    let (_, _verifiers_from_tx, signed_tx) =
+        setup_storage_for_masp_verification("shielded");
+
+    let transaction = signed_tx
+        .sections
+        .into_iter()
+        .filter_map(|section| match section {
+            Section::MaspTx(transaction) => Some(transaction),
+            _ => None,
+        })
+        .collect::<Vec<Transaction>>()
+        .first()
+        .unwrap()
+        .to_owned();
+    let sapling_bundle = transaction.sapling_bundle().unwrap();
+    let mut ctx = SaplingVerificationContext::new(true);
+    // Partially deauthorize the transparent bundle
+    let unauth_tx_data = partial_deauthorize(transaction.deref()).unwrap();
+    let txid_parts = unauth_tx_data.digest(TxIdDigester);
+    let sighash =
+        signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
+
+    // Check spends, converts and outputs before the final check
+    assert!(sapling_bundle.shielded_spends.iter().all(|spend| {
+        check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk)
+    }));
+    assert!(
+        sapling_bundle
+            .shielded_converts
+            .iter()
+            .all(|convert| check_convert(convert, &mut ctx, convert_vk))
+    );
+    assert!(
+        sapling_bundle
+            .shielded_outputs
+            .iter()
+            .all(|output| check_output(output, &mut ctx, output_vk))
+    );
+
+    c.bench_function("vp_masp_final_check", |b| {
+        b.iter(|| {
+            assert!(ctx.final_check(
+                sapling_bundle.value_balance.clone(),
+                sighash.as_ref(),
+                sapling_bundle.authorization.binding_sig
+            ))
+        })
+    });
 }
 
 fn pgf(c: &mut Criterion) {
@@ -663,17 +865,16 @@ fn pgf(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let pgf = PgfVp {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Pgf),
@@ -681,7 +882,6 @@ fn pgf(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -696,7 +896,7 @@ fn pgf(c: &mut Criterion) {
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -706,6 +906,10 @@ fn pgf(c: &mut Criterion) {
 }
 
 fn eth_bridge_nut(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     let mut shell = BenchShell::default();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
@@ -735,19 +939,18 @@ fn eth_bridge_nut(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address =
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let nut = NonUsableTokens {
         ctx: Ctx::new(
             &vp_address,
@@ -755,7 +958,6 @@ fn eth_bridge_nut(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -770,13 +972,17 @@ fn eth_bridge_nut(c: &mut Criterion) {
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .unwrap()
+                .is_ok()
             )
         })
     });
 }
 
 fn eth_bridge(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     let mut shell = BenchShell::default();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
@@ -806,18 +1012,17 @@ fn eth_bridge(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridge);
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let eth_bridge = EthBridge {
         ctx: Ctx::new(
             &vp_address,
@@ -825,7 +1030,6 @@ fn eth_bridge(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -841,13 +1045,17 @@ fn eth_bridge(c: &mut Criterion) {
                         eth_bridge.ctx.keys_changed,
                         eth_bridge.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
             )
         })
     });
 }
 
 fn eth_bridge_pool(c: &mut Criterion) {
+    if !is_bridge_comptime_enabled() {
+        return;
+    }
+
     // NOTE: this vp is one of the most expensive but its cost comes from the
     // numerous accesses to storage that we already account for, so no need to
     // benchmark specific sections of it like for the ibc native vp
@@ -902,18 +1110,17 @@ fn eth_bridge_pool(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx);
 
     let (verifiers, keys_changed) = shell
         .state
         .write_log()
-        .verifiers_and_changed_keys(&BTreeSet::default());
+        .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridgePool);
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let sentinel = RefCell::new(VpSentinel::default());
     let bridge_pool = BridgePoolVp {
         ctx: Ctx::new(
             &vp_address,
@@ -921,7 +1128,6 @@ fn eth_bridge_pool(c: &mut Criterion) {
             &signed_tx,
             &TxIndex(0),
             &gas_meter,
-            &sentinel,
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
@@ -937,7 +1143,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
                         bridge_pool.ctx.keys_changed,
                         bridge_pool.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
             )
         })
     });
@@ -949,12 +1155,12 @@ fn parameters(c: &mut Criterion) {
     for bench_name in ["foreign_key_write", "parameter_change"] {
         let mut shell = BenchShell::default();
 
-        let signed_tx = match bench_name {
+        let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                shell.execute_tx(&tx);
-                tx
+                let verifiers_from_tx = shell.execute_tx(&tx);
+                (verifiers_from_tx, tx)
             }
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
@@ -966,12 +1172,10 @@ fn parameters(c: &mut Criterion) {
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx =
-                    Tx::from_type(namada::tx::data::TxType::Decrypted(
-                        namada::tx::data::DecryptedTx::Decrypted,
-                    ));
+                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
-                tx
+                let verifiers_from_tx = BTreeSet::default();
+                (verifiers_from_tx, tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -979,13 +1183,12 @@ fn parameters(c: &mut Criterion) {
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let vp_address = Address::Internal(InternalAddress::Parameters);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let parameters = ParametersVp {
             ctx: Ctx::new(
                 &vp_address,
@@ -993,7 +1196,6 @@ fn parameters(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1009,7 +1211,7 @@ fn parameters(c: &mut Criterion) {
                             parameters.ctx.keys_changed,
                             parameters.ctx.verifiers,
                         )
-                        .unwrap()
+                        .is_ok()
                 )
             })
         });
@@ -1024,12 +1226,12 @@ fn pos(c: &mut Criterion) {
     for bench_name in ["foreign_key_write", "parameter_change"] {
         let mut shell = BenchShell::default();
 
-        let signed_tx = match bench_name {
+        let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                shell.execute_tx(&tx);
-                tx
+                let verifiers_from_tx = shell.execute_tx(&tx);
+                (verifiers_from_tx, tx)
             }
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
@@ -1041,12 +1243,10 @@ fn pos(c: &mut Criterion) {
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx =
-                    Tx::from_type(namada::tx::data::TxType::Decrypted(
-                        namada::tx::data::DecryptedTx::Decrypted,
-                    ));
+                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
-                tx
+                let verifiers_from_tx = BTreeSet::default();
+                (verifiers_from_tx, tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -1054,13 +1254,12 @@ fn pos(c: &mut Criterion) {
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let vp_address = Address::Internal(InternalAddress::PoS);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let pos = PosVP {
             ctx: Ctx::new(
                 &vp_address,
@@ -1068,7 +1267,6 @@ fn pos(c: &mut Criterion) {
                 &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
                 shell.vp_wasm_cache.clone(),
@@ -1083,7 +1281,7 @@ fn pos(c: &mut Criterion) {
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .unwrap()
+                    .is_ok()
                 )
             })
         });
@@ -1094,95 +1292,51 @@ fn pos(c: &mut Criterion) {
 
 fn ibc_vp_validate_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_validate_action");
-    let shell = BenchShell::default();
 
-    // Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
-        // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => shell.init_ibc_channel(),
-            _ => panic!("Unexpected bench test"),
-        }
-
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
         let tx_data = signed_tx.data().unwrap();
-        let (verifiers, keys_changed) = shell
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone());
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone(), verifiers);
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.validate(&tx_data).unwrap())
@@ -1194,95 +1348,52 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
 fn ibc_vp_execute_action(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_ibc_execute_action");
-    let shell = BenchShell::default();
 
-    // Connection handshake
-    let msg = MsgConnectionOpenInit {
-        client_id_on_a: ClientId::new(
-            ClientType::new("01-tendermint").unwrap(),
-            1,
-        )
-        .unwrap(),
-        counterparty: Counterparty::new(
-            ClientId::from_str("01-tendermint-1").unwrap(),
-            None,
-            CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
-        ),
-        version: Some(Version::default()),
-        delay_period: std::time::Duration::new(100, 0),
-        signer: defaults::albert_address().to_string().into(),
-    };
-    let open_connection = shell.generate_ibc_tx(TX_IBC_WASM, msg);
+    for bench_name in [
+        "open_connection",
+        "open_channel",
+        "outgoing_transfer",
+        "outgoing_shielded_action",
+    ] {
+        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-    // Channel handshake
-    let msg = MsgChannelOpenInit {
-        port_id_on_a: PortId::transfer(),
-        connection_hops_on_a: vec![ConnectionId::new(1)],
-        port_id_on_b: PortId::transfer(),
-        ordering: Order::Unordered,
-        signer: defaults::albert_address().to_string().into(),
-        version_proposal: ChannelVersion::new("ics20-1".to_string()),
-    };
-
-    // Avoid serializing the data again with borsh
-    let open_channel = shell.generate_ibc_tx(TX_IBC_WASM, msg);
-
-    // Ibc transfer
-    let outgoing_transfer = shell.generate_ibc_transfer_tx();
-
-    for (signed_tx, bench_name) in
-        [open_connection, open_channel, outgoing_transfer]
-            .iter()
-            .zip(["open_connection", "open_channel", "outgoing_transfer"])
-    {
-        let mut shell = BenchShell::default();
-        // Initialize the state according to the target tx
-        match bench_name {
-            "open_connection" => {
-                let _ = shell.init_ibc_client_state(
-                    namada::core::storage::Key::from(
-                        Address::Internal(InternalAddress::Ibc).to_db_key(),
-                    ),
-                );
-            }
-            "open_channel" => {
-                let _ = shell.init_ibc_connection();
-            }
-            "outgoing_transfer" => shell.init_ibc_channel(),
-            _ => panic!("Unexpected bench test"),
-        }
-
-        shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
         let tx_data = signed_tx.data().unwrap();
-        let (verifiers, keys_changed) = shell
+        let (verifiers, keys_changed) = shielded_ctx
+            .shell
             .state
             .write_log()
-            .verifiers_and_changed_keys(&BTreeSet::default());
+            .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let sentinel = RefCell::new(VpSentinel::default());
         let ibc = Ibc {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
-                &shell.state,
-                signed_tx,
+                &shielded_ctx.shell.state,
+                &signed_tx,
                 &TxIndex(0),
                 &gas_meter,
-                &sentinel,
                 &keys_changed,
                 &verifiers,
-                shell.vp_wasm_cache.clone(),
+                shielded_ctx.shell.vp_wasm_cache.clone(),
             ),
         };
+        // Use an empty verifiers set placeholder for validation, this is only
+        // needed in actual txs to addresses whose VPs should be triggered
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+
         let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone());
+
+        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx);
-        actions.add_transfer_module(module.module_id(), module);
+        let module = TransferModule::new(ctx.clone(), verifiers);
+        actions.add_transfer_module(module);
+        let module = NftTransferModule::new(ctx);
+        actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
             b.iter(|| actions.execute(&tx_data).unwrap())
@@ -1298,7 +1409,10 @@ criterion_group!(
     // slash_fund,
     ibc,
     masp,
-    masp_verify_shielded_tx,
+    masp_check_spend,
+    masp_check_convert,
+    masp_check_output,
+    masp_final_check,
     vp_multitoken,
     pgf,
     eth_bridge_nut,

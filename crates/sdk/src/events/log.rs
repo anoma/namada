@@ -3,9 +3,10 @@
 //! The log can only hold `N` events at a time, where `N` is a configurable
 //! parameter. If the log is holding `N` events, and a new event is logged,
 //! old events are pruned.
+
 use circular_queue::CircularQueue;
 
-use crate::events::Event;
+use super::{EmitEvents, Event};
 
 pub mod dumb_queries;
 
@@ -38,6 +39,26 @@ pub struct EventLog {
 impl Default for EventLog {
     fn default() -> Self {
         Self::new(Default::default())
+    }
+}
+
+impl EmitEvents for EventLog {
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: Into<Event>,
+    {
+        self.log_events(core::iter::once(event.into()));
+    }
+
+    /// Emit a batch of [events](Event).
+    #[inline]
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: Into<Event>,
+    {
+        self.log_events(event_batch.into_iter().map(Into::into));
     }
 }
 
@@ -91,28 +112,28 @@ mod tests {
         "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
     /// An accepted tx hash query.
-    macro_rules! accepted {
+    macro_rules! applied {
         ($hash:expr) => {
-            dumb_queries::QueryMatcher::accepted(Hash::try_from($hash).unwrap())
+            dumb_queries::QueryMatcher::applied(Hash::try_from($hash).unwrap())
         };
     }
 
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
         let event_1 = Event {
-            event_type: EventType::Accepted,
+            event_type: EventType::Applied,
             level: EventLevel::Block,
             attributes: {
-                let mut attrs = std::collections::HashMap::new();
+                let mut attrs = namada_core::collections::HashMap::new();
                 attrs.insert("hash".to_string(), hash.to_string());
                 attrs
             },
         };
         let event_2 = Event {
-            event_type: EventType::Applied,
+            event_type: EventType::Proposal,
             level: EventLevel::Block,
             attributes: {
-                let mut attrs = std::collections::HashMap::new();
+                let mut attrs = namada_core::collections::HashMap::new();
                 attrs.insert("hash".to_string(), hash.to_string());
                 attrs
             },
@@ -137,7 +158,7 @@ mod tests {
 
         // inspect log
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
@@ -176,7 +197,7 @@ mod tests {
 
         // inspect log - it should be full
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         assert_eq!(events_in_log.len(), MATCHED_EVENTS);
 
@@ -184,12 +205,12 @@ mod tests {
             assert_eq!(events[0], event);
         }
 
-        // add a new APPLIED event to the log,
-        // pruning the first ACCEPTED event we added
+        // add a new PROPOSAL event to the log,
+        // pruning the first APPLIED event we added
         log.log_events(Some(events[1].clone()));
 
         let events_in_log: Vec<_> =
-            log.iter_with_matcher(accepted!(HASH)).cloned().collect();
+            log.iter_with_matcher(applied!(HASH)).cloned().collect();
 
         const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
         assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);

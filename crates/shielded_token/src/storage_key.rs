@@ -17,17 +17,21 @@ pub const MASP_NOTE_COMMITMENT_TREE_KEY: &str = "commitment_tree";
 pub const MASP_NOTE_COMMITMENT_ANCHOR_PREFIX: &str = "note_commitment_anchor";
 /// Key segment prefix for the convert anchor
 pub const MASP_CONVERT_ANCHOR_KEY: &str = "convert_anchor";
+/// The key for the token map
+pub const MASP_TOKEN_MAP_KEY: &str = "tokens";
+/// The key for the asset map
+pub const MASP_ASSETS_HASH_KEY: &str = "assets_hash";
 /// Last calculated inflation value handed out
 pub const MASP_LAST_INFLATION_KEY: &str = "last_inflation";
-/// The last locked ratio
-pub const MASP_LAST_LOCKED_AMOUNT_KEY: &str = "last_locked_ratio";
+/// The last locked amount
+pub const MASP_LAST_LOCKED_AMOUNT_KEY: &str = "last_locked_amount";
 /// The key for the nominal proportional gain of a shielded pool for a given
 /// asset
 pub const MASP_KP_GAIN_KEY: &str = "proportional_gain";
 /// The key for the nominal derivative gain of a shielded pool for a given asset
 pub const MASP_KD_GAIN_KEY: &str = "derivative_gain";
-/// The key for the locked ratio target for a given asset
-pub const MASP_LOCKED_AMOUNT_TARGET_KEY: &str = "locked_ratio_target";
+/// The key for the locked amount target for a given asset
+pub const MASP_LOCKED_AMOUNT_TARGET_KEY: &str = "locked_amount_target";
 /// The key for the max reward rate for a given asset
 pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 
@@ -47,13 +51,13 @@ pub fn masp_max_reward_rate_key(token_addr: &Address) -> storage::Key {
         .with_segment(MASP_MAX_REWARD_RATE_KEY.to_owned())
 }
 
-/// Obtain the locked target ratio key for the given token
+/// Obtain the locked target amount key for the given token
 pub fn masp_locked_amount_target_key(token_addr: &Address) -> storage::Key {
     parameter_prefix(token_addr)
         .with_segment(MASP_LOCKED_AMOUNT_TARGET_KEY.to_owned())
 }
 
-/// Obtain the storage key for the last locked ratio of a token
+/// Obtain the storage key for the last locked amount of a token
 pub fn masp_last_locked_amount_key(token_address: &Address) -> storage::Key {
     parameter_prefix(token_address)
         .with_segment(MASP_LAST_LOCKED_AMOUNT_KEY.to_owned())
@@ -144,5 +148,19 @@ pub fn masp_commitment_anchor_key(anchor: impl Into<Scalar>) -> storage::Key {
 pub fn masp_convert_anchor_key() -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_CONVERT_ANCHOR_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp token map
+pub fn masp_token_map_key() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_TOKEN_MAP_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get the key for the masp assets' hash
+pub fn masp_assets_hash_key() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_ASSETS_HASH_KEY.to_owned())
         .expect("Cannot obtain a storage key")
 }

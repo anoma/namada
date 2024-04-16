@@ -25,11 +25,6 @@ struct Keys {
     /// Sub-lkey for storing the Ethereum address of the bridge contract.
     bridge_contract_address: &'static str,
     // ========================================
-    // PoS parameters
-    // ========================================
-    pos_inflation_amount: &'static str,
-    staked_ratio: &'static str,
-    // ========================================
     // Core parameters
     // ========================================
     epoch_duration: &'static str,
@@ -45,6 +40,7 @@ struct Keys {
     fee_unshielding_gas_limit: &'static str,
     fee_unshielding_descriptions_limit: &'static str,
     max_signatures_per_transaction: &'static str,
+    native_token_transferable: &'static str,
 }
 
 /// Returns if the key is a parameter key.
@@ -93,16 +89,6 @@ pub fn is_implicit_vp_key(key: &Key) -> bool {
 /// Returns if the key is the epoch_per_year key.
 pub fn is_epochs_per_year_key(key: &Key) -> bool {
     is_epochs_per_year_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the staked ratio key.
-pub fn is_staked_ratio_key(key: &Key) -> bool {
-    is_staked_ratio_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the PoS reward rate key.
-pub fn is_pos_inflation_amount_key(key: &Key) -> bool {
-    is_pos_inflation_amount_key_at_addr(key, &ADDRESS)
 }
 
 /// Returns if the key is the max proposal bytes key.
@@ -155,16 +141,6 @@ pub fn get_epochs_per_year_key() -> Key {
     get_epochs_per_year_key_at_addr(ADDRESS)
 }
 
-/// Storage key used for staked ratio parameter.
-pub fn get_staked_ratio_key() -> Key {
-    get_staked_ratio_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for the inflation amount parameter.
-pub fn get_pos_inflation_amount_key() -> Key {
-    get_pos_inflation_amount_key_at_addr(ADDRESS)
-}
-
 /// Storage key used for the max proposal bytes.
 pub fn get_max_proposal_bytes_key() -> Key {
     get_max_proposal_bytes_key_at_addr(ADDRESS)
@@ -198,6 +174,23 @@ pub fn get_max_block_gas(
     storage.read(&get_max_block_gas_key())?.ok_or(
         namada_storage::Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
+        ),
+    )
+}
+
+/// Storage key used for the flag to enable the native token transfer
+pub fn get_native_token_transferable_key() -> Key {
+    get_native_token_transferable_key_at_addr(ADDRESS)
+}
+
+/// Helper function to retrieve the `is_native_token_transferable` protocol
+/// parameter from storage
+pub fn is_native_token_transferable(
+    storage: &impl StorageRead,
+) -> std::result::Result<bool, namada_storage::Error> {
+    storage.read(&get_native_token_transferable_key())?.ok_or(
+        namada_storage::Error::SimpleMessage(
+            "Missing is_native_token_transferable parameter from storage",
         ),
     )
 }

@@ -53,6 +53,7 @@ pub struct TestTxEnv {
     pub sentinel: RefCell<TxSentinel>,
     pub tx_index: TxIndex,
     pub result_buffer: Option<Vec<u8>>,
+    pub yielded_value: Option<Vec<u8>>,
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
@@ -72,12 +73,13 @@ impl Default for TestTxEnv {
             state,
             iterators: PrefixIterators::default(),
             gas_meter: RefCell::new(TxGasMeter::new_from_sub_limit(
-                100_000_000.into(),
+                100_000_000_000.into(),
             )),
             sentinel: RefCell::new(TxSentinel::default()),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
             result_buffer: None,
+            yielded_value: None,
             vp_wasm_cache,
             vp_cache_dir,
             tx_wasm_cache,
@@ -340,6 +342,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 result_buffer,
+                                yielded_value,
                                 tx_index,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
@@ -357,6 +360,7 @@ mod native_tx_host_env {
                                 tx,
                                 tx_index,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
                             );
@@ -382,6 +386,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
@@ -398,6 +403,7 @@ mod native_tx_host_env {
                                 tx,
                                 tx_index,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
                             );
@@ -422,6 +428,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 result_buffer,
+                                yielded_value,
                                 tx_index,
                                 vp_wasm_cache,
                                 vp_cache_dir: _,
@@ -439,6 +446,7 @@ mod native_tx_host_env {
                                 tx,
                                 tx_index,
                                 result_buffer,
+                                yielded_value,
                                 vp_wasm_cache,
                                 tx_wasm_cache,
                             );
@@ -454,6 +462,7 @@ mod native_tx_host_env {
     // Implement all the exported functions from
     // [`namada_vm_env::imports::tx`] `extern "C"` section.
     native_host_fn!(tx_read(key_ptr: u64, key_len: u64) -> i64);
+    native_host_fn!(tx_read_temp(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_result_buffer(result_ptr: u64));
     native_host_fn!(tx_has_key(key_ptr: u64, key_len: u64) -> i64);
     native_host_fn!(tx_write(
@@ -485,6 +494,8 @@ mod native_tx_host_env {
         code_hash_len: u64,
         code_tag_ptr: u64,
         code_tag_len: u64,
+        entropy_source_ptr: u64,
+        entropy_source_len: u64,
         result_ptr: u64
     ));
     native_host_fn!(tx_emit_ibc_event(event_ptr: u64, event_len: u64));
@@ -509,6 +520,10 @@ mod native_tx_host_env {
         max_signatures_ptr: u64,
         max_signatures_len: u64,
     ) -> i64);
+    native_host_fn!(tx_yield_value(
+        buf_ptr: u64,
+        buf_len: u64,
+    ));
 }
 
 #[cfg(test)]
@@ -723,6 +738,7 @@ mod tests {
             gas_meter,
             sentinel,
             result_buffer,
+            yielded_value,
             tx_index,
             vp_wasm_cache,
             vp_cache_dir: _,
@@ -740,6 +756,7 @@ mod tests {
             tx,
             tx_index,
             result_buffer,
+            yielded_value,
             vp_wasm_cache,
             tx_wasm_cache,
         );

@@ -1,7 +1,7 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
-use std::collections::HashMap;
+use namada::core::collections::HashMap;
 
 use super::*;
 
@@ -110,6 +110,7 @@ where
 #[cfg(test)]
 mod test_vote_extensions {
     use namada::core::key::RefTo;
+    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::{
         consensus_validator_set_handle,
@@ -131,6 +132,11 @@ mod test_vote_extensions {
     /// epoch it was included on in a vote extension is rejected
     #[test]
     fn test_reject_incorrect_epoch() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _recv, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();
@@ -174,6 +180,11 @@ mod test_vote_extensions {
     /// a non-validator are rejected
     #[test]
     fn test_valset_upd_must_be_signed_by_validator() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _recv, _, _) = test_utils::setup();
         let (eth_bridge_key, _protocol_key, validator_addr) = {
             let bertha_key = wallet::defaults::bertha_keypair();
@@ -216,6 +227,11 @@ mod test_vote_extensions {
     /// change to the validator set.
     #[test]
     fn test_validate_valset_upd_vexts() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (mut shell, _recv, _, _oracle_control_recv) = test_utils::setup();
 
         // validators from the current epoch sign over validator
@@ -341,6 +357,11 @@ mod test_vote_extensions {
     /// is rejected
     #[test]
     fn test_reject_bad_signatures() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
         let (shell, _recv, _, _) = test_utils::setup();
         let validator_addr =
             shell.mode.get_validator_address().unwrap().clone();

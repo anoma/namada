@@ -8,14 +8,12 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
-use namada_core::ibc::{
-    get_shielded_transfer, IbcEvent, MsgShieldedTransfer, EVENT_TYPE_PACKET,
-};
 use namada_core::storage::{
     BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
 };
 use namada_core::token::Transfer;
-use namada_storage::{OptionExt, ResultExt, StorageRead};
+use namada_ibc::{decode_message, IbcEvent, IbcMessage};
+use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
@@ -108,7 +106,7 @@ where
         &self,
         vp_code: Hash,
         input_data: Tx,
-    ) -> Result<bool, namada_storage::Error>;
+    ) -> Result<(), namada_storage::Error>;
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
@@ -120,37 +118,31 @@ where
     ) -> Result<Transaction, namada_storage::Error> {
         let signed = tx_data;
         let data = signed.data().ok_or_err_msg("No transaction data")?;
-        if let Ok(transfer) = Transfer::try_from_slice(&data) {
-            let shielded_hash = transfer
-                .shielded
-                .ok_or_err_msg("unable to find shielded hash")?;
-            let masp_tx = signed
-                .get_section(&shielded_hash)
-                .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg("unable to find shielded section")?;
-            return Ok(masp_tx);
-        }
+        let transfer = match Transfer::try_from_slice(&data) {
+            Ok(transfer) => Some(transfer),
+            Err(_) => {
+                match decode_message(&data).map_err(|_| {
+                    namada_storage::Error::new_const("Unknown IBC message")
+                })? {
+                    IbcMessage::Transfer(msg) => msg.transfer,
+                    IbcMessage::NftTransfer(msg) => msg.transfer,
+                    IbcMessage::RecvPacket(msg) => msg.transfer,
+                    IbcMessage::AckPacket(msg) => msg.transfer,
+                    IbcMessage::Timeout(msg) => msg.transfer,
+                    IbcMessage::Envelope(_) => None,
+                }
+            }
+        };
 
-        if let Ok(message) = MsgShieldedTransfer::try_from_slice(&data) {
-            return Ok(message.shielded_transfer.masp_tx);
-        }
-
-        // Shielded transfer over IBC
-        let events = self.get_ibc_events(EVENT_TYPE_PACKET.to_string())?;
-        // The receiving event should be only one in the single IBC transaction
-        let event = events.first().ok_or_else(|| {
-            namada_storage::Error::new_const(
-                "No IBC event for the shielded action",
-            )
-        })?;
-        get_shielded_transfer(event)
-            .into_storage_result()?
-            .map(|shielded| shielded.masp_tx)
-            .ok_or_else(|| {
-                namada_storage::Error::new_const(
-                    "No shielded transfer in the IBC event",
-                )
-            })
+        let shielded_hash = transfer
+            .ok_or_err_msg("Missing transfer")?
+            .shielded
+            .ok_or_err_msg("unable to find shielded hash")?;
+        let masp_tx = signed
+            .get_section(&shielded_hash)
+            .and_then(|x| x.as_ref().masp_tx())
+            .ok_or_err_msg("unable to find shielded section")?;
+        Ok(masp_tx)
     }
 
     /// Charge the provided gas for the current vp

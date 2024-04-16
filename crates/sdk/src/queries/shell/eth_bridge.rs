@@ -1,12 +1,12 @@
 //! Ethereum bridge related shell queries.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::{Encode, EncodeCell};
 use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
 use namada_core::ethereum_events::{
@@ -28,6 +28,9 @@ use namada_ethereum_bridge::storage::vote_tallies::{eth_msgs_prefix, Keys};
 use namada_ethereum_bridge::storage::{
     bridge_contract_key, native_erc20_key, vote_tallies,
 };
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;
 use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
@@ -50,6 +53,7 @@ use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -78,7 +82,14 @@ pub struct TransferToEthereumStatus {
 /// Contains information about the flow control of some ERC20
 /// wrapped asset.
 #[derive(
-    Debug, Copy, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize,
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Erc20FlowControl {
     /// Whether the wrapped asset is whitelisted.
@@ -117,7 +128,15 @@ pub type TransferToErcArgs = (
 );
 
 /// Response data returned by `generate_bridge_pool_proof`.
-#[derive(Debug, Clone, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub struct GenBridgePoolProofRsp {
     /// Ethereum ABI encoded arguments to pass to `transfer_to_erc`.
     pub abi_encoded_args: Vec<u8>,
@@ -257,7 +276,7 @@ where
         });
     } else {
         for hash in store.keys() {
-            if transfer_hashes.remove(hash) {
+            if transfer_hashes.swap_remove(hash) {
                 status.pending.insert(hash.clone());
             }
             if transfer_hashes.is_empty() {
@@ -296,7 +315,7 @@ where
             .as_str()
             .try_into()
             .expect("We must have a valid KeccakHash");
-        if !transfer_hashes.remove(&tx_hash) {
+        if !transfer_hashes.swap_remove(&tx_hash) {
             return None;
         }
         Some((tx_hash, is_relayed, transfer_hashes.is_empty()))

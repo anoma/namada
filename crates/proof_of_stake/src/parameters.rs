@@ -8,11 +8,14 @@ use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
 use namada_governance::parameters::GovernanceParameters;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use thiserror::Error;
 
 /// Proof-of-Stake system parameters. This includes parameters that are used in
 /// PoS but are read from other accounts storage (governance).
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize)]
 pub struct PosParams {
     /// PoS-owned params
     pub owned: OwnedPosParams,
@@ -23,7 +26,7 @@ pub struct PosParams {
 
 /// Proof-of-Stake system parameters owned by the PoS address, set at genesis
 /// and can only be changed via governance
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize)]
 pub struct OwnedPosParams {
     /// A maximum number of consensus validators
     pub max_validator_slots: u64,
@@ -131,6 +134,9 @@ pub enum ValidationError {
     )]
     UnbondingLenTooShort(u64, u64),
 }
+
+/// The maximum string length of any validator metadata
+pub const MAX_VALIDATOR_METADATA_LEN: u64 = 500;
 
 /// The number of fundamental units per whole token of the native staking token
 pub const TOKENS_PER_NAM: u64 = 1_000_000;

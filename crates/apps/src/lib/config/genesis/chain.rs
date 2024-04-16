@@ -9,12 +9,14 @@ use namada::core::address::{
     Address, EstablishedAddress, EstablishedAddressGen,
 };
 use namada::core::chain::{ChainId, ChainIdPrefix};
-use namada::core::dec::Dec;
 use namada::core::hash::Hash;
 use namada::core::key::{common, RefTo};
 use namada::core::time::{DateTimeUtc, DurationNanos, Rfc3339String};
 use namada::core::token::Amount;
 use namada::ledger::parameters::EpochDuration;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
@@ -292,6 +294,7 @@ impl Finalized {
             max_block_gas,
             minimum_gas_price,
             max_tx_bytes,
+            is_native_token_transferable,
             ..
         } = self.parameters.parameters.clone();
 
@@ -318,8 +321,6 @@ impl Finalized {
                 .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();
-        let staked_ratio = Dec::zero();
-        let pos_inflation_amount = 0;
 
         namada::ledger::parameters::Parameters {
             max_tx_bytes,
@@ -329,8 +330,6 @@ impl Finalized {
             tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
-            staked_ratio,
-            pos_inflation_amount: Amount::native_whole(pos_inflation_amount),
             max_proposal_bytes,
             max_signatures_per_transaction,
             fee_unshielding_gas_limit,
@@ -345,6 +344,7 @@ impl Finalized {
                     )
                 })
                 .collect(),
+            is_native_token_transferable,
         }
     }
 
@@ -438,6 +438,17 @@ impl Finalized {
             })
         } else {
             None
+        }
+    }
+
+    pub fn get_ibc_params(&self) -> namada::ibc::parameters::IbcParameters {
+        let templates::IbcParams {
+            default_mint_limit,
+            default_per_epoch_throughput_limit,
+        } = self.parameters.ibc_params.clone();
+        namada::ibc::parameters::IbcParameters {
+            default_mint_limit,
+            default_per_epoch_throughput_limit,
         }
     }
 
@@ -589,6 +600,7 @@ pub struct Chain<ID> {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -619,6 +631,7 @@ impl FinalizedTokens {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -640,6 +653,7 @@ impl DeriveEstablishedAddress for (&Alias, &templates::TokenConfig) {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -696,6 +710,7 @@ impl FinalizedTransactions {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -706,6 +721,7 @@ pub struct FinalizedParameters {
     pub gov_params: templates::GovernanceParams,
     pub pgf_params: namada::governance::pgf::parameters::PgfParameters,
     pub eth_bridge_params: Option<templates::EthBridgeParams>,
+    pub ibc_params: templates::IbcParams,
 }
 
 impl FinalizedParameters {
@@ -716,6 +732,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params,
             eth_bridge_params,
+            ibc_params,
         }: templates::Parameters<Validated>,
     ) -> Self {
         use namada::governance::pgf::parameters::PgfParameters;
@@ -730,6 +747,7 @@ impl FinalizedParameters {
             gov_params,
             pgf_params: finalized_pgf_params,
             eth_bridge_params,
+            ibc_params,
         }
     }
 }
@@ -741,6 +759,7 @@ impl FinalizedParameters {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
 )]
@@ -757,6 +776,7 @@ pub struct FinalizedEstablishedAccountTx {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
 )]

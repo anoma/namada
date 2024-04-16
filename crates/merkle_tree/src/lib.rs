@@ -26,6 +26,9 @@ use namada_core::storage::{
     StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use thiserror::Error;
 
 /// Trait for reading from a merkle tree that is a sub-tree
@@ -133,6 +136,7 @@ pub type Amt<H> =
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub enum StoreType {
     /// Base tree, which has roots of the subtrees
@@ -145,6 +149,8 @@ pub enum StoreType {
     PoS,
     /// For the Ethereum bridge Pool transfers
     BridgePool,
+    /// For the commit only data
+    CommitData,
 }
 
 /// Backing storage for merkle trees
@@ -159,6 +165,8 @@ pub enum Store {
     PoS(SmtStore),
     /// For the Ethereum bridge Pool transfers
     BridgePool(BridgePoolStore),
+    /// For the commit only data
+    CommitData,
 }
 
 impl Store {
@@ -170,6 +178,7 @@ impl Store {
             Self::Ibc(store) => StoreRef::Ibc(store),
             Self::PoS(store) => StoreRef::PoS(store),
             Self::BridgePool(store) => StoreRef::BridgePool(store),
+            Self::CommitData => StoreRef::CommitData,
         }
     }
 }
@@ -186,6 +195,8 @@ pub enum StoreRef<'a> {
     PoS(&'a SmtStore),
     /// For the Ethereum bridge Pool transfers
     BridgePool(&'a BridgePoolStore),
+    /// For commit only data
+    CommitData,
 }
 
 impl<'a> StoreRef<'a> {
@@ -197,6 +208,7 @@ impl<'a> StoreRef<'a> {
             Self::Ibc(store) => Store::Ibc(store.to_owned()),
             Self::PoS(store) => Store::PoS(store.to_owned()),
             Self::BridgePool(store) => Store::BridgePool(store.to_owned()),
+            Self::CommitData => Store::CommitData,
         }
     }
 
@@ -208,6 +220,7 @@ impl<'a> StoreRef<'a> {
             Self::Ibc(store) => store.serialize_to_vec(),
             Self::PoS(store) => store.serialize_to_vec(),
             Self::BridgePool(store) => store.serialize_to_vec(),
+            Self::CommitData => vec![],
         }
     }
 }
@@ -215,23 +228,25 @@ impl<'a> StoreRef<'a> {
 impl StoreType {
     /// Get an iterator for the base tree and subtrees
     pub fn iter() -> std::slice::Iter<'static, Self> {
-        static SUB_TREE_TYPES: [StoreType; 5] = [
+        static SUB_TREE_TYPES: [StoreType; 6] = [
             StoreType::Base,
             StoreType::Account,
             StoreType::PoS,
             StoreType::Ibc,
             StoreType::BridgePool,
+            StoreType::CommitData,
         ];
         SUB_TREE_TYPES.iter()
     }
 
     /// Get an iterator for subtrees
     pub fn iter_subtrees() -> std::slice::Iter<'static, Self> {
-        static SUB_TREE_TYPES: [StoreType; 4] = [
+        static SUB_TREE_TYPES: [StoreType; 5] = [
             StoreType::Account,
             StoreType::PoS,
             StoreType::Ibc,
             StoreType::BridgePool,
+            StoreType::CommitData,
         ];
         SUB_TREE_TYPES.iter()
     }
@@ -277,6 +292,9 @@ impl StoreType {
                     _ => Ok((StoreType::Account, key.clone())),
                 }
             }
+            Some(DbKeySeg::StringSeg(data)) if data.eq("commit_data") => {
+                Ok((StoreType::CommitData, key.clone()))
+            }
             // use the same key for Account
             _ => Ok((StoreType::Account, key.clone())),
         }
@@ -306,6 +324,7 @@ impl StoreType {
             Self::Ibc => Ok(Store::Ibc(decode(bytes)?)),
             Self::PoS => Ok(Store::PoS(decode(bytes)?)),
             Self::BridgePool => Ok(Store::BridgePool(decode(bytes)?)),
+            Self::CommitData => Ok(Store::CommitData),
         }
     }
 }
@@ -320,6 +339,7 @@ impl FromStr for StoreType {
             "ibc" => Ok(StoreType::Ibc),
             "pos" => Ok(StoreType::PoS),
             "eth_bridge_pool" => Ok(StoreType::BridgePool),
+            "commit_data" => Ok(StoreType::CommitData),
             _ => Err(Error::StoreType(s.to_string())),
         }
     }
@@ -333,24 +353,41 @@ impl fmt::Display for StoreType {
             StoreType::Ibc => write!(f, "ibc"),
             StoreType::PoS => write!(f, "pos"),
             StoreType::BridgePool => write!(f, "eth_bridge_pool"),
+            StoreType::CommitData => write!(f, "commit_data"),
         }
     }
 }
 
-/// Get the key prefix with which the base root and store are stored in the
+/// Get the key prefix with which the tree root and store are stored in the
 /// storage
-pub fn base_tree_key_prefix(height: BlockHeight) -> Key {
+pub fn tree_key_prefix_with_height(st: &StoreType, height: BlockHeight) -> Key {
     Key::from(height.to_db_key())
         .with_segment("tree".to_owned())
-        .with_segment(StoreType::Base.to_string())
+        .with_segment(st.to_string())
 }
 
-/// Get the key prefix with which the subtree root and store are stored in the
+/// Get the key prefix with which the tree root and store are stored in the
 /// storage
-pub fn subtree_key_prefix(st: &StoreType, epoch: Epoch) -> Key {
+pub fn tree_key_prefix_with_epoch(st: &StoreType, epoch: Epoch) -> Key {
     Key::from(epoch.to_db_key())
         .with_segment("tree".to_owned())
         .with_segment(st.to_string())
+}
+
+/// Fake merkle tree just to commit extra data to the merkle tree
+#[derive(Default)]
+pub struct CommitDataRoot(Hash);
+
+impl From<Hash> for CommitDataRoot {
+    fn from(value: Hash) -> Self {
+        Self(value)
+    }
+}
+
+impl CommitDataRoot {
+    pub fn get_commit_data_key() -> Key {
+        Key::parse("commit_data").expect("Should be able to parse the key.")
+    }
 }
 
 /// Merkle tree storage
@@ -361,6 +398,7 @@ pub struct MerkleTree<H: StorageHasher + Default> {
     ibc: Amt<H>,
     pos: Smt<H>,
     bridge_pool: BridgePoolTree,
+    commit_data: CommitDataRoot,
 }
 
 impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
@@ -381,12 +419,15 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
         let bridge_pool =
             BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
+        let commit_data = stores.commit.into();
+
         let tree = Self {
             base,
             account,
             ibc,
             pos,
             bridge_pool,
+            commit_data,
         };
 
         // validate
@@ -398,15 +439,19 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let pos_root = tree.base.get(&pos_key.into())?;
         let bp_key = H::hash(StoreType::BridgePool.to_string());
         let bp_root = tree.base.get(&bp_key.into())?;
+        let commit_data_key = H::hash(StoreType::CommitData.to_string());
+        let commit_data_root = tree.base.get(&commit_data_key.into())?;
         if tree.base.root().is_zero()
             && tree.account.root().is_zero()
             && tree.ibc.root().is_zero()
             && tree.pos.root().is_zero()
             && tree.bridge_pool.root().is_zero()
+            && tree.commit_data.0.is_zero()
             || (account_root == tree.account.root().into()
                 && ibc_root == tree.ibc.root().into()
                 && pos_root == tree.pos.root().into()
-                && bp_root == tree.bridge_pool.root().into())
+                && bp_root == tree.bridge_pool.root().into()
+                && commit_data_root == tree.commit_data.0)
         {
             Ok(tree)
         } else {
@@ -424,12 +469,15 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         let pos = Smt::new(stores.pos.0.into(), stores.pos.1);
         let bridge_pool =
             BridgePoolTree::new(stores.bridge_pool.0, stores.bridge_pool.1);
+        let commit_data = stores.commit.into();
+
         Self {
             base,
             account,
             ibc,
             pos,
             bridge_pool,
+            commit_data,
         }
     }
 
@@ -440,6 +488,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             StoreType::Ibc => Box::new(&self.ibc),
             StoreType::PoS => Box::new(&self.pos),
             StoreType::BridgePool => Box::new(&self.bridge_pool),
+            StoreType::CommitData => Box::new(&self.commit_data),
         }
     }
 
@@ -453,6 +502,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
             StoreType::Ibc => Box::new(&mut self.ibc),
             StoreType::PoS => Box::new(&mut self.pos),
             StoreType::BridgePool => Box::new(&mut self.bridge_pool),
+            StoreType::CommitData => Box::new(&mut self.commit_data),
         }
     }
 
@@ -491,6 +541,14 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
         self.update_tree(&store_type, &sub_key, value)
     }
 
+    /// Update the commit data subtree
+    pub fn update_commit_data(
+        &mut self,
+        value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        self.update(&CommitDataRoot::get_commit_data_key(), value)
+    }
+
     /// Delete the value corresponding to the given key
     pub fn delete(&mut self, key: &Key) -> Result<()> {
         let (store_type, sub_key) = StoreType::sub_key(key)?;
@@ -523,6 +581,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
                 self.bridge_pool.root().into(),
                 self.bridge_pool.store(),
             ),
+            commit: self.commit_data.0,
         }
     }
 
@@ -631,6 +690,12 @@ impl From<H256> for MerkleRoot {
     }
 }
 
+impl From<Hash> for MerkleRoot {
+    fn from(root: Hash) -> Self {
+        Self(root.0)
+    }
+}
+
 impl From<&H256> for MerkleRoot {
     fn from(root: &H256) -> Self {
         let root = *root;
@@ -670,6 +735,7 @@ pub struct MerkleTreeStoresRead {
     ibc: (Hash, AmtStore),
     pos: (Hash, SmtStore),
     bridge_pool: (KeccakHash, BridgePoolStore),
+    commit: Hash,
 }
 
 impl MerkleTreeStoresRead {
@@ -681,6 +747,7 @@ impl MerkleTreeStoresRead {
             StoreType::Ibc => self.ibc.0 = root,
             StoreType::PoS => self.pos.0 = root,
             StoreType::BridgePool => self.bridge_pool.0 = root.into(),
+            StoreType::CommitData => self.commit = root,
         }
     }
 
@@ -692,6 +759,7 @@ impl MerkleTreeStoresRead {
             Store::Ibc(store) => self.ibc.1 = store,
             Store::PoS(store) => self.pos.1 = store,
             Store::BridgePool(store) => self.bridge_pool.1 = store,
+            Store::CommitData => (),
         }
     }
 
@@ -703,6 +771,7 @@ impl MerkleTreeStoresRead {
             StoreType::Ibc => StoreRef::Ibc(&self.ibc.1),
             StoreType::PoS => StoreRef::PoS(&self.pos.1),
             StoreType::BridgePool => StoreRef::BridgePool(&self.bridge_pool.1),
+            StoreType::CommitData => StoreRef::CommitData,
         }
     }
 
@@ -714,6 +783,7 @@ impl MerkleTreeStoresRead {
             StoreType::Ibc => self.ibc.0,
             StoreType::PoS => self.pos.0,
             StoreType::BridgePool => Hash(self.bridge_pool.0.0),
+            StoreType::CommitData => Hash(self.commit.0),
         }
     }
 }
@@ -725,6 +795,7 @@ pub struct MerkleTreeStoresWrite<'a> {
     ibc: (Hash, &'a AmtStore),
     pos: (Hash, &'a SmtStore),
     bridge_pool: (Hash, &'a BridgePoolStore),
+    commit: Hash,
 }
 
 impl<'a> MerkleTreeStoresWrite<'a> {
@@ -736,6 +807,7 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::Ibc => &self.ibc.0,
             StoreType::PoS => &self.pos.0,
             StoreType::BridgePool => &self.bridge_pool.0,
+            StoreType::CommitData => &self.commit,
         }
     }
 
@@ -747,6 +819,7 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::Ibc => StoreRef::Ibc(self.ibc.1),
             StoreType::PoS => StoreRef::PoS(self.pos.1),
             StoreType::BridgePool => StoreRef::BridgePool(self.bridge_pool.1),
+            StoreType::CommitData => StoreRef::CommitData,
         }
     }
 }
@@ -996,6 +1069,50 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
         self.delete_key(key)
             .map_err(|err| Error::MerkleTree(err.to_string()))?;
         Ok(self.root().into())
+    }
+}
+
+impl<'a> SubTreeRead for &'a CommitDataRoot {
+    fn root(&self) -> MerkleRoot {
+        self.0.into()
+    }
+
+    fn subtree_has_key(&self, key: &Key) -> Result<bool> {
+        Ok(*key == CommitDataRoot::get_commit_data_key())
+    }
+
+    fn subtree_get(&self, key: &Key) -> Result<Vec<u8>> {
+        if self.subtree_has_key(key).unwrap() {
+            Ok(self.0.to_vec())
+        } else {
+            Err(Error::MerkleTree(
+                "Invalid key for commit data subtree.".to_string(),
+            ))
+        }
+    }
+
+    fn subtree_membership_proof(
+        &self,
+        _keys: &[Key],
+        _values: Vec<StorageBytes>,
+    ) -> Result<MembershipProof> {
+        unimplemented!("Commit data subspace hold only a single hash value.")
+    }
+}
+
+impl<'a> SubTreeWrite for &'a mut CommitDataRoot {
+    fn subtree_update(
+        &mut self,
+        _key: &Key,
+        value: StorageBytes,
+    ) -> Result<Hash> {
+        self.0 = Hash::sha256(value);
+        Ok(self.0)
+    }
+
+    fn subtree_delete(&mut self, _key: &Key) -> Result<Hash> {
+        self.0 = Hash::default();
+        Ok(self.0)
     }
 }
 

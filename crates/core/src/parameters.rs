@@ -2,9 +2,12 @@
 
 use std::collections::BTreeMap;
 
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
+
 use super::address::Address;
 use super::chain::ProposalBytes;
-use super::dec::Dec;
 use super::hash::Hash;
 use super::time::DurationSecs;
 use super::token;
@@ -21,6 +24,7 @@ use crate::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct Parameters {
@@ -44,16 +48,14 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
-    /// PoS staked ratio (read + write for every epoch)
-    pub staked_ratio: Dec,
-    /// PoS inflation amount from the last epoch (read + write for every epoch)
-    pub pos_inflation_amount: token::Amount,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
     /// Fee unshielding descriptions limit
     pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
+    /// Enable the native token transfer if it is true
+    pub is_native_token_transferable: bool,
 }
 
 /// Epoch duration. A new epoch begins as soon as both the `min_num_of_blocks`
@@ -68,6 +70,7 @@ pub struct Parameters {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct EpochDuration {

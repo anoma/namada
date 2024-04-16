@@ -3,12 +3,13 @@
 mod eth_msgs;
 mod events;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
 use eth_msgs::EthMsgUpdate;
 use eyre::Result;
 use namada_core::address::Address;
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::ethereum_events::EthereumEvent;
 use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::key::common;

@@ -1,14 +1,16 @@
 //! Parameters for configuring the Ethereum bridge
 use std::num::NonZeroU64;
 
-use eyre::{eyre, Result};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ethereum_structs;
 use namada_core::storage::Key;
 use namada_core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_storage::{StorageRead, StorageWrite};
+use namada_storage::{Error, Result, StorageRead, StorageWrite};
 use serde::{Deserialize, Serialize};
 
 use super::whitelist;
@@ -29,6 +31,7 @@ use crate::storage::vp;
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Erc20WhitelistEntry {
     /// The address of the whitelisted ERC20 token.
@@ -49,6 +52,7 @@ pub struct Erc20WhitelistEntry {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 #[repr(transparent)]
 pub struct MinimumConfirmations(NonZeroU64);
@@ -85,6 +89,7 @@ impl From<MinimumConfirmations> for NonZeroU64 {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 #[repr(transparent)]
 pub struct ContractVersion(NonZeroU64);
@@ -109,6 +114,7 @@ impl Default for ContractVersion {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct UpgradeableContract {
     /// The Ethereum address of the contract.
@@ -129,6 +135,7 @@ pub struct UpgradeableContract {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Contracts {
     /// The Ethereum address of the ERC20 contract that represents this chain's
@@ -148,6 +155,7 @@ pub struct Contracts {
     Serialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct EthereumBridgeParams {
     /// Initial Ethereum block height when events will first be extracted from.
@@ -323,17 +331,10 @@ where
     S: StorageRead,
 {
     let native_erc20 = bridge_storage::native_erc20_key();
-    match StorageRead::read(storage, &native_erc20) {
-        Ok(Some(eth_address)) => Ok(eth_address),
-        Ok(None) => {
-            Err(eyre!("The Ethereum bridge storage is not initialized"))
-        }
-        Err(e) => Err(eyre!(
-            "Failed to read storage when fetching the native ERC20 address \
-             with: {}",
-            e.to_string()
-        )),
-    }
+
+    storage.read(&native_erc20)?.ok_or_else(|| {
+        Error::SimpleMessage("The Ethereum bridge storage is not initialized")
+    })
 }
 
 /// Reads the value of `key` from `storage` and deserializes it, or panics
@@ -362,8 +363,10 @@ where
 #[cfg(test)]
 mod tests {
     use namada_state::testing::TestState;
+    use namada_storage::ResultExt;
 
     use super::*;
+    use crate::storage::eth_bridge_queries::is_bridge_comptime_enabled;
 
     /// Ensure we can serialize and deserialize a [`Config`] struct to and from
     /// TOML. This can fail if complex fields are ordered before simple fields
@@ -382,8 +385,9 @@ mod tests {
                 },
             },
         };
-        let serialized = toml::to_string(&config)?;
-        let deserialized: EthereumBridgeParams = toml::from_str(&serialized)?;
+        let serialized = toml::to_string(&config).into_storage_result()?;
+        let deserialized: EthereumBridgeParams =
+            toml::from_str(&serialized).into_storage_result()?;
 
         assert_eq!(config, deserialized);
         Ok(())
@@ -391,6 +395,12 @@ mod tests {
 
     #[test]
     fn test_ethereum_bridge_config_read_write_storage() {
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
+
         let mut state = TestState::default();
         let config = EthereumBridgeParams {
             erc20_whitelist: vec![],
@@ -421,6 +431,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "namada-eth-bridge"), ignore)]
     #[should_panic(expected = "Could not read")]
     fn test_ethereum_bridge_config_storage_corrupt() {
         let mut state = TestState::default();
@@ -447,6 +458,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "namada-eth-bridge"), ignore)]
     #[should_panic(
         expected = "Ethereum bridge appears to be only partially configured!"
     )]

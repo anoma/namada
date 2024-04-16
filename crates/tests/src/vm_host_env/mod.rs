@@ -18,8 +18,10 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
+    use std::cell::RefCell;
     use std::collections::BTreeSet;
     use std::panic;
+    use std::rc::Rc;
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
@@ -29,8 +31,9 @@ mod tests {
     use namada::core::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
     use namada::core::time::DateTimeUtc;
     use namada::core::{address, key};
+    use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
-    use namada::ibc::primitives::Msg;
+    use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
     use namada::ledger::ibc::storage as ibc_storage;
     use namada::ledger::native_vp::ibc::{
@@ -214,7 +217,7 @@ mod tests {
         tx_host_env::init();
 
         let code = vec![];
-        tx::ctx().init_account(code, &None).unwrap();
+        tx::ctx().init_account(code, &None, &[]).unwrap();
     }
 
     #[test]
@@ -229,7 +232,7 @@ mod tests {
             let key = Key::wasm_code(&code_hash);
             env.state.write_bytes(&key, &code).unwrap();
         });
-        tx::ctx().init_account(code_hash, &None).unwrap();
+        tx::ctx().init_account(code_hash, &None, &[]).unwrap();
     }
 
     /// Test that a tx updating validity predicate that is not in the allowlist
@@ -329,7 +332,7 @@ mod tests {
         });
 
         // Initializing a new account with the VP should fail
-        tx::ctx().init_account(vp_hash, &None).unwrap();
+        tx::ctx().init_account(vp_hash, &None, &[]).unwrap();
     }
 
     #[test]
@@ -547,6 +550,7 @@ mod tests {
 
         // Use some arbitrary bytes for tx code
         let code = vec![4, 3, 2, 1, 0];
+        #[allow(clippy::disallowed_methods)]
         let expiration = Some(DateTimeUtc::now());
         for data in &[
             // Tx with some arbitrary data
@@ -644,8 +648,8 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(empty_code, tx).unwrap();
-        assert!(!result);
+        let result = vp::CTX.eval(empty_code, tx);
+        assert!(result.is_err());
 
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
@@ -663,8 +667,8 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(code_hash, tx).unwrap();
-        assert!(result);
+        let result = vp::CTX.eval(code_hash, tx);
+        assert!(result.is_ok());
 
         // evaluating the VP template which always returns `false` shouldn't
         // pass
@@ -683,8 +687,8 @@ mod tests {
             .add_serialized_data(input_data)
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
-        let result = vp::CTX.eval(code_hash, tx).unwrap();
-        assert!(!result);
+        let result = vp::CTX.eval(code_hash, tx);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -710,14 +714,15 @@ mod tests {
             .sign_wrapper(keypair.clone());
 
         // create a client with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("creating a client failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -743,14 +748,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // update the client with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("updating a client failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -783,14 +789,15 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a connection with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("creating a connection failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -816,14 +823,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("opening the connection failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -857,14 +865,15 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // open try a connection with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("creating a connection failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -890,14 +899,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the mssage
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("opening the connection failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -933,14 +943,15 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("creating a channel failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -966,14 +977,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("opening the channel failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1009,14 +1021,15 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // try open a channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("creating a channel failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -1043,14 +1056,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open a channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("opening the channel failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1089,10 +1103,13 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // close the channel with the message
-        let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers);
         // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
-        actions.add_transfer_module(dummy_module.module_id(), dummy_module);
+        actions.add_transfer_module(dummy_module);
+        let dummy_module = DummyNftTransferModule {};
+        actions.add_transfer_module(dummy_module);
         actions
             .execute(&tx_data)
             .expect("closing the channel failed");
@@ -1144,14 +1161,15 @@ mod tests {
             .sign_wrapper(keypair);
 
         // close the channel with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("closing the channel failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1182,11 +1200,7 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1194,14 +1208,15 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("sending a token failed");
 
         // Check
         let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was escrowed
         let escrow = token::storage_key::balance_key(
             &token,
@@ -1209,7 +1224,7 @@ mod tests {
         );
         let token_vp_result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(token_vp_result.expect("token validation failed unexpectedly"));
+        assert!(token_vp_result.is_ok());
 
         // Commit
         env.commit_tx_and_block();
@@ -1227,7 +1242,7 @@ mod tests {
         // Start the next transaction for receiving an ack
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1241,14 +1256,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // ack the packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("ack failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let balance_key = token::storage_key::balance_key(&token, &sender);
@@ -1304,6 +1320,10 @@ mod tests {
             minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         );
+        let mint_amount_key = ibc_storage::mint_amount_key(&ibc_token);
+        let init_bal = Amount::from_u64(100);
+        writes.insert(mint_amount_key, init_bal.serialize_to_vec());
+        writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
         writes.into_iter().for_each(|(key, val)| {
             tx_host_env::with(|env| {
                 env.state.write_bytes(&key, &val).expect("write error");
@@ -1313,8 +1333,7 @@ mod tests {
         // Start a transaction to send a packet
         // Set this chain is the sink zone
         let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
 
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1322,18 +1341,27 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // send the token and a packet with the data
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("sending a token failed");
 
         // Check
-        let env = tx_host_env::take();
+        let mut env = tx_host_env::take();
+        // The token must be part of the verifier set (checked by MultitokenVp)
+        env.verifiers.insert(ibc_token);
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check if the token was burned
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check the balance
         tx_host_env::set(env);
         let balance: Option<Amount> = tx_host_env::with(|env| {
@@ -1392,21 +1420,33 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("receiving the token failed");
 
         // Check
-        let env = tx_host_env::take();
+        let mut env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was minted
+        // The token must be part of the verifier set (checked by MultitokenVp)
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
+        env.verifiers.insert(ibc_token.clone());
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
+        // Check if the token was minted
         let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(
+            result.is_ok(),
+            "Expected VP to accept the tx, got {result:?}"
+        );
         // Check the balance
         tx_host_env::set(env);
         let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
@@ -1467,14 +1507,15 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // Receive the packet, but no token is received
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("receiving the token failed");
 
         // Check if the transaction is valid
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the ack has an error due to the invalid packet data
         tx_host_env::set(env);
         let ack_key = ibc_storage::ack_key(&port_id, &channel_id, sequence);
@@ -1559,18 +1600,19 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("receiving a token failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was unescrowed
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         let key = token::storage_key::balance_key(&token, &receiver);
@@ -1657,18 +1699,19 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("receiving a token failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was unescrowed
         let result =
             ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
         // without the source trace path
@@ -1712,14 +1755,11 @@ mod tests {
         // Start a transaction to send a packet
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        ibc::set_timeout_timestamp(&mut msg);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        ibc::set_timeout_timestamp(&mut msg.message);
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1740,7 +1780,7 @@ mod tests {
         // Start a transaction to notify the timeout
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1754,21 +1794,22 @@ mod tests {
             .sign_wrapper(keypair);
 
         // timeout the packet
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("timeout failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
         let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1799,13 +1840,10 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let mut tx_data = vec![];
-        msg.clone()
-            .to_any()
-            .encode(&mut tx_data)
-            .expect("encoding failed");
+        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1826,7 +1864,7 @@ mod tests {
         // Start a transaction to notify the timing-out on closed
         let counterparty = ibc::dummy_channel_counterparty();
         let packet = ibc::packet_from_message(
-            &msg,
+            &msg.message,
             ibc::Sequence::from(1),
             &counterparty,
         );
@@ -1840,20 +1878,21 @@ mod tests {
             .sign_wrapper(keypair);
 
         // timeout the packet
-        tx_host_env::ibc::ibc_actions(tx::ctx())
+        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
+        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
             .execute(&tx_data)
             .expect("timeout on close failed");
 
         // Check
         let env = tx_host_env::take();
         let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
-        assert!(result.expect("validation failed unexpectedly"));
+        assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
         let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
-        assert!(result.expect("token validation failed unexpectedly"));
+        assert!(result.is_ok());
     }
 }

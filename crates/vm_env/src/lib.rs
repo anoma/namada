@@ -5,8 +5,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-use std::mem::ManuallyDrop;
-
 use borsh::BorshDeserialize;
 use namada_core::internal::{HostEnvResult, KeyVal};
 
@@ -21,6 +19,13 @@ pub mod tx {
         // cache, because we cannot allocate a buffer for it before we know
         // its size.
         pub fn namada_tx_read(key_ptr: u64, key_len: u64) -> i64;
+
+        // Read variable-length temporary state when we don't know the size
+        // up-front, returns the size of the value (can be 0), or -1 if
+        // the key is not present. If a value is found, it will be placed in the
+        // result buffer, because we cannot allocate a buffer for it before
+        // we know its size.
+        pub fn namada_tx_read_temp(key_ptr: u64, key_len: u64) -> i64;
 
         // Read a value from result buffer.
         pub fn namada_tx_result_buffer(result_ptr: u64);
@@ -76,6 +81,8 @@ pub mod tx {
             code_hash_len: u64,
             code_tag_ptr: u64,
             code_tag_len: u64,
+            entropy_source_ptr: u64,
+            entropy_source_len: u64,
             result_ptr: u64,
         );
 
@@ -120,7 +127,7 @@ pub mod tx {
 
         /// Execute IBC tx.
         // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-        pub fn namada_tx_ibc_execute();
+        pub fn namada_tx_ibc_execute() -> i64;
 
         /// Set the sentinel for a wrong tx section commitment
         pub fn namada_tx_set_commitment_sentinel();
@@ -141,6 +148,9 @@ pub mod tx {
             transaction_ptr: u64,
             transaction_len: u64,
         ) -> i64;
+
+        // Yield a byte array value back to the host.
+        pub fn namada_tx_yield_value(buf_ptr: u64, buf_len: u64);
     }
 }
 
@@ -233,6 +243,9 @@ pub mod vp {
             event_type_len: u64,
         ) -> i64;
 
+        // Yield a byte array value back to the host.
+        pub fn namada_vp_yield_value(buf_ptr: u64, buf_len: u64);
+
         // Requires a node running with "Info" log level
         pub fn namada_vp_log_string(str_ptr: u64, str_len: u64);
 
@@ -247,7 +260,7 @@ pub mod vp {
             threshold: u8,
             max_signatures_ptr: u64,
             max_signatures_len: u64,
-        ) -> i64;
+        );
 
         pub fn namada_vp_eval(
             vp_code_hash_ptr: u64,
@@ -276,16 +289,10 @@ pub fn read_from_buffer(
     if HostEnvResult::is_fail(read_result) {
         None
     } else {
-        let result: Vec<u8> = Vec::with_capacity(read_result as _);
-        // The `result` will be dropped from the `target`, which is
-        // reconstructed from the same memory
-        let result = ManuallyDrop::new(result);
+        let result = vec![0u8; read_result as _];
         let offset = result.as_slice().as_ptr() as u64;
         unsafe { result_buffer(offset) };
-        let target = unsafe {
-            Vec::from_raw_parts(offset as _, read_result as _, read_result as _)
-        };
-        Some(target)
+        Some(result)
     }
 }
 

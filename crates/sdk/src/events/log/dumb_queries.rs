@@ -6,8 +6,7 @@
 //! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
 //! ```
 
-use std::collections::HashMap;
-
+use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::storage::BlockHeight;
 
@@ -39,16 +38,6 @@ impl QueryMatcher {
                 None => false,
             }
         })
-    }
-
-    /// Returns a query matching the given accepted transaction hash.
-    pub fn accepted(tx_hash: Hash) -> Self {
-        let mut attributes = HashMap::new();
-        attributes.insert("hash".to_string(), tx_hash.to_string());
-        Self {
-            event_type: EventType::Accepted,
-            attributes,
-        }
     }
 
     /// Returns a query matching the given applied transaction hash.
@@ -132,16 +121,16 @@ mod tests {
         let mut attributes = HashMap::new();
         attributes.insert("hash".to_string(), HASH.to_string());
         let matcher = QueryMatcher {
-            event_type: EventType::Accepted,
+            event_type: EventType::Proposal,
             attributes,
         };
 
         let tests = {
             let event_1 = Event {
-                event_type: EventType::Accepted,
+                event_type: EventType::Proposal,
                 level: EventLevel::Block,
                 attributes: {
-                    let mut attrs = std::collections::HashMap::new();
+                    let mut attrs = namada_core::collections::HashMap::new();
                     attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },
@@ -152,7 +141,7 @@ mod tests {
                 event_type: EventType::Applied,
                 level: EventLevel::Block,
                 attributes: {
-                    let mut attrs = std::collections::HashMap::new();
+                    let mut attrs = namada_core::collections::HashMap::new();
                     attrs.insert("hash".to_string(), HASH.to_string());
                     attrs
                 },

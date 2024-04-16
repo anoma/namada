@@ -7,16 +7,13 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span as Span2, TokenStream as TokenStream2};
+use proc_macro2::{Span as Span2, Span, TokenStream as TokenStream2};
 use quote::{quote, ToTokens};
+use sha2::Digest;
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, ExprAssign, FnArg, ItemFn, ItemStruct, Pat};
+use syn::{parse_macro_input, ItemEnum, ItemFn, ItemStruct, LitByte};
 
 /// Generate WASM binding for a transaction main entrypoint function.
-///
-/// It expects an attribute in the form: `gas = u64`, so that a call to the gas
-/// meter can be injected as the first instruction of the transaction to account
-/// for the whitelisted gas amount.
 ///
 /// This macro expects a function with signature:
 ///
@@ -27,42 +24,19 @@ use syn::{parse_macro_input, ExprAssign, FnArg, ItemFn, ItemStruct, Pat};
 /// ) -> TxResult
 /// ```
 #[proc_macro_attribute]
-pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
-    let ItemFn {
-        attrs,
-        vis,
-        sig,
-        block,
-    } = ast;
-    let stmts = &block.stmts;
-    let ident = &sig.ident;
-    let attr_ast = parse_macro_input!(attr as ExprAssign);
-    let gas = attr_ast.right;
-    let ctx = match sig.inputs.first() {
-        Some(FnArg::Typed(pat_type)) => {
-            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-                &pat_ident.ident
-            } else {
-                panic!("Unexpected token, expected ctx ident")
-            }
-        }
-        _ => panic!("Unexpected token, expected ctx ident"),
-    };
+    let ident = &ast.sig.ident;
     let gen = quote! {
         // Use `wee_alloc` as the global allocator.
         #[global_allocator]
         static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-        #(#attrs)* #vis #sig {
-            // Consume the whitelisted gas
-            #ctx.charge_gas(#gas)?;
-            #(#stmts)*
-        }
+        #ast
 
         // The module entrypoint callable by wasm runtime
         #[no_mangle]
-        extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) {
+        extern "C" fn _apply_tx(tx_data_ptr: u64, tx_data_len: u64) -> u64 {
             let slice = unsafe {
                 core::slice::from_raw_parts(
                     tx_data_ptr as *const u8,
@@ -78,10 +52,15 @@ pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
             // to "fake" it.
             let mut ctx = unsafe { namada_tx_prelude::Ctx::new() };
 
-            if let Err(err) = #ident(&mut ctx, tx_data) {
-                namada_tx_prelude::debug_log!("Transaction error: {}", err);
-                // crash the transaction to abort
-                panic!();
+            match #ident(&mut ctx, tx_data) {
+                Ok(()) => 1,
+                Err(err) => {
+                    namada_tx_prelude::debug_log!("Transaction error: {err}");
+                    // TODO: pass some proper error from txs, instead of a string
+                    let err = err.to_string().serialize_to_vec();
+                    ctx.yield_value(err);
+                    0
+                },
             }
         }
     };
@@ -89,10 +68,6 @@ pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Generate WASM binding for validity predicate main entrypoint function.
-///
-/// It expects an attribute in the form: `gas = u64`, so that a call to the gas
-/// meter can be injected as the first instruction of the validity predicate to
-/// account for the whitelisted gas amount.
 ///
 /// This macro expects a function with signature:
 ///
@@ -107,40 +82,17 @@ pub fn transaction(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn validity_predicate(
-    attr: TokenStream,
+    _attr: TokenStream,
     input: TokenStream,
 ) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
-    let ItemFn {
-        attrs,
-        vis,
-        sig,
-        block,
-    } = ast;
-    let stmts = &block.stmts;
-    let ident = &sig.ident;
-    let attr_ast = parse_macro_input!(attr as ExprAssign);
-    let gas = attr_ast.right;
-    let ctx = match sig.inputs.first() {
-        Some(FnArg::Typed(pat_type)) => {
-            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-                &pat_ident.ident
-            } else {
-                panic!("Unexpected token, expected ctx ident")
-            }
-        }
-        _ => panic!("Unexpected token, expected ctx ident"),
-    };
+    let ident = &ast.sig.ident;
     let gen = quote! {
         // Use `wee_alloc` as the global allocator.
         #[global_allocator]
         static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-        #(#attrs)* #vis #sig {
-            // Consume the whitelisted gas
-            #ctx.charge_gas(#gas)?;
-            #(#stmts)*
-        }
+        #ast
 
         // The module entrypoint callable by wasm runtime
         #[no_mangle]
@@ -194,10 +146,11 @@ pub fn validity_predicate(
             // run validation with the concrete type(s)
             match #ident(&ctx, tx_data, addr, keys_changed, verifiers)
             {
-                Ok(true) => 1,
-                Ok(false) => 0,
+                Ok(()) => 1,
                 Err(err) => {
-                    namada_vp_prelude::debug_log!("Validity predicate error: {}", err);
+                    namada_vp_prelude::debug_log!("Validity predicate error: {err}");
+                    let err = err.serialize_to_vec();
+                    ctx.yield_value(err);
                     0
                 },
             }
@@ -330,6 +283,156 @@ where
         accum.push(map(ident));
         accum
     })
+}
+
+#[proc_macro_derive(BorshDeserializer)]
+pub fn derive_borsh_deserializer(type_def: TokenStream) -> TokenStream {
+    derive_borsh_deserializer_inner(type_def.into()).into()
+}
+
+#[proc_macro]
+pub fn derive_borshdeserializer(type_def: TokenStream) -> TokenStream {
+    derive_borsh_deserialize_inner(type_def.into()).into()
+}
+
+#[proc_macro]
+pub fn derive_typehash(type_def: TokenStream) -> TokenStream {
+    let type_def = syn::parse2::<syn::Type>(type_def.into()).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (_, hash) = derive_typehash_inner(&type_def);
+    quote!(
+        impl TypeHash for #type_def {
+            const HASH: [u8; 32] = #hash;
+        }
+    )
+    .into()
+}
+
+#[proc_macro]
+pub fn typehash(type_def: TokenStream) -> TokenStream {
+    let type_def = syn::parse2::<syn::Type>(type_def.into()).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (_, hash) = derive_typehash_inner(&type_def);
+    quote!(#hash).into()
+}
+
+#[inline]
+fn derive_borsh_deserializer_inner(item_def: TokenStream2) -> TokenStream2 {
+    let mut hasher = sha2::Sha256::new();
+    let (type_def, generics) = syn::parse2::<ItemStruct>(item_def.clone())
+        .map(|def| {
+            hasher.update(def.to_token_stream().to_string().as_bytes());
+            (def.ident, def.generics)
+        })
+        .unwrap_or_else(|_| {
+            let def = syn::parse2::<ItemEnum>(item_def).expect(
+                "BorshDeserializer expected to be derived on a struct or enum",
+            );
+            hasher.update(def.to_token_stream().to_string().as_bytes());
+            (def.ident, def.generics)
+        });
+    let type_hash: [u8; 32] = hasher.finalize().into();
+
+    if !generics.params.is_empty() {
+        panic!(
+            "Cannot derive BorshDeserializer on a parameterized type. This \
+             can be done manually for concrete instantiations via the \
+             derive_borshdeserializer! macro."
+        );
+    }
+    let hash = syn::ExprArray {
+        attrs: vec![],
+        bracket_token: Default::default(),
+        elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(|b| {
+            syn::Expr::Lit(syn::ExprLit {
+                attrs: vec![],
+                lit: syn::Lit::Byte(LitByte::new(b, Span::call_site())),
+            })
+        })),
+    };
+    let hex = data_encoding::HEXUPPER.encode(&type_hash);
+    let deserializer_ident =
+        syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
+
+    quote!(
+        #[cfg(feature = "migrations")]
+        #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
+        static #deserializer_ident: fn() = || {
+            ::namada_migrations::register_deserializer(#hash, |bytes| {
+                #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
+            });
+        };
+        #[cfg(feature = "migrations")]
+        impl ::namada_migrations::TypeHash for #type_def {
+            const HASH: [u8; 32] = #hash;
+        }
+    )
+}
+
+#[inline]
+fn derive_borsh_deserialize_inner(item: TokenStream2) -> TokenStream2 {
+    let type_def = syn::parse2::<syn::Type>(item).expect(
+        "Could not parse input to `derive_borshdesrializer` as a type.",
+    );
+    match type_def {
+        syn::Type::Array(_) | syn::Type::Tuple(_) | syn::Type::Path(_) => {}
+        _ => panic!(
+            "The `borsh_derserializer!` macro may only be called on arrays, \
+             tuples, structs, and enums."
+        ),
+    }
+    let (type_hash, hash) = derive_typehash_inner(&type_def);
+    let hex = data_encoding::HEXUPPER.encode(&type_hash);
+    let deserializer_ident =
+        syn::Ident::new(&format!("DESERIALIZER_{}", hex), Span::call_site());
+
+    quote!(
+        #[cfg(feature = "migrations")]
+        #[::namada_migrations::distributed_slice(REGISTER_DESERIALIZERS)]
+        static #deserializer_ident: fn() = || {
+            ::namada_migrations::register_deserializer(#hash, |bytes| {
+                #type_def::try_from_slice(&bytes).map(|val| format!("{:?}", val)).ok()
+            });
+        };
+    )
+}
+
+#[inline]
+fn derive_typehash_inner(type_def: &syn::Type) -> ([u8; 32], syn::ExprArray) {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(type_def.to_token_stream().to_string().as_bytes());
+    let type_hash: [u8; 32] = hasher.finalize().into();
+    (
+        type_hash,
+        syn::ExprArray {
+            attrs: vec![],
+            bracket_token: Default::default(),
+            elems: Punctuated::<_, _>::from_iter(type_hash.into_iter().map(
+                |b| {
+                    syn::Expr::Lit(syn::ExprLit {
+                        attrs: vec![],
+                        lit: syn::Lit::Byte(LitByte::new(b, Span::call_site())),
+                    })
+                },
+            )),
+        },
+    )
 }
 
 #[cfg(test)]

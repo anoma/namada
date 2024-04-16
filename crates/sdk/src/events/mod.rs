@@ -1,9 +1,10 @@
 //! Logic to do with events emitted by the ledger.
 pub mod log;
 
-use std::collections::HashMap;
-
-pub use namada_core::event::{Event, EventError, EventLevel, EventType};
+use namada_core::collections::HashMap;
+pub use namada_core::event::{
+    extend, EmitEvents, Event, EventError, EventLevel, EventType,
+};
 use serde_json::Value;
 
 // use crate::ledger::governance::utils::ProposalEvent;
@@ -22,7 +23,7 @@ impl Attributes {
 
     /// Get ownership of the value associated to the input key
     pub fn take(&mut self, key: &str) -> Option<String> {
-        self.0.remove(key)
+        self.0.swap_remove(key)
     }
 }
 

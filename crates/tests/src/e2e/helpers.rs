@@ -36,7 +36,7 @@ use super::setup::{
     ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, Who, APPS_PACKAGE};
-use crate::strings::{LEDGER_STARTED, TX_ACCEPTED, TX_APPLIED_SUCCESS};
+use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
 /// Instantiate a new [`HttpClient`] to perform RPC requests with.
@@ -100,7 +100,6 @@ pub fn init_established_account(
         rpc_addr,
     ];
     let mut cmd = run!(test, Bin::Client, init_account_args, Some(40))?;
-    cmd.exp_string(TX_ACCEPTED)?;
     cmd.exp_string(TX_APPLIED_SUCCESS)?;
     cmd.assert_success();
     Ok(())
@@ -319,7 +318,7 @@ pub fn get_epoch(test: &Test, ledger_address: &str) -> Result<Epoch> {
         test,
         Bin::Client,
         &["epoch", "--node", ledger_address],
-        Some(10)
+        Some(20)
     )?;
     let (unread, matched) = find.exp_regex("Last committed epoch: .*")?;
     let epoch_str = strip_trailing_newline(&matched)
@@ -379,6 +378,7 @@ pub fn wait_for_block_height(
     height: u64,
     timeout_secs: u64,
 ) -> Result<()> {
+    #[allow(clippy::disallowed_methods)]
     let start = Instant::now();
     let loop_timeout = Duration::new(timeout_secs, 0);
     loop {
@@ -386,6 +386,7 @@ pub fn wait_for_block_height(
         if current >= height {
             break Ok(());
         }
+        #[allow(clippy::disallowed_methods)]
         if Instant::now().duration_since(start) > loop_timeout {
             return Err(eyre!(
                 "Timed out waiting for height {height}, current {current}"
@@ -425,6 +426,7 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
             build_cmd.release()
         };
 
+        #[allow(clippy::disallowed_methods)]
         let now = time::Instant::now();
         // ideally we would print the compile command here, but escargot doesn't
         // implement Display or Debug for CargoBuild

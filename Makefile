@@ -17,10 +17,8 @@ debug-cargo := $(env) $(debug-env) cargo
 nightly := $(shell cat rust-nightly-version)
 
 # Path to the wasm source for the provided txs and VPs
-wasms := wasm/wasm_source
-wasms_for_tests := wasm_for_tests/wasm_source
-# Paths for all the wasm templates
-wasm_templates := wasm/tx_template wasm/vp_template
+wasms := wasm
+wasms_for_tests := wasm_for_tests
 
 ifdef JOBS
 jobs := -j $(JOBS)
@@ -74,7 +72,8 @@ build-release:
 	$(cargo) build $(jobs) --release --timings --package namada_apps \
 		--manifest-path Cargo.toml \
 		--no-default-features \
-		--features jemalloc
+		--features jemalloc \
+		--features migrations
 
 build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml
@@ -92,8 +91,7 @@ check-wasm = $(cargo) check --target wasm32-unknown-unknown --manifest-path $(wa
 check:
 	$(cargo) check --workspace && \
 	make -C $(wasms) check && \
-	make -C $(wasms_for_tests) check && \
-	$(foreach wasm,$(wasm_templates),$(check-wasm) && ) true
+	make -C $(wasms_for_tests) check
 
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
@@ -101,18 +99,21 @@ check-mainnet:
 # Check that every crate can be built with default features and that namada crate
 # can be built for wasm
 check-crates:
+	rustup target add --toolchain $(nightly) wasm32-unknown-unknown
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
+		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
 		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" && \
 		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
+# Need a separate command for benchmarks to prevent the "testing" feature flag from being activated
 clippy:
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings && \
 	make -C $(wasms) clippy && \
-	make -C $(wasms_for_tests) clippy && \
-	$(foreach wasm,$(wasm_templates),$(clippy-wasm) && ) true
+	make -C $(wasms_for_tests) clippy
 
 clippy-mainnet:
 	$(cargo) +$(nightly) clippy --all-targets --features "mainnet" -- -D warnings
@@ -166,7 +167,7 @@ test-e2e:
 	NAMADA_E2E_USE_PREBUILT_BINARIES=$(NAMADA_E2E_USE_PREBUILT_BINARIES) \
 	NAMADA_E2E_DEBUG=$(NAMADA_E2E_DEBUG) \
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test $(jobs) e2e::$(TEST_FILTER) \
+	$(cargo) +$(nightly) test --lib $(jobs) e2e::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -176,14 +177,22 @@ test-e2e:
 # Run integration tests
 test-integration:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test $(jobs) integration::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
 	-Z unstable-options --report-time
 
 test-unit:
+	$(cargo) +$(nightly) test --lib \
+		$(TEST_FILTER) \
+		$(jobs) \
+		-- --skip e2e --skip integration --skip pos_state_machine_test \
+		-Z unstable-options --report-time
+
+test-unit-with-eth-bridge:
 	$(cargo) +$(nightly) test \
+		--features namada-eth-bridge \
 		$(TEST_FILTER) \
 		$(jobs) \
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
@@ -197,7 +206,7 @@ test-unit-with-coverage:
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
-	$(cargo) +$(nightly) test \
+	$(cargo) +$(nightly) test --lib \
 		--features "mainnet" \
 		$(TEST_FILTER) \
 		$(jobs) \
@@ -205,7 +214,7 @@ test-unit-mainnet:
 		-Z unstable-options --report-time
 
 test-unit-debug:
-	$(debug-cargo) +$(nightly) test \
+	$(debug-cargo) +$(nightly) test --lib \
 		$(jobs) \
 		$(TEST_FILTER) \
 		-- --skip e2e --skip integration --skip pos_state_machine_test \
@@ -223,7 +232,7 @@ test-wasm-templates:
 	$(foreach wasm,$(wasm_templates),$(test-wasm-template) && ) true
 
 test-debug:
-	$(debug-cargo) +$(nightly) test \
+	$(debug-cargo) +$(nightly) test --lib \
 		-- \
 		--nocapture \
 		-Z unstable-options --report-time
@@ -240,19 +249,15 @@ test-pos-sm:
 		PROPTEST_CASES=$(PROPTEST_CASES) \
 		PROPTEST_MAX_SHRINK_ITERS=$(PROPTEST_MAX_SHRINK_ITERS) \
 		RUSTFLAGS='-C debuginfo=2 -C debug-assertions=true -C overflow-checks=true' \
-		cargo test pos_state_machine_test --release 
+		cargo test --lib pos_state_machine_test --release 
 
 fmt-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml
 fmt:
-	$(cargo) +$(nightly) fmt --all && \
-	make -C $(wasms) fmt && \
-	$(foreach wasm,$(wasm_templates),$(fmt-wasm) && ) true
+	$(cargo) +$(nightly) fmt --all && make -C $(wasms) fmt
 
 fmt-check-wasm = $(cargo) +$(nightly) fmt --manifest-path $(wasm)/Cargo.toml -- --check
 fmt-check:
-	$(cargo) +$(nightly) fmt --all -- --check && \
-	make -C $(wasms) fmt-check && \
-	$(foreach wasm,$(wasm_templates),$(fmt-check-wasm) && ) true
+	$(cargo) +$(nightly) fmt --all -- --check && make -C $(wasms) fmt-check
 
 watch:
 	$(cargo) watch
@@ -261,7 +266,7 @@ clean:
 	$(cargo) clean
 
 bench:
-	$(cargo) bench --package namada_benchmarks 
+	$(cargo) bench --package namada_benchmarks
 
 build-doc:
 	$(cargo) doc --no-deps
@@ -281,7 +286,7 @@ debug-wasm-scripts-docker: build-wasm-image-docker
 
 # Build the validity predicate and transactions wasm
 build-wasm-scripts:
-	rm wasm/*.wasm || true
+	rm $(wasms)/*.wasm || true
 	make -C $(wasms)
 	make opt-wasm
 	make checksum-wasm
@@ -293,6 +298,18 @@ debug-wasm-scripts:
 	make opt-wasm
 	make checksum-wasm
 
+# Build the validity predicate and transactions wasm for tests
+build-wasm-tests-scripts:
+	rm $(wasms_for_tests)/*.wasm || true
+	make -C $(wasms_for_tests)
+	make opt-wasm-tests
+
+# Debug build the validity predicate and transactions wasm for tests
+debug-wasm-tests-scripts:
+	rm $(wasms_for_tests)/*.wasm || true
+	make -C $(wasms_for_tests) debug
+	make opt-wasm-tests
+
 # need python
 checksum-wasm:
 	python3 wasm/checksums.py
@@ -300,6 +317,9 @@ checksum-wasm:
 # this command needs wasm-opt installed
 opt-wasm:
 	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+
+opt-wasm-tests:
+	@for file in $(shell ls wasm_for_tests/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
 
 clean-wasm-scripts:
 	make -C $(wasms) clean

@@ -7,6 +7,9 @@ use namada_core::address::Address;
 use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::storage::Epoch;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -32,31 +35,30 @@ pub enum ProposalError {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
 pub struct InitProposalData {
-    /// The proposal id
-    pub id: u64,
     /// The proposal content
     pub content: Hash,
     /// The proposal author address
     pub author: Address,
     /// The proposal type
     pub r#type: ProposalType,
-    /// The epoch from which voting is allowed
+    /// The epoch in which voting begins
     pub voting_start_epoch: Epoch,
-    /// The epoch from which voting is stopped
+    /// The final epoch in which voting is allowed
     pub voting_end_epoch: Epoch,
-    /// The epoch from which this changes are executed
-    pub grace_epoch: Epoch,
+    /// The epoch in which any changes are executed and become active
+    pub activation_epoch: Epoch,
 }
 
 impl InitProposalData {
     /// Get the hash of the corresponding extra data section
     pub fn get_section_code_hash(&self) -> Option<Hash> {
         match self.r#type {
-            ProposalType::Default(hash) => hash,
+            ProposalType::DefaultWithWasm(hash) => Some(hash),
             _ => None,
         }
     }
@@ -69,6 +71,7 @@ impl InitProposalData {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -88,13 +91,15 @@ impl TryFrom<DefaultProposal> for InitProposalData {
 
     fn try_from(value: DefaultProposal) -> Result<Self, Self::Error> {
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
-            r#type: ProposalType::Default(None),
+            r#type: match value.data {
+                Some(_) => ProposalType::DefaultWithWasm(Hash::default()),
+                None => ProposalType::Default,
+            },
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -107,13 +112,12 @@ impl TryFrom<PgfStewardProposal> for InitProposalData {
             BTreeSet::<AddRemove<Address>>::try_from(value.data).unwrap();
 
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
             r#type: ProposalType::PGFSteward(extra_data),
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -147,13 +151,12 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
         continuous_fundings.extend(retro_fundings);
 
         Ok(InitProposalData {
-            id: value.proposal.id,
             content: Hash::default(),
             author: value.proposal.author,
             r#type: ProposalType::PGFPayment(continuous_fundings), /* here continuous_fundings also contains the retro funding */
             voting_start_epoch: value.proposal.voting_start_epoch,
             voting_end_epoch: value.proposal.voting_end_epoch,
-            grace_epoch: value.proposal.grace_epoch,
+            activation_epoch: value.proposal.activation_epoch,
         })
     }
 }
@@ -167,6 +170,7 @@ impl TryFrom<PgfFundingProposal> for InitProposalData {
     PartialOrd,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -191,12 +195,15 @@ impl StoragePgfFunding {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
 pub enum ProposalType {
-    /// Default governance proposal with the optional wasm code
-    Default(Option<Hash>),
+    /// Default governance proposal
+    Default,
+    /// Governance proposal with wasm code
+    DefaultWithWasm(Hash),
     /// PGF stewards proposal
     PGFSteward(BTreeSet<AddRemove<Address>>),
     /// PGF funding proposal
@@ -243,6 +250,7 @@ where
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Ord,
@@ -294,6 +302,7 @@ impl Display for PGFTarget {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Ord,
@@ -309,7 +318,15 @@ pub struct PGFInternalTarget {
 
 /// The target of a PGF payment
 #[derive(
-    Debug, Clone, PartialEq, Serialize, Deserialize, Ord, Eq, PartialOrd,
+    Debug,
+    Clone,
+    PartialEq,
+    Serialize,
+    Deserialize,
+    Ord,
+    Eq,
+    PartialOrd,
+    BorshDeserializer,
 )]
 pub struct PGFIbcTarget {
     /// The target address on the target chain
@@ -393,6 +410,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
     Eq,
@@ -409,13 +427,18 @@ pub enum PGFAction {
 impl ProposalType {
     /// Check if the proposal type is default
     pub fn is_default(&self) -> bool {
-        matches!(self, ProposalType::Default(_))
+        matches!(self, ProposalType::Default)
+    }
+
+    /// Check if the proposal type is default
+    pub fn is_default_with_wasm(&self) -> bool {
+        matches!(self, ProposalType::DefaultWithWasm(_))
     }
 
     fn format_data(&self) -> String {
         match self {
-            ProposalType::Default(Some(hash)) => format!("Hash: {}", &hash),
-            ProposalType::Default(None) => "".to_string(),
+            ProposalType::DefaultWithWasm(hash) => format!("Hash: {}", &hash),
+            ProposalType::Default => "".to_string(),
             ProposalType::PGFSteward(addresses) => format!(
                 "Addresses:{}",
                 addresses
@@ -437,7 +460,8 @@ impl ProposalType {
 impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProposalType::Default(_) => write!(f, "Default"),
+            ProposalType::Default => write!(f, "Default"),
+            ProposalType::DefaultWithWasm(_) => write!(f, "DefaultWithWasm"),
             ProposalType::PGFSteward(_) => write!(f, "PGF steward"),
             ProposalType::PGFPayment(_) => write!(f, "PGF funding"),
         }
@@ -508,7 +532,7 @@ impl Display for PGFAction {
     }
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 /// Proposal representation when fetched from the storage
 pub struct StorageProposal {
     /// The proposal id
@@ -524,7 +548,7 @@ pub struct StorageProposal {
     /// The epoch from which voting is stopped
     pub voting_end_epoch: Epoch,
     /// The epoch from which this changes are executed
-    pub grace_epoch: Epoch,
+    pub activation_epoch: Epoch,
 }
 
 impl StorageProposal {
@@ -535,9 +559,11 @@ impl StorageProposal {
         is_validator: bool,
     ) -> bool {
         if is_validator {
-            self.voting_start_epoch <= current_epoch
-                && current_epoch * 3
-                    <= self.voting_start_epoch + self.voting_end_epoch * 2
+            crate::utils::is_valid_validator_voting_period(
+                current_epoch,
+                self.voting_start_epoch,
+                self.voting_end_epoch,
+            )
         } else {
             let valid_start_epoch = current_epoch >= self.voting_start_epoch;
             let valid_end_epoch = current_epoch <= self.voting_end_epoch;
@@ -572,7 +598,7 @@ Author: {}
 Content: {:?}
 Start Epoch: {}
 End Epoch: {}
-Grace Epoch: {}
+Activation Epoch: {}
 Status: {}
 Data: {}",
             self.id,
@@ -581,7 +607,7 @@ Data: {}",
             self.content,
             self.voting_start_epoch,
             self.voting_end_epoch,
-            self.grace_epoch,
+            self.activation_epoch,
             self.get_status(current_epoch),
             self.r#type.format_data()
         )
@@ -597,7 +623,7 @@ impl Display for StorageProposal {
             {:2}Author: {}
             {:2}Start Epoch: {}
             {:2}End Epoch: {}
-            {:2}Grace Epoch: {}
+            {:2}Activation Epoch: {}
             ",
             self.id,
             "",
@@ -609,7 +635,7 @@ impl Display for StorageProposal {
             "",
             self.voting_end_epoch,
             "",
-            self.grace_epoch
+            self.activation_epoch
         )
     }
 }
@@ -622,7 +648,7 @@ pub mod testing {
     use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
-    use proptest::{collection, option, prop_compose};
+    use proptest::{collection, prop_compose};
 
     use super::*;
     use crate::storage::vote::testing::arb_proposal_vote;
@@ -706,7 +732,7 @@ pub mod testing {
     /// Generate an arbitrary proposal type
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
-            option::of(arb_hash()).prop_map(ProposalType::Default),
+            arb_hash().prop_map(ProposalType::DefaultWithWasm),
             collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
                 0..10,
@@ -720,22 +746,20 @@ pub mod testing {
     prop_compose! {
         /// Generate a proposal initialization
         pub fn arb_init_proposal()(
-            id: u64,
             content in arb_hash(),
             author in arb_non_internal_address(),
             r#type in arb_proposal_type(),
             voting_start_epoch in arb_epoch(),
             voting_end_epoch in arb_epoch(),
-            grace_epoch in arb_epoch(),
+            activation_epoch in arb_epoch(),
         ) -> InitProposalData {
             InitProposalData {
-                id,
                 content,
                 author,
                 r#type,
                 voting_start_epoch,
                 voting_end_epoch,
-                grace_epoch,
+                activation_epoch,
             }
         }
     }

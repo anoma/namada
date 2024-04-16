@@ -1,8 +1,7 @@
 //! Client RPC queries
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::{self, read_dir};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::str::FromStr;
 
@@ -14,19 +13,15 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::address::{Address, InternalAddress, MASP};
+use namada::core::address::{Address, InternalAddress, MASP, MULTITOKEN};
+use namada::core::collections::{HashMap, HashSet};
 use namada::core::hash::Hash;
-use namada::core::ibc::{is_ibc_denom, IbcTokenHash};
 use namada::core::key::*;
 use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
 };
 use namada::core::token::{Change, MaspDigitPos};
-use namada::governance::cli::offline::{
-    find_offline_proposal, find_offline_votes, read_offline_files,
-    OfflineSignedProposal, OfflineVote,
-};
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
 use namada::governance::pgf::storage::steward::StewardDetail;
@@ -34,14 +29,11 @@ use namada::governance::storage::keys as governance_storage;
 use namada::governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
-use namada::governance::utils::{
-    compute_proposal_result, ProposalVotes, TallyType, TallyVote, VotePower,
-};
+use namada::governance::utils::{ProposalVotes, VotePower};
+use namada::governance::ProposalVote;
 use namada::io::Io;
 use namada::ledger::events::Event;
-use namada::ledger::ibc::storage::{
-    ibc_denom_key, ibc_denom_key_prefix, is_ibc_denom_key,
-};
+use namada::ledger::ibc::storage::ibc_trace_key;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
@@ -58,7 +50,7 @@ use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada_sdk::tendermint_rpc::endpoint::status;
-use namada_sdk::tx::{display_inner_resp, display_wrapper_resp_and_get_result};
+use namada_sdk::tx::display_inner_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
@@ -177,7 +169,8 @@ pub async fn query_transfers(
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let token_map = query_tokens(context, None, None).await;
+    let token_map =
+        query_tokens(context, query_token.as_ref(), None, true).await;
     let tokens = token_map.values().collect();
     let _ = shielded
         .precompute_asset_types(context.client(), tokens)
@@ -201,8 +194,12 @@ pub async fn query_transfers(
         .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
         .collect();
     // Now display historical shielded and transparent transactions
-    for (IndexedTx { height, index: idx }, (epoch, tfer_delta, tx_delta)) in
-        transfers
+    for (
+        IndexedTx {
+            height, index: idx, ..
+        },
+        (epoch, tfer_delta, tx_delta),
+    ) in transfers
     {
         // Check if this transfer pertains to the supplied owner
         let mut relevant = match &query_owner {
@@ -378,15 +375,16 @@ pub async fn query_transparent_balance(
     context: &impl Namada,
     args: args::QueryBalance,
 ) {
-    let prefix = Key::from(
-        Address::Internal(namada::core::address::InternalAddress::Multitoken)
-            .to_db_key(),
-    );
     match (args.token, args.owner) {
         (Some(base_token), Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens =
-                query_tokens(context, Some(&base_token), Some(&owner)).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                Some(&owner),
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 let balance_key =
                     token::storage_key::balance_key(&token, &owner);
@@ -425,7 +423,9 @@ pub async fn query_transparent_balance(
         }
         (None, Some(owner)) => {
             let owner = owner.address().unwrap();
-            let tokens = query_tokens(context, None, Some(&owner)).await;
+            let tokens =
+                query_tokens(context, None, Some(&owner), args.show_ibc_tokens)
+                    .await;
             for (token_alias, token) in tokens {
                 let balance =
                     get_token_balance(context.client(), &token, &owner).await;
@@ -436,7 +436,13 @@ pub async fn query_transparent_balance(
             }
         }
         (Some(base_token), None) => {
-            let tokens = query_tokens(context, Some(&base_token), None).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                None,
+                args.show_ibc_tokens,
+            )
+            .await;
             for (_, token) in tokens {
                 let prefix = token::storage_key::balance_prefix(&token);
                 let balances =
@@ -448,6 +454,7 @@ pub async fn query_transparent_balance(
             }
         }
         (None, None) => {
+            let prefix = Key::from(MULTITOKEN.to_db_key());
             let balances = query_storage_prefix(context, &prefix).await;
             if let Some(balances) = balances {
                 print_balances(context, balances, None, None).await;
@@ -481,7 +488,9 @@ pub async fn query_pinned_balance(
         .collect();
     let _ = context.shielded_mut().await.load().await;
     // Precompute asset types to increase chances of success in decoding
-    let token_map = query_tokens(context, None, None).await;
+    let token_map =
+        query_tokens(context, args.token.as_ref(), None, args.show_ibc_tokens)
+            .await;
     let tokens = token_map.values().collect();
     let _ = context
         .shielded_mut()
@@ -552,8 +561,13 @@ pub async fn query_pinned_balance(
                 )
             }
             (Ok((balance, _undecoded, epoch)), Some(base_token)) => {
-                let tokens =
-                    query_tokens(context, Some(base_token), None).await;
+                let tokens = query_tokens(
+                    context,
+                    Some(base_token),
+                    None,
+                    args.show_ibc_tokens,
+                )
+                .await;
                 for (token_alias, token) in &tokens {
                     let total_balance = balance
                         .0
@@ -725,17 +739,26 @@ async fn lookup_token_alias(
     token: &Address,
     owner: &Address,
 ) -> String {
-    if let Address::Internal(InternalAddress::IbcToken(trace_hash)) = token {
-        let ibc_denom_key =
-            ibc_denom_key(owner.to_string(), trace_hash.to_string());
-        match query_storage_value::<_, String>(context.client(), &ibc_denom_key)
+    match token {
+        Address::Internal(InternalAddress::IbcToken(trace_hash)) => {
+            let ibc_trace_key =
+                ibc_trace_key(owner.to_string(), trace_hash.to_string());
+            match query_storage_value::<_, String>(
+                context.client(),
+                &ibc_trace_key,
+            )
             .await
-        {
-            Ok(ibc_denom) => get_ibc_denom_alias(context, ibc_denom).await,
-            Err(_) => token.to_string(),
+            {
+                Ok(ibc_trace) => {
+                    context.wallet().await.lookup_ibc_token_alias(ibc_trace)
+                }
+                Err(_) => token.to_string(),
+            }
         }
-    } else {
-        context.wallet().await.lookup_alias(token)
+        Address::Internal(InternalAddress::Erc20(eth_addr)) => {
+            eth_addr.to_canonical()
+        }
+        _ => context.wallet().await.lookup_alias(token),
     }
 }
 
@@ -744,79 +767,88 @@ async fn query_tokens(
     context: &impl Namada,
     base_token: Option<&Address>,
     owner: Option<&Address>,
+    show_ibc_tokens: bool,
 ) -> BTreeMap<String, Address> {
     let wallet = context.wallet().await;
-    let mut base_token = base_token;
-    // Base tokens
-    let mut tokens = match base_token {
-        Some(base_token) => {
-            let mut map = BTreeMap::new();
-            if let Some(alias) = wallet.find_alias(base_token) {
-                map.insert(alias.to_string(), base_token.clone());
-            }
-            map
+    let mut tokens = BTreeMap::new();
+    match base_token {
+        Some(token)
+            if matches!(
+                token,
+                Address::Internal(InternalAddress::IbcToken(_))
+            ) =>
+        {
+            let ibc_denom =
+                rpc::query_ibc_denom(context, token.to_string(), owner).await;
+            let alias =
+                context.wallet().await.lookup_ibc_token_alias(ibc_denom);
+            tokens.insert(alias, token.clone());
+            // we don't need to check other IBC prefixes
+            return tokens;
         }
-        None => wallet.tokens_with_aliases(),
-    };
-
-    // Check all IBC denoms if the token isn't an pre-existing token
-    if tokens.is_empty() {
-        base_token = None;
+        Some(token) => {
+            if let Address::Internal(InternalAddress::Erc20(eth_addr)) = token {
+                tokens.insert(eth_addr.to_string(), token.clone());
+            } else {
+                let alias = wallet
+                    .find_alias(token)
+                    .map(|alias| alias.to_string())
+                    .unwrap_or(token.to_string());
+                tokens.insert(alias, token.clone());
+            }
+        }
+        None => tokens = wallet.tokens_with_aliases(),
     }
-    let prefixes = match (base_token, owner) {
-        (Some(base_token), Some(owner)) => vec![
-            ibc_denom_key_prefix(Some(base_token.to_string())),
-            ibc_denom_key_prefix(Some(owner.to_string())),
-        ],
-        (Some(base_token), None) => {
-            vec![ibc_denom_key_prefix(Some(base_token.to_string()))]
-        }
-        (None, Some(_)) => {
-            // Check all IBC denoms because the owner might not know IBC token
-            // transfers in the same chain
-            vec![ibc_denom_key_prefix(None)]
-        }
-        (None, None) => vec![ibc_denom_key_prefix(None)],
-    };
 
-    for prefix in prefixes {
-        let ibc_denoms = query_storage_prefix::<String>(context, &prefix).await;
-        if let Some(ibc_denoms) = ibc_denoms {
-            for (key, ibc_denom) in ibc_denoms {
-                if let Some((_, hash)) = is_ibc_denom_key(&key) {
-                    let ibc_denom_alias =
-                        get_ibc_denom_alias(context, ibc_denom).await;
-                    let hash: IbcTokenHash = hash.parse().expect(
-                        "Parsing an IBC token hash from storage shouldn't fail",
-                    );
-                    let ibc_token =
-                        Address::Internal(InternalAddress::IbcToken(hash));
-                    tokens.insert(ibc_denom_alias, ibc_token);
-                }
+    if !show_ibc_tokens {
+        return tokens;
+    }
+
+    match rpc::query_ibc_tokens(
+        context,
+        base_token.map(|t| t.to_string()),
+        owner,
+    )
+    .await
+    {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let ibc_trace_alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                tokens.insert(ibc_trace_alias, addr);
             }
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
         }
     }
     tokens
 }
 
-async fn get_ibc_denom_alias(
+pub async fn query_ibc_tokens(
     context: &impl Namada,
-    ibc_denom: impl AsRef<str>,
-) -> String {
+    args: args::QueryIbcToken,
+) {
     let wallet = context.wallet().await;
-    is_ibc_denom(&ibc_denom)
-        .map(|(trace_path, base_token)| {
-            let base_token_alias = match Address::decode(&base_token) {
-                Ok(base_token) => wallet.lookup_alias(&base_token),
-                Err(_) => base_token,
-            };
-            if trace_path.is_empty() {
-                base_token_alias
-            } else {
-                format!("{}/{}", trace_path, base_token_alias)
+    let token = args.token.map(|t| {
+        wallet
+            .find_address(&t)
+            .map(|addr| addr.to_string())
+            .unwrap_or(t)
+    });
+    let owner = args.owner.map(|o| o.address().unwrap_or(MASP));
+    match rpc::query_ibc_tokens(context, token, owner.as_ref()).await {
+        Ok(ibc_tokens) => {
+            for (trace, addr) in ibc_tokens {
+                let alias =
+                    context.wallet().await.lookup_ibc_token_alias(trace);
+                display_line!(context.io(), "{}: {}", alias, addr);
             }
-        })
-        .unwrap_or(ibc_denom.as_ref().to_string())
+        }
+        Err(e) => {
+            edisplay_line!(context.io(), "IBC token query failed: {}", e);
+        }
+    }
 }
 
 /// Query votes for the given proposal
@@ -931,7 +963,13 @@ pub async fn query_shielded_balance(
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
         // Precompute asset types to increase chances of success in decoding
-        let token_map = query_tokens(context, None, None).await;
+        let token_map = query_tokens(
+            context,
+            args.token.as_ref(),
+            None,
+            args.show_ibc_tokens,
+        )
+        .await;
         let tokens = token_map.values().collect();
         let _ = shielded
             .precompute_asset_types(context.client(), tokens)
@@ -945,8 +983,13 @@ pub async fn query_shielded_balance(
     match (args.token, owner.is_some()) {
         // Here the user wants to know the balance for a specific token
         (Some(base_token), true) => {
-            let tokens =
-                query_tokens(context, Some(&base_token), Some(&MASP)).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                Some(&MASP),
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 // Query the multi-asset balance at the given spending key
                 let viewing_key =
@@ -1072,7 +1115,13 @@ pub async fn query_shielded_balance(
         // Here the user wants to know the balance for a specific token across
         // users
         (Some(base_token), false) => {
-            let tokens = query_tokens(context, Some(&base_token), None).await;
+            let tokens = query_tokens(
+                context,
+                Some(&base_token),
+                None,
+                args.show_ibc_tokens,
+            )
+            .await;
             for (token_alias, token) in tokens {
                 let mut found_any = false;
                 display_line!(context.io(), "Shielded Token {}:", token_alias);
@@ -1251,133 +1300,43 @@ pub async fn query_proposal_result(
     context: &impl Namada,
     args: args::QueryProposalResult,
 ) {
-    if args.proposal_id.is_some() {
-        let proposal_id =
-            args.proposal_id.expect("Proposal id should be defined.");
+    let proposal_id = args.proposal_id;
 
-        let current_epoch = query_epoch(context.client()).await.unwrap();
-        let proposal_result = namada_sdk::rpc::query_proposal_result(
-            context.client(),
-            proposal_id,
-        )
-        .await;
-        let proposal_query = namada_sdk::rpc::query_proposal_by_id(
-            context.client(),
-            proposal_id,
-        )
-        .await;
+    let current_epoch = query_epoch(context.client()).await.unwrap();
+    let proposal_result =
+        namada_sdk::rpc::query_proposal_result(context.client(), proposal_id)
+            .await;
+    let proposal_query =
+        namada_sdk::rpc::query_proposal_by_id(context.client(), proposal_id)
+            .await;
 
-        if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
-            (proposal_result, proposal_query)
-        {
-            display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-            if current_epoch >= proposal_query.voting_end_epoch {
-                display_line!(context.io(), "{:4}{}", "", proposal_result);
+    if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
+        (proposal_result, proposal_query)
+    {
+        display_line!(context.io(), "Proposal Id: {} ", proposal_id);
+        if current_epoch > proposal_query.voting_end_epoch {
+            display_line!(context.io(), "{:4}{}", "", proposal_result);
+        } else {
+            display_line!(
+                context.io(),
+                "{:4}Still voting until epoch {}",
+                "",
+                proposal_query.voting_end_epoch
+            );
+            let res = format!("{}", proposal_result);
+            if let Some(idx) = res.find(' ') {
+                let slice = &res[idx..];
+                display_line!(context.io(), "{:4}Currently{}", "", slice);
             } else {
                 display_line!(
                     context.io(),
-                    "{:4}Still voting until epoch {}",
+                    "{:4}Error parsing the result string",
                     "",
-                    proposal_query.voting_end_epoch
                 );
-                let res = format!("{}", proposal_result);
-                if let Some(idx) = res.find(' ') {
-                    let slice = &res[idx..];
-                    display_line!(context.io(), "{:4}Currently{}", "", slice);
-                } else {
-                    display_line!(
-                        context.io(),
-                        "{:4}Error parsing the result string",
-                        "",
-                    );
-                }
             }
-        } else {
-            edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
-        };
+        }
     } else {
-        let proposal_folder = args.proposal_folder.expect(
-            "The argument --proposal-folder is required with --offline.",
-        );
-        let data_directory = read_dir(&proposal_folder).unwrap_or_else(|_| {
-            panic!(
-                "Should be able to read {} directory.",
-                proposal_folder.to_string_lossy()
-            )
-        });
-        let files = read_offline_files(data_directory);
-        let proposal_path = find_offline_proposal(&files);
-
-        let proposal = if let Some(path) = proposal_path {
-            let proposal_file =
-                fs::File::open(path).expect("file should open read only");
-            let proposal: OfflineSignedProposal =
-                serde_json::from_reader(proposal_file)
-                    .expect("file should be proper JSON");
-
-            let author_account = rpc::get_account_info(
-                context.client(),
-                &proposal.proposal.author,
-            )
-            .await
-            .unwrap()
-            .expect("Account should exist.");
-
-            let proposal = proposal.validate(
-                &author_account.public_keys_map,
-                author_account.threshold,
-                false,
-            );
-
-            if let Ok(proposal) = proposal {
-                proposal
-            } else {
-                edisplay_line!(
-                    context.io(),
-                    "The offline proposal is not valid."
-                );
-                return;
-            }
-        } else {
-            edisplay_line!(
-                context.io(),
-                "Couldn't find a file name offline_proposal_*.json."
-            );
-            return;
-        };
-
-        let votes = find_offline_votes(&files)
-            .iter()
-            .map(|path| {
-                let vote_file = fs::File::open(path).expect("");
-                let vote: OfflineVote =
-                    serde_json::from_reader(vote_file).expect("");
-                vote
-            })
-            .collect::<Vec<OfflineVote>>();
-
-        let proposal_votes =
-            compute_offline_proposal_votes(context, &proposal, votes.clone())
-                .await;
-        let total_voting_power = get_total_staked_tokens(
-            context.client(),
-            proposal.proposal.tally_epoch,
-        )
-        .await;
-
-        let proposal_result = compute_proposal_result(
-            proposal_votes,
-            total_voting_power,
-            TallyType::TwoThirds,
-        );
-
-        display_line!(
-            context.io(),
-            "Proposal offline: {}",
-            proposal.proposal.hash()
-        );
-        display_line!(context.io(), "Parsed {} votes.", votes.len());
-        display_line!(context.io(), "{:4}{}", "", proposal_result);
+        edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
     }
 }
 
@@ -2769,23 +2728,10 @@ pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
         Ok(resp) => {
             display_inner_resp(context, &resp);
         }
-        Err(err1) => {
-            // If this fails then instead look for an acceptance event.
-            let wrapper_resp = query_tx_response(
-                context.client(),
-                namada_sdk::rpc::TxEventQuery::Accepted(&args.tx_hash),
-            )
-            .await;
-            match wrapper_resp {
-                Ok(resp) => {
-                    display_wrapper_resp_and_get_result(context, &resp);
-                }
-                Err(err2) => {
-                    // Print the errors that caused the lookups to fail
-                    edisplay_line!(context.io(), "{}\n{}", err1, err2);
-                    cli::safe_exit(1)
-                }
-            }
+        Err(err) => {
+            // Print the errors that caused the lookups to fail
+            edisplay_line!(context.io(), "{}", err);
+            cli::safe_exit(1)
         }
     }
 }
@@ -2895,69 +2841,6 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     })
 }
 
-pub async fn compute_offline_proposal_votes(
-    context: &impl Namada,
-    proposal: &OfflineSignedProposal,
-    votes: Vec<OfflineVote>,
-) -> ProposalVotes {
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut validator_voting_power: HashMap<Address, VotePower> =
-        HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
-    let mut delegator_voting_power: HashMap<
-        Address,
-        HashMap<Address, VotePower>,
-    > = HashMap::default();
-    for vote in votes {
-        let is_validator = is_validator(context.client(), &vote.address).await;
-        let is_delegator = is_delegator(context.client(), &vote.address).await;
-        if is_validator {
-            let validator_stake = get_validator_stake(
-                context.client(),
-                proposal.proposal.tally_epoch,
-                &vote.address,
-            )
-            .await
-            .unwrap_or_default();
-            validators_vote.insert(vote.address.clone(), vote.clone().into());
-            validator_voting_power
-                .insert(vote.address.clone(), validator_stake);
-        } else if is_delegator {
-            let validators = get_delegators_delegation_at(
-                context.client(),
-                &vote.address.clone(),
-                proposal.proposal.tally_epoch,
-            )
-            .await;
-
-            for validator in vote.delegations.clone() {
-                let delegator_stake =
-                    validators.get(&validator).cloned().unwrap_or_default();
-
-                delegators_vote
-                    .insert(vote.address.clone(), vote.clone().into());
-                delegator_voting_power
-                    .entry(vote.address.clone())
-                    .or_default()
-                    .insert(validator, delegator_stake);
-            }
-        } else {
-            display_line!(
-                context.io(),
-                "Skipping vote, not a validator/delegator at epoch {}.",
-                proposal.proposal.tally_epoch
-            );
-        }
-    }
-
-    ProposalVotes {
-        validators_vote,
-        validator_voting_power,
-        delegators_vote,
-        delegator_voting_power,
-    }
-}
-
 pub async fn compute_proposal_votes<
     C: namada::ledger::queries::Client + Sync,
 >(
@@ -2969,10 +2852,12 @@ pub async fn compute_proposal_votes<
         .await
         .unwrap();
 
-    let mut validators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut validators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut validator_voting_power: HashMap<Address, VotePower> =
         HashMap::default();
-    let mut delegators_vote: HashMap<Address, TallyVote> = HashMap::default();
+    let mut delegators_vote: HashMap<Address, ProposalVote> =
+        HashMap::default();
     let mut delegator_voting_power: HashMap<
         Address,
         HashMap<Address, VotePower>,
@@ -2985,7 +2870,7 @@ pub async fn compute_proposal_votes<
                     .await
                     .unwrap_or_default();
 
-            validators_vote.insert(vote.validator.clone(), vote.data.into());
+            validators_vote.insert(vote.validator.clone(), vote.data);
             validator_voting_power.insert(vote.validator, validator_stake);
         } else {
             let delegator_stake = get_bond_amount_at(
@@ -2997,8 +2882,7 @@ pub async fn compute_proposal_votes<
             .await;
 
             if let Some(stake) = delegator_stake {
-                delegators_vote
-                    .insert(vote.delegator.clone(), vote.data.into());
+                delegators_vote.insert(vote.delegator.clone(), vote.data);
                 delegator_voting_power
                     .entry(vote.delegator.clone())
                     .or_default()

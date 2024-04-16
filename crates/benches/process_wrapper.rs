@@ -5,7 +5,7 @@ use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
-use namada::tx::Signature;
+use namada::tx::Authorization;
 use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
 use namada_apps::wallet::defaults;
@@ -46,20 +46,20 @@ fn process_tx(c: &mut Criterion) {
             None,
         ),
     )));
-    tx.add_section(namada::tx::Section::Signature(Signature::new(
+    tx.add_section(namada::tx::Section::Authorization(Authorization::new(
         tx.sechashes(),
         [(0, defaults::albert_keypair())].into_iter().collect(),
         None,
     )));
     let wrapper = tx.to_bytes();
 
+    #[allow(clippy::disallowed_methods)]
     let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {
         b.iter_batched(
             || {
                 (
-                    shell.state.in_mem().tx_queue.clone(),
                     // Prevent block out of gas and replay protection
                     shell.state.with_temp_write_log(),
                     ValidationMeta::from(shell.state.read_only()),
@@ -69,7 +69,6 @@ fn process_tx(c: &mut Criterion) {
                 )
             },
             |(
-                tx_queue,
                 mut temp_state,
                 mut validation_meta,
                 mut vp_wasm_cache,
@@ -81,7 +80,6 @@ fn process_tx(c: &mut Criterion) {
                     shell
                         .check_proposal_tx(
                             &wrapper,
-                            &mut tx_queue.iter(),
                             &mut validation_meta,
                             &mut temp_state,
                             datetime,

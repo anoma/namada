@@ -2,10 +2,45 @@
 resolver = "2"
 
 members = [
-    "wasm_source",
-    "tx_template",
-    "vp_template",
+    "tx_become_validator",
+    "tx_bond",
+    "tx_change_bridge_pool",
+    "tx_change_consensus_key",
+    "tx_change_validator_commission",
+    "tx_change_validator_metadata",
+    "tx_claim_rewards",
+    "tx_deactivate_validator",
+    "tx_ibc",
+    "tx_init_account",
+    "tx_init_proposal",
+    "tx_reactivate_validator",
+    "tx_redelegate",
+    "tx_resign_steward",
+    "tx_transfer",
+    "tx_unbond",
+    "tx_update_account",
+    "tx_reveal_pk",
+    "tx_update_steward_commission",
+    "tx_unjail_validator",
+    "tx_vote_proposal",
+    "tx_withdraw",
+    "vp_implicit",
+    "vp_user",
 ]
+
+[workspace.package]
+authors = ["Heliax AG <hello@heliax.dev>"]
+edition = "2021"
+license = "GPL-3.0"
+version = "0.33.0"
+
+[workspace.dependencies]
+namada_tx_prelude = { path = "../crates/tx_prelude" }
+namada_vp_prelude = { path = "../crates/vp_prelude" }
+
+once_cell = { version = "1.8.0" }
+wee_alloc = "0.4.5"
+getrandom = { version = "0.2", features = ["custom"] }
 
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
@@ -14,3 +49,4 @@ lto = true
 panic = "abort"
 # tell llvm to optimize for size (https://rustwasm.github.io/book/reference/code-size.html#tell-llvm-to-optimize-for-size-instead-of-speed)
 opt-level = 'z'
+strip = "debuginfo"

@@ -1,0 +1,1 @@
+1.7.4-namada-beta8-rc2

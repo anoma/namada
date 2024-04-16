@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{create_dir_all, File, OpenOptions};
@@ -28,6 +27,7 @@ use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
 use namada_apps::config::{ethereum_bridge, genesis, Config};
 use namada_apps::{config, wallet};
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::key::{RefTo, SchemeType};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -869,6 +869,7 @@ impl NamadaCmd {
     }
 
     /// Assert that the process exited with failure
+    #[allow(dead_code)]
     pub fn assert_failure(&mut self) {
         // Make sure that there is no unread output first
         let _ = self.exp_eof().unwrap();
@@ -1230,7 +1231,7 @@ where
 #[allow(dead_code)]
 pub mod constants {
     // Paths to the WASMs used for tests
-    pub use namada_sdk::tx::{TX_IBC_WASM, TX_TRANSFER_WASM, VP_USER_WASM};
+    pub use namada_sdk::tx::TX_IBC_WASM;
 
     // User addresses aliases
     pub const ALBERT: &str = "Albert";

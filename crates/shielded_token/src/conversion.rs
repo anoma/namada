@@ -1,22 +1,58 @@
 //! MASP rewards conversions
 
+use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
+#[cfg(any(feature = "multicore", test))]
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
+#[cfg(any(feature = "multicore", test))]
+use namada_core::hash::Hash;
 use namada_core::uint::Uint;
 use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
-use namada_trans_token::inflation::{
-    ShieldedRewardsController, ShieldedValsToUpdate,
+use namada_trans_token::{
+    get_effective_total_native_supply, read_balance, read_denom, Amount,
+    DenominatedAmount, Denomination,
 };
-use namada_trans_token::storage_key::{balance_key, minted_balance_key};
-use namada_trans_token::{read_denom, Amount, DenominatedAmount, Denomination};
 
+#[cfg(any(feature = "multicore", test))]
+use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
 use crate::storage_key::{
     masp_kd_gain_key, masp_kp_gain_key, masp_last_inflation_key,
     masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
 use crate::WithConversionState;
+
+/// Compute shielded token inflation amount
+#[allow(clippy::too_many_arguments)]
+pub fn compute_inflation(
+    locked_amount: Uint,
+    total_native_amount: Uint,
+    max_reward_rate: Dec,
+    last_inflation_amount: Uint,
+    p_gain_nom: Dec,
+    d_gain_nom: Dec,
+    epochs_per_year: u64,
+    target_amount: Dec,
+    last_amount: Dec,
+) -> Uint {
+    let controller = PDController::new(
+        total_native_amount,
+        max_reward_rate,
+        last_inflation_amount,
+        p_gain_nom,
+        d_gain_nom,
+        epochs_per_year,
+        target_amount,
+        last_amount,
+    );
+
+    let metric = Dec::try_from(locked_amount)
+        .expect("Should not fail to convert Uint to Dec");
+    let control_coeff = max_reward_rate / controller.get_epochs_per_year();
+    controller.compute_inflation(control_coeff, metric)
+}
 
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
@@ -58,16 +94,11 @@ where
 
     // Query the storage for information -------------------------
 
-    let native_token = storage.get_native_token()?;
     //// information about the amount of native tokens on the chain
-    let total_native_tokens: Amount = storage
-        .read(&minted_balance_key(&native_token))?
-        .expect("the total supply key should be here");
+    let total_native_tokens = get_effective_total_native_supply(storage)?;
 
     // total locked amount in the Shielded pool
-    let total_tokens_in_masp: Amount = storage
-        .read(&balance_key(token, &masp_addr))?
-        .unwrap_or_default();
+    let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
 
     let epochs_per_year: u64 = storage
         .read(&parameters::storage::get_epochs_per_year_key())?
@@ -99,21 +130,23 @@ where
         .read(&masp_locked_amount_target_key(token))?
         .expect("locked ratio target should properly decode");
 
-    // Creating the PD controller for handing out tokens
-    let controller = ShieldedRewardsController {
-        locked_tokens: total_tokens_in_masp.raw_amount(),
-        total_native_tokens: total_native_tokens.raw_amount(),
-        locked_tokens_target: target_locked_amount.raw_amount(),
-        locked_tokens_last: last_locked_amount.raw_amount(),
-        max_reward_rate,
-        last_inflation_amount: last_inflation.raw_amount(),
-        p_gain_nom: kp_gain_nom,
-        d_gain_nom: kd_gain_nom,
-        epochs_per_year,
-    };
+    let target_locked_dec = Dec::try_from(target_locked_amount.raw_amount())
+        .expect("Should not fail to convert Uint to Dec");
+    let last_locked_dec = Dec::try_from(last_locked_amount.raw_amount())
+        .expect("Should not fail to convert Uint to Dec");
 
-    let ShieldedValsToUpdate { inflation } =
-        ShieldedRewardsController::run(controller);
+    // Initial computation of the new shielded inflation
+    let inflation = compute_inflation(
+        total_tokens_in_masp.raw_amount(),
+        total_native_tokens.raw_amount(),
+        max_reward_rate,
+        last_inflation.raw_amount(),
+        kp_gain_nom,
+        kd_gain_nom,
+        epochs_per_year,
+        target_locked_dec,
+        last_locked_dec,
+    );
 
     // inflation-per-token = inflation / locked tokens = n/PRECISION
     // ∴ n = (inflation * PRECISION) / locked tokens
@@ -211,6 +244,7 @@ where
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
     use namada_storage::ResultExt;
+    use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -220,12 +254,10 @@ where
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
 
-    let mut masp_reward_keys: Vec<_> = storage
-        .conversion_state()
-        .tokens
-        .values()
-        .cloned()
-        .collect();
+    let token_map_key = masp_token_map_key();
+    let token_map: namada_core::masp::TokenMap =
+        storage.read(&token_map_key)?.unwrap_or_default();
+    let mut masp_reward_keys: Vec<_> = token_map.values().cloned().collect();
     let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
     // on it
@@ -295,9 +327,8 @@ where
         let (reward, denom) = calculate_masp_rewards(storage, token)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal: Amount = storage
-            .read(&balance_key(token, &masp_addr))?
-            .unwrap_or_default();
+        let addr_bal = read_balance(storage, token, &masp_addr)?;
+
         // Get the last rewarded amount of the native token
         let normed_inflation = *storage
             .conversion_state_mut()
@@ -517,21 +548,24 @@ where
             );
         }
     }
+    // store only the assets hash because the size is quite large
+    let assets_hash =
+        Hash::sha256(storage.conversion_state().assets.serialize_to_vec());
+    storage.write(&masp_assets_hash_key(), assets_hash)?;
 
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::str::FromStr;
 
     use namada_core::address;
+    use namada_core::collections::HashMap;
     use namada_core::dec::testing::arb_non_negative_dec;
-    use namada_core::time::DurationSecs;
     use namada_core::token::testing::arb_amount;
-    use namada_parameters::{EpochDuration, Parameters};
     use namada_storage::testing::TestStorage;
+    use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_trans_token::write_denom;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -561,31 +595,10 @@ mod tests {
         const ROUNDS: usize = 10;
 
         let mut s = TestStorage::default();
-        let params = Parameters {
-            max_tx_bytes: 1024 * 1024,
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 1,
-                min_duration: DurationSecs(3600),
-            },
-            max_expected_time_per_block: DurationSecs(3600),
-            max_proposal_bytes: Default::default(),
-            max_block_gas: 100,
-            vp_allowlist: vec![],
-            tx_allowlist: vec![],
-            implicit_vp_code_hash: Default::default(),
-            epochs_per_year: 365,
-            max_signatures_per_transaction: 10,
-            staked_ratio: Default::default(),
-            pos_inflation_amount: Default::default(),
-            fee_unshielding_gas_limit: 0,
-            fee_unshielding_descriptions_limit: 0,
-            minimum_gas_price: Default::default(),
-        };
-
         // Initialize the state
         {
             // Parameters
-            namada_parameters::init_storage(&params, &mut s).unwrap();
+            namada_parameters::init_test_storage(&mut s).unwrap();
 
             // Tokens
             let token_params = ShieldedParams {
@@ -615,9 +628,11 @@ mod tests {
                 .unwrap();
 
                 // Insert tokens into MASP conversion state
-                s.conversion_state_mut()
-                    .tokens
-                    .insert(alias.to_string(), token_addr.clone());
+                let token_map_key = masp_token_map_key();
+                let mut token_map: namada_core::masp::TokenMap =
+                    s.read(&token_map_key).unwrap().unwrap_or_default();
+                token_map.insert(alias.to_string(), token_addr.clone());
+                s.write(&token_map_key, token_map).unwrap();
             }
         }
 
@@ -641,5 +656,60 @@ mod tests {
         ]
         .into_iter()
         .collect()
+    }
+
+    #[test]
+    fn test_masp_inflation_playground() {
+        let denom = Uint::from(1_000_000); // token denomination (usually 6)
+        let total_tokens = 10_000_000_000_u64; // 10B naan
+        let mut total_tokens = Uint::from(total_tokens) * denom;
+        let locked_tokens_target = Uint::from(500_000) * denom; // Dependent on the token type
+        let init_locked_ratio = Dec::from_str("0.1").unwrap(); // Arbitrary amount to play around with
+        let init_locked_tokens = (init_locked_ratio
+            * Dec::try_from(locked_tokens_target).unwrap())
+        .to_uint()
+        .unwrap();
+        let epochs_per_year = 730_u64; // SE configuration
+        let max_reward_rate = Dec::from_str("0.01").unwrap(); // Pre-determined based on token type
+        let mut last_inflation_amount = Uint::zero();
+        let p_gain_nom = Dec::from_str("25000").unwrap(); // To be configured
+        let d_gain_nom = Dec::from_str("25000").unwrap(); // To be configured
+
+        let mut locked_amount = init_locked_tokens;
+        let mut locked_tokens_last = init_locked_tokens;
+
+        let num_rounds = 10;
+        println!();
+
+        for round in 0..num_rounds {
+            let inflation = compute_inflation(
+                locked_amount,
+                total_tokens,
+                max_reward_rate,
+                last_inflation_amount,
+                p_gain_nom,
+                d_gain_nom,
+                epochs_per_year,
+                Dec::try_from(locked_tokens_target).unwrap(),
+                Dec::try_from(locked_tokens_last).unwrap(),
+            );
+
+            let rate = Dec::try_from(inflation).unwrap()
+                * Dec::from(epochs_per_year)
+                / Dec::try_from(total_tokens).unwrap();
+
+            println!(
+                "Round {round}: Locked amount: {locked_amount}, inflation \
+                 rate: {rate} -- (raw infl: {inflation})",
+            );
+            // dbg!(&controller);
+
+            last_inflation_amount = inflation;
+            total_tokens += inflation;
+            locked_tokens_last = locked_amount;
+
+            let change_staked_tokens = Uint::from(2) * locked_tokens_target;
+            locked_amount += change_staked_tokens;
+        }
     }
 }

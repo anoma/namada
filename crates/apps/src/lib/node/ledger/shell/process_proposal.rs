@@ -7,7 +7,7 @@ use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::vote_ext::ethereum_tx_data_variants;
 
-use super::block_alloc::{BlockSpace, EncryptedTxsBins};
+use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
 use crate::facade::tendermint_proto::v0_37::abci::RequestProcessProposal;
 use crate::node::ledger::shell::block_alloc::{AllocFailure, TxBin};
@@ -18,19 +18,10 @@ use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
 /// transaction numbers, in a block proposal.
 #[derive(Default)]
 pub struct ValidationMeta {
-    /// Space and gas utilized by encrypted txs.
-    pub encrypted_txs_bins: EncryptedTxsBins,
-    /// Vote extension digest counters.
+    /// Gas emitted by users.
+    pub user_gas: TxBin<BlockGas>,
     /// Space utilized by all txs.
     pub txs_bin: TxBin<BlockSpace>,
-    /// Check if the decrypted tx queue has any elements
-    /// left.
-    ///
-    /// This field will only evaluate to true if a block
-    /// proposer didn't include all decrypted txs in a block.
-    pub decrypted_queue_has_remaining_txs: bool,
-    /// Check if a block has decrypted txs.
-    pub has_decrypted_txs: bool,
 }
 
 impl<D, H> From<&WlState<D, H>> for ValidationMeta
@@ -43,15 +34,10 @@ where
             state.pos_queries().get_max_proposal_bytes().get();
         let max_block_gas =
             namada::parameters::get_max_block_gas(state).unwrap();
-        let encrypted_txs_bin =
-            EncryptedTxsBins::new(max_proposal_bytes, max_block_gas);
+
+        let user_gas = TxBin::init(max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
-        Self {
-            decrypted_queue_has_remaining_txs: false,
-            has_decrypted_txs: false,
-            encrypted_txs_bins: encrypted_txs_bin,
-            txs_bin,
-        }
+        Self { user_gas, txs_bin }
     }
 }
 
@@ -94,7 +80,7 @@ where
                 )
         };
 
-        let (tx_results, meta) = self.process_txs(
+        let tx_results = self.process_txs(
             &req.txs,
             req.time
                 .expect("Missing timestamp in proposed block")
@@ -104,9 +90,8 @@ where
         );
 
         // Erroneous transactions were detected when processing
-        // the leader's proposal. We allow txs that do not
-        // deserialize properly, that have invalid signatures
-        // and that have invalid wasm code to reach FinalizeBlock.
+        // the leader's proposal. We allow txs that are invalid at runtime
+        // (wasm) to reach FinalizeBlock.
         let invalid_txs = tx_results.iter().any(|res| {
             let error = ResultCode::from_u32(res.code).expect(
                 "All error codes returned from process_single_tx are valid",
@@ -121,22 +106,8 @@ where
                 "Found invalid transactions, proposed block will be rejected"
             );
         }
-
-        let has_remaining_decrypted_txs =
-            meta.decrypted_queue_has_remaining_txs;
-        if has_remaining_decrypted_txs {
-            tracing::warn!(
-                proposer = ?HEXUPPER.encode(&req.proposer_address),
-                height = req.height,
-                hash = ?HEXUPPER.encode(&req.hash),
-                "Not all decrypted txs from the previous height were included in
-                 the proposal, the block will be rejected"
-            );
-        }
-
-        let will_reject_proposal = invalid_txs || has_remaining_decrypted_txs;
         (
-            if will_reject_proposal {
+            if invalid_txs {
                 ProcessProposal::Reject
             } else {
                 ProcessProposal::Accept
@@ -157,8 +128,7 @@ where
         txs: &[TxBytes],
         block_time: DateTimeUtc,
         block_proposer: &Address,
-    ) -> (Vec<TxResult>, ValidationMeta) {
-        let mut tx_queue_iter = self.state.in_mem().tx_queue.iter();
+    ) -> Vec<TxResult> {
         let mut temp_state = self.state.with_temp_write_log();
         let mut metadata = ValidationMeta::from(self.state.read_only());
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
@@ -169,7 +139,6 @@ where
             .map(|tx_bytes| {
                 let result = self.check_proposal_tx(
                     tx_bytes,
-                    &mut tx_queue_iter,
                     &mut metadata,
                     &mut temp_state,
                     block_time,
@@ -192,10 +161,7 @@ where
                 result
             })
             .collect();
-        metadata.decrypted_queue_has_remaining_txs =
-            !self.state.in_mem().tx_queue.is_empty()
-                && tx_queue_iter.next().is_some();
-        (tx_results, metadata)
+        tx_results
     }
 
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
@@ -221,10 +187,9 @@ where
     /// proposal is rejected (unless we can simply overwrite them in the
     /// next block).
     #[allow(clippy::too_many_arguments)]
-    pub fn check_proposal_tx<'a, CA>(
+    pub fn check_proposal_tx<CA>(
         &self,
         tx_bytes: &[u8],
-        tx_queue_iter: &mut impl Iterator<Item = &'a TxInQueue>,
         metadata: &mut ValidationMeta,
         temp_state: &mut TempWlState<D, H>,
         block_time: DateTimeUtc,
@@ -437,75 +402,14 @@ where
                     },
                 }
             }
-            TxType::Decrypted(tx_header) => {
-                metadata.has_decrypted_txs = true;
-                match tx_queue_iter.next() {
-                    Some(wrapper) => {
-                        if wrapper.tx.raw_header_hash() != tx.raw_header_hash()
-                        {
-                            TxResult {
-                                code: ResultCode::InvalidOrder.into(),
-                                info: "Process proposal rejected a decrypted \
-                                       transaction that violated the tx order \
-                                       determined in the previous block"
-                                    .into(),
-                            }
-                        } else if matches!(
-                            tx_header,
-                            DecryptedTx::Undecryptable
-                        ) {
-                            // DKG is disabled, txs are not actually encrypted
-                            TxResult {
-                                code: ResultCode::InvalidTx.into(),
-                                info: "The encrypted payload of tx was \
-                                       incorrectly marked as un-decryptable"
-                                    .into(),
-                            }
-                        } else {
-                            match tx.header().expiration {
-                                Some(tx_expiration)
-                                    if block_time > tx_expiration =>
-                                {
-                                    TxResult {
-                                        code: ResultCode::ExpiredDecryptedTx
-                                            .into(),
-                                        info: format!(
-                                            "Tx expired at {:#?}, block time: \
-                                             {:#?}",
-                                            tx_expiration, block_time
-                                        ),
-                                    }
-                                }
-                                _ => TxResult {
-                                    code: ResultCode::Ok.into(),
-                                    info: "Process Proposal accepted this \
-                                           transaction"
-                                        .into(),
-                                },
-                            }
-                        }
-                    }
-                    None => TxResult {
-                        code: ResultCode::ExtraTxs.into(),
-                        info: "Received more decrypted txs than expected"
-                            .into(),
-                    },
-                }
-            }
             TxType::Wrapper(wrapper) => {
-                // Account for gas and space. This is done even if the
-                // transaction is later deemed invalid, to
-                // incentivize the proposer to include only
-                // valid transaction and avoid wasting block
-                // resources (ABCI only)
+                // Account for the tx's resources
+                let allocated_gas =
+                    metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
                 let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
-                    // Account for the tx's resources even in case of an error.
-                    // Ignore any allocation error
-                    let _ = metadata
-                        .encrypted_txs_bins
-                        .try_dump(tx_bytes, u64::from(wrapper.gas_limit));
-
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err()
+                    || allocated_gas.is_err()
+                {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
@@ -513,31 +417,14 @@ where
                     };
                 }
 
-                // try to allocate space and gas for this encrypted tx
-                if let Err(e) = metadata
-                    .encrypted_txs_bins
-                    .try_dump(tx_bytes, u64::from(wrapper.gas_limit))
-                {
+                // Tx allowlist
+                if let Err(err) = check_tx_allowed(&tx, &self.state) {
                     return TxResult {
-                        code: ResultCode::AllocationError.into(),
-                        info: e,
-                    };
-                }
-                // decrypted txs shouldn't show up before wrapper txs
-                if metadata.has_decrypted_txs {
-                    return TxResult {
-                        code: ResultCode::InvalidTx.into(),
-                        info: "Decrypted txs should not be proposed before \
-                               wrapper txs"
-                            .into(),
-                    };
-                }
-                if hints::unlikely(self.encrypted_txs_not_allowed()) {
-                    return TxResult {
-                        code: ResultCode::AllocationError.into(),
-                        info: "Wrapper txs not allowed at the current block \
-                               height"
-                            .into(),
+                        code: ResultCode::TxNotAllowlisted.into(),
+                        info: format!(
+                            "Tx code didn't pass the allowlist check: {}",
+                            err
+                        ),
                     };
                 }
 
@@ -607,14 +494,6 @@ where
     ) -> shim::response::RevertProposal {
         Default::default()
     }
-
-    /// Checks if it is not possible to include encrypted txs at the current
-    /// block height.
-    pub(super) fn encrypted_txs_not_allowed(&self) -> bool {
-        let is_2nd_height_off = self.is_deciding_offset_within_epoch(1);
-        let is_3rd_height_off = self.is_deciding_offset_within_epoch(2);
-        is_2nd_height_off || is_3rd_height_off
-    }
 }
 
 fn process_proposal_fee_check<D, H, CA>(
@@ -655,12 +534,17 @@ where
 mod test_process_proposal {
     use namada::core::key::*;
     use namada::core::storage::Epoch;
+    use namada::eth_bridge::storage::eth_bridge_queries::{
+        is_bridge_comptime_enabled, EthBridgeQueries,
+    };
     use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
-    use namada::tx::{Code, Data, Signature, Signed};
-    use namada::vote_ext::{bridge_pool_roots, ethereum_events};
+    use namada::tx::{Authorization, Code, Data, Signed};
+    use namada::vote_ext::{
+        bridge_pool_roots, ethereum_events, validator_set_update,
+    };
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
@@ -671,6 +555,69 @@ mod test_process_proposal {
     use crate::wallet;
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+
+    /// Check that we reject a validator set update protocol tx
+    /// if the bridge is not active.
+    #[test]
+    fn check_rejected_valset_upd_bridge_inactive() {
+        if is_bridge_comptime_enabled() {
+            // NOTE: validator set updates are always signed
+            // when the bridge is enabled at compile time
+            return;
+        }
+
+        let (shell, _, _, _) = test_utils::setup_at_height(3);
+        let ext = {
+            let eth_hot_key =
+                shell.mode.get_eth_bridge_keypair().expect("Test failed");
+            let signing_epoch = shell.state.in_mem().get_current_epoch().0;
+            let next_epoch = signing_epoch.next();
+            let voting_powers = shell
+                .state
+                .ethbridge_queries()
+                .get_consensus_eth_addresses(Some(next_epoch))
+                .iter()
+                .map(|(eth_addr_book, _, voting_power)| {
+                    (eth_addr_book, voting_power)
+                })
+                .collect();
+            let validator_addr = shell
+                .mode
+                .get_validator_address()
+                .expect("Test failed")
+                .clone();
+            let ext = validator_set_update::Vext {
+                voting_powers,
+                validator_addr,
+                signing_epoch,
+            };
+            ext.sign(eth_hot_key)
+        };
+        let request = {
+            let protocol_key =
+                shell.mode.get_protocol_key().expect("Test failed");
+            let tx = EthereumTxData::ValSetUpdateVext(ext)
+                .sign(protocol_key, shell.chain_id.clone())
+                .to_bytes();
+            ProcessProposal { txs: vec![tx] }
+        };
+
+        let response = if let Err(TestError::RejectProposal(resp)) =
+            shell.process_proposal(request)
+        {
+            if let [resp] = resp.as_slice() {
+                resp.clone()
+            } else {
+                panic!("Test failed")
+            }
+        } else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            response.result.code,
+            u32::from(ResultCode::InvalidVoteExtension)
+        );
+    }
 
     /// Check that we reject an eth events protocol tx
     /// if the bridge is not active.
@@ -694,13 +641,15 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        let [resp]: [ProcessedTx; 1] = shell
-            .process_proposal(request.clone())
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
-        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
-        deactivate_bridge(&mut shell);
+        if is_bridge_comptime_enabled() {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
+            assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
+            deactivate_bridge(&mut shell);
+        }
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
         {
@@ -745,14 +694,16 @@ mod test_process_proposal {
             .to_bytes();
         let request = ProcessProposal { txs: vec![tx] };
 
-        let [resp]: [ProcessedTx; 1] = shell
-            .process_proposal(request.clone())
-            .expect("Test failed")
-            .try_into()
-            .expect("Test failed");
+        if is_bridge_comptime_enabled() {
+            let [resp]: [ProcessedTx; 1] = shell
+                .process_proposal(request.clone())
+                .expect("Test failed")
+                .try_into()
+                .expect("Test failed");
 
-        assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
-        deactivate_bridge(&mut shell);
+            assert_eq!(resp.result.code, u32::from(ResultCode::Ok));
+            deactivate_bridge(&mut shell);
+        }
         let response = if let Err(TestError::RejectProposal(resp)) =
             shell.process_proposal(request)
         {
@@ -957,7 +908,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1031,7 +982,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1099,7 +1050,7 @@ mod test_process_proposal {
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Signature(Signature::new(
+        outer_tx.add_section(Section::Authorization(Authorization::new(
             outer_tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1130,190 +1081,6 @@ mod test_process_proposal {
                  was insufficient to pay fee. All the available transparent \
                  funds have been moved to the block proposer"
             )
-        );
-    }
-
-    /// Test that if the expected order of decrypted txs is
-    /// validated, [`process_proposal`] rejects it
-    #[test]
-    fn test_decrypted_txs_out_of_order() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-        let mut txs = vec![];
-        for i in 0..3 {
-            let mut outer_tx =
-                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                    Fee {
-                        amount_per_gas_unit: DenominatedAmount::native(
-                            Amount::native_whole(i as u64),
-                        ),
-                        token: shell.state.in_mem().native_token.clone(),
-                    },
-                    keypair.ref_to(),
-                    Epoch(0),
-                    GAS_LIMIT_MULTIPLIER.into(),
-                    None,
-                ))));
-            outer_tx.header.chain_id = shell.chain_id.clone();
-            outer_tx
-                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-            outer_tx.set_data(Data::new(
-                format!("transaction data: {}", i).as_bytes().to_owned(),
-            ));
-            let gas_limit =
-                Gas::from(outer_tx.header().wrapper().unwrap().gas_limit)
-                    .checked_sub(Gas::from(outer_tx.to_bytes().len() as u64))
-                    .unwrap();
-            shell.enqueue_tx(outer_tx.clone(), gas_limit);
-
-            outer_tx.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-            txs.push(outer_tx);
-        }
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![
-                    txs[0].to_bytes(),
-                    txs[2].to_bytes(),
-                    txs[1].to_bytes(),
-                ],
-            };
-            if let Err(TestError::RejectProposal(mut resp)) =
-                shell.process_proposal(request)
-            {
-                assert_eq!(resp.len(), 3);
-                resp.remove(1)
-            } else {
-                panic!("Test failed")
-            }
-        };
-        assert_eq!(response.result.code, u32::from(ResultCode::InvalidOrder));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "Process proposal rejected a decrypted transaction that \
-                 violated the tx order determined in the previous block"
-            ),
-        );
-    }
-
-    /// Test that a block containing a tx incorrectly labelled as undecryptable
-    /// is rejected by [`process_proposal`]
-    #[test]
-    fn test_incorrectly_labelled_as_undecryptable() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-
-        let mut tx = Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: DenominatedAmount::native(
-                    Default::default(),
-                ),
-                token: shell.state.in_mem().native_token.clone(),
-            },
-            keypair.ref_to(),
-            Epoch(0),
-            GAS_LIMIT_MULTIPLIER.into(),
-            None,
-        ))));
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
-            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
-            .unwrap();
-        shell.enqueue_tx(tx.clone(), gas_limit);
-
-        tx.header.tx_type = TxType::Decrypted(DecryptedTx::Undecryptable);
-
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![tx.to_bytes()],
-            };
-            if let Err(TestError::RejectProposal(resp)) =
-                shell.process_proposal(request)
-            {
-                if let [resp] = resp.as_slice() {
-                    resp.clone()
-                } else {
-                    panic!("Test failed")
-                }
-            } else {
-                panic!("Test failed")
-            }
-        };
-        assert_eq!(response.result.code, u32::from(ResultCode::InvalidTx));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "The encrypted payload of tx was incorrectly marked as \
-                 un-decryptable"
-            ),
-        )
-    }
-
-    /// Test that if a wrapper tx contains  marked undecryptable the proposal is
-    /// rejected
-    #[test]
-    fn test_undecryptable() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = crate::wallet::defaults::daewon_keypair();
-        // not valid tx bytes
-        let wrapper = WrapperTx {
-            fee: Fee {
-                amount_per_gas_unit: DenominatedAmount::native(
-                    Default::default(),
-                ),
-                token: shell.state.in_mem().native_token.clone(),
-            },
-            pk: keypair.ref_to(),
-            epoch: Epoch(0),
-            gas_limit: GAS_LIMIT_MULTIPLIER.into(),
-            unshield_section_hash: None,
-        };
-
-        let tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
-        let mut decrypted = tx.clone();
-        decrypted.update_header(TxType::Decrypted(DecryptedTx::Undecryptable));
-
-        let gas_limit = Gas::from(tx.header().wrapper().unwrap().gas_limit)
-            .checked_sub(Gas::from(tx.to_bytes().len() as u64))
-            .unwrap();
-        shell.enqueue_tx(tx, gas_limit);
-
-        let request = ProcessProposal {
-            txs: vec![decrypted.to_bytes()],
-        };
-        shell.process_proposal(request).expect_err("Test failed");
-    }
-
-    /// Test that if more decrypted txs are submitted to
-    /// [`process_proposal`] than expected, they are rejected
-    #[test]
-    fn test_too_many_decrypted_txs() {
-        let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-
-        let request = ProcessProposal {
-            txs: vec![tx.to_bytes()],
-        };
-        let response = if let Err(TestError::RejectProposal(resp)) =
-            shell.process_proposal(request)
-        {
-            if let [resp] = resp.as_slice() {
-                resp.clone()
-            } else {
-                panic!("Test failed")
-            }
-        } else {
-            panic!("Test failed")
-        };
-        assert_eq!(response.result.code, u32::from(ResultCode::ExtraTxs));
-        assert_eq!(
-            response.result.info,
-            String::from("Received more decrypted txs than expected"),
         );
     }
 
@@ -1379,7 +1146,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1449,7 +1216,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1503,7 +1270,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1564,7 +1331,7 @@ mod test_process_proposal {
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1580,7 +1347,7 @@ mod test_process_proposal {
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         ))));
-        new_wrapper.add_section(Section::Signature(Signature::new(
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
             [(0, keypair_2)].into_iter().collect(),
             None,
@@ -1620,7 +1387,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1682,7 +1449,7 @@ mod test_process_proposal {
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1700,55 +1467,6 @@ mod test_process_proposal {
                     u32::from(ResultCode::ExpiredTx)
                 );
             }
-        }
-    }
-
-    /// Test that an expired decrypted transaction is marked as rejected but
-    /// still allows the block to be accepted
-    #[test]
-    fn test_expired_decrypted() {
-        let (mut shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
-
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.header.expiration = Some(DateTimeUtc::default());
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
-
-        shell.enqueue_tx(wrapper.clone(), GAS_LIMIT_MULTIPLIER.into());
-
-        let decrypted =
-            wrapper.update_header(TxType::Decrypted(DecryptedTx::Decrypted));
-
-        // Run validation
-        let request = ProcessProposal {
-            txs: vec![decrypted.to_bytes()],
-        };
-        match shell.process_proposal(request) {
-            Ok(txs) => {
-                assert_eq!(txs.len(), 1);
-                assert_eq!(
-                    txs[0].result.code,
-                    u32::from(ResultCode::ExpiredDecryptedTx)
-                );
-            }
-            Err(_) => panic!("Test failed"),
         }
     }
 
@@ -1776,7 +1494,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1791,7 +1509,7 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ResultCode::AllocationError)
+                    u32::from(ResultCode::TxGasLimit)
                 );
             }
         }
@@ -1818,7 +1536,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -1866,7 +1584,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1909,7 +1627,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1954,7 +1672,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -1999,7 +1717,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
+        wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, crate::wallet::defaults::albert_keypair())]
                 .into_iter()
@@ -2019,65 +1737,6 @@ mod test_process_proposal {
                     u32::from(ResultCode::FeeError)
                 );
             }
-        }
-    }
-
-    /// Test if we reject wrapper txs when they shouldn't be included in blocks.
-    ///
-    /// Currently, the conditions to reject wrapper
-    /// txs are simply to check if we are at the 2nd
-    /// or 3rd height offset within an epoch.
-    #[test]
-    fn test_include_only_protocol_txs() {
-        let (mut shell, _recv, _, _) = test_utils::setup_at_height(1u64);
-        let keypair = gen_keypair();
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(0.into()),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                Epoch(0),
-                GAS_LIMIT_MULTIPLIER.into(),
-                None,
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Signature(Signature::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
-        let wrapper = wrapper.to_bytes();
-        for height in [1u64, 2] {
-            if let Some(b) = shell.state.in_mem_mut().last_block.as_mut() {
-                b.height = height.into();
-            }
-            let response = {
-                let request = ProcessProposal {
-                    txs: vec![wrapper.clone()],
-                };
-                if let Err(TestError::RejectProposal(mut resp)) =
-                    shell.process_proposal(request)
-                {
-                    assert_eq!(resp.len(), 1);
-                    resp.remove(0)
-                } else {
-                    panic!("Test failed")
-                }
-            };
-            assert_eq!(
-                response.result.code,
-                u32::from(ResultCode::AllocationError)
-            );
-            assert_eq!(
-                response.result.info,
-                String::from(
-                    "Wrapper txs not allowed at the current block height"
-                ),
-            );
         }
     }
 
@@ -2115,7 +1774,7 @@ mod test_process_proposal {
             wrapper
                 .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
-            wrapper.add_section(Section::Signature(Signature::new(
+            wrapper.add_section(Section::Authorization(Authorization::new(
                 wrapper.sechashes(),
                 [(0, keypair)].into_iter().collect(),
                 None,
@@ -2156,6 +1815,12 @@ mod test_process_proposal {
         use namada::core::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
+
+        if !is_bridge_comptime_enabled() {
+            // NOTE: this test doesn't work if the ethereum bridge
+            // is disabled at compile time.
+            return;
+        }
 
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(LAST_HEIGHT);
         shell

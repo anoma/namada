@@ -11,6 +11,7 @@ use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada::state::StorageHasher;
 use namada_sdk::state::FullAccessState;
+pub use rocksdb::RocksDBUpdateVisitor;
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);
@@ -52,11 +53,10 @@ fn new_blake2b() -> Blake2b {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use borsh::BorshDeserialize;
     use itertools::Itertools;
     use namada::core::chain::ChainId;
+    use namada::core::collections::HashMap;
     use namada::core::ethereum_events::Uint;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
@@ -166,11 +166,10 @@ mod tests {
             implicit_vp_code_hash: Default::default(),
             epochs_per_year: 365,
             max_signatures_per_transaction: 10,
-            staked_ratio: Default::default(),
-            pos_inflation_amount: Default::default(),
             fee_unshielding_gas_limit: 0,
             fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
+            is_native_token_transferable: true,
         };
         parameters::init_storage(&params, &mut state).expect("Test failed");
         // insert and commit
@@ -472,11 +471,6 @@ mod tests {
         let mut batch = PersistentState::batch();
         for (height, key, write_type) in blocks_write_type.clone() {
             if height != state.in_mem().block.height {
-                // to check the root later
-                roots.insert(
-                    state.in_mem().block.height,
-                    state.in_mem().merkle_root(),
-                );
                 if state.in_mem().block.height.0 % 5 == 0 {
                     // new epoch every 5 heights
                     state.in_mem_mut().block.epoch =
@@ -485,6 +479,11 @@ mod tests {
                     state.in_mem_mut().block.pred_epochs.new_epoch(height);
                 }
                 state.commit_block_from_batch(batch)?;
+                // to check the root later
+                roots.insert(
+                    state.in_mem().block.height,
+                    state.in_mem().merkle_root(),
+                );
                 let hash = BlockHash::default();
                 let next_height = state.in_mem().block.height.next_height();
                 state.in_mem_mut().begin_block(hash, next_height)?;
@@ -778,10 +777,6 @@ mod tests {
         Key::parse("testing2").unwrap()
     }
 
-    fn merkle_tree_key_filter(key: &Key) -> bool {
-        key == &test_key_1()
-    }
-
     #[test]
     fn test_persistent_storage_writing_without_merklizing_or_diffs() {
         let db_path =
@@ -792,7 +787,8 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            merkle_tree_key_filter,
+            // Only merkelize and persist diffs for `test_key_1`
+            |key: &Key| -> bool { key == &test_key_1() },
         );
         // Start the first block
         let first_height = BlockHeight::first();
@@ -868,12 +864,12 @@ mod tests {
         // need to have diffs for at least 1 block for rollback purposes
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, true)
+            .read_rollback_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, false)
+            .read_rollback_val(&key2, first_height, false)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
@@ -931,12 +927,12 @@ mod tests {
         // Check that key-val-2 diffs don't exist for block 0 anymore
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, true)
+            .read_rollback_val(&key2, first_height, true)
             .unwrap();
         assert!(res2.is_none());
         let res2 = state
             .db()
-            .read_diffs_val(&key2, first_height, false)
+            .read_rollback_val(&key2, first_height, false)
             .unwrap();
         assert!(res2.is_none());
 
@@ -944,14 +940,14 @@ mod tests {
         // val2 and no "new" value
         let res2 = state
             .db()
-            .read_diffs_val(&key2, second_height, true)
+            .read_rollback_val(&key2, second_height, true)
             .unwrap()
             .unwrap();
         let res2 = u64::try_from_slice(&res2).unwrap();
         assert_eq!(res2, val2);
         let res2 = state
             .db()
-            .read_diffs_val(&key2, second_height, false)
+            .read_rollback_val(&key2, second_height, false)
             .unwrap();
         assert!(res2.is_none());
     }

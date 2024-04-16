@@ -1,17 +1,19 @@
 //! Implementation of chain initialization for the Shell
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ops::ControlFlow;
 
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
 use namada::account::protocol_pk_key;
+use namada::core::collections::HashMap;
 use namada::core::hash::Hash as CodeHash;
 use namada::core::time::{TimeZone, Utc};
 use namada::ledger::parameters::Parameters;
 use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::BecomeValidator;
 use namada::state::StorageWrite;
+use namada::token::storage_key::masp_token_map_key;
 use namada::token::{credit_tokens, write_denom};
 use namada::vm::validate_untrusted_wasm;
 use namada_sdk::eth_bridge::EthBridgeStatus;
@@ -27,6 +29,7 @@ use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint_proto::google::protobuf;
+use crate::node::ledger;
 use crate::wasm_loader;
 
 /// Errors that represent panics in normal flow but get demoted to errors
@@ -84,7 +87,8 @@ where
     pub fn init_chain(
         &mut self,
         init: request::InitChain,
-        #[cfg(any(test, feature = "testing"))] _num_validators: u64,
+        #[cfg(any(test, feature = "testing", feature = "benches"))]
+        _num_validators: u64,
     ) -> Result<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.state.in_mem().chain_id.as_str();
@@ -93,6 +97,38 @@ where
                 "Current chain ID: {}, Tendermint chain ID: {}",
                 chain_id, init.chain_id
             )));
+        }
+        if ledger::migrating_state().is_some() {
+            let rsp = response::InitChain {
+                validators: self
+                    .get_abci_validator_updates(true, |pk, power| {
+                        let pub_key: crate::facade::tendermint::PublicKey =
+                            pk.into();
+                        let power =
+                            crate::facade::tendermint::vote::Power::try_from(
+                                power,
+                            )
+                            .unwrap();
+                        validator::Update { pub_key, power }
+                    })
+                    .expect("Must be able to set genesis validator set"),
+                app_hash: self
+                    .state
+                    .in_mem()
+                    .merkle_root()
+                    .0
+                    .to_vec()
+                    .try_into()
+                    .expect("Infallible"),
+                ..Default::default()
+            };
+            debug_assert!(!rsp.validators.is_empty());
+            debug_assert!(
+                !Vec::<u8>::from(rsp.app_hash.clone())
+                    .iter()
+                    .all(|&b| b == 0)
+            );
+            return Ok(rsp);
         }
 
         // Read the genesis files
@@ -215,6 +251,10 @@ where
                 .unwrap();
         }
 
+        // Initialize IBC parameters
+        let ibc_params = genesis.get_ibc_params();
+        ibc_params.init_storage(&mut self.state).unwrap();
+
         // Depends on parameters being initialized
         self.state
             .in_mem_mut()
@@ -274,7 +314,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<(), Vec<u8>> {
-        use std::collections::hash_map::Entry;
+        use namada::core::collections::hash_map::Entry;
         let Some(vp_filename) = self
             .validate(
                 genesis
@@ -418,6 +458,7 @@ where
 
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
+        let mut token_map = BTreeMap::new();
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
@@ -438,13 +479,12 @@ where
                 // add token addresses to the masp reward conversions lookup
                 // table.
                 let alias = alias.to_string();
-                self.state
-                    .in_mem_mut()
-                    .conversion_state
-                    .tokens
-                    .insert(alias, address.clone());
+                token_map.insert(alias, address.clone());
             }
         }
+        self.state
+            .write(&masp_token_map_key(), token_map)
+            .expect("Couldn't init token accounts");
     }
 
     /// Init genesis token balances
@@ -937,7 +977,6 @@ impl<T> Policy<T> {
 
 #[cfg(all(test, not(feature = "integration")))]
 mod test {
-    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use namada::core::string_encoding::StringEncoded;

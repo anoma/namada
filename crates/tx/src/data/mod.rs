@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use bitflags::bitflags;
 pub use decrypted::*;
 use namada_core::address::Address;
 use namada_core::borsh::{
@@ -27,6 +28,9 @@ use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{Gas, VpsGas};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
@@ -46,6 +50,7 @@ use crate::data::protocol::ProtocolTx;
     ToPrimitive,
     PartialEq,
     Eq,
+    Hash,
     Serialize,
     Deserialize,
 )]
@@ -60,30 +65,24 @@ pub enum ResultCode {
     InvalidTx = 2,
     /// Invalid signature
     InvalidSig = 3,
-    /// Tx is in invalid order
-    InvalidOrder = 4,
-    /// Tx wasn't expected
-    ExtraTxs = 5,
-    /// Undecryptable
-    Undecryptable = 6,
     /// The block is full
-    AllocationError = 7,
+    AllocationError = 4,
     /// Replayed tx
-    ReplayTx = 8,
+    ReplayTx = 5,
     /// Invalid chain ID
-    InvalidChainId = 9,
+    InvalidChainId = 6,
     /// Expired tx
-    ExpiredTx = 10,
+    ExpiredTx = 7,
     /// Exceeded gas limit
-    TxGasLimit = 11,
+    TxGasLimit = 8,
     /// Error in paying tx fee
-    FeeError = 12,
+    FeeError = 9,
     /// Invalid vote extension
-    InvalidVoteExtension = 13,
+    InvalidVoteExtension = 10,
     /// Tx is too large
-    TooLarge = 14,
-    /// Decrypted tx is expired
-    ExpiredDecryptedTx = 15,
+    TooLarge = 11,
+    /// Tx code is not allowlisted
+    TxNotAllowlisted = 12,
     // =========================================================================
     // WARN: These codes shouldn't be changed between version!
 }
@@ -96,11 +95,10 @@ impl ResultCode {
         // NOTE: pattern match on all `ResultCode` variants, in order
         // to catch potential bugs when adding new codes
         match self {
-            Ok | WasmRuntimeError | ExpiredDecryptedTx => true,
-            InvalidTx | InvalidSig | InvalidOrder | ExtraTxs
-            | Undecryptable | AllocationError | ReplayTx | InvalidChainId
-            | ExpiredTx | TxGasLimit | FeeError | InvalidVoteExtension
-            | TooLarge => false,
+            Ok | WasmRuntimeError => true,
+            InvalidTx | InvalidSig | AllocationError | ReplayTx
+            | InvalidChainId | ExpiredTx | TxGasLimit | FeeError
+            | InvalidVoteExtension | TooLarge | TxNotAllowlisted => false,
         }
     }
 
@@ -169,12 +167,15 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
 pub struct TxResult {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
+    /// Storage keys touched by the wrapper transaction
+    pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction
@@ -194,6 +195,44 @@ impl TxResult {
     }
 }
 
+bitflags! {
+    /// Validity predicate status flags.
+    #[derive(
+        Default, Debug, Clone, Copy, PartialEq, Eq,
+        PartialOrd, Ord, Hash, Serialize, Deserialize,
+    )]
+    pub struct VpStatusFlags: u64 {
+        /// The transaction had an invalid signature.
+        const INVALID_SIGNATURE = 0b0000_0001;
+    }
+}
+
+impl BorshSerialize for VpStatusFlags {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&self.bits(), writer)
+    }
+}
+
+impl BorshDeserialize for VpStatusFlags {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        let bits = <u64 as BorshDeserialize>::deserialize_reader(reader)?;
+        VpStatusFlags::from_bits(bits).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Unexpected VpStatusFlags flag in input",
+            )
+        })
+    }
+}
+
+#[cfg(feature = "migrations")]
+namada_macros::derive_borshdeserializer!(VpStatusFlags);
+
 /// Result of checking a transaction with validity predicates
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
@@ -202,6 +241,7 @@ impl TxResult {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Serialize,
     Deserialize,
 )]
@@ -214,8 +254,10 @@ pub struct VpsResult {
     pub gas_used: VpsGas,
     /// Errors occurred in any of the VPs, if any
     pub errors: Vec<(Address, String)>,
-    /// Sentinel to signal an invalid transaction signature
-    pub invalid_sig: bool,
+    /// Validity predicate status flags, containing info
+    /// about conditions that caused their evaluation to
+    /// fail.
+    pub status_flags: VpStatusFlags,
 }
 
 impl fmt::Display for TxResult {
@@ -290,6 +332,7 @@ fn iterable_to_string<T: fmt::Display>(
     Debug,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -299,8 +342,6 @@ pub enum TxType {
     Raw,
     /// A Tx that contains an encrypted raw tx
     Wrapper(Box<WrapperTx>),
-    /// An attempted decryption of a wrapper tx
-    Decrypted(DecryptedTx),
     /// Txs issued by validators as part of internal protocols
     Protocol(Box<ProtocolTx>),
 }
@@ -347,7 +388,7 @@ mod test_process_tx {
     use namada_core::token::{Amount, DenominatedAmount};
 
     use super::*;
-    use crate::{Code, Data, Section, Signature, Tx, TxError};
+    use crate::{Authorization, Code, Data, Section, Tx, TxError};
 
     fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
@@ -408,7 +449,7 @@ mod test_process_tx {
         let data_sec = tx
             .set_data(Data::new("transaction data".as_bytes().to_owned()))
             .clone();
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             vec![tx.raw_header_hash()],
             [(0, gen_keypair())].into_iter().collect(),
             None,
@@ -444,7 +485,7 @@ mod test_process_tx {
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        tx.add_section(Section::Signature(Signature::new(
+        tx.add_section(Section::Authorization(Authorization::new(
             tx.sechashes(),
             [(0, keypair)].into_iter().collect(),
             None,
@@ -475,76 +516,5 @@ mod test_process_tx {
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let result = tx.validate_tx().expect_err("Test failed");
         assert_matches!(result, TxError::SigError(_));
-    }
-}
-
-/// Test that process_tx correctly identifies a DecryptedTx
-/// with some unsigned data and returns an identical copy
-#[test]
-fn test_process_tx_decrypted_unsigned() {
-    use crate::{Code, Data, Tx};
-    let mut tx = Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-    let code_sec = tx
-        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
-        .clone();
-    let data_sec = tx
-        .set_data(Data::new("transaction data".as_bytes().to_owned()))
-        .clone();
-    tx.validate_tx().expect("Test failed");
-    match tx.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted) => {
-            assert_eq!(tx.header().code_hash, code_sec.get_hash(),);
-            assert_eq!(tx.header().data_hash, data_sec.get_hash(),);
-        }
-        _ => panic!("Test failed"),
-    }
-}
-
-/// Test that process_tx correctly identifies a DecryptedTx
-/// with some signed data and extracts it without checking
-/// signature
-#[test]
-fn test_process_tx_decrypted_signed() {
-    use namada_core::key::*;
-
-    use crate::{Code, Data, Section, Signature, Tx};
-
-    fn gen_keypair() -> common::SecretKey {
-        use rand::prelude::ThreadRng;
-        use rand::thread_rng;
-
-        let mut rng: ThreadRng = thread_rng();
-        ed25519::SigScheme::generate(&mut rng).try_to_sk().unwrap()
-    }
-
-    use namada_core::key::Signature as S;
-    let mut decrypted =
-        Tx::from_type(TxType::Decrypted(DecryptedTx::Decrypted));
-    // Invalid signed data
-    let ed_sig =
-        ed25519::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
-    let mut sig_sec = Signature::new(
-        vec![decrypted.header_hash()],
-        [(0, gen_keypair())].into_iter().collect(),
-        None,
-    );
-    sig_sec
-        .signatures
-        .insert(0, common::Signature::try_from_sig(&ed_sig).unwrap());
-    decrypted.add_section(Section::Signature(sig_sec));
-    // create the tx with signed decrypted data
-    let code_sec = decrypted
-        .set_code(Code::new("transaction data".as_bytes().to_owned(), None))
-        .clone();
-    let data_sec = decrypted
-        .set_data(Data::new("transaction data".as_bytes().to_owned()))
-        .clone();
-    decrypted.validate_tx().expect("Test failed");
-    match decrypted.header().tx_type {
-        TxType::Decrypted(DecryptedTx::Decrypted) => {
-            assert_eq!(decrypted.header.code_hash, code_sec.get_hash());
-            assert_eq!(decrypted.header.data_hash, data_sec.get_hash());
-        }
-        _ => panic!("Test failed"),
     }
 }

@@ -11,6 +11,9 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::{BASE32HEX_NOPAD, HEXUPPER};
 use index_set::vec::VecIndexSet;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -41,8 +44,13 @@ pub enum Error {
     ParseBlockHash(String),
     #[error("The key is empty")]
     EmptyKey,
-    #[error("They key is missing sub-key segments: {0}")]
+    #[error("The key is missing sub-key segments: {0}")]
     MissingSegments(String),
+    #[error(
+        "The following input could not be interpreted as a DB column family: \
+         {0}"
+    )]
+    DbColFamily(String),
 }
 
 /// Result for functions that may fail
@@ -76,6 +84,65 @@ pub const WASM_CODE_LEN_PREFIX: &str = "len";
 /// The reserved storage key prefix for wasm code hashes
 pub const WASM_HASH_PREFIX: &str = "hash";
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+/// Storage column families
+pub enum DbColFam {
+    /// Subspace
+    SUBSPACE,
+    /// Block
+    BLOCK,
+    /// State
+    STATE,
+    /// Diffs
+    DIFFS,
+    /// Diffs for rollback (only kept for 1 block)
+    ROLLBACK,
+    /// Replay protection
+    REPLAYPROT,
+}
+
+/// Subspace column family name
+pub const SUBSPACE_CF: &str = "subspace";
+/// Diffs column family name
+pub const DIFFS_CF: &str = "diffs";
+/// Diffs for rollback (only kept for 1 block) column family name
+pub const ROLLBACK_CF: &str = "rollback";
+/// State column family name
+pub const STATE_CF: &str = "state";
+/// Block column family name
+pub const BLOCK_CF: &str = "block";
+/// Replay protection column family name
+pub const REPLAY_PROTECTION_CF: &str = "replay_protection";
+
+impl DbColFam {
+    /// Get the name of the column family
+    pub fn to_str(&self) -> &str {
+        match self {
+            DbColFam::SUBSPACE => SUBSPACE_CF,
+            DbColFam::BLOCK => BLOCK_CF,
+            DbColFam::STATE => STATE_CF,
+            DbColFam::DIFFS => DIFFS_CF,
+            DbColFam::ROLLBACK => ROLLBACK_CF,
+            DbColFam::REPLAYPROT => REPLAY_PROTECTION_CF,
+        }
+    }
+}
+
+impl FromStr for DbColFam {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            SUBSPACE_CF => Ok(Self::SUBSPACE),
+            DIFFS_CF => Ok(Self::DIFFS),
+            ROLLBACK_CF => Ok(Self::ROLLBACK),
+            STATE_CF => Ok(Self::STATE),
+            REPLAY_PROTECTION_CF => Ok(Self::REPLAYPROT),
+            BLOCK_CF => Ok(Self::BLOCK),
+            _ => Err(Error::DbColFamily(s.to_string())),
+        }
+    }
+}
 /// Transaction index within block.
 #[derive(
     Default,
@@ -83,6 +150,7 @@ pub const WASM_HASH_PREFIX: &str = "hash";
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -128,6 +196,7 @@ impl From<TxIndex> for u32 {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Default,
 )]
 pub struct BlockResults(VecIndexSet<u128>);
@@ -166,6 +235,7 @@ impl BlockResults {
     Copy,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     PartialEq,
     Eq,
@@ -238,6 +308,7 @@ impl FromStr for BlockHeight {
     Default,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     PartialEq,
     Eq,
     PartialOrd,
@@ -311,6 +382,11 @@ impl BlockHeight {
     pub fn prev_height(&self) -> BlockHeight {
         BlockHeight(self.0 - 1)
     }
+
+    /// Get the height of the previous block if it won't underflow
+    pub fn checked_prev(&self) -> Option<BlockHeight> {
+        Some(BlockHeight(self.0.checked_sub(1)?))
+    }
 }
 
 impl TryFrom<&[u8]> for BlockHash {
@@ -347,7 +423,9 @@ impl core::fmt::Debug for BlockHash {
 
 /// The data from Tendermint header
 /// relevant for Namada storage
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, Default)]
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer, Default,
+)]
 pub struct Header {
     /// Merkle root hash of block
     pub hash: Hash,
@@ -370,6 +448,7 @@ impl Header {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Debug,
     Default,
@@ -410,7 +489,7 @@ impl FromStr for Key {
 }
 
 /// Storage keys that are utf8 encoded strings
-#[derive(Eq, PartialEq, Copy, Clone, Hash)]
+#[derive(Eq, Debug, PartialEq, Copy, Clone, Hash, BorshDeserializer)]
 pub struct StringKey {
     /// The original key string, in bytes
     pub original: [u8; IBC_KEY_LIMIT],
@@ -497,7 +576,15 @@ impl arse_merkle_tree::Key<IBC_KEY_LIMIT> for StringKey {
 
 /// A wrapper around raw bytes to be stored as values
 /// in a merkle tree
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub struct TreeBytes(pub Vec<u8>);
 
 impl arse_merkle_tree::traits::Value for TreeBytes {
@@ -575,6 +662,14 @@ impl Key {
     /// Returns the addresses from the key segments
     pub fn find_addresses(&self) -> Vec<Address> {
         self.iter_addresses().cloned().collect()
+    }
+
+    /// Returns the address from the first key segment if it's an address.
+    pub fn fst_address(&self) -> Option<&Address> {
+        self.segments.first().and_then(|s| match s {
+            DbKeySeg::AddressSeg(addr) => Some(addr),
+            DbKeySeg::StringSeg(_) => None,
+        })
     }
 
     /// Iterates over all addresses in the key segments
@@ -794,6 +889,7 @@ pub trait KeySeg {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Debug,
     Eq,
@@ -1038,6 +1134,7 @@ impl KeySeg for common::PublicKey {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
     Serialize,
     Deserialize,
@@ -1171,6 +1268,14 @@ impl Mul<u64> for Epoch {
     }
 }
 
+impl Mul<Epoch> for u64 {
+    type Output = Epoch;
+
+    fn mul(self, rhs: Epoch) -> Self::Output {
+        Epoch(self * rhs.0)
+    }
+}
+
 impl Div<u64> for Epoch {
     type Output = Epoch;
 
@@ -1215,6 +1320,7 @@ impl Mul for Epoch {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 pub struct Epochs {
     /// The block heights of the first block of each known epoch.
@@ -1282,7 +1388,14 @@ impl Epochs {
 }
 
 /// A value of a storage prefix iterator.
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+)]
 pub struct PrefixValue {
     /// Storage key
     pub key: Key,
@@ -1291,7 +1404,9 @@ pub struct PrefixValue {
 }
 
 /// Container of all Ethereum event queues.
-#[derive(Default, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Default, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct EthEventsQueue {
     /// Queue of transfer to Namada events.
     pub transfers_to_namada: InnerEthEventsQueue<TransfersToNamada>,
@@ -1457,6 +1572,7 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Eq,
     PartialEq,
     Ord,
@@ -1468,6 +1584,9 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
+    /// A transcation can have up to two shielded transfers.
+    /// This indicates if the wrapper contained a shielded transfer.
+    pub is_wrapper: bool,
 }
 
 #[cfg(test)]

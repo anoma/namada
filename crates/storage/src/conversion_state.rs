@@ -10,16 +10,19 @@ use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_core::masp_primitives::sapling;
 use namada_core::storage::Epoch;
 use namada_core::token::{Denomination, MaspDigitPos};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 
 /// A representation of the conversion state
-#[derive(Debug, Default, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub struct ConversionState {
     /// The last amount of the native token distributed
     pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
-    /// A map from token alias to actual address.
-    pub tokens: BTreeMap<String, Address>,
     /// Map assets to their latest conversion and position in Merkle tree
     #[allow(clippy::type_complexity)]
     pub assets: BTreeMap<

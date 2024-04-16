@@ -7,22 +7,29 @@
 //!   - `eth_events_queue`: a queue of confirmed ethereum events to be processed
 //!     in order
 //!   - `height`: the last committed block height
-//!   - `tx_queue`: txs to be decrypted in the next block
 //!   - `next_epoch_min_start_height`: minimum block height from which the next
 //!     epoch can start
 //!   - `next_epoch_min_start_time`: minimum block time from which the next
 //!     epoch can start
-//!   - `replay_protection`: hashes of the processed transactions
+//!   - `update_epoch_blocks_delay`: number of missing blocks before updating
+//!     PoS with CometBFT
 //!   - `pred`: predecessor values of the top-level keys of the same name
-//!     - `tx_queue`
 //!     - `next_epoch_min_start_height`
 //!     - `next_epoch_min_start_time`
+//!     - `commit_only_data_commitment`
+//!     - `update_epoch_blocks_delay`
 //!   - `conversion_state`: MASP conversion state
 //! - `subspace`: accounts sub-spaces
 //!   - `{address}/{dyn}`: any byte data associated with accounts
-//! - `diffs`: diffs in account subspaces' key-vals
-//!   - `new/{dyn}`: value set in block height `h`
-//!   - `old/{dyn}`: value from predecessor block height
+//! - `diffs`: diffs in account subspaces' key-vals modified with `persist_diff
+//!   == true`
+//!   - `{height}/new/{dyn}`: value set in block height `h`
+//!   - `{height}/old/{dyn}`: value from predecessor block height
+//! - `rollback`: diffs in account subspaces' key-vals for keys modified with
+//!   `persist_diff == false` which are only kept for 1 block to support
+//!   rollback
+//!   - `{height}/new/{dyn}`: value set in block height `h`
+//!   - `{height}/old/{dyn}`: value from predecessor block height
 //! - `block`: block state
 //!   - `results/{h}`: block results at height `h`
 //!   - `h`: for each block at height `h`:
@@ -48,6 +55,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
+use namada::core::collections::HashSet;
 use namada::core::storage::{
     BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
     KEY_SEGMENT_SEPARATOR,
@@ -56,15 +64,24 @@ use namada::core::time::DateTimeUtc;
 use namada::core::{decode, encode, ethereum_events, ethereum_structs};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::ledger::storage::tx_queue::TxQueue;
 use namada::replay_protection;
-use namada::state::merkle_tree::{base_tree_key_prefix, subtree_key_prefix};
+use namada::state::merkle_tree::{
+    tree_key_prefix_with_epoch, tree_key_prefix_with_height,
+};
 use namada::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
-    DbResult as Result, MerkleTreeStoresRead, PrefixIterator, StoreType, DB,
+    DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
+    StoreType, DB,
+};
+use namada::storage::{
+    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
+    SUBSPACE_CF,
 };
 use namada::token::ConversionState;
+use namada_sdk::migrations::DBUpdateVisitor;
+use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
+use regex::Regex;
 use rocksdb::{
     BlockBasedOptions, ColumnFamily, ColumnFamilyDescriptor, DBCompactionStyle,
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
@@ -78,13 +95,6 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
-
-/// Column family names
-const SUBSPACE_CF: &str = "subspace";
-const DIFFS_CF: &str = "diffs";
-const STATE_CF: &str = "state";
-const BLOCK_CF: &str = "block";
-const REPLAY_PROTECTION_CF: &str = "replay_protection";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -159,6 +169,14 @@ pub fn open(
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
     cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
+    // for non-persisted diffs for rollback (read/update-intensive)
+    let mut rollback_cf_opts = Options::default();
+    rollback_cf_opts.set_compression_type(DBCompressionType::Zstd);
+    rollback_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
+    rollback_cf_opts.set_compaction_style(DBCompactionStyle::Level);
+    rollback_cf_opts.set_block_based_table_factory(&table_opts);
+    cfs.push(ColumnFamilyDescriptor::new(ROLLBACK_CF, rollback_cf_opts));
+
     // for the ledger state (update-intensive)
     let mut state_cf_opts = Options::default();
     // No compression since the size of the state is small
@@ -216,7 +234,11 @@ impl RocksDB {
         new_value: Option<&[u8]>,
         persist_diffs: bool,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = if persist_diffs {
+            self.get_column_family(DIFFS_CF)?
+        } else {
+            self.get_column_family(ROLLBACK_CF)?
+        };
         let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
@@ -229,39 +251,6 @@ impl RocksDB {
             self.0
                 .put_cf(cf, new_val_key, new_value)
                 .map_err(|e| Error::DBError(e.into_string()))?;
-        }
-
-        // If not persisting the diffs, remove the last diffs.
-        if !persist_diffs && height > BlockHeight::first() {
-            let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
-                let (old_diff_key, new_diff_key) =
-                    old_and_new_diff_key(key, height)?;
-                let has_old_diff = self
-                    .0
-                    .get_cf(cf, &old_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                let has_new_diff = self
-                    .0
-                    .get_cf(cf, &new_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                if has_old_diff {
-                    self.0
-                        .delete_cf(cf, old_diff_key)
-                        .map_err(|e| Error::DBError(e.into_string()))?;
-                }
-                if has_new_diff {
-                    self.0
-                        .delete_cf(cf, new_diff_key)
-                        .map_err(|e| Error::DBError(e.into_string()))?;
-                }
-                if has_old_diff || has_new_diff {
-                    break;
-                }
-                height = height.prev_height();
-            }
         }
         Ok(())
     }
@@ -277,7 +266,11 @@ impl RocksDB {
         new_value: Option<&[u8]>,
         persist_diffs: bool,
     ) -> Result<()> {
-        let cf = self.get_column_family(DIFFS_CF)?;
+        let cf = if persist_diffs {
+            self.get_column_family(DIFFS_CF)?
+        } else {
+            self.get_column_family(ROLLBACK_CF)?
+        };
         let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         if let Some(old_value) = old_value {
@@ -286,35 +279,6 @@ impl RocksDB {
 
         if let Some(new_value) = new_value {
             batch.0.put_cf(cf, new_val_key, new_value);
-        }
-
-        // If not persisting the diffs, remove the last diffs.
-        if !persist_diffs && height > BlockHeight::first() {
-            let mut height = height.prev_height();
-            while height >= BlockHeight::first() {
-                let (old_diff_key, new_diff_key) =
-                    old_and_new_diff_key(key, height)?;
-                let has_old_diff = self
-                    .0
-                    .get_cf(cf, &old_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                let has_new_diff = self
-                    .0
-                    .get_cf(cf, &new_diff_key)
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                    .is_some();
-                if has_old_diff {
-                    batch.0.delete_cf(cf, old_diff_key);
-                }
-                if has_new_diff {
-                    batch.0.delete_cf(cf, new_diff_key);
-                }
-                if has_old_diff || has_new_diff {
-                    break;
-                }
-                height = height.prev_height();
-            }
         }
         Ok(())
     }
@@ -515,7 +479,8 @@ impl RocksDB {
         for metadata_key in [
             "next_epoch_min_start_height",
             "next_epoch_min_start_time",
-            "tx_queue",
+            "commit_only_data_commitment",
+            "update_epoch_blocks_delay",
         ] {
             let previous_key = format!("pred/{}", metadata_key);
             let previous_value = self
@@ -528,7 +493,7 @@ impl RocksDB {
             // NOTE: we cannot restore the "pred/" keys themselves since we
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
-            // Tendermint.
+            // CometBFT.
         }
 
         // Revert conversion state if the epoch had been changed
@@ -549,11 +514,30 @@ impl RocksDB {
         tracing::info!("Removing last block results");
         batch.delete_cf(block_cf, format!("results/{}", last_block.height));
 
-        // Delete the tx hashes included in the last block
+        // Restore the state of replay protection to the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
-        tracing::info!("Removing replay protection hashes");
-        batch
-            .delete_cf(reprot_cf, replay_protection::last_prefix().to_string());
+        tracing::info!("Restoring replay protection state");
+        // Remove the "last" tx hashes
+        for (ref hash_str, _, _) in self.iter_replay_protection() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::last_key(&hash);
+            batch.delete_cf(reprot_cf, key.to_string());
+        }
+
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let last_key = replay_protection::last_key(&hash);
+            // Restore "buffer" bucket to "last"
+            batch.put_cf(reprot_cf, last_key.to_string(), vec![]);
+
+            // Remove anything in the buffer from the "all" prefix. Note that
+            // some hashes might be missing from "all" if they have been
+            // deleted, this is fine, in this case just continue
+            let all_key = replay_protection::all_key(&hash);
+            batch.delete_cf(reprot_cf, all_key.to_string());
+        }
 
         // Execute next step in parallel
         let batch = Mutex::new(batch);
@@ -581,6 +565,10 @@ impl RocksDB {
             },
         )?;
 
+        let mut batch = batch.into_inner().unwrap();
+
+        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
+        let diffs_cf = self.get_column_family(DIFFS_CF)?;
         // Look for diffs in this block to find what has been deleted
         let diff_new_key_prefix = Key {
             segments: vec![
@@ -588,24 +576,42 @@ impl RocksDB {
                 NEW_DIFF_PREFIX.to_string().to_db_key(),
             ],
         };
+        for (key_str, val, _) in
+            iter_diffs_prefix(self, diffs_cf, last_block.height, None, true)
         {
-            let mut batch_guard = batch.lock().unwrap();
-            let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-            for (key, val, _) in
-                iter_diffs_prefix(self, last_block.height, None, true)
-            {
-                let key = Key::parse(key).unwrap();
-                let diff_new_key = diff_new_key_prefix.join(&key);
-                if self.read_subspace_val(&diff_new_key)?.is_none() {
-                    // If there is no new value, it has been deleted in this
-                    // block and we have to restore it
-                    batch_guard.put_cf(subspace_cf, key.to_string(), val)
-                }
+            let key = Key::parse(&key_str).unwrap();
+            let diff_new_key = diff_new_key_prefix.join(&key);
+            if self.read_subspace_val(&diff_new_key)?.is_none() {
+                // If there is no new value, it has been deleted in this
+                // block and we have to restore it
+                batch.put_cf(subspace_cf, key_str, val)
+            }
+        }
+
+        // Look for non-persisted diffs for rollback
+        let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+        // Iterate the old keys first and keep a set of keys that have old val
+        let mut keys_with_old_value = HashSet::<String>::new();
+        for (key_str, val, _) in
+            iter_diffs_prefix(self, rollback_cf, last_block.height, None, true)
+        {
+            // If there is no new value, it has been deleted in this
+            // block and we have to restore it
+            keys_with_old_value.insert(key_str.clone());
+            batch.put_cf(subspace_cf, key_str, val)
+        }
+        // Then the new keys
+        for (key_str, _val, _) in
+            iter_diffs_prefix(self, rollback_cf, last_block.height, None, false)
+        {
+            if !keys_with_old_value.contains(&key_str) {
+                // If there was no old value it means that the key was newly
+                // written in the last block and we have to delete it
+                batch.delete_cf(subspace_cf, key_str)
             }
         }
 
         tracing::info!("Deleting keys prepended with the last height");
-        let mut batch = batch.into_inner().unwrap();
         let prefix = last_block.height.to_string();
         let mut delete_keys = |cf: &ColumnFamily| {
             let read_opts = make_iter_read_opts(Some(prefix.clone()));
@@ -630,6 +636,27 @@ impl RocksDB {
         // Write the batch and persist changes to disk
         tracing::info!("Flushing restored state to disk");
         self.exec_batch(batch)
+    }
+
+    /// Read diffs of non-persisted key-vals that are only kept for rollback of
+    /// one block height.
+    #[cfg(test)]
+    pub fn read_rollback_val(
+        &self,
+        key: &Key,
+        height: BlockHeight,
+        is_old: bool,
+    ) -> Result<Option<Vec<u8>>> {
+        let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+        let key = if is_old {
+            old_and_new_diff_key(key, height)?.0
+        } else {
+            old_and_new_diff_key(key, height)?.1
+        };
+
+        self.0
+            .get_cf(rollback_cf, key)
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 }
 
@@ -720,6 +747,19 @@ impl DB for RocksDB {
                 return Ok(None);
             }
         };
+        let commit_only_data: CommitOnlyData = match self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+            None => {
+                tracing::error!(
+                    "Couldn't load commit only data commitment from the DB"
+                );
+                return Ok(None);
+            }
+        };
         let conversion_state: ConversionState = match self
             .0
             .get_cf(state_cf, "conversion_state")
@@ -728,17 +768,6 @@ impl DB for RocksDB {
             Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
             None => {
                 tracing::error!("Couldn't load conversion state from the DB");
-                return Ok(None);
-            }
-        };
-        let tx_queue: TxQueue = match self
-            .0
-            .get_cf(state_cf, "tx_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load tx queue from the DB");
                 return Ok(None);
             }
         };
@@ -802,7 +831,8 @@ impl DB for RocksDB {
                 path.split(KEY_SEGMENT_SEPARATOR).collect();
             match segments.get(1) {
                 Some(prefix) => match *prefix {
-                    // Restore the base tree of Merkle tree
+                    // Restore the base tree and the CommitData tree of Merkle
+                    // tree
                     "tree" => match segments.get(2) {
                         Some(s) => {
                             let st = StoreType::from_str(s)?;
@@ -847,7 +877,11 @@ impl DB for RocksDB {
         // Restore subtrees of Merkle tree
         if let Some(epoch) = epoch {
             for st in StoreType::iter_subtrees() {
-                let key_prefix = subtree_key_prefix(st, epoch);
+                if *st == StoreType::CommitData {
+                    // CommitData tree has been already restored
+                    continue;
+                }
+                let key_prefix = tree_key_prefix_with_epoch(st, epoch);
                 let root_key =
                     key_prefix.clone().with_segment("root".to_owned());
                 if let Some(bytes) = self
@@ -890,9 +924,9 @@ impl DB for RocksDB {
                 next_epoch_min_start_time,
                 update_epoch_blocks_delay,
                 address_gen,
-                tx_queue,
                 ethereum_height,
                 eth_events_queue,
+                commit_only_data,
             })),
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
@@ -921,9 +955,9 @@ impl DB for RocksDB {
             address_gen,
             results,
             conversion_state,
-            tx_queue,
             ethereum_height,
             eth_events_queue,
+            commit_only_data,
         }: BlockStateWrite = state;
 
         // Epoch start height and time
@@ -981,6 +1015,25 @@ impl DB for RocksDB {
             encode(&update_epoch_blocks_delay),
         );
 
+        // Commitment to the only data commit
+        if let Some(current_value) = self
+            .0
+            .get_cf(state_cf, "commit_only_data_commitment")
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            // Write the predecessor value for rollback
+            batch.0.put_cf(
+                state_cf,
+                "pred/commit_only_data_commitment",
+                current_value,
+            );
+        }
+        batch.0.put_cf(
+            state_cf,
+            "commit_only_data_commitment",
+            commit_only_data.serialize(),
+        );
+
         // Save the conversion state when the epoch is updated
         if is_full_commit {
             if let Some(current_value) = self
@@ -1002,16 +1055,6 @@ impl DB for RocksDB {
             );
         }
 
-        // Tx queue
-        if let Some(pred_tx_queue) = self
-            .0
-            .get_cf(state_cf, "tx_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(state_cf, "pred/tx_queue", pred_tx_queue);
-        }
-        batch.0.put_cf(state_cf, "tx_queue", encode(&tx_queue));
         batch
             .0
             .put_cf(state_cf, "ethereum_height", encode(&ethereum_height));
@@ -1020,15 +1063,18 @@ impl DB for RocksDB {
             .put_cf(state_cf, "eth_events_queue", encode(&eth_events_queue));
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let prefix_key = Key::from(height.to_db_key());
         // Merkle tree
         {
             for st in StoreType::iter() {
-                if *st == StoreType::Base || is_full_commit {
-                    let key_prefix = if *st == StoreType::Base {
-                        base_tree_key_prefix(height)
-                    } else {
-                        subtree_key_prefix(st, epoch)
+                if *st == StoreType::Base
+                    || *st == StoreType::CommitData
+                    || is_full_commit
+                {
+                    let key_prefix = match st {
+                        StoreType::Base | StoreType::CommitData => {
+                            tree_key_prefix_with_height(st, height)
+                        }
+                        _ => tree_key_prefix_with_epoch(st, epoch),
                     };
                     let root_key =
                         key_prefix.clone().with_segment("root".to_owned());
@@ -1046,7 +1092,9 @@ impl DB for RocksDB {
                 }
             }
         }
+
         // Block header
+        let prefix_key = Key::from(height.to_db_key());
         {
             if let Some(h) = header {
                 let key = prefix_key
@@ -1141,10 +1189,11 @@ impl DB for RocksDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = if *st == StoreType::Base {
-                base_tree_key_prefix(base_height)
-            } else {
-                subtree_key_prefix(st, epoch)
+            let key_prefix = match st {
+                StoreType::Base | StoreType::CommitData => {
+                    tree_key_prefix_with_height(st, base_height)
+                }
+                _ => tree_key_prefix_with_epoch(st, epoch),
             };
             let root_key = key_prefix.clone().with_segment("root".to_owned());
             let bytes = self
@@ -1477,7 +1526,7 @@ impl DB for RocksDB {
         epoch: Epoch,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let key_prefix = subtree_key_prefix(store_type, epoch);
+        let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = key_prefix.clone().with_segment("root".to_owned());
         batch.0.delete_cf(block_cf, root_key.to_string());
         let store_key = key_prefix.with_segment("store".to_owned());
@@ -1533,9 +1582,212 @@ impl DB for RocksDB {
 
         Ok(())
     }
+
+    fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+    ) -> Result<()> {
+        let replay_protection_cf =
+            self.get_column_family(REPLAY_PROTECTION_CF)?;
+
+        for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
+            let hash = namada::core::hash::Hash::from_str(hash_str)
+                .expect("Failed hash conversion");
+            let key = replay_protection::buffer_key(&hash);
+            batch.0.delete_cf(replay_protection_cf, key.to_string());
+        }
+
+        Ok(())
+    }
+
+    fn prune_non_persisted_diffs(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        height: BlockHeight,
+    ) -> Result<()> {
+        let rollback_cf = self.get_column_family(ROLLBACK_CF)?;
+
+        let diff_old_key_prefix = Key {
+            segments: vec![
+                height.to_db_key(),
+                OLD_DIFF_PREFIX.to_string().to_db_key(),
+            ],
+        };
+        for (key_str, _val, _) in
+            iter_prefix(self, rollback_cf, None, Some(&diff_old_key_prefix))
+        {
+            batch.0.delete_cf(rollback_cf, key_str)
+        }
+
+        let diff_new_key_prefix = Key {
+            segments: vec![
+                height.to_db_key(),
+                NEW_DIFF_PREFIX.to_string().to_db_key(),
+            ],
+        };
+        for (key_str, _val, _) in
+            iter_prefix(self, rollback_cf, None, Some(&diff_new_key_prefix))
+        {
+            batch.0.delete_cf(rollback_cf, key_str)
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        cf: &DbColFam,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let last_height: BlockHeight = {
+            let state_cf = self.get_column_family(STATE_CF)?;
+
+            decode(
+                self.0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))?
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })?,
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })?
+        };
+        let desired_height = height.unwrap_or(last_height);
+
+        if desired_height != last_height {
+            todo!(
+                "Overwriting values at heights different than the last \
+                 committed height hast yet to be implemented"
+            );
+        }
+        // NB: the following code only updates values
+        // written to at the last committed height
+
+        let val = new_value.as_ref();
+
+        // Write the new key-val in the Db column family
+        let cf_name = self.get_column_family(cf.to_str())?;
+        batch.0.put_cf(cf_name, key.to_string(), val);
+
+        // If the CF is subspace, additionally update the diffs
+        if cf == &DbColFam::SUBSPACE {
+            let diffs_cf = self.get_column_family(DIFFS_CF)?;
+            let diffs_key = Key::from(last_height.to_db_key())
+                .with_segment("new".to_owned())
+                .join(key)
+                .to_string();
+
+            batch.0.put_cf(diffs_cf, diffs_key, val);
+        }
+
+        Ok(())
+    }
+}
+
+/// A struct that can visit a set of updates,
+/// registering them all in the batch
+pub struct RocksDBUpdateVisitor<'db> {
+    db: &'db RocksDB,
+    batch: RocksDBWriteBatch,
+}
+
+impl<'db> RocksDBUpdateVisitor<'db> {
+    pub fn new(db: &'db RocksDB) -> Self {
+        Self {
+            db,
+            batch: Default::default(),
+        }
+    }
+
+    pub fn take_batch(self) -> RocksDBWriteBatch {
+        self.batch
+    }
+}
+
+impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
+    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>> {
+        match cf {
+            DbColFam::SUBSPACE => self
+                .db
+                .read_subspace_val(key)
+                .expect("Failed to read from storage"),
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to read column family from storage");
+                self.db
+                    .0
+                    .get_cf(cf, key.to_string())
+                    .expect("Failed to get key from storage")
+            }
+        }
+    }
+
+    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
+        self.db
+            .overwrite_entry(&mut self.batch, None, cf, key, value)
+            .expect("Failed to overwrite a key in storage")
+    }
+
+    fn delete(&mut self, key: &Key, cf: &DbColFam) {
+        let last_height: BlockHeight = {
+            let state_cf = self.db.get_column_family(STATE_CF).unwrap();
+
+            decode(
+                self.db
+                    .0
+                    .get_cf(state_cf, "height")
+                    .map_err(|e| Error::DBError(e.to_string()))
+                    .unwrap()
+                    .ok_or_else(|| {
+                        Error::DBError("No block height found".to_string())
+                    })
+                    .unwrap(),
+            )
+            .map_err(|e| {
+                Error::DBError(format!("Unable to decode block height: {e}"))
+            })
+            .unwrap()
+        };
+        match cf {
+            DbColFam::SUBSPACE => {
+                self.db
+                    .batch_delete_subspace_val(
+                        &mut self.batch,
+                        last_height,
+                        key,
+                        true,
+                    )
+                    .expect("Failed to delete key from storage");
+            }
+            _ => {
+                let cf_str = cf.to_str();
+                let cf = self
+                    .db
+                    .get_column_family(cf_str)
+                    .expect("Failed to get read column family from storage");
+                self.batch.0.delete_cf(cf, key.to_string());
+            }
+        };
+    }
+
+    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
+        self.db
+            .iter_pattern(None, pattern)
+            .map(|(k, v, _)| (k, v))
+            .collect()
+    }
 }
 
 impl<'iter> DBIter<'iter> for RocksDB {
+    type PatternIter = PersistentPatternIterator<'iter>;
     type PrefixIter = PersistentPrefixIterator<'iter>;
 
     fn iter_prefix(
@@ -1543,6 +1795,14 @@ impl<'iter> DBIter<'iter> for RocksDB {
         prefix: Option<&Key>,
     ) -> PersistentPrefixIterator<'iter> {
         iter_subspace_prefix(self, prefix)
+    }
+
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> PersistentPatternIterator<'iter> {
+        iter_subspace_pattern(self, prefix, pattern)
     }
 
     fn iter_results(&'iter self) -> PersistentPrefixIterator<'iter> {
@@ -1566,7 +1826,10 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
         prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, prefix, true)
+        let diffs_cf = self
+            .get_column_family(DIFFS_CF)
+            .expect("{DIFFS_CF} column family should exist");
+        iter_diffs_prefix(self, diffs_cf, height, prefix, true)
     }
 
     fn iter_new_diffs(
@@ -1574,7 +1837,10 @@ impl<'iter> DBIter<'iter> for RocksDB {
         height: BlockHeight,
         prefix: Option<&'iter Key>,
     ) -> PersistentPrefixIterator<'iter> {
-        iter_diffs_prefix(self, height, prefix, false)
+        let diffs_cf = self
+            .get_column_family(DIFFS_CF)
+            .expect("{DIFFS_CF} column family should exist");
+        iter_diffs_prefix(self, diffs_cf, height, prefix, false)
     }
 
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
@@ -1583,6 +1849,15 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .expect("{REPLAY_PROTECTION_CF} column family should exist");
 
         let stripped_prefix = Some(replay_protection::last_prefix());
+        iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
+    }
+
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+        let replay_protection_cf = self
+            .get_column_family(REPLAY_PROTECTION_CF)
+            .expect("{REPLAY_PROTECTION_CF} column family should exist");
+
+        let stripped_prefix = Some(replay_protection::buffer_prefix());
         iter_prefix(self, replay_protection_cf, stripped_prefix.as_ref(), None)
     }
 }
@@ -1598,15 +1873,25 @@ fn iter_subspace_prefix<'iter>(
     iter_prefix(db, subspace_cf, stripped_prefix, prefix)
 }
 
+fn iter_subspace_pattern<'iter>(
+    db: &'iter RocksDB,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'iter> {
+    let subspace_cf = db
+        .get_column_family(SUBSPACE_CF)
+        .expect("{SUBSPACE_CF} column family should exist");
+    let stripped_prefix = None;
+    iter_pattern(db, subspace_cf, stripped_prefix, prefix, pattern)
+}
+
 fn iter_diffs_prefix<'a>(
     db: &'a RocksDB,
+    cf: &'a ColumnFamily,
     height: BlockHeight,
     prefix: Option<&Key>,
     is_old: bool,
 ) -> PersistentPrefixIterator<'a> {
-    let diffs_cf = db
-        .get_column_family(DIFFS_CF)
-        .expect("{DIFFS_CF} column family should exist");
     let kind = if is_old {
         OLD_DIFF_PREFIX
     } else {
@@ -1618,7 +1903,7 @@ fn iter_diffs_prefix<'a>(
             .unwrap(),
     );
     // get keys without the `stripped_prefix`
-    iter_prefix(db, diffs_cf, stripped_prefix.as_ref(), prefix)
+    iter_prefix(db, cf, stripped_prefix.as_ref(), prefix)
 }
 
 /// Create an iterator over key-vals in the given CF matching the given
@@ -1650,6 +1935,23 @@ fn iter_prefix<'a>(
     PersistentPrefixIterator(PrefixIterator::new(iter, stripped_prefix))
 }
 
+/// Create an iterator over key-vals in the given CF matching the given
+/// pattern(s).
+fn iter_pattern<'a>(
+    db: &'a RocksDB,
+    cf: &'a ColumnFamily,
+    stripped_prefix: Option<&Key>,
+    prefix: Option<&Key>,
+    pattern: Regex,
+) -> PersistentPatternIterator<'a> {
+    PersistentPatternIterator {
+        inner: PatternIterator {
+            iter: iter_prefix(db, cf, stripped_prefix, prefix),
+            pattern,
+        },
+    }
+}
+
 #[derive(Debug)]
 pub struct PersistentPrefixIterator<'a>(
     PrefixIterator<rocksdb::DBIterator<'a>>,
@@ -1679,6 +1981,25 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                     }
                 }
                 None => return None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PersistentPatternIterator<'a> {
+    inner: PatternIterator<PersistentPrefixIterator<'a>>,
+}
+
+impl<'a> Iterator for PersistentPatternIterator<'a> {
+    type Item = (String, Vec<u8>, u64);
+
+    /// Returns the next pair and the gas cost
+    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+        loop {
+            let next_result = self.inner.iter.next()?;
+            if self.inner.pattern.is_match(&next_result.0) {
+                return Some(next_result);
             }
         }
     }
@@ -1784,9 +2105,8 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::core::address::{
-        gen_established_address, EstablishedAddressGen,
-    };
+    use namada::core::address::EstablishedAddressGen;
+    use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
     use namada::state::{MerkleTree, Sha256Hasher};
     use tempfile::tempdir;
@@ -1982,116 +2302,192 @@ mod test {
 
     #[test]
     fn test_rollback() {
-        let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        for persist_diffs in [true, false] {
+            println!("Running with persist_diffs: {persist_diffs}");
 
-        // A key that's gonna be added on a second block
-        let add_key = Key::parse("add").unwrap();
-        // A key that's gonna be deleted on a second block
-        let delete_key = Key::parse("delete").unwrap();
-        // A key that's gonna be overwritten on a second block
-        let overwrite_key = Key::parse("overwrite").unwrap();
+            let dir = tempdir().unwrap();
+            let mut db = open(dir.path(), None).unwrap();
 
-        // Write first block
-        let mut batch = RocksDB::batch();
-        let height_0 = BlockHeight(100);
-        let mut pred_epochs = Epochs::default();
-        pred_epochs.new_epoch(height_0);
-        let mut conversion_state_0 = ConversionState::default();
-        conversion_state_0
-            .tokens
-            .insert("dummy1".to_string(), gen_established_address("test"));
-        let to_delete_val = vec![1_u8, 1, 0, 0];
-        let to_overwrite_val = vec![1_u8, 1, 1, 0];
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_0,
-            &delete_key,
-            &to_delete_val,
-            true,
-        )
-        .unwrap();
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_0,
-            &overwrite_key,
-            &to_overwrite_val,
-            true,
-        )
-        .unwrap();
+            // A key that's gonna be added on a second block
+            let add_key = Key::parse("add").unwrap();
+            // A key that's gonna be deleted on a second block
+            let delete_key = Key::parse("delete").unwrap();
+            // A key that's gonna be overwritten on a second block
+            let overwrite_key = Key::parse("overwrite").unwrap();
 
-        add_block_to_batch(
-            &db,
-            &mut batch,
-            height_0,
-            Epoch(1),
-            pred_epochs.clone(),
-            &conversion_state_0,
-        )
-        .unwrap();
-        db.exec_batch(batch.0).unwrap();
+            // Write first block
+            let mut batch = RocksDB::batch();
+            let height_0 = BlockHeight(100);
+            let mut pred_epochs = Epochs::default();
+            pred_epochs.new_epoch(height_0);
+            let conversion_state_0 = ConversionState::default();
+            let to_delete_val = vec![1_u8, 1, 0, 0];
+            let to_overwrite_val = vec![1_u8, 1, 1, 0];
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_0,
+                &delete_key,
+                &to_delete_val,
+                persist_diffs,
+            )
+            .unwrap();
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_0,
+                &overwrite_key,
+                &to_overwrite_val,
+                persist_diffs,
+            )
+            .unwrap();
+            for tx in [b"tx1", b"tx2"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::all_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::buffer_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
 
-        // Write second block
-        let mut batch = RocksDB::batch();
-        let height_1 = BlockHeight(101);
-        pred_epochs.new_epoch(height_1);
-        let mut conversion_state_1 = ConversionState::default();
-        conversion_state_1
-            .tokens
-            .insert("dummy2".to_string(), gen_established_address("test"));
-        let add_val = vec![1_u8, 0, 0, 0];
-        let overwrite_val = vec![1_u8, 1, 1, 1];
-        db.batch_write_subspace_val(
-            &mut batch, height_1, &add_key, &add_val, true,
-        )
-        .unwrap();
-        db.batch_write_subspace_val(
-            &mut batch,
-            height_1,
-            &overwrite_key,
-            &overwrite_val,
-            true,
-        )
-        .unwrap();
-        db.batch_delete_subspace_val(&mut batch, height_1, &delete_key, true)
+            for tx in [b"tx3", b"tx4"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            add_block_to_batch(
+                &db,
+                &mut batch,
+                height_0,
+                Epoch(1),
+                pred_epochs.clone(),
+                &conversion_state_0,
+            )
+            .unwrap();
+            db.exec_batch(batch.0).unwrap();
+
+            // Write second block
+            let mut batch = RocksDB::batch();
+            let height_1 = BlockHeight(101);
+            pred_epochs.new_epoch(height_1);
+            let conversion_state_1 = ConversionState::default();
+            let add_val = vec![1_u8, 0, 0, 0];
+            let overwrite_val = vec![1_u8, 1, 1, 1];
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_1,
+                &add_key,
+                &add_val,
+                persist_diffs,
+            )
+            .unwrap();
+            db.batch_write_subspace_val(
+                &mut batch,
+                height_1,
+                &overwrite_key,
+                &overwrite_val,
+                persist_diffs,
+            )
+            .unwrap();
+            db.batch_delete_subspace_val(
+                &mut batch,
+                height_1,
+                &delete_key,
+                persist_diffs,
+            )
             .unwrap();
 
-        add_block_to_batch(
-            &db,
-            &mut batch,
-            height_1,
-            Epoch(2),
-            pred_epochs,
-            &conversion_state_1,
-        )
-        .unwrap();
-        db.exec_batch(batch.0).unwrap();
+            db.prune_replay_protection_buffer(&mut batch).unwrap();
+            db.write_replay_protection_entry(
+                &mut batch,
+                &replay_protection::all_key(&Hash::sha256(b"tx3")),
+            )
+            .unwrap();
 
-        // Check that the values are as expected from second block
-        let added = db.read_subspace_val(&add_key).unwrap();
-        assert_eq!(added, Some(add_val));
-        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
-        assert_eq!(overwritten, Some(overwrite_val));
-        let deleted = db.read_subspace_val(&delete_key).unwrap();
-        assert_eq!(deleted, None);
-
-        // Rollback to the first block height
-        db.rollback(height_0).unwrap();
-
-        // Check that the values are back to the state at the first block
-        let added = db.read_subspace_val(&add_key).unwrap();
-        assert_eq!(added, None);
-        let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
-        assert_eq!(overwritten, Some(to_overwrite_val));
-        let deleted = db.read_subspace_val(&delete_key).unwrap();
-        assert_eq!(deleted, Some(to_delete_val));
-        // Check the conversion state
-        let state_cf = db.get_column_family(STATE_CF).unwrap();
-        let conversion_state =
-            db.0.get_cf(state_cf, "conversion_state".as_bytes())
-                .unwrap()
+            for tx in [b"tx3", b"tx4"] {
+                db.delete_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
                 .unwrap();
-        assert_eq!(conversion_state, encode(&conversion_state_0));
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::buffer_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            for tx in [b"tx5", b"tx6"] {
+                db.write_replay_protection_entry(
+                    &mut batch,
+                    &replay_protection::last_key(&Hash::sha256(tx)),
+                )
+                .unwrap();
+            }
+
+            add_block_to_batch(
+                &db,
+                &mut batch,
+                height_1,
+                Epoch(2),
+                pred_epochs,
+                &conversion_state_1,
+            )
+            .unwrap();
+            db.exec_batch(batch.0).unwrap();
+
+            // Check that the values are as expected from second block
+            let added = db.read_subspace_val(&add_key).unwrap();
+            assert_eq!(added, Some(add_val));
+            let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+            assert_eq!(overwritten, Some(overwrite_val));
+            let deleted = db.read_subspace_val(&delete_key).unwrap();
+            assert_eq!(deleted, None);
+
+            for tx in [b"tx1", b"tx2", b"tx3", b"tx5", b"tx6"] {
+                assert!(
+                    db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
+            assert!(
+                !db.has_replay_protection_entry(&Hash::sha256(b"tx4"))
+                    .unwrap()
+            );
+
+            // Rollback to the first block height
+            db.rollback(height_0).unwrap();
+
+            // Check that the values are back to the state at the first block
+            let added = db.read_subspace_val(&add_key).unwrap();
+            assert_eq!(added, None);
+            let overwritten = db.read_subspace_val(&overwrite_key).unwrap();
+            assert_eq!(overwritten, Some(to_overwrite_val));
+            let deleted = db.read_subspace_val(&delete_key).unwrap();
+            assert_eq!(deleted, Some(to_delete_val));
+            // Check the conversion state
+            let state_cf = db.get_column_family(STATE_CF).unwrap();
+            let conversion_state =
+                db.0.get_cf(state_cf, "conversion_state".as_bytes())
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(conversion_state, encode(&conversion_state_0));
+            for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
+                assert!(
+                    db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
+
+            for tx in [b"tx5", b"tx6"] {
+                assert!(
+                    !db.has_replay_protection_entry(&Hash::sha256(tx)).unwrap()
+                );
+            }
+        }
     }
 
     #[test]
@@ -2128,18 +2524,21 @@ mod test {
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
-            // Diffs new key for `key_with_diffs` at height_0 must be present
+            // Diffs new key for `key_with_diffs` at height_0 must be
+            // present
             let (old_with_h0, new_with_h0) =
                 old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
             assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
             assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
 
-            // Diffs new key for `key_without_diffs` at height_0 must be present
+            // Diffs new key for `key_without_diffs` at height_0 must be
+            // present
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_some());
         }
 
         // Write second block
@@ -2161,10 +2560,12 @@ mod test {
             false,
         )
         .unwrap();
+        db.prune_non_persisted_diffs(&mut batch, height_0).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
             // Diffs keys for `key_with_diffs` at height_0 must be present
             let (old_with_h0, new_with_h0) =
@@ -2175,8 +2576,8 @@ mod test {
             // Diffs keys for `key_without_diffs` at height_0 must be gone
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
@@ -2184,11 +2585,12 @@ mod test {
             assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
             assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
 
-            // Diffs keys for `key_without_diffs` at height_1 must be present
+            // Diffs keys for `key_without_diffs` at height_1 must be
+            // present
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_some());
         }
 
         // Write third block
@@ -2210,10 +2612,12 @@ mod test {
             false,
         )
         .unwrap();
+        db.prune_non_persisted_diffs(&mut batch, height_1).unwrap();
         db.exec_batch(batch.0).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
+            let rollback_cf = db.get_column_family(ROLLBACK_CF).unwrap();
 
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
@@ -2224,8 +2628,8 @@ mod test {
             // Diffs keys for `key_without_diffs` at height_1 must be gone
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h1).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_none());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_2 must be present
             let (old_with_h2, new_with_h2) =
@@ -2233,11 +2637,12 @@ mod test {
             assert!(db.0.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
             assert!(db.0.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
 
-            // Diffs keys for `key_without_diffs` at height_2 must be present
+            // Diffs keys for `key_without_diffs` at height_2 must be
+            // present
             let (old_wo_h2, new_wo_h2) =
                 old_and_new_diff_key(&key_without_diffs, height_2).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_wo_h2).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, old_wo_h2).unwrap().is_some());
+            assert!(db.0.get_cf(rollback_cf, new_wo_h2).unwrap().is_some());
         }
     }
 
@@ -2253,14 +2658,16 @@ mod test {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
         let hash = BlockHash::default();
+        #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let next_epoch_min_start_height = BlockHeight::default();
+        #[allow(clippy::disallowed_methods)]
         let next_epoch_min_start_time = DateTimeUtc::now();
         let update_epoch_blocks_delay = None;
         let address_gen = EstablishedAddressGen::new("whatever");
-        let tx_queue = TxQueue::default();
         let results = BlockResults::default();
         let eth_events_queue = EthEventsQueue::default();
+        let commit_only_data = CommitOnlyData::default();
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
@@ -2275,9 +2682,9 @@ mod test {
             next_epoch_min_start_time,
             update_epoch_blocks_delay,
             address_gen: &address_gen,
-            tx_queue: &tx_queue,
             ethereum_height: None,
             eth_events_queue: &eth_events_queue,
+            commit_only_data: &commit_only_data,
         };
 
         db.add_block_to_batch(block, batch, true)

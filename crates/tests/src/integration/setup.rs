@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::path::Path;
 use std::str::FromStr;
@@ -24,6 +23,7 @@ use namada_apps::node::ledger::shell::testing::utils::TestDir;
 use namada_apps::node::ledger::shell::Shell;
 use namada_apps::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
+use namada_core::collections::HashMap;
 use namada_sdk::wallet::alias::Alias;
 
 use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};
@@ -33,11 +33,15 @@ const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
 
 /// Setup a network with a single genesis validator node.
 pub fn setup() -> Result<(MockNode, MockServicesController)> {
-    initialize_genesis()
+    initialize_genesis(|genesis| genesis)
 }
 
 /// Setup folders with genesis, configs, wasm, etc.
-pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
+pub fn initialize_genesis(
+    mut update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(MockNode, MockServicesController)> {
     let working_dir = std::fs::canonicalize("../..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
         Ok(val) => val.to_ascii_lowercase() != "false",
@@ -57,6 +61,7 @@ pub fn initialize_genesis() -> Result<(MockNode, MockServicesController)> {
             locked_amount_target: 1_000_000u64,
         });
     }
+    let templates = update_genesis(templates);
     let genesis_path = test_dir.path().join("int-test-genesis-src");
     std::fs::create_dir(&genesis_path)
         .expect("Could not create test chain directory.");

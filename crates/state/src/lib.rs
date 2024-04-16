@@ -20,10 +20,7 @@ pub use namada_core::storage::{
     EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_gas::{
-    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
-    STORAGE_WRITE_GAS_PER_BYTE,
-};
+use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
 use namada_merkle_tree::Error as MerkleTreeError;
 pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
@@ -33,7 +30,7 @@ pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
     ConversionState, WithConversionState,
 };
-pub use namada_storage::types::{KVBytes, PrefixIterator};
+pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
     mockdb, tx_queue, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch,
@@ -197,21 +194,18 @@ macro_rules! impl_storage_read {
                 key: &storage::Key,
             ) -> namada_storage::Result<Option<Vec<u8>>> {
                 // try to read from the write log first
-                let (log_val, gas) = self.write_log().read(key);
+                let (log_val, gas) = self.write_log().read_persistent(key);
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
-                    Some(write_log::StorageModification::Write { ref value }) => {
+                    Some(write_log::PersistentStorageModification::Write { value }) => {
                         Ok(Some(value.clone()))
                     }
-                    Some(write_log::StorageModification::Delete) => Ok(None),
-                    Some(write_log::StorageModification::InitAccount {
+                    Some(write_log::PersistentStorageModification::Delete) => Ok(None),
+                    Some(write_log::PersistentStorageModification::InitAccount {
                         ref vp_code_hash,
                     }) => Ok(Some(vp_code_hash.to_vec())),
-                    Some(write_log::StorageModification::Temp { ref value }) => {
-                        Ok(Some(value.clone()))
-                    }
                     None => {
-                        // when not found in write log, try to read from the storage
+                        // when not found in write log try to read from the storage
                         let (value, gas) = self.db_read(key).into_storage_result()?;
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(value)
@@ -225,14 +219,13 @@ macro_rules! impl_storage_read {
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
                     Some(&write_log::StorageModification::Write { .. })
-                    | Some(&write_log::StorageModification::InitAccount { .. })
-                    | Some(&write_log::StorageModification::Temp { .. }) => Ok(true),
+                    | Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
                     Some(&write_log::StorageModification::Delete) => {
                         // the given key has been deleted
                         Ok(false)
                     }
-                    None => {
-                        // when not found in write log, try to check the storage
+                    Some(&write_log::StorageModification::Temp { .. }) | None => {
+                        // when not found in write log or only found a temporary value, try to check the storage
                         let (present, gas) = self.db_has_key(key).into_storage_result()?;
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(present)
@@ -551,8 +544,7 @@ where
                         self.write_log_iter.next()
                     {
                         match modification {
-                            write_log::StorageModification::Write { value }
-                            | write_log::StorageModification::Temp { value } => {
+                            write_log::StorageModification::Write { value } => {
                                 let gas = value.len() as u64;
                                 return Some((key, value, gas));
                             }
@@ -562,7 +554,8 @@ where
                                 let gas = vp_code_hash.len() as u64;
                                 return Some((key, vp_code_hash.to_vec(), gas));
                             }
-                            write_log::StorageModification::Delete => {
+                            write_log::StorageModification::Delete
+                            | write_log::StorageModification::Temp { .. } => {
                                 continue;
                             }
                         }
@@ -581,11 +574,13 @@ where
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
-    use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+    use namada_storage::tx_queue::ExpiredTxsQueue;
+    use storage::types::CommitOnlyData;
 
     use super::mockdb::MockDB;
     use super::*;
@@ -625,6 +620,7 @@ pub mod testing {
                 last_block: None,
                 last_epoch: Epoch::default(),
                 next_epoch_min_start_height: BlockHeight::default(),
+                #[allow(clippy::disallowed_methods)]
                 next_epoch_min_start_time: DateTimeUtc::now(),
                 address_gen: EstablishedAddressGen::new(
                     "Test address generator seed",
@@ -632,12 +628,12 @@ pub mod testing {
                 update_epoch_blocks_delay: None,
                 tx_index: TxIndex::default(),
                 conversion_state: ConversionState::default(),
-                tx_queue: TxQueue::default(),
                 expired_txs_queue: ExpiredTxsQueue::default(),
                 native_token: address::testing::nam(),
                 ethereum_height: None,
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
+                commit_only_data: CommitOnlyData::default(),
             }
         }
     }
@@ -650,10 +646,8 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
-    use namada_core::dec::Dec;
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
-    use namada_core::token;
     use namada_parameters::{EpochDuration, Parameters};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -737,11 +731,10 @@ mod tests {
                 implicit_vp_code_hash: Some(Hash::zero()),
                 epochs_per_year: 100,
                 max_signatures_per_transaction: 15,
-                staked_ratio: Dec::new(1,1).expect("Cannot fail"),
-                pos_inflation_amount: token::Amount::zero(),
                 fee_unshielding_gas_limit: 20_000,
                 fee_unshielding_descriptions_limit: 15,
                 minimum_gas_price: BTreeMap::default(),
+                is_native_token_transferable: true,
             };
             namada_parameters::init_storage(&parameters, &mut state).unwrap();
             // Initialize pred_epochs to the current height

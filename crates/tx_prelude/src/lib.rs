@@ -38,7 +38,7 @@ pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead, StorageWrite,
 };
-pub use namada_tx::{data as transaction, Section, Tx};
+pub use namada_tx::{action, data as transaction, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
@@ -101,6 +101,14 @@ impl Ctx {
     #[allow(clippy::new_without_default)]
     pub const unsafe fn new() -> Self {
         Self(())
+    }
+
+    /// Yield a byte array value back to the host environment.
+    pub fn yield_value<V: AsRef<[u8]>>(&self, value: V) {
+        let value = value.as_ref();
+        unsafe {
+            namada_tx_yield_value(value.as_ptr() as _, value.len() as _);
+        }
     }
 }
 
@@ -252,13 +260,14 @@ impl StorageWrite for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn write_temp<T: BorshSerialize>(
-        &mut self,
+    fn read_bytes_temp(
+        &self,
         key: &storage::Key,
-        val: T,
-    ) -> Result<(), Error> {
-        let buf = val.serialize_to_vec();
-        self.write_bytes_temp(key, buf)
+    ) -> Result<Option<Vec<u8>>, Error> {
+        let key = key.to_string();
+        let read_result =
+            unsafe { namada_tx_read_temp(key.as_ptr() as _, key.len() as _) };
+        Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
     fn write_bytes_temp(
@@ -290,6 +299,7 @@ impl TxEnv for Ctx {
         &mut self,
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
+        entropy_source: &[u8],
     ) -> Result<Address, Error> {
         let code_hash = code_hash.as_ref();
         let code_tag = code_tag.serialize_to_vec();
@@ -300,6 +310,8 @@ impl TxEnv for Ctx {
                 code_hash.len() as _,
                 code_tag.as_ptr() as _,
                 code_tag.len() as _,
+                entropy_source.as_ptr() as _,
+                entropy_source.len() as _,
                 result.as_ptr() as _,
             )
         };
@@ -371,10 +383,38 @@ impl TxEnv for Ctx {
     }
 }
 
+impl namada_tx::action::Read for Ctx {
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>, Self::Err> {
+        TxEnv::read_temp(self, key)
+    }
+}
+
+impl namada_tx::action::Write for Ctx {
+    fn write_temp<T: BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<(), Self::Err> {
+        TxEnv::write_temp(self, key, val)
+    }
+}
+
 /// Execute IBC tx.
 // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-pub fn tx_ibc_execute() {
-    unsafe { namada_tx_ibc_execute() }
+pub fn tx_ibc_execute() -> Result<Option<token::Transfer>, Error> {
+    let result = unsafe { namada_tx_ibc_execute() };
+    match read_from_buffer(result, namada_tx_result_buffer) {
+        Some(value) => {
+            Ok(Option::<token::Transfer>::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail"))
+        }
+        None => Ok(None),
+    }
 }
 
 /// Verify section signatures against the given list of keys

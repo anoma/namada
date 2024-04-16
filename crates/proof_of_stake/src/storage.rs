@@ -1,10 +1,11 @@
 //! PoS functions for reading and writing to storage and lazy collection handles
 //! associated with given `storage_key`s.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use namada_account::protocol_pk_key;
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::{common, tm_consensus_key_raw_hash};
 use namada_core::storage::Epoch;
@@ -244,6 +245,12 @@ pub fn liveness_sum_missed_votes_handle() -> LivenessSumMissedVotes {
     LivenessSumMissedVotes::open(key)
 }
 
+/// Get the storage handle to the total active deltas
+pub fn total_active_deltas_handle() -> TotalDeltas {
+    let key = storage_key::total_active_deltas_key();
+    TotalDeltas::open(key)
+}
+
 // ---- Storage read + write ----
 
 /// Read PoS parameters
@@ -387,6 +394,52 @@ where
     storage.write(&key, address)
 }
 
+/// Read last epoch's staked ratio.
+pub fn read_last_staked_ratio<S>(
+    storage: &S,
+) -> namada_storage::Result<Option<Dec>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::last_staked_ratio_key();
+    storage.read(&key)
+}
+
+/// Write last epoch's staked ratio.
+pub fn write_last_staked_ratio<S>(
+    storage: &mut S,
+    ratio: Dec,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::last_staked_ratio_key();
+    storage.write(&key, ratio)
+}
+
+/// Read last epoch's PoS inflation amount.
+pub fn read_last_pos_inflation_amount<S>(
+    storage: &S,
+) -> namada_storage::Result<Option<token::Amount>>
+where
+    S: StorageRead,
+{
+    let key = storage_key::last_pos_inflation_amount_key();
+    storage.read(&key)
+}
+
+/// Write last epoch's pos inflation amount.
+pub fn write_last_pos_inflation_amount<S>(
+    storage: &mut S,
+    inflation: token::Amount,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::last_pos_inflation_amount_key();
+    storage.write(&key, inflation)
+}
+
 /// Read PoS validator's delta value.
 pub fn read_validator_deltas_value<S>(
     storage: &S,
@@ -459,6 +512,26 @@ where
     S: StorageRead,
 {
     let handle = total_deltas_handle();
+    let amnt = handle
+        .get_sum(storage, epoch, params)?
+        .map(|change| {
+            debug_assert!(change.non_negative());
+            token::Amount::from_change(change)
+        })
+        .unwrap_or_default();
+    Ok(amnt)
+}
+
+/// Read PoS total stake (sum of deltas).
+pub fn read_total_active_stake<S>(
+    storage: &S,
+    params: &PosParams,
+    epoch: namada_core::storage::Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let handle = total_active_deltas_handle();
     let amnt = handle
         .get_sum(storage, epoch, params)?
         .map(|change| {
@@ -617,22 +690,44 @@ pub fn update_total_deltas<S>(
     delta: token::Change,
     current_epoch: namada_core::storage::Epoch,
     offset_opt: Option<u64>,
+    update_active_voting_power: bool,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    let handle = total_deltas_handle();
     let offset = offset_opt.unwrap_or(params.pipeline_len);
-    let val = handle
+    let total_deltas = total_deltas_handle();
+    let total_active_deltas = total_active_deltas_handle();
+
+    // Update total deltas
+    let total_deltas_val = total_deltas
         .get_delta_val(storage, current_epoch + offset)?
         .unwrap_or_default();
-    handle.set(
+    total_deltas.set(
         storage,
-        val.checked_add(&delta)
+        total_deltas_val
+            .checked_add(&delta)
             .expect("Total deltas updated amount should not overflow"),
         current_epoch,
         offset,
-    )
+    )?;
+
+    // Update total active voting power
+    if update_active_voting_power {
+        let active_delta = total_active_deltas
+            .get_delta_val(storage, current_epoch + offset)?
+            .unwrap_or_default();
+        total_active_deltas.set(
+            storage,
+            active_delta.checked_add(&delta).expect(
+                "Total active voting power updated amount should not overflow",
+            ),
+            current_epoch,
+            offset,
+        )?;
+    }
+
+    Ok(())
 }
 
 /// Read PoS validator's email.

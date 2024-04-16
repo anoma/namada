@@ -13,14 +13,13 @@ use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 
 use crate::in_memory::InMemory;
 use crate::write_log::{
-    self, ReProtStorageModification, StorageModification, WriteLog,
+    ReProtStorageModification, StorageModification, WriteLog,
 };
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
     MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result, State,
     StateRead, StorageHasher, StorageResult, StoreType, DB,
     EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
-    STORAGE_WRITE_GAS_PER_BYTE,
 };
 
 /// Owned state with full R/W access.
@@ -215,7 +214,10 @@ where
         }
         debug_assert!(self.0.write_log.block_write_log.is_empty());
 
-        // Replay protections specifically
+        // Replay protections specifically. Starts with pruning the buffer from
+        // the previous block
+        self.prune_replay_protection_buffer(batch)?;
+
         for (hash, entry) in
             std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
         {
@@ -227,17 +229,29 @@ where
                         // further
                         &replay_protection::last_key(&hash),
                     )?,
-                ReProtStorageModification::Delete => self
-                    .delete_replay_protection_entry(
+                ReProtStorageModification::Delete => {
+                    // Cache in case of a rollback
+                    self.write_replay_protection_entry(
+                        batch,
+                        &replay_protection::buffer_key(&hash),
+                    )?;
+
+                    self.delete_replay_protection_entry(
                         batch,
                         // Can only delete tx hashes from the previous block,
                         // no further
                         &replay_protection::last_key(&hash),
-                    )?,
+                    )?
+                }
                 ReProtStorageModification::Finalize => {
                     self.write_replay_protection_entry(
                         batch,
                         &replay_protection::all_key(&hash),
+                    )?;
+                    // Cache in case of a rollback
+                    self.write_replay_protection_entry(
+                        batch,
+                        &replay_protection::buffer_key(&hash),
                     )?;
                     self.delete_replay_protection_entry(
                         batch,
@@ -391,6 +405,14 @@ where
         Ok(())
     }
 
+    /// Delete the replay protection buffer
+    pub fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut D::WriteBatch,
+    ) -> Result<()> {
+        Ok(self.db.prune_replay_protection_buffer(batch)?)
+    }
+
     /// Iterate the replay protection storage from the last block
     pub fn iter_replay_protection(
         &self,
@@ -467,9 +489,9 @@ where
             results,
             address_gen,
             conversion_state,
-            tx_queue,
             ethereum_height,
             eth_events_queue,
+            commit_only_data,
         }) = self
             .0
             .db
@@ -490,6 +512,7 @@ where
                 in_mem.next_epoch_min_start_time = next_epoch_min_start_time;
                 in_mem.update_epoch_blocks_delay = update_epoch_blocks_delay;
                 in_mem.address_gen = address_gen;
+                in_mem.commit_only_data = commit_only_data;
             }
 
             // Rebuild Merkle tree - requires the values above to be set first
@@ -500,13 +523,21 @@ where
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;
             in_mem.conversion_state = conversion_state;
-            in_mem.tx_queue = tx_queue;
             in_mem.ethereum_height = ethereum_height;
             in_mem.eth_events_queue = eth_events_queue;
             tracing::debug!("Loaded storage from DB");
         } else {
             tracing::info!("No state could be found");
         }
+    }
+
+    pub fn commit_only_data(&mut self) -> Result<()> {
+        let data = self.in_mem().commit_only_data.serialize();
+        self.in_mem_mut()
+            .block
+            .tree
+            .update_commit_data(data)
+            .map_err(Error::MerkleTreeError)
     }
 
     /// Persist the block's state from batch writes to the database.
@@ -522,16 +553,19 @@ where
 
         // For convenience in tests, fill-in a header if it's missing.
         // Normally, the header is added in `FinalizeBlock`.
-        #[cfg(any(test, feature = "testing"))]
+        #[cfg(any(test, feature = "testing", feature = "benches"))]
         {
             if self.in_mem.header.is_none() {
                 self.in_mem.header = Some(storage::Header {
                     hash: Hash::default(),
+                    #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash::default(),
                 });
             }
         }
+
+        self.commit_only_data()?;
 
         let state = BlockStateWrite {
             merkle_tree_stores: self.in_mem.block.tree.stores(),
@@ -554,9 +588,9 @@ where
             update_epoch_blocks_delay: self.in_mem.update_epoch_blocks_delay,
             address_gen: &self.in_mem.address_gen,
             conversion_state: &self.in_mem.conversion_state,
-            tx_queue: &self.in_mem.tx_queue,
             ethereum_height: self.in_mem.ethereum_height.as_ref(),
             eth_events_queue: &self.in_mem.eth_events_queue,
+            commit_only_data: &self.in_mem.commit_only_data,
         };
         self.db
             .add_block_to_batch(state, &mut batch, is_full_commit)?;
@@ -574,6 +608,10 @@ where
         if is_full_commit {
             // prune old merkle tree stores
             self.prune_merkle_tree_stores(&mut batch)?;
+        }
+        // If there's a previous block, prune non-persisted diffs from it
+        if let Some(height) = self.in_mem.block.height.checked_prev() {
+            self.db.prune_non_persisted_diffs(&mut batch, height)?;
         }
         self.db.exec_batch(batch)?;
         Ok(())
@@ -628,8 +666,8 @@ where
     }
 
     /// Delete the provided transaction's hash from storage.
-    pub fn delete_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
-        self.write_log.delete_tx_hash(hash)
+    pub fn delete_tx_hash(&mut self, hash: Hash) {
+        self.write_log.delete_tx_hash(hash);
     }
 
     #[inline]
@@ -690,6 +728,7 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
+    #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_write(
         &mut self,
         key: &Key,
@@ -714,7 +753,8 @@ where
         }
 
         let len = value.len();
-        let gas = (key.len() + len) as u64 * STORAGE_WRITE_GAS_PER_BYTE;
+        let gas =
+            (key.len() + len) as u64 * namada_gas::STORAGE_WRITE_GAS_PER_BYTE;
         let size_diff = self.db.write_subspace_val(
             self.in_mem.block.height,
             key,
@@ -726,6 +766,7 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
+    #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
         // but with gas and storage bytes len diff accounting
@@ -742,7 +783,7 @@ where
             )?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64
-            * STORAGE_WRITE_GAS_PER_BYTE;
+            * namada_gas::STORAGE_WRITE_GAS_PER_BYTE;
         Ok((gas, deleted_bytes_len))
     }
 
@@ -850,19 +891,25 @@ where
             .pred_epochs
             .get_epoch(height)
             .unwrap_or_default();
-        let epoch_start_height = match self
-            .in_mem
-            .block
-            .pred_epochs
-            .get_start_height_of_epoch(epoch)
-        {
-            Some(BlockHeight(0)) => BlockHeight(1),
-            Some(height) => height,
-            None => BlockHeight(1),
+        let start_height = if store_type == Some(StoreType::CommitData) {
+            // CommitData is stored every height
+            height
+        } else {
+            // others are stored at the first height of each epoch
+            match self
+                .in_mem
+                .block
+                .pred_epochs
+                .get_start_height_of_epoch(epoch)
+            {
+                Some(BlockHeight(0)) => BlockHeight(1),
+                Some(height) => height,
+                None => BlockHeight(1),
+            }
         };
         let stores = self
             .db
-            .read_merkle_tree_stores(epoch, epoch_start_height, store_type)?
+            .read_merkle_tree_stores(epoch, start_height, store_type)?
             .ok_or(Error::NoMerkleTree { height })?;
         let prefix = store_type.and_then(|st| st.provable_prefix());
         let mut tree = match store_type {
@@ -870,7 +917,7 @@ where
             None => MerkleTree::<H>::new(stores).expect("invalid stores"),
         };
         // Restore the tree state with diffs
-        let mut target_height = epoch_start_height;
+        let mut target_height = start_height;
         while target_height < height {
             target_height = target_height.next_height();
             let mut old_diff_iter =
@@ -961,17 +1008,40 @@ where
                 }
             }
         }
-        if let Some(st) = store_type {
-            // Add the base tree with the given height
-            let mut stores = self
-                .db
-                .read_merkle_tree_stores(epoch, height, Some(StoreType::Base))?
-                .ok_or(Error::NoMerkleTree { height })?;
-            let restored_stores = tree.stores();
-            // Set the root and store of the rebuilt subtree
-            stores.set_root(&st, *restored_stores.root(&st));
-            stores.set_store(restored_stores.store(&st).to_owned());
-            tree = MerkleTree::<H>::new_partial(stores);
+
+        // Restore the base tree and CommitData tree
+        match store_type {
+            Some(st) => {
+                // It is enough to get the base tree
+                let mut stores = self
+                    .db
+                    .read_merkle_tree_stores(
+                        epoch,
+                        height,
+                        Some(StoreType::Base),
+                    )?
+                    .ok_or(Error::NoMerkleTree { height })?;
+                let restored_stores = tree.stores();
+                stores.set_root(&st, *restored_stores.root(&st));
+                stores.set_store(restored_stores.store(&st).to_owned());
+                tree = MerkleTree::<H>::new_partial(stores);
+            }
+            None => {
+                // Get the base and CommitData trees
+                let mut stores = self
+                    .db
+                    .read_merkle_tree_stores(epoch, height, None)?
+                    .ok_or(Error::NoMerkleTree { height })?;
+                let restored_stores = tree.stores();
+                // Set all rebuilt subtrees except for CommitData tree
+                for st in StoreType::iter_subtrees() {
+                    if *st != StoreType::CommitData {
+                        stores.set_root(st, *restored_stores.root(st));
+                        stores.set_store(restored_stores.store(st).to_owned());
+                    }
+                }
+                tree = MerkleTree::<H>::new(stores)?;
+            }
         }
         Ok(tree)
     }
@@ -981,10 +1051,11 @@ where
     pub fn get_last_block_timestamp(&self) -> Result<DateTimeUtc> {
         let last_block_height = self.in_mem.get_block_height().0;
 
-        Ok(self
-            .db
-            .read_block_header(last_block_height)?
-            .map_or_else(DateTimeUtc::now, |header| header.time))
+        Ok(self.db.read_block_header(last_block_height)?.map_or_else(
+            #[allow(clippy::disallowed_methods)]
+            DateTimeUtc::now,
+            |header| header.time,
+        ))
     }
 }
 
@@ -1188,5 +1259,54 @@ where
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl<D, H> namada_tx::action::Read for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let (log_val, _) = self.write_log().read(key);
+        match log_val {
+            Some(crate::write_log::StorageModification::Temp { value }) => {
+                let value =
+                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
+                        .map_err(Error::BorshCodingError)?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+            _ => Err(Error::UnknownKey {
+                key: key.to_string(),
+            }),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl<D, H> namada_tx::action::Write for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn write_temp<T: namada_core::borsh::BorshSerialize>(
+        &mut self,
+        key: &storage::Key,
+        val: T,
+    ) -> Result<()> {
+        let _ = self
+            .write_log_mut()
+            .write_temp(key, val.serialize_to_vec())
+            .map_err(|err| Error::Temporary {
+                error: err.to_string(),
+            })?;
+        Ok(())
     }
 }

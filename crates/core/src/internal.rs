@@ -1,6 +1,9 @@
 //! Shared internal types between the host env and guest (wasm).
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 
 /// A result of a wasm call to host functions that may fail.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,7 +16,7 @@ pub enum HostEnvResult {
 
 /// Key-value pair represents data from account's subspace.
 /// It is used for prefix iterator's WASM host_env functions.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct KeyVal {
     /// The storage key
     pub key: String,
@@ -35,6 +38,23 @@ impl HostEnvResult {
     /// Check if the given result as `i64` is a non-fatal failure
     pub fn is_fail(int: i64) -> bool {
         int == Self::Fail.to_i64()
+    }
+
+    /// Expect [`HostEnvResult::Success`].
+    pub fn success_or_else<F, E>(int: i64, or_else: F) -> Result<(), E>
+    where
+        F: FnOnce() -> E,
+    {
+        if Self::is_success(int) {
+            Ok(())
+        } else {
+            Err(or_else())
+        }
+    }
+
+    /// Expect [`HostEnvResult::Success`].
+    pub fn success_or<E>(int: i64, or_else: E) -> Result<(), E> {
+        Self::success_or_else(int, || or_else)
     }
 }
 

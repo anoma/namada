@@ -1,7 +1,7 @@
 //! SDK functions to construct different types of transactions
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -9,7 +9,6 @@ use std::time::Duration;
 use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::builder;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
@@ -18,20 +17,28 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
+use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
+use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
+use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use namada_core::ibc::apps::nft_transfer::types::PrefixedClassId;
+use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::primitives::{Msg, Timestamp as IbcTimestamp};
-use namada_core::ibc::{IbcShieldedTransfer, MsgShieldedTransfer};
-use namada_core::key::*;
-use namada_core::masp::{AssetData, TransferSource, TransferTarget};
+use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_core::ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
+use namada_core::key::{self, *};
+use namada_core::masp::{
+    AssetData, PaymentAddress, TransferSource, TransferTarget,
+};
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
@@ -43,14 +50,18 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::storage::channel_key;
-use namada_proof_of_stake::parameters::PosParams;
+use namada_ibc::storage::{channel_key, ibc_token};
+use namada_proof_of_stake::parameters::{
+    PosParams, MAX_VALIDATOR_METADATA_LEN,
+};
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
+use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{pos, ResultCode, TxResult};
-pub use namada_tx::{Signature, *};
+pub use namada_tx::{Authorization, *};
+use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
 use crate::control_flow::time;
@@ -60,8 +71,8 @@ use crate::masp::TransferErr::Build;
 use crate::masp::{ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
-    self, query_wasm_code_hash, validate_amount, InnerTxResult,
-    TxBroadcastData, TxResponse,
+    self, get_validator_stake, query_wasm_code_hash, validate_amount,
+    InnerTxResult, TxBroadcastData, TxResponse,
 };
 use crate::signing::{self, validate_fee_and_gen_unshield, SigningTxData};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
@@ -220,15 +231,10 @@ pub async fn process_tx(
         expect_dry_broadcast(TxBroadcastData::DryRun(tx), context).await
     } else {
         // We use this to determine when the wrapper tx makes it on-chain
-        let wrapper_hash = tx.header_hash().to_string();
+        let tx_hash = tx.header_hash().to_string();
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
-        let decrypted_hash = tx.raw_header_hash().to_string();
-        let to_broadcast = TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        };
+        let to_broadcast = TxBroadcastData::Live { tx, tx_hash };
         // TODO: implement the code to resubmit the wrapper if it fails because
         // of masp epoch Either broadcast or submit transaction and
         // collect result into sum type
@@ -313,12 +319,8 @@ pub async fn broadcast_tx(
     context: &impl Namada,
     to_broadcast: &TxBroadcastData,
 ) -> Result<Response> {
-    let (tx, wrapper_tx_hash, decrypted_tx_hash) = match to_broadcast {
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => Ok((tx, wrapper_hash, decrypted_hash)),
+    let (tx, tx_hash) = match to_broadcast {
+        TxBroadcastData::Live { tx, tx_hash } => Ok((tx, tx_hash)),
         TxBroadcastData::DryRun(tx) => {
             Err(TxSubmitError::ExpectLiveRun(tx.clone()))
         }
@@ -342,14 +344,7 @@ pub async fn broadcast_tx(
         // Print the transaction identifiers to enable the extraction of
         // acceptance/application results later
         {
-            display_line!(
-                context.io(),
-                "Wrapper transaction hash: {wrapper_tx_hash}",
-            );
-            display_line!(
-                context.io(),
-                "Inner transaction hash: {decrypted_tx_hash}",
-            );
+            display_line!(context.io(), "Transaction hash: {tx_hash}",);
         }
         Ok(response)
     } else {
@@ -373,12 +368,8 @@ pub async fn submit_tx(
     context: &impl Namada,
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse> {
-    let (_, wrapper_hash, decrypted_hash) = match &to_broadcast {
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash,
-            decrypted_hash,
-        } => Ok((tx, wrapper_hash, decrypted_hash)),
+    let (_, tx_hash) = match &to_broadcast {
+        TxBroadcastData::Live { tx, tx_hash } => Ok((tx, tx_hash)),
         TxBroadcastData::DryRun(tx) => {
             Err(TxSubmitError::ExpectLiveRun(tx.clone()))
         }
@@ -387,6 +378,7 @@ pub async fn submit_tx(
     // Broadcast the supplied transaction
     broadcast_tx(context, &to_broadcast).await?;
 
+    #[allow(clippy::disallowed_methods)]
     let deadline = time::Instant::now()
         + time::Duration::from_secs(
             DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS,
@@ -398,36 +390,12 @@ pub async fn submit_tx(
         "Awaiting transaction approval",
     );
 
-    let response = {
-        let wrapper_query = rpc::TxEventQuery::Accepted(wrapper_hash.as_str());
-        let event =
-            rpc::query_tx_status(context, wrapper_query, deadline).await?;
-        let wrapper_resp = TxResponse::from_event(event);
-
-        if display_wrapper_resp_and_get_result(context, &wrapper_resp) {
-            display_line!(
-                context.io(),
-                "Waiting for inner transaction result..."
-            );
-            // The transaction is now on chain. We wait for it to be decrypted
-            // and applied
-            // We also listen to the event emitted when the encrypted
-            // payload makes its way onto the blockchain
-            let decrypted_query =
-                rpc::TxEventQuery::Applied(decrypted_hash.as_str());
-            let event =
-                rpc::query_tx_status(context, decrypted_query, deadline)
-                    .await?;
-            let inner_resp = TxResponse::from_event(event);
-
-            display_inner_resp(context, &inner_resp);
-            Ok(inner_resp)
-        } else {
-            Ok(wrapper_resp)
-        }
-    };
-
-    response
+    // The transaction is now on chain. We wait for it to be applied
+    let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
+    let event = rpc::query_tx_status(context, tx_query, deadline).await?;
+    let response = TxResponse::from_event(event);
+    display_inner_resp(context, &response);
+    Ok(response)
 }
 
 /// Display a result of a wrapper tx.
@@ -481,9 +449,11 @@ pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
                 .collect();
             edisplay_line!(
                 context.io(),
-                "Transaction was rejected by VPs: {}.\nChanged keys: {}",
+                "Transaction was rejected by VPs: {}\nErrors: {}\nChanged \
+                 keys: {}",
                 serde_json::to_string_pretty(&inner.vps_result.rejected_vps)
                     .unwrap(),
+                serde_json::to_string_pretty(&inner.vps_result.errors).unwrap(),
                 serde_json::to_string_pretty(&changed_keys).unwrap(),
             );
         }
@@ -560,6 +530,71 @@ pub async fn save_initialized_accounts<N: Namada>(
             };
         }
     }
+}
+
+/// Submit validator commission rate change
+pub async fn build_change_consensus_key(
+    context: &impl Namada,
+    args::ConsensusKeyChange {
+        tx: tx_args,
+        validator,
+        consensus_key,
+        tx_code_path,
+        unsafe_dont_encrypt: _,
+    }: &args::ConsensusKeyChange,
+) -> Result<(Tx, SigningTxData)> {
+    let consensus_key = if let Some(consensus_key) = consensus_key {
+        consensus_key
+    } else {
+        edisplay_line!(context.io(), "Consensus key must must be present.");
+        return Err(Error::from(TxSubmitError::Other(
+            "Consensus key must must be present.".to_string(),
+        )));
+    };
+
+    // Check that the new consensus key is unique
+    let consensus_keys = rpc::get_consensus_keys(context.client()).await?;
+
+    if consensus_keys.contains(consensus_key) {
+        edisplay_line!(
+            context.io(),
+            "The consensus key is already being used."
+        );
+        return Err(Error::from(TxSubmitError::ConsensusKeyNotUnique));
+    }
+
+    let data = ConsensusKeyChange {
+        validator: validator.clone(),
+        consensus_key: consensus_key.clone(),
+    };
+
+    let signing_data = signing::init_validator_signing_data(
+        context,
+        tx_args,
+        vec![consensus_key.clone()],
+    )
+    .await?;
+
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            tx_args,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        unshield,
+        fee_amount,
+        &signing_data.fee_payer,
+    )
+    .await
+    .map(|tx| (tx, signing_data))
 }
 
 /// Submit validator commission rate change
@@ -733,6 +768,68 @@ pub async fn build_validator_metadata_change(
             );
             return Err(Error::from(TxSubmitError::InvalidEmail));
         }
+        // Check that the email is within MAX_VALIDATOR_METADATA_LEN characters
+        if email.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Email provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+
+    // Check that any new metadata provided is within MAX_VALIDATOR_METADATA_LEN
+    // characters
+    if let Some(description) = description.as_ref() {
+        if description.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Description provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(website) = website.as_ref() {
+        if website.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Website provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(discord_handle) = discord_handle.as_ref() {
+        if discord_handle.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Discord handle provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
+    if let Some(avatar) = avatar.as_ref() {
+        if avatar.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Avatar provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
     }
 
     // If there's a new commission rate, it must be valid
@@ -848,28 +945,32 @@ pub async fn build_update_steward_commission(
     )
     .await?;
 
-    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
             context.io(),
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxSubmitError::InvalidSteward(
-            steward.clone(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidSteward(
+                steward.clone(),
+            )));
+        }
     };
 
     let commission = Commission::try_from(commission.as_ref())
         .map_err(|e| TxSubmitError::InvalidStewardCommission(e.to_string()))?;
 
-    if !commission.is_valid() && !tx_args.force {
+    if !commission.is_valid() {
         edisplay_line!(
             context.io(),
             "The sum of all percentage must not be greater than 1."
         );
-        return Err(Error::from(TxSubmitError::InvalidStewardCommission(
-            "Commission sum is greater than 1.".to_string(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidStewardCommission(
+                "Commission sum is greater than 1.".to_string(),
+            )));
+        }
     }
 
     let data = UpdateStewardCommission {
@@ -915,15 +1016,17 @@ pub async fn build_resign_steward(
     )
     .await?;
 
-    if !rpc::is_steward(context.client(), steward).await && !tx_args.force {
+    if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
             context.io(),
             "The given address {} is not a steward.",
             &steward
         );
-        return Err(Error::from(TxSubmitError::InvalidSteward(
-            steward.clone(),
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidSteward(
+                steward.clone(),
+            )));
+        }
     };
 
     build(
@@ -1307,21 +1410,21 @@ pub async fn build_redelegation(
         Some(pipeline_epoch),
     )
     .await?;
-    if dest_validator_state_at_pipeline == Some(ValidatorState::Inactive)
-        && !tx_args.force
-    {
+    if dest_validator_state_at_pipeline == Some(ValidatorState::Inactive) {
         edisplay_line!(
             context.io(),
             "WARNING: the given destination validator address {} is inactive \
-             at the pipeline epoch {}. If you would still like to bond to the \
-             inactive validator, use the --force option.",
+             at the pipeline epoch {}. If you would still like to redelegate \
+             to the inactive validator, use the --force option.",
             &dest_validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxSubmitError::ValidatorInactive(
-            dest_validator.clone(),
-            pipeline_epoch,
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::ValidatorInactive(
+                dest_validator.clone(),
+                pipeline_epoch,
+            )));
+        }
     }
 
     // There must be at least as many tokens in the bond as the requested
@@ -1637,6 +1740,13 @@ pub async fn build_unbond(
             amount.to_string_native(),
             bond_amount.to_string_native(),
         );
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::LowerBondThanUnbond(
+                bond_source,
+                amount.to_string_native(),
+                bond_amount.to_string_native(),
+            )));
+        }
     }
 
     // Query the unbonds before submitting the tx
@@ -1712,7 +1822,7 @@ pub async fn query_unbonds(
                          occurred"
                     );
                 } else {
-                    return Err(Error::from(TxSubmitError::UnboundError));
+                    return Err(Error::from(TxSubmitError::UnbondError));
                 }
             }
             std::cmp::Ordering::Equal => {
@@ -1773,12 +1883,33 @@ pub async fn build_bond(
             .await?;
 
     // Check that the source address exists on chain
+    let mut is_src_also_val = false;
     let source = match source.clone() {
-        Some(source) => source_exists_or_err(source, tx_args.force, context)
-            .await
-            .map(Some),
+        Some(source) => {
+            is_src_also_val =
+                rpc::is_validator(context.client(), &source).await?;
+            source_exists_or_err(source, tx_args.force, context)
+                .await
+                .map(Some)
+        }
         None => Ok(source.clone()),
     }?;
+
+    // Check that the source is not a different validator bonding to validator
+    if is_src_also_val && source != Some(validator.clone()) {
+        edisplay_line!(
+            context.io(),
+            "The given source address {} is a validator. A validator is \
+             prohibited from bonding to another validator.",
+            &source.clone().unwrap()
+        );
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::InvalidBondPair(
+                source.clone().unwrap(),
+                validator.clone(),
+            )));
+        }
+    }
 
     // Give a bonding warning based on the pipeline state
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
@@ -1790,9 +1921,7 @@ pub async fn build_bond(
         Some(pipeline_epoch),
     )
     .await?;
-    if validator_state_at_pipeline == Some(ValidatorState::Inactive)
-        && !tx_args.force
-    {
+    if validator_state_at_pipeline == Some(ValidatorState::Inactive) {
         edisplay_line!(
             context.io(),
             "WARNING: the given validator address {} is inactive at the \
@@ -1801,10 +1930,12 @@ pub async fn build_bond(
             &validator,
             &pipeline_epoch
         );
-        return Err(Error::from(TxSubmitError::ValidatorInactive(
-            validator.clone(),
-            pipeline_epoch,
-        )));
+        if !tx_args.force {
+            return Err(Error::from(TxSubmitError::ValidatorInactive(
+                validator.clone(),
+                pipeline_epoch,
+            )));
+        }
     }
 
     let default_address = source.clone().unwrap_or(validator.clone());
@@ -1871,7 +2002,6 @@ pub async fn build_default_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
@@ -1903,7 +2033,7 @@ pub async fn build_default_proposal(
                 let (_, extra_section_hash) =
                     tx_builder.add_extra_section(init_proposal_code, None);
                 init_proposal_data.r#type =
-                    ProposalType::Default(Some(extra_section_hash));
+                    ProposalType::DefaultWithWasm(extra_section_hash);
             };
             Ok(())
         };
@@ -1929,18 +2059,16 @@ pub async fn build_vote_proposal(
         tx,
         proposal_id,
         vote,
-        voter,
-        is_offline: _,
-        proposal_data: _,
+        voter_address,
         tx_code_path,
     }: &args::VoteProposal,
-    epoch: Epoch,
+    current_epoch: Epoch,
 ) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(voter.clone());
+    let default_signer = Some(voter_address.clone());
     let signing_data = signing::aux_signing_data(
         context,
         tx,
-        Some(voter.clone()),
+        default_signer.clone(),
         default_signer.clone(),
     )
     .await?;
@@ -1951,51 +2079,150 @@ pub async fn build_vote_proposal(
     let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxSubmitError::InvalidProposalVote)?;
 
-    let proposal_id = proposal_id.ok_or_else(|| {
-        Error::Other("Proposal id must be defined.".to_string())
-    })?;
     let proposal = if let Some(proposal) =
-        rpc::query_proposal_by_id(context.client(), proposal_id).await?
+        rpc::query_proposal_by_id(context.client(), *proposal_id).await?
     {
         proposal
     } else {
         return Err(Error::from(TxSubmitError::ProposalDoesNotExist(
-            proposal_id,
+            *proposal_id,
         )));
     };
 
-    let is_validator = rpc::is_validator(context.client(), voter).await?;
+    let is_validator =
+        rpc::is_validator(context.client(), voter_address).await?;
 
-    if !proposal.can_be_voted(epoch, is_validator) {
-        if tx.force {
-            eprintln!("Invalid proposal {} vote period.", proposal_id);
-        } else {
+    // Prevent jailed or inactive validators from voting
+    if is_validator && !tx.force {
+        let state = rpc::get_validator_state(
+            context.client(),
+            voter_address,
+            Some(current_epoch),
+        )
+        .await?
+        .expect("Expected to find the state of the validator");
+
+        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
+            return Err(Error::from(TxSubmitError::CannotVoteInGovernance(
+                voter_address.clone(),
+                current_epoch,
+            )));
+        }
+    }
+
+    // Check if the voting period is still valid for the voter
+    if !proposal.can_be_voted(current_epoch, is_validator) {
+        eprintln!("Proposal {} cannot be voted on anymore.", proposal_id);
+        if is_validator {
+            eprintln!(
+                "NB: voter address {} is a validator, and validators can only \
+                 vote on proposals within the first 2/3 of the voting period.",
+                voter_address
+            );
+        }
+        if !tx.force {
             return Err(Error::from(
-                TxSubmitError::InvalidProposalVotingPeriod(proposal_id),
+                TxSubmitError::InvalidProposalVotingPeriod(*proposal_id),
             ));
         }
     }
 
-    let delegations = rpc::get_delegators_delegation_at(
-        context.client(),
-        voter,
-        proposal.voting_start_epoch,
-    )
-    .await?
-    .keys()
-    .cloned()
-    .collect::<Vec<Address>>();
+    let delegations = if is_validator {
+        let stake =
+            get_validator_stake(context.client(), current_epoch, voter_address)
+                .await?;
 
-    if delegations.is_empty() {
-        return Err(Error::Other(
-            "Voter address must have delegations".to_string(),
-        ));
-    }
+        if stake.is_zero() {
+            eprintln!(
+                "Voter address {} is a validator but has no stake, so it has \
+                 no votes.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::Other(
+                    "Voter address must have delegations".to_string(),
+                ));
+            }
+        }
+        let val_state = rpc::get_validator_state(
+            context.client(),
+            voter_address,
+            Some(current_epoch),
+        )
+        .await?
+        .expect("Expected to find the state of the validator");
+
+        if !matches!(
+            val_state,
+            ValidatorState::Jailed | ValidatorState::Inactive
+        ) {
+            vec![voter_address.clone()]
+        } else {
+            eprintln!(
+                "Voter address {} is a validator that is either jailed or \
+                 inactive, and so it may not vote in governance at this \
+                 moment.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::from(
+                    TxSubmitError::CannotVoteInGovernance(
+                        voter_address.clone(),
+                        current_epoch,
+                    ),
+                ));
+            }
+            vec![]
+        }
+    } else {
+        // Get active valid validators with whom the voter has delegations
+        // (bonds)
+        let delegation_vals = rpc::get_delegators_delegation_at(
+            context.client(),
+            voter_address,
+            proposal.voting_start_epoch,
+        )
+        .await?;
+
+        let mut delegation_validators = Vec::<Address>::new();
+        for validator in delegation_vals.keys() {
+            let val_state = rpc::get_validator_state(
+                context.client(),
+                validator,
+                Some(current_epoch),
+            )
+            .await?
+            .expect("Expected to find the state of the validator");
+
+            if matches!(
+                val_state,
+                ValidatorState::Jailed | ValidatorState::Inactive
+            ) {
+                continue;
+            }
+            delegation_validators.push(validator.clone());
+        }
+
+        // Check that there are delegations to vote with
+        if delegation_validators.is_empty() {
+            eprintln!(
+                "Voter address {} does not have any delegations.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::from(TxSubmitError::NoDelegationsFound(
+                    voter_address.clone(),
+                    current_epoch,
+                )));
+            }
+        }
+        delegation_validators
+    };
 
     let data = VoteProposalData {
-        id: proposal_id,
+        id: *proposal_id,
         vote: proposal_vote,
-        voter: voter.clone(),
+        voter: voter_address.clone(),
         delegations,
     };
 
@@ -2014,12 +2241,201 @@ pub async fn build_vote_proposal(
 }
 
 /// Build a pgf funding proposal governance
+pub async fn build_become_validator(
+    context: &impl Namada,
+    args::TxBecomeValidator {
+        tx: tx_args,
+        address,
+        scheme: _,
+        consensus_key,
+        eth_cold_key,
+        eth_hot_key,
+        protocol_key,
+        commission_rate,
+        max_commission_rate_change,
+        email,
+        website,
+        description,
+        discord_handle,
+        avatar,
+        unsafe_dont_encrypt: _,
+        tx_code_path,
+    }: &args::TxBecomeValidator,
+) -> Result<(Tx, SigningTxData)> {
+    // Check that the address is established
+    if !address.is_established() {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} is not established. Only an \
+             established address can become a validator.",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must be enstablished".to_string(),
+            ));
+        }
+    };
+
+    // Check that the address is not already a validator
+    if rpc::is_validator(context.client(), address).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} is already a validator",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must not be a validator already".to_string(),
+            ));
+        }
+    };
+
+    // If the address is not yet a validator, it cannot have self-bonds, but it
+    // may have delegations. It has to unbond those before it can become a
+    // validator.
+    if rpc::has_bonds(context.client(), address).await? {
+        edisplay_line!(
+            context.io(),
+            "The given address {address} has delegations and therefore cannot \
+             become a validator. To become a validator, you have to unbond \
+             your delegations first.",
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "The given address must not have delegations".to_string(),
+            ));
+        }
+    }
+
+    // Validate the commission rate data
+    if *commission_rate > Dec::one() || *commission_rate < Dec::zero() {
+        edisplay_line!(
+            context.io(),
+            "The validator commission rate must not exceed 1.0 or 100%, and \
+             it must be 0 or positive."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Invalid validator commission rate".to_string(),
+            ));
+        }
+    }
+
+    if *max_commission_rate_change > Dec::one()
+        || *max_commission_rate_change < Dec::zero()
+    {
+        edisplay_line!(
+            context.io(),
+            "The validator maximum change in commission rate per epoch must \
+             not exceed 1.0 or 100%, and it must be 0 or positive."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Invalid validator maximum change".to_string(),
+            ));
+        }
+    }
+
+    // Validate the email
+    if email.is_empty() {
+        edisplay_line!(
+            context.io(),
+            "The validator email must not be an empty string."
+        );
+        if !tx_args.force {
+            return Err(Error::Other(
+                "Validator email must not be empty".to_string(),
+            ));
+        }
+    }
+
+    // check that all keys have been supplied correctly
+    if [
+        consensus_key.clone(),
+        eth_cold_key.clone(),
+        eth_hot_key.clone(),
+        protocol_key.clone(),
+    ]
+    .iter()
+    .any(|key| key.is_none())
+    {
+        edisplay_line!(
+            context.io(),
+            "All validator keys must be supplied to create a validator."
+        );
+        return Err(Error::Other("Validator key must be present".to_string()));
+    }
+
+    let data = BecomeValidator {
+        address: address.clone(),
+        consensus_key: consensus_key.clone().unwrap(),
+        eth_cold_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_cold_key.clone().unwrap(),
+        )
+        .unwrap(),
+        eth_hot_key: key::secp256k1::PublicKey::try_from_pk(
+            &eth_hot_key.clone().unwrap(),
+        )
+        .unwrap(),
+        protocol_key: protocol_key.clone().unwrap(),
+        commission_rate: *commission_rate,
+        max_commission_rate_change: *max_commission_rate_change,
+        email: email.to_owned(),
+        description: description.clone(),
+        website: website.clone(),
+        discord_handle: discord_handle.clone(),
+        avatar: avatar.clone(),
+    };
+
+    // Put together all the PKs that we have to sign with to verify ownership
+    let account = if let Some(account) =
+        rpc::get_account_info(context.client(), address).await?
+    {
+        account
+    } else {
+        edisplay_line!(
+            context.io(),
+            "Unable to query account keys for address {address}."
+        );
+        return Err(Error::Other("Invalid address".to_string()));
+    };
+
+    let mut all_pks = account.get_all_public_keys();
+    all_pks.push(consensus_key.clone().unwrap().clone());
+    all_pks.push(eth_cold_key.clone().unwrap());
+    all_pks.push(eth_hot_key.clone().unwrap());
+    all_pks.push(protocol_key.clone().unwrap().clone());
+
+    let signing_data =
+        signing::init_validator_signing_data(context, tx_args, all_pks).await?;
+
+    let (fee_amount, _updated_balance, unshield) =
+        validate_fee_and_gen_unshield(
+            context,
+            tx_args,
+            &signing_data.fee_payer,
+        )
+        .await?;
+
+    build(
+        context,
+        tx_args,
+        tx_code_path.clone(),
+        data,
+        do_nothing,
+        unshield,
+        fee_amount,
+        &signing_data.fee_payer,
+    )
+    .await
+    .map(|tx| (tx, signing_data))
+}
+
+/// Build a pgf funding proposal governance
 pub async fn build_pgf_funding_proposal(
     context: &impl Namada,
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
@@ -2068,7 +2484,6 @@ pub async fn build_pgf_stewards_proposal(
     args::InitProposal {
         tx,
         proposal_data: _,
-        is_offline: _,
         is_pgf_stewards: _,
         is_pgf_funding: _,
         tx_code_path,
@@ -2117,6 +2532,9 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+    let refund_target =
+        get_refund_target(context, &args.source, &args.refund_target).await?;
+
     let source = args.source.effective_address();
     let signing_data = signing::aux_signing_data(
         context,
@@ -2181,24 +2599,10 @@ pub async fn build_ibc_transfer(
         &TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
         &args.token,
         validated_amount,
+        !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
-
-    let ibc_denom =
-        rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
-            .await;
-    let token = PrefixedCoin {
-        denom: ibc_denom.parse().expect("Invalid IBC denom"),
-        // Set the IBC amount as an integer
-        amount: validated_amount.into(),
-    };
-    let packet_data = PacketData {
-        token,
-        sender: source.to_string().into(),
-        receiver: args.receiver.clone().into(),
-        memo: args.memo.clone().unwrap_or_default().into(),
-    };
 
     // this height should be that of the destination chain, not this chain
     let timeout_height = match args.timeout_height {
@@ -2213,7 +2617,11 @@ pub async fn build_ibc_transfer(
     let now: std::result::Result<
         crate::tendermint::Time,
         namada_core::tendermint::Error,
-    > = DateTimeUtc::now().try_into();
+    > = {
+        #[allow(clippy::disallowed_methods)]
+        DateTimeUtc::now()
+    }
+    .try_into();
     let now = now.map_err(|e| Error::Other(e.to_string()))?;
     let now: IbcTimestamp = now.into();
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
@@ -2227,59 +2635,109 @@ pub async fn build_ibc_transfer(
         IbcTimestamp::none()
     };
 
-    let message = MsgTransfer {
-        port_id_on_a: args.port_id.clone(),
-        chan_id_on_a: args.channel_id.clone(),
-        packet_data,
-        timeout_height_on_b: timeout_height,
-        timeout_timestamp_on_b: timeout_timestamp,
-    };
-
     let chain_id = args.tx.chain_id.clone().unwrap();
     let mut tx = Tx::new(chain_id, args.tx.expiration);
     if let Some(memo) = &args.tx.memo {
         tx.add_memo(memo);
     }
 
-    let data = match shielded_parts {
-        Some((shielded_transfer, asset_types)) => {
-            let masp_tx_hash =
-                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-            let transfer = token::Transfer {
-                source: source.clone(),
-                // The token will be escrowed to IBC address
-                target: Address::Internal(InternalAddress::Ibc),
-                token: args.token.clone(),
-                amount: validated_amount,
-                // The address could be a payment address, but the address isn't
-                // that of this chain.
-                key: None,
-                // Link the Transfer to the MASP Transaction by hash code
-                shielded: Some(masp_tx_hash),
-            };
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                metadata: shielded_transfer.metadata,
-                builder: shielded_transfer.builder,
-                target: masp_tx_hash,
-            });
-            let shielded_transfer = IbcShieldedTransfer {
-                transfer,
-                masp_tx: shielded_transfer.masp_tx,
-            };
-            MsgShieldedTransfer {
-                message,
-                shielded_transfer,
-            }
-            .serialize_to_vec()
-        }
-        None => {
-            let any_msg = message.to_any();
-            let mut data = vec![];
-            prost::Message::encode(&any_msg, &mut data)
-                .map_err(TxSubmitError::EncodeFailure)?;
-            data
-        }
+    let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
+        let masp_tx_hash =
+            tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+        let transfer = token::Transfer {
+            source: source.clone(),
+            // The token will be escrowed to IBC address
+            target: Address::Internal(InternalAddress::Ibc),
+            token: args.token.clone(),
+            amount: validated_amount,
+            // The address could be a payment address, but the address isn't
+            // that of this chain.
+            key: None,
+            // Link the Transfer to the MASP Transaction by hash code
+            shielded: Some(masp_tx_hash),
+        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            metadata: shielded_transfer.metadata,
+            builder: shielded_transfer.builder,
+            target: masp_tx_hash,
+        });
+        transfer
+    });
+
+    // Check the token and make the tx data
+    let ibc_denom =
+        rpc::query_ibc_denom(context, &args.token.to_string(), Some(&source))
+            .await;
+    // The refund target should be given or created if the source is shielded.
+    // Otherwise, the refund target should be None.
+    assert!(
+        (args.source.spending_key().is_some() && refund_target.is_some())
+            || (args.source.address().is_some() && refund_target.is_none())
+    );
+    // If the refund address is given, set the refund address. It is used only
+    // when refunding and won't affect the actual transfer because the actual
+    // source will be the MASP address and the MASP transaction is generated by
+    // the shielded source address.
+    let sender = refund_target
+        .map(|t| t.to_string())
+        .unwrap_or(source.to_string())
+        .into();
+    let data = if args.port_id == PortId::transfer() {
+        let token = PrefixedCoin {
+            denom: ibc_denom
+                .parse()
+                .map_err(|e| Error::Other(format!("Invalid IBC denom: {e}")))?,
+            // Set the IBC amount as an integer
+            amount: validated_amount.into(),
+        };
+        let packet_data = PacketData {
+            token,
+            sender,
+            receiver: args.receiver.clone().into(),
+            memo: args.memo.clone().unwrap_or_default().into(),
+        };
+        let message = IbcMsgTransfer {
+            port_id_on_a: args.port_id.clone(),
+            chan_id_on_a: args.channel_id.clone(),
+            packet_data,
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+        MsgTransfer { message, transfer }.serialize_to_vec()
+    } else if let Some((trace_path, base_class_id, token_id)) =
+        is_nft_trace(&ibc_denom)
+    {
+        let class_id = PrefixedClassId {
+            trace_path,
+            base_class_id: base_class_id.parse().map_err(|_| {
+                Error::Other(format!("Invalid class ID: {base_class_id}"))
+            })?,
+        };
+        let token_ids = vec![token_id.clone()].try_into().map_err(|_| {
+            Error::Other(format!("Invalid token ID: {token_id}"))
+        })?;
+        let packet_data = NftPacketData {
+            class_id,
+            class_uri: None,
+            class_data: None,
+            token_ids,
+            token_uris: None,
+            token_data: None,
+            sender,
+            receiver: args.receiver.clone().into(),
+            memo: args.memo.clone().map(|m| m.into()),
+        };
+        let message = IbcMsgNftTransfer {
+            port_id_on_a: args.port_id.clone(),
+            chan_id_on_a: args.channel_id.clone(),
+            packet_data,
+            timeout_height_on_b: timeout_height,
+            timeout_timestamp_on_b: timeout_timestamp,
+        };
+        MsgNftTransfer { message, transfer }.serialize_to_vec()
+    } else {
+        return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
 
     tx.add_code_from_hash(
@@ -2504,6 +2962,7 @@ pub async fn build_transfer<N: Namada>(
         &args.target,
         &args.token,
         validated_amount,
+        !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -2570,6 +3029,7 @@ async fn construct_shielded_parts<N: Namada>(
     target: &TransferTarget,
     token: &Address,
     amount: token::DenominatedAmount,
+    update_ctx: bool,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
@@ -2581,7 +3041,7 @@ async fn construct_shielded_parts<N: Namada>(
         .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, source, target, token, amount,
+            context, source, target, token, amount, update_ctx,
         )
         .await;
 
@@ -2833,7 +3293,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
-) -> Result<Option<IbcShieldedTransfer>> {
+) -> Result<Option<(token::Transfer, MaspTransaction)>> {
     let key = match args.target.payment_address() {
         Some(pa) if pa.is_pinned() => Some(pa.hash()),
         Some(_) => None,
@@ -2845,19 +3305,27 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let prefixed_denom = ibc_denom
-        .parse()
-        .map_err(|_| Error::Other(format!("Invalid IBC denom: {ibc_denom}")))?;
-    let token = namada_ibc::received_ibc_token(
-        &prefixed_denom,
-        &src_port_id,
-        &src_channel_id,
-        &args.port_id,
-        &args.channel_id,
-    )
-    .map_err(|e| {
-        Error::Other(format!("Getting IBC Token failed: error {e}"))
-    })?;
+    let token = if args.refund {
+        if ibc_denom.contains('/') {
+            ibc_token(ibc_denom)
+        } else {
+            // the token is a base token
+            Address::decode(&ibc_denom)
+                .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
+        }
+    } else {
+        // Need to check the prefix
+        namada_ibc::received_ibc_token(
+            &ibc_denom,
+            &src_port_id,
+            &src_channel_id,
+            &args.port_id,
+            &args.channel_id,
+        )
+        .map_err(|e| {
+            Error::Other(format!("Getting IBC Token failed: error {e}"))
+        })?
+    };
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 
@@ -2877,25 +3345,23 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             &args.target,
             &token,
             validated_amount,
+            true,
         )
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     if let Some(shielded_transfer) = shielded_transfer {
+        let masp_tx_hash =
+            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
         let transfer = token::Transfer {
             source: source.clone(),
             target: MASP,
             token: token.clone(),
             amount: validated_amount,
             key,
-            shielded: Some(
-                Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash(),
-            ),
+            shielded: Some(masp_tx_hash),
         };
-        Ok(Some(IbcShieldedTransfer {
-            transfer,
-            masp_tx: shielded_transfer.masp_tx,
-        }))
+        Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)
     }
@@ -2952,11 +3418,9 @@ async fn expect_dry_broadcast(
             let result = rpc::dry_run_tx(context, tx.to_bytes()).await?;
             Ok(ProcessTxResponse::DryRun(result))
         }
-        TxBroadcastData::Live {
-            tx,
-            wrapper_hash: _,
-            decrypted_hash: _,
-        } => Err(Error::from(TxSubmitError::ExpectDryRun(tx))),
+        TxBroadcastData::Live { tx, tx_hash: _ } => {
+            Err(Error::from(TxSubmitError::ExpectDryRun(tx)))
+        }
     }
 }
 
@@ -3048,6 +3512,62 @@ async fn target_exists_or_err(
         Error::from(TxSubmitError::TargetLocationDoesNotExist(err))
     })
     .await
+}
+
+/// Returns the given refund target address if the given address is valid for
+/// the IBC shielded transfer. Returns an error if the address is transparent
+/// or the address is given for non-shielded transfer.
+async fn get_refund_target(
+    context: &impl Namada,
+    source: &TransferSource,
+    refund_target: &Option<TransferTarget>,
+) -> Result<Option<PaymentAddress>> {
+    match (source, refund_target) {
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::PaymentAddress(pa)),
+        ) => Ok(Some(*pa)),
+        (
+            TransferSource::ExtendedSpendingKey(_),
+            Some(TransferTarget::Address(addr)),
+        ) => Err(Error::Other(format!(
+            "Transparent address can't be specified as a refund target: {}",
+            addr,
+        ))),
+        (TransferSource::ExtendedSpendingKey(spending_key), None) => {
+            // Generate a new payment address
+            let viewing_key =
+                ExtendedFullViewingKey::from(&(*spending_key).into()).fvk.vk;
+            let mut rng = OsRng;
+            let (div, _g_d) = crate::masp::find_valid_diversifier(&mut rng);
+            let payment_addr: PaymentAddress = viewing_key
+                .to_payment_address(div)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Converting to a payment address failed".to_string(),
+                    )
+                })?
+                .into();
+            let alias = format!("ibc-refund-target-{}", rng.next_u64());
+            let mut wallet = context.wallet_mut().await;
+            wallet
+                .insert_payment_addr(alias, payment_addr, false)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Adding a new payment address failed".to_string(),
+                    )
+                })?;
+            wallet.save().map_err(|e| {
+                Error::Other(format!("Saving wallet error: {e}"))
+            })?;
+            Ok(Some(payment_addr))
+        }
+        (_, Some(_)) => Err(Error::Other(
+            "Refund target can't be specified for non-shielded transfer"
+                .to_string(),
+        )),
+        (_, None) => Ok(None),
+    }
 }
 
 enum CheckBalance {

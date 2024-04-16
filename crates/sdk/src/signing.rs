@@ -1,5 +1,5 @@
 //! Functions to sign transactions
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use borsh::BorshDeserialize;
@@ -13,6 +13,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
 use namada_core::sign::SignatureIndex;
@@ -516,6 +517,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                         &target,
                         &args.fee_token,
                         fee_amount,
+                    !(args.dry_run || args.dry_run_wrapper)
                     )
                     .await
                 {
@@ -886,11 +888,11 @@ fn to_ledger_decimal(amount: &str) -> String {
     if amount.contains('.') {
         let mut amount = amount.trim_end_matches('0').to_string();
         if amount.ends_with('.') {
-            amount.push('0')
+            amount.pop();
         }
         amount
     } else {
-        amount.to_string() + ".0"
+        amount.to_string()
     }
 }
 
@@ -915,8 +917,8 @@ struct LedgerProposalType<'a>(&'a ProposalType, &'a Tx);
 impl<'a> Display for LedgerProposalType<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.0 {
-            ProposalType::Default(None) => write!(f, "Default"),
-            ProposalType::Default(Some(hash)) => {
+            ProposalType::Default => write!(f, "Default"),
+            ProposalType::DefaultWithWasm(hash) => {
                 let extra = self
                     .1
                     .get_section(hash)
@@ -938,10 +940,10 @@ fn proposal_type_to_ledger_vector(
     output: &mut Vec<String>,
 ) {
     match proposal_type {
-        ProposalType::Default(None) => {
+        ProposalType::Default => {
             output.push("Proposal type : Default".to_string())
         }
-        ProposalType::Default(Some(hash)) => {
+        ProposalType::DefaultWithWasm(hash) => {
             output.push("Proposal type : Default".to_string());
             let extra = tx
                 .get_section(hash)
@@ -1222,7 +1224,6 @@ pub async fn to_ledger_vector(
             .hash();
 
         tv.output.push("Type : Init proposal".to_string());
-        tv.output.push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
             tx,
@@ -1238,12 +1239,13 @@ pub async fn to_ledger_vector(
                 "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
-            format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!(
+                "Activation epoch : {}",
+                init_proposal_data.activation_epoch
+            ),
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
 
-        tv.output_expert
-            .push(format!("ID : {}", init_proposal_data.id));
         proposal_type_to_ledger_vector(
             &init_proposal_data.r#type,
             tx,
@@ -1259,7 +1261,10 @@ pub async fn to_ledger_vector(
                 "Voting end epoch : {}",
                 init_proposal_data.voting_end_epoch
             ),
-            format!("Grace epoch : {}", init_proposal_data.grace_epoch),
+            format!(
+                "Activation epoch : {}",
+                init_proposal_data.activation_epoch
+            ),
             format!("Content : {}", HEXLOWER.encode(&extra.0)),
         ]);
     } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {

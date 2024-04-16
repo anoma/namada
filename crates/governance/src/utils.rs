@@ -1,13 +1,15 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 
-use super::cli::offline::OfflineVote;
 use super::storage::proposal::ProposalType;
 use super::storage::vote::ProposalVote;
 
@@ -35,7 +37,7 @@ impl Display for ProposalStatus {
 pub type VotePower = token::Amount;
 
 /// Structure rappresenting a proposal vote
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct Vote {
     /// Field holding the address of the validator
     pub validator: Address,
@@ -60,7 +62,9 @@ impl Vote {
 }
 
 /// Represent a tally type
-#[derive(Copy, Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy, Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub enum TallyType {
     /// Represent a tally type for proposal requiring 2/3 of the total voting
     /// power to be yay
@@ -77,7 +81,8 @@ impl TallyType {
     /// Compute the type of tally for a proposal
     pub fn from(proposal_type: ProposalType, is_steward: bool) -> Self {
         match (proposal_type, is_steward) {
-            (ProposalType::Default(_), _) => TallyType::TwoThirds,
+            (ProposalType::Default, _) => TallyType::TwoThirds,
+            (ProposalType::DefaultWithWasm(_), _) => TallyType::TwoThirds,
             (ProposalType::PGFSteward(_), _) => TallyType::OneHalfOverOneThird,
             (ProposalType::PGFPayment(_), true) => {
                 TallyType::LessOneHalfOverOneThirdNay
@@ -90,7 +95,9 @@ impl TallyType {
 }
 
 /// The result of a proposal
-#[derive(Copy, Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Copy, Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer,
+)]
 pub enum TallyResult {
     /// Proposal was accepted with the associated value
     Passed,
@@ -173,7 +180,9 @@ impl TallyResult {
 }
 
 /// The result with votes of a proposal
-#[derive(Clone, Copy, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Clone, Debug, Copy, BorshDeserialize, BorshSerialize, BorshDeserializer,
+)]
 pub struct ProposalResult {
     /// The result of a proposal
     pub result: TallyResult,
@@ -234,77 +243,16 @@ impl Display for ProposalResult {
     }
 }
 
-/// General representation of a vote
-#[derive(Debug, Clone)]
-pub enum TallyVote {
-    /// Represent a vote for a proposal onchain
-    OnChain(ProposalVote),
-    /// Represent a vote for a proposal offline
-    Offline(OfflineVote),
-}
-
-impl From<ProposalVote> for TallyVote {
-    fn from(vote: ProposalVote) -> Self {
-        Self::OnChain(vote)
-    }
-}
-
-impl From<OfflineVote> for TallyVote {
-    fn from(vote: OfflineVote) -> Self {
-        Self::Offline(vote)
-    }
-}
-
-impl TallyVote {
-    /// Check if a vote is yay
-    pub fn is_yay(&self) -> bool {
-        match self {
-            TallyVote::OnChain(vote) => vote.is_yay(),
-            TallyVote::Offline(vote) => vote.is_yay(),
-        }
-    }
-
-    /// Check if a vote is nay
-    pub fn is_nay(&self) -> bool {
-        match self {
-            TallyVote::OnChain(vote) => vote.is_nay(),
-            TallyVote::Offline(vote) => vote.is_nay(),
-        }
-    }
-
-    /// Check if a vote is abstain
-    pub fn is_abstain(&self) -> bool {
-        match self {
-            TallyVote::OnChain(vote) => vote.is_abstain(),
-            TallyVote::Offline(vote) => vote.is_abstain(),
-        }
-    }
-
-    /// Check if two votes are equal, returns an error if the variants of the
-    /// two instances are different
-    pub fn is_same_side(&self, other: &TallyVote) -> bool {
-        match (self, other) {
-            (TallyVote::OnChain(vote), TallyVote::OnChain(other_vote)) => {
-                vote == other_vote
-            }
-            (TallyVote::Offline(vote), TallyVote::Offline(other_vote)) => {
-                vote.vote == other_vote.vote
-            }
-            _ => false,
-        }
-    }
-}
-
 /// Proposal structure holding votes information necessary to compute the
 /// outcome
 #[derive(Default, Debug, Clone)]
 pub struct ProposalVotes {
     /// Map from validator address to vote
-    pub validators_vote: HashMap<Address, TallyVote>,
+    pub validators_vote: HashMap<Address, ProposalVote>,
     /// Map from validator to their voting power
     pub validator_voting_power: HashMap<Address, VotePower>,
     /// Map from delegation address to their vote
-    pub delegators_vote: HashMap<Address, TallyVote>,
+    pub delegators_vote: HashMap<Address, ProposalVote>,
     /// Map from delegator address to the corresponding validator voting power
     pub delegator_voting_power: HashMap<Address, HashMap<Address, VotePower>>,
 }
@@ -315,7 +263,7 @@ impl ProposalVotes {
         &mut self,
         address: &Address,
         voting_power: VotePower,
-        vote: TallyVote,
+        vote: ProposalVote,
     ) {
         match self.validators_vote.insert(address.clone(), vote) {
             None => {
@@ -336,7 +284,7 @@ impl ProposalVotes {
         address: &Address,
         validator_address: &Address,
         voting_power: VotePower,
-        vote: TallyVote,
+        vote: ProposalVote,
     ) {
         self.delegator_voting_power
             .entry(address.clone())
@@ -432,8 +380,10 @@ pub fn compute_proposal_result(
     }
 }
 
-/// Calculate the valid voting window for validator given a proposal epoch
-/// details
+/// Calculate the valid voting window for a validator given proposal epoch
+/// details. The valid window is within 2/3 of the voting period.
+/// NOTE: technically the window can be more generous than 2/3 since the end
+/// epoch is a valid epoch for voting too.
 pub fn is_valid_validator_voting_period(
     current_epoch: Epoch,
     voting_start_epoch: Epoch,
@@ -442,9 +392,10 @@ pub fn is_valid_validator_voting_period(
     if voting_start_epoch >= voting_end_epoch {
         false
     } else {
-        let duration = voting_end_epoch - voting_start_epoch;
-        let two_third_duration = (duration / 3) * 2;
-        current_epoch <= voting_start_epoch + two_third_duration
+        // From e_cur <= e_start + 2/3 * (e_end - e_start)
+        let is_within_two_thirds =
+            3 * current_epoch <= voting_start_epoch + 2 * voting_end_epoch;
+        current_epoch >= voting_start_epoch && is_within_two_thirds
     }
 }
 
@@ -494,7 +445,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         for tally_type in [
@@ -533,7 +484,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_2();
@@ -542,7 +493,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         for tally_type in [
@@ -581,7 +532,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_2();
@@ -590,7 +541,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         for tally_type in [
@@ -632,7 +583,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_2();
@@ -641,7 +592,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -650,7 +601,7 @@ mod test {
             &delegator_address_two,
             &validator_address,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         for tally_type in [
@@ -699,7 +650,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_2();
@@ -708,7 +659,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -717,7 +668,7 @@ mod test {
             &delegator_address_two,
             &validator_address,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         for tally_type in [
@@ -766,7 +717,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -775,7 +726,7 @@ mod test {
             &delegator_address_two,
             &validator_address,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         for tally_type in [
@@ -823,7 +774,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let validator_address_two = address::testing::established_address_2();
@@ -831,7 +782,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address_two,
             validator_voting_power_two,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         for tally_type in [
@@ -886,7 +837,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let validator_address_two = address::testing::established_address_2();
@@ -894,7 +845,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address_two,
             validator_voting_power_two,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -903,7 +854,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         for tally_type in [
@@ -958,7 +909,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let validator_address_two = address::testing::established_address_2();
@@ -966,7 +917,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address_two,
             validator_voting_power_two,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -975,7 +926,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1017,7 +968,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address,
             validator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let validator_address_two = address::testing::established_address_2();
@@ -1025,7 +976,7 @@ mod test {
         proposal_votes.add_validator(
             &validator_address_two,
             validator_voting_power_two,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address_two = address::testing::established_address_3();
@@ -1034,7 +985,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1043,7 +994,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1089,7 +1040,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Abstain.into(),
+            ProposalVote::Abstain,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1098,7 +1049,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1141,7 +1092,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1150,7 +1101,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1195,7 +1146,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1204,7 +1155,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1249,7 +1200,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1258,7 +1209,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Yay.into(),
+            ProposalVote::Yay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1303,7 +1254,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1312,7 +1263,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1347,7 +1298,7 @@ mod test {
     }
 
     #[test]
-    fn test_proposal_fifthteen() {
+    fn test_proposal_fifteen() {
         let mut proposal_votes = ProposalVotes::default();
 
         let validator_address = address::testing::established_address_1();
@@ -1359,7 +1310,7 @@ mod test {
             &delegator_address_two,
             &validator_address_two,
             delegator_voting_power_two,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let delegator_address = address::testing::established_address_4();
@@ -1368,7 +1319,7 @@ mod test {
             &delegator_address,
             &validator_address,
             delegator_voting_power,
-            ProposalVote::Nay.into(),
+            ProposalVote::Nay,
         );
 
         let proposal_result = compute_proposal_result(
@@ -1400,5 +1351,45 @@ mod test {
         );
 
         assert!(!proposal_result.two_thirds_nay_over_two_thirds_total())
+    }
+
+    #[test]
+    fn test_validator_voting_period() {
+        assert!(!is_valid_validator_voting_period(
+            0.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            2.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            3.into(),
+            2.into(),
+            4.into()
+        ));
+        assert!(!is_valid_validator_voting_period(
+            4.into(),
+            2.into(),
+            4.into()
+        ));
+
+        assert!(is_valid_validator_voting_period(
+            3.into(),
+            2.into(),
+            5.into()
+        ));
+        assert!(is_valid_validator_voting_period(
+            4.into(),
+            2.into(),
+            5.into()
+        ));
+        assert!(!is_valid_validator_voting_period(
+            5.into(),
+            2.into(),
+            5.into()
+        ));
     }
 }

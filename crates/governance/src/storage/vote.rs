@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -9,6 +12,7 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     Eq,
     Serialize,
     Deserialize,
@@ -37,6 +41,18 @@ impl ProposalVote {
     /// Check if a vote is abstain
     pub fn is_abstain(&self) -> bool {
         matches!(self, ProposalVote::Abstain)
+    }
+
+    /// Check if two votes are equal, returns an error if the variants of the
+    /// two instances are different
+    #[allow(clippy::match_like_matches_macro)]
+    pub fn is_same_side(&self, other: &ProposalVote) -> bool {
+        match (self, other) {
+            (ProposalVote::Yay, ProposalVote::Yay) => true,
+            (ProposalVote::Nay, ProposalVote::Nay) => true,
+            (ProposalVote::Abstain, ProposalVote::Abstain) => true,
+            _ => false,
+        }
     }
 }
 

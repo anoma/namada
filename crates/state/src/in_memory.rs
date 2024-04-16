@@ -1,13 +1,18 @@
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::hash::Hash;
 use namada_core::time::DateTimeUtc;
 use namada_core::{encode, ethereum_structs};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_macros::BorshDeserializer;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;
-use namada_storage::tx_queue::{ExpiredTxsQueue, TxQueue};
+use namada_storage::tx_queue::ExpiredTxsQueue;
+use namada_storage::types::CommitOnlyData;
 use namada_storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, StorageHasher, TxIndex, BLOCK_HASH_LENGTH,
@@ -54,8 +59,6 @@ where
     pub tx_index: TxIndex,
     /// The currently saved conversion state
     pub conversion_state: ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: TxQueue,
     /// Queue of expired transactions that need to be retransmitted.
     ///
     /// These transactions do not need to be persisted, as they are
@@ -69,10 +72,12 @@ where
     pub eth_events_queue: EthEventsQueue,
     /// How many block heights in the past can the storage be queried
     pub storage_read_past_height_limit: Option<u64>,
+    /// Data that needs to be committed to the merkle tree
+    pub commit_only_data: CommitOnlyData,
 }
 
 /// Last committed block
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct LastBlock {
     /// Block height
     pub height: BlockHeight,
@@ -132,6 +137,7 @@ where
             last_block: None,
             last_epoch: Epoch::default(),
             next_epoch_min_start_height: BlockHeight::default(),
+            #[allow(clippy::disallowed_methods)]
             next_epoch_min_start_time: DateTimeUtc::now(),
             address_gen: EstablishedAddressGen::new(
                 "Privacy is a function of liberty.",
@@ -139,12 +145,12 @@ where
             update_epoch_blocks_delay: None,
             tx_index: TxIndex::default(),
             conversion_state: ConversionState::default(),
-            tx_queue: TxQueue::default(),
             expired_txs_queue: ExpiredTxsQueue::default(),
             native_token,
             ethereum_height: None,
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
+            commit_only_data: CommitOnlyData::default(),
         }
     }
 
@@ -181,6 +187,10 @@ where
         self.block.hash = hash;
         self.block.height = height;
         Ok(())
+    }
+
+    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
+        self.commit_only_data.tx_gas.insert(tx_hash, gas);
     }
 
     /// Get the chain ID as a raw string

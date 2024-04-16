@@ -1,62 +1,20 @@
 #![allow(missing_docs)]
 
+pub mod action;
 pub mod data;
+pub mod event;
 pub mod proto;
 mod types;
 
-use std::collections::HashMap;
-
 use data::TxType;
-use namada_core::event::{Event, EventLevel, EventType};
+pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
-    standalone_signature, verify_standalone_sig, Code, Commitment,
-    CompressedSignature, Data, DecodeError, Header, MaspBuilder, Memo, Section,
-    Signature, Signed, Signer, Tx, TxError, VerifySigError,
+    standalone_signature, verify_standalone_sig, Authorization, Code,
+    Commitment, CompressedSignature, Data, DecodeError, Header, MaspBuilder,
+    Memo, Section, Signed, Signer, Tx, TxError, VerifySigError,
 };
-
-/// Creates a new event with the hash and height of the transaction
-/// already filled in
-pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
-    let mut event = match tx.header().tx_type {
-        TxType::Wrapper(_) => {
-            let mut event = Event {
-                event_type: EventType::Accepted,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx.header_hash().to_string();
-            event
-        }
-        TxType::Decrypted(_) => {
-            let mut event = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx
-                .clone()
-                .update_header(TxType::Raw)
-                .header_hash()
-                .to_string();
-            event
-        }
-        TxType::Protocol(_) => {
-            let mut event = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Tx,
-                attributes: HashMap::new(),
-            };
-            event["hash"] = tx.header_hash().to_string();
-            event
-        }
-        _ => unreachable!(),
-    };
-    event["height"] = height.to_string();
-    event["log"] = "".to_string();
-    event
-}
 
 #[cfg(test)]
 mod tests {

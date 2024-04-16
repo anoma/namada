@@ -1,11 +1,11 @@
 //! Structures encapsulating SDK arguments
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
 use namada_core::chain::ChainId;
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
@@ -317,6 +317,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub timeout_height: Option<u64>,
     /// Timeout timestamp offset
     pub timeout_sec_offset: Option<u64>,
+    /// Refund target address when the shielded transfer failure
+    pub refund_target: Option<C::TransferTarget>,
     /// Memo
     pub memo: Option<String>,
     /// Path to the TX WASM code file
@@ -382,6 +384,14 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
         }
     }
 
+    /// Refund target address
+    pub fn refund_target(self, refund_target: C::TransferTarget) -> Self {
+        Self {
+            refund_target: Some(refund_target),
+            ..self
+        }
+    }
+
     /// Memo
     pub fn memo(self, memo: String) -> Self {
         Self {
@@ -417,8 +427,6 @@ pub struct InitProposal<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// The proposal data
     pub proposal_data: C::Data,
-    /// Flag if proposal should be run offline
-    pub is_offline: bool,
     /// Flag if proposal is of type Pgf stewards
     pub is_pgf_stewards: bool,
     /// Flag if proposal is of type Pgf funding
@@ -446,11 +454,6 @@ impl<C: NamadaTypes> InitProposal<C> {
             proposal_data,
             ..self
         }
-    }
-
-    /// Flag if proposal should be run offline
-    pub fn is_offline(self, is_offline: bool) -> Self {
-        Self { is_offline, ..self }
     }
 
     /// Flag if proposal is of type Pgf stewards
@@ -568,15 +571,11 @@ pub struct VoteProposal<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Proposal id
-    pub proposal_id: Option<u64>,
+    pub proposal_id: u64,
     /// The vote
     pub vote: String,
     /// The address of the voter
-    pub voter: C::Address,
-    /// Flag if proposal vote should be run offline
-    pub is_offline: bool,
-    /// The proposal file path
-    pub proposal_data: Option<C::Data>,
+    pub voter_address: C::Address,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -597,7 +596,7 @@ impl<C: NamadaTypes> VoteProposal<C> {
     /// Proposal id
     pub fn proposal_id(self, proposal_id: u64) -> Self {
         Self {
-            proposal_id: Some(proposal_id),
+            proposal_id,
             ..self
         }
     }
@@ -608,19 +607,9 @@ impl<C: NamadaTypes> VoteProposal<C> {
     }
 
     /// The address of the voter
-    pub fn voter(self, voter: C::Address) -> Self {
-        Self { voter, ..self }
-    }
-
-    /// Flag if proposal vote should be run offline
-    pub fn is_offline(self, is_offline: bool) -> Self {
-        Self { is_offline, ..self }
-    }
-
-    /// The proposal file path
-    pub fn proposal_data(self, proposal_data: C::Data) -> Self {
+    pub fn voter(self, voter_address: C::Address) -> Self {
         Self {
-            proposal_data: Some(proposal_data),
+            voter_address,
             ..self
         }
     }
@@ -751,6 +740,62 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
+}
+
+impl<C: NamadaTypes> TxBuilder<C> for TxBecomeValidator<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        TxBecomeValidator {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
+
+impl<C: NamadaTypes> TxBecomeValidator<C> {
+    pub fn address(self, address: C::Address) -> Self {
+        Self { address, ..self }
+    }
+
+    pub fn commission_rate(self, commission_rate: Dec) -> Self {
+        Self {
+            commission_rate,
+            ..self
+        }
+    }
+
+    pub fn max_commission_rate_change(
+        self,
+        max_commission_rate_change: Dec,
+    ) -> Self {
+        Self {
+            max_commission_rate_change,
+            ..self
+        }
+    }
+
+    pub fn email(self, email: String) -> Self {
+        Self { email, ..self }
+    }
+
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
+
+impl TxBecomeValidator {
+    pub async fn build(
+        &self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_become_validator(context, self).await
+    }
 }
 
 /// Transaction to initialize a new account
@@ -1281,6 +1326,19 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Whether not to convert balances
     pub no_conversions: bool,
+    /// Show IBC tokens
+    pub show_ibc_tokens: bool,
+}
+
+/// Query IBC token(s)
+#[derive(Clone, Debug)]
+pub struct QueryIbcToken<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// The token address which could be a non-namada address
+    pub token: Option<String>,
+    /// Address of an owner
+    pub owner: Option<C::BalanceOwner>,
 }
 
 /// Query historical transfer(s)
@@ -1397,51 +1455,50 @@ pub struct ConsensusKeyChange<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
-// impl<C: NamadaTypes> TxBuilder<C> for ConsensusKeyChange<C> {
-//     fn tx<F>(self, func: F) -> Self
-//     where
-//         F: FnOnce(Tx<C>) -> Tx<C>,
-//     {
-//         ConsensusKeyChange {
-//             tx: func(self.tx),
-//             ..self
-//         }
-//     }
-// }
+impl<C: NamadaTypes> TxBuilder<C> for ConsensusKeyChange<C> {
+    fn tx<F>(self, func: F) -> Self
+    where
+        F: FnOnce(Tx<C>) -> Tx<C>,
+    {
+        ConsensusKeyChange {
+            tx: func(self.tx),
+            ..self
+        }
+    }
+}
 
-// impl<C: NamadaTypes> ConsensusKeyChange<C> {
-//     /// Validator address (should be self)
-//     pub fn validator(self, validator: C::Address) -> Self {
-//         Self { validator, ..self }
-//     }
+impl<C: NamadaTypes> ConsensusKeyChange<C> {
+    /// Validator address (should be self)
+    pub fn validator(self, validator: C::Address) -> Self {
+        Self { validator, ..self }
+    }
 
-//     /// Value to which the tx changes the commission rate
-//     pub fn consensus_key(self, consensus_key: C::Keypair) -> Self {
-//         Self {
-//             consensus_key: Some(consensus_key),
-//             ..self
-//         }
-//     }
+    /// Value to which the tx changes the commission rate
+    pub fn consensus_key(self, consensus_key: C::PublicKey) -> Self {
+        Self {
+            consensus_key: Some(consensus_key),
+            ..self
+        }
+    }
 
-//     /// Path to the TX WASM code file
-//     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
-//         Self {
-//             tx_code_path,
-//             ..self
-//         }
-//     }
-// }
+    /// Path to the TX WASM code file
+    pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
+        Self {
+            tx_code_path,
+            ..self
+        }
+    }
+}
 
-// impl ConsensusKeyChange {
-//     /// Build a transaction from this builder
-//     pub async fn build(
-//         &self,
-//         context: &impl Namada,
-//     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData,
-// Option<Epoch>)>     {
-//         tx::build_change_consensus_key(context, self).await
-//     }
-// }
+impl ConsensusKeyChange {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_change_consensus_key(context, self).await
+    }
+}
 
 #[derive(Clone, Debug)]
 /// Commission rate change args
@@ -1818,6 +1875,8 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     pub ledger_address: C::TendermintAddress,
     /// The number of txs to fetch before caching
     pub batch_size: u64,
+    /// Height to start syncing from. Defaults to the correct one.
+    pub start_query_height: Option<BlockHeight>,
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
@@ -2500,4 +2559,6 @@ pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub port_id: PortId,
     /// Channel ID via which the token is received
     pub channel_id: ChannelId,
+    /// Generate the shielded transfer for refunding
+    pub refund: bool,
 }

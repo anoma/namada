@@ -24,10 +24,11 @@ mod tests;
 
 use core::fmt::Debug;
 use std::cmp::{self};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::event::EmitEvents;
 use namada_core::key::common;
@@ -67,8 +68,10 @@ use crate::storage::{
     validator_rewards_products_handle, validator_set_positions_handle,
     validator_slashes_handle, validator_state_handle,
     validator_total_redelegated_bonded_handle,
-    validator_total_redelegated_unbonded_handle, write_last_reward_claim_epoch,
-    write_pos_params, write_validator_address_raw_hash, write_validator_avatar,
+    validator_total_redelegated_unbonded_handle,
+    write_last_pos_inflation_amount, write_last_reward_claim_epoch,
+    write_last_staked_ratio, write_pos_params,
+    write_validator_address_raw_hash, write_validator_avatar,
     write_validator_description, write_validator_discord_handle,
     write_validator_email, write_validator_max_commission_rate_change,
     write_validator_metadata, write_validator_website,
@@ -113,6 +116,11 @@ where
     tracing::debug!("Initializing PoS genesis");
     write_pos_params(storage, params)?;
 
+    // Initialize values for PoS inflation
+    write_last_staked_ratio(storage, Dec::zero())?;
+    write_last_pos_inflation_amount(storage, token::Amount::zero())?;
+
+    // Initialize validator set data
     consensus_validator_set_handle().init(storage, current_epoch)?;
     below_capacity_validator_set_handle().init(storage, current_epoch)?;
     validator_set_positions_handle().init(storage, current_epoch)?;
@@ -267,11 +275,11 @@ where
     // Update the validator set
     // Allow bonding even if the validator is jailed. However, if jailed, there
     // must be no changes to the validator set. Check at the pipeline epoch.
-    let is_jailed_or_inactive_at_pipeline = matches!(
+    let is_jailed_or_inactive_at_offset = matches!(
         validator_state_handle.get(storage, offset_epoch, &params)?,
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
-    if !is_jailed_or_inactive_at_pipeline {
+    if !is_jailed_or_inactive_at_offset {
         update_validator_set(
             storage,
             &params,
@@ -298,6 +306,7 @@ where
         amount.change(),
         current_epoch,
         offset_opt,
+        !is_jailed_or_inactive_at_offset,
     )?;
 
     Ok(())
@@ -680,6 +689,7 @@ where
         change_after_slashing,
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
@@ -2159,6 +2169,7 @@ where
         amount_after_slashing.change(),
         current_epoch,
         None,
+        !is_jailed_or_inactive_at_pipeline,
     )?;
 
     Ok(())
@@ -2205,7 +2216,8 @@ where
             // Promote the next below-capacity validator to consensus
             promote_next_below_capacity_validator_to_consensus(
                 storage,
-                pipeline_epoch,
+                current_epoch,
+                params.pipeline_len,
             )?;
         }
 
@@ -2290,8 +2302,8 @@ where
             validator_state_handle(validator).set(
                 storage,
                 ValidatorState::Jailed,
-                pipeline_epoch,
-                0,
+                current_epoch,
+                params.pipeline_len,
             )?;
             return Ok(());
         }
@@ -2485,6 +2497,10 @@ where
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
+    use namada_core::chain::ProposalBytes;
+    use namada_core::hash::Hash;
+    use namada_core::time::DurationSecs;
+    use namada_parameters::{init_storage, EpochDuration};
     use namada_trans_token::credit_tokens;
 
     use super::*;
@@ -2568,6 +2584,26 @@ pub mod test_utils {
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;
         let params = read_non_pos_owned_params(storage, owned)?;
+        let chain_parameters = namada_parameters::Parameters {
+            max_tx_bytes: 123456789,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 2,
+                min_duration: DurationSecs(4),
+            },
+            max_expected_time_per_block: DurationSecs(2),
+            max_proposal_bytes: ProposalBytes::default(),
+            max_block_gas: 10000000,
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
+            implicit_vp_code_hash: Some(Hash::default()),
+            epochs_per_year: 10000000,
+            max_signatures_per_transaction: 15,
+            fee_unshielding_gas_limit: 10000,
+            fee_unshielding_descriptions_limit: 15,
+            minimum_gas_price: BTreeMap::new(),
+            is_native_token_transferable: true,
+        };
+        init_storage(&chain_parameters, storage).unwrap();
         init_genesis_helper(storage, &params, validators, current_epoch)?;
         Ok(params)
     }
@@ -2680,7 +2716,7 @@ where
 /// Jail a validator by removing it from and updating the validator sets and
 /// changing a its state to `Jailed`. Validators are jailed for liveness and for
 /// misbehaving.
-fn jail_validator<S>(
+pub fn jail_validator<S>(
     storage: &mut S,
     params: &PosParams,
     validator: &Address,
@@ -2698,10 +2734,14 @@ where
 
     // Remove the validator from the set starting at the update epoch and up
     // thru the pipeline epoch.
-    let pipeline_epoch = current_epoch + params.pipeline_len;
-    for epoch in
-        Epoch::iter_bounds_inclusive(validator_set_update_epoch, pipeline_epoch)
-    {
+    let start = validator_set_update_epoch
+        .0
+        .checked_sub(current_epoch.0)
+        .unwrap(); // Safe unwrap
+    let end = params.pipeline_len;
+
+    for offset in start..=end {
+        let epoch = current_epoch + offset;
         let prev_state = validator_state_handle(validator)
             .get(storage, epoch, params)?
             .expect("Expected to find a valid validator.");
@@ -2716,9 +2756,11 @@ where
                 // For the pipeline epoch only:
                 // promote the next max inactive validator to the active
                 // validator set at the pipeline offset
-                if epoch == pipeline_epoch {
+                if offset == params.pipeline_len {
                     promote_next_below_capacity_validator_to_consensus(
-                        storage, epoch,
+                        storage,
+                        current_epoch,
+                        offset,
                     )?;
                 }
             }

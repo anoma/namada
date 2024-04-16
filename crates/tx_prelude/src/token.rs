@@ -4,6 +4,7 @@ use namada_proof_of_stake::token::storage_key::{
 };
 use namada_storage::{Error as StorageError, ResultExt};
 pub use namada_token::*;
+use namada_tx_env::TxEnv;
 
 use crate::{Ctx, StorageRead, StorageWrite, TxResult};
 
@@ -14,9 +15,17 @@ pub fn transfer(
     src: &Address,
     dest: &Address,
     token: &Address,
-    amount: DenominatedAmount,
+    amount: Amount,
 ) -> TxResult {
-    let amount = denom_to_amount(amount, token, ctx)?;
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(src)?;
+    if token.is_internal() {
+        // Established address tokens do not have VPs themselves, their
+        // validation is handled by the `Multitoken` internal address, but
+        // internal token addresses have to verify the transfer
+        ctx.insert_verifier(token)?;
+    }
+
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);
@@ -41,6 +50,15 @@ pub fn undenominated_transfer(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
+    // The tx must be authorized by the source address
+    ctx.insert_verifier(src)?;
+    if token.is_internal() {
+        // Established address tokens do not have VPs themselves, their
+        // validation is handled by the `Multitoken` internal address, but
+        // internal token addresses have to verify the transfer
+        ctx.insert_verifier(token)?;
+    }
+
     if amount != Amount::default() && src != dest {
         let src_key = balance_key(token, src);
         let dest_key = balance_key(token, dest);

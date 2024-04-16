@@ -9,6 +9,9 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use chrono::ParseError;
 pub use chrono::{DateTime, Duration, TimeZone, Utc};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// Check if the given `duration` has passed since the given `start.
@@ -34,6 +37,7 @@ pub fn duration_passed(
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct DurationSecs(pub u64);
@@ -79,6 +83,7 @@ impl Display for DurationSecs {
     Deserialize,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSchema,
 )]
 pub struct DurationNanos {
@@ -110,6 +115,7 @@ impl From<DurationNanos> for std::time::Duration {
     Deserialize,
     Serialize,
     BorshDeserialize,
+    BorshDeserializer,
     BorshSerialize,
     PartialEq,
     Eq,
@@ -132,6 +138,7 @@ pub struct Rfc3339String(pub String);
     Hash,
     serde::Serialize,
     serde::Deserialize,
+    BorshDeserializer,
 )]
 #[serde(try_from = "Rfc3339String", into = "Rfc3339String")]
 pub struct DateTimeUtc(pub DateTime<Utc>);
@@ -148,7 +155,10 @@ impl Display for DateTimeUtc {
 impl DateTimeUtc {
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
-        Self(Utc::now())
+        Self(
+            #[allow(clippy::disallowed_methods)]
+            Utc::now(),
+        )
     }
 
     /// Returns a [`DateTimeUtc`] corresponding to the provided Unix timestamp.

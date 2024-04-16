@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key,
+    BlockHash, BlockHeight, BlockResults, DbColFam, Epoch, Epochs,
+    EthEventsQueue, Header, Key,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{ethereum_events, ethereum_structs};
@@ -12,10 +12,11 @@ use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
 };
+use regex::Regex;
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
-use crate::tx_queue::TxQueue;
+use crate::types::CommitOnlyData;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -69,13 +70,13 @@ pub struct BlockStateRead {
     pub results: BlockResults,
     /// The conversion state
     pub conversion_state: ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<ethereum_structs::BlockHeight>,
     /// The queue of Ethereum events to be processed in order.
     pub eth_events_queue: EthEventsQueue,
+    /// Structure holding data that needs to be added to the merkle tree
+    pub commit_only_data: CommitOnlyData,
 }
 
 /// The block's state to write into the database.
@@ -106,13 +107,13 @@ pub struct BlockStateWrite<'a> {
     pub results: &'a BlockResults,
     /// The conversion state
     pub conversion_state: &'a ConversionState,
-    /// Wrapper txs to be decrypted in the next block proposal
-    pub tx_queue: &'a TxQueue,
     /// The latest block height on Ethereum processed, if
     /// the bridge is enabled.
     pub ethereum_height: Option<&'a ethereum_structs::BlockHeight>,
     /// The queue of Ethereum events to be processed in order.
     pub eth_events_queue: &'a EthEventsQueue,
+    /// Structure holding data that needs to be added to the merkle tree
+    pub commit_only_data: &'a CommitOnlyData,
 }
 
 /// A database backend.
@@ -260,12 +261,37 @@ pub trait DB: Debug {
         batch: &mut Self::WriteBatch,
         key: &Key,
     ) -> Result<()>;
+
+    /// Delete the entire replay protection buffer
+    fn prune_replay_protection_buffer(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+    ) -> Result<()>;
+
+    /// Prune non-persisted diffs that are only kept for one block for rollback
+    fn prune_non_persisted_diffs(
+        &mut self,
+        batch: &mut Self::WriteBatch,
+        height: BlockHeight,
+    ) -> Result<()>;
+
+    /// Overwrite a new value in storage, taking into
+    /// account values stored at a previous height
+    fn overwrite_entry(
+        &self,
+        batch: &mut Self::WriteBatch,
+        height: Option<BlockHeight>,
+        cf: &DbColFam,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()>;
 }
 
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
     /// The concrete type of the iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// WARNING: This only works for values that have been committed to DB.
     /// To be able to see values written or deleted, but not yet committed,
@@ -274,6 +300,18 @@ pub trait DBIter<'iter> {
     /// Read account subspace key value pairs with the given prefix from the DB,
     /// ordered by the storage keys.
     fn iter_prefix(&'iter self, prefix: Option<&Key>) -> Self::PrefixIter;
+
+    /// WARNING: This only works for values that have been committed to DB.
+    /// To be able to see values written or deleted, but not yet committed,
+    /// use the `StorageWithWriteLog`.
+    ///
+    /// Read account subspace key value pairs with the given pattern from the
+    /// DB, ordered by the storage keys.
+    fn iter_pattern(
+        &'iter self,
+        prefix: Option<&Key>,
+        pattern: Regex,
+    ) -> Self::PatternIter;
 
     /// Read results subspace key value pairs from the DB
     fn iter_results(&'iter self) -> Self::PrefixIter;
@@ -294,6 +332,9 @@ pub trait DBIter<'iter> {
 
     /// Read replay protection storage from the last block
     fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
+
+    /// Read replay protection storage from the the buffer
+    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.

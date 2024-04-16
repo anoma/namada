@@ -1,5 +1,8 @@
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::token;
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
 use super::storage::keys as goverance_storage;
@@ -14,6 +17,7 @@ use super::storage::keys as goverance_storage;
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshDeserializer,
 )]
 /// Governance parameter structure
 pub struct GovernanceParameters {
@@ -27,7 +31,7 @@ pub struct GovernanceParameters {
     pub max_proposal_period: u64,
     /// Maximum number of characters for proposal content
     pub max_proposal_content_size: u64,
-    /// Minimum epochs between end and grace epochs
+    /// Minimum number of epochs between the end and activation epochs
     pub min_proposal_grace_epochs: u64,
 }
 
@@ -83,10 +87,10 @@ impl GovernanceParameters {
         storage
             .write(&max_proposal_content_size_key, max_proposal_content_size)?;
 
-        let min_proposal_grace_epoch_key =
-            goverance_storage::get_min_proposal_grace_epoch_key();
+        let min_proposal_grace_epochs_key =
+            goverance_storage::get_min_proposal_grace_epochs_key();
         storage
-            .write(&min_proposal_grace_epoch_key, min_proposal_grace_epochs)?;
+            .write(&min_proposal_grace_epochs_key, min_proposal_grace_epochs)?;
 
         let counter_key = goverance_storage::get_counter_key();
         storage.write(&counter_key, u64::MIN)

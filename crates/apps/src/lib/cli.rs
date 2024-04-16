@@ -251,6 +251,7 @@ pub mod cmds {
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
+                .subcommand(QueryIbcToken::def().display_order(5))
                 .subcommand(QueryBonds::def().display_order(5))
                 .subcommand(QueryBondedStake::def().display_order(5))
                 .subcommand(QuerySlashes::def().display_order(5))
@@ -270,7 +271,6 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
-                .subcommand(GenIbcShieldedTransfer::def().display_order(6))
                 // Utils
                 .subcommand(Utils::def().display_order(7))
         }
@@ -325,6 +325,7 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryMaspRewardTokens);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
+            let query_ibc_token = Self::parse_with_ctx(matches, QueryIbcToken);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
@@ -353,8 +354,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
-            let gen_ibc_shielded =
-                Self::parse_with_ctx(matches, GenIbcShieldedTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transfer)
@@ -388,6 +387,7 @@ pub mod cmds {
                 .or(query_masp_reward_tokens)
                 .or(query_block)
                 .or(query_balance)
+                .or(query_ibc_token)
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
@@ -407,7 +407,6 @@ pub mod cmds {
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
-                .or(gen_ibc_shielded)
                 .or(utils)
         }
     }
@@ -479,6 +478,7 @@ pub mod cmds {
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
+        QueryIbcToken(QueryIbcToken),
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
@@ -496,7 +496,6 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
-        GenIbcShieldedTransfer(GenIbcShieldedTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -839,6 +838,8 @@ pub mod cmds {
         RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
+        UpdateDB(LedgerUpdateDB),
+        QueryDB(LedgerQueryDB),
         RollBack(LedgerRollBack),
     }
 
@@ -850,10 +851,14 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
+                let update_db = SubCmd::parse(matches).map(Self::UpdateDB);
+                let query_db = SubCmd::parse(matches).map(Self::QueryDB);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
+                    .or(update_db)
+                    .or(query_db)
                     .or(rollback)
                     .or(run_until)
                     // The `run` command is the default if no sub-command given
@@ -873,6 +878,8 @@ pub mod cmds {
                 .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
+                .subcommand(LedgerUpdateDB::def())
+                .subcommand(LedgerQueryDB::def())
                 .subcommand(LedgerRollBack::def())
         }
     }
@@ -952,6 +959,51 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Dump Namada ledger node's DB from a block into a file.")
                 .add_args::<args::LedgerDumpDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerUpdateDB(pub args::LedgerUpdateDb);
+
+    impl SubCmd for LedgerUpdateDB {
+        const CMD: &'static str = "update-db";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerUpdateDb::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Applies a set of updates to the DB for hard forking. The \
+                     input should be a path to a file dictating a set of keys \
+                     and their new values. Can be dry-run for testing.",
+                )
+                .add_args::<args::LedgerUpdateDb>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerQueryDB(pub args::LedgerQueryDb);
+
+    impl SubCmd for LedgerQueryDB {
+        const CMD: &'static str = "query-db";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::LedgerQueryDb::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(
+                    "Query the value of keys from the DB while the ledger is \
+                     not running.",
+                )
+                .add_args::<args::LedgerQueryDb>()
         }
     }
 
@@ -1671,6 +1723,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct QueryIbcToken(pub args::QueryIbcToken<args::CliTypes>);
+
+    impl SubCmd for QueryIbcToken {
+        const CMD: &'static str = "ibc-token";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryIbcToken(args::QueryIbcToken::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Query IBC token(s).")
+                .add_args::<args::QueryIbcToken<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct QueryBonds(pub args::QueryBonds<args::CliTypes>);
 
     impl SubCmd for QueryBonds {
@@ -2115,29 +2186,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct GenIbcShieldedTransfer(
-        pub args::GenIbcShieldedTransfer<args::CliTypes>,
-    );
-
-    impl SubCmd for GenIbcShieldedTransfer {
-        const CMD: &'static str = "ibc-gen-shielded";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                GenIbcShieldedTransfer(args::GenIbcShieldedTransfer::parse(
-                    matches,
-                ))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Generate shielded transfer for IBC.")
-                .add_args::<args::GenIbcShieldedTransfer<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct EpochSleep(pub args::Query<args::CliTypes>);
 
     impl SubCmd for EpochSleep {
@@ -2175,6 +2223,7 @@ pub mod cmds {
         ValidateGenesisTemplates(ValidateGenesisTemplates),
         TestGenesis(TestGenesis),
         SignGenesisTxs(SignGenesisTxs),
+        ParseMigrationJson(MigrationJson),
     }
 
     impl SubCmd for Utils {
@@ -2208,6 +2257,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::SignGenesisTxs);
                 let test_genesis =
                     SubCmd::parse(matches).map(Self::TestGenesis);
+                let parse_migrations_json =
+                    SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 join_network
                     .or(fetch_wasms)
                     .or(validate_wasm)
@@ -2222,6 +2273,7 @@ pub mod cmds {
                     .or(validate_genesis_templates)
                     .or(test_genesis)
                     .or(genesis_tx)
+                    .or(parse_migrations_json)
             })
         }
 
@@ -2242,6 +2294,7 @@ pub mod cmds {
                 .subcommand(ValidateGenesisTemplates::def())
                 .subcommand(TestGenesis::def())
                 .subcommand(SignGenesisTxs::def())
+                .subcommand(MigrationJson::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2468,6 +2521,25 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Sign genesis transaction(s).")
                 .add_args::<args::SignGenesisTxs>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct MigrationJson(pub args::MigrationJson);
+
+    impl SubCmd for MigrationJson {
+        const CMD: &'static str = "parse-migration-json";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::MigrationJson::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Parse and print a migration JSON file.")
+                .add_args::<args::MigrationJson>()
         }
     }
 
@@ -2925,14 +2997,15 @@ pub mod cmds {
 }
 
 pub mod args {
-    use std::collections::HashMap;
     use std::env;
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::str::FromStr;
 
+    use data_encoding::HEXUPPER;
     use namada::core::address::{Address, EstablishedAddress};
     use namada::core::chain::{ChainId, ChainIdPrefix};
+    use namada::core::collections::HashMap;
     use namada::core::dec::Dec;
     use namada::core::ethereum_events::EthAddress;
     use namada::core::keccak::KeccakHash;
@@ -2987,6 +3060,9 @@ pub mod args {
         arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
+    pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
+        arg_opt("from-height");
+    pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
             "pool-gas-amount",
@@ -3026,6 +3102,11 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DB_KEY: Arg<String> = arg("db-key");
+    pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
+        "db-column-family",
+        DefaultFn(|| storage::SUBSPACE_CF.to_string()),
+    );
     pub const DECRYPT: ArgFlag = flag("decrypt");
     pub const DESCRIPTION_OPT: ArgOpt<String> = arg_opt("description");
     pub const DISPOSABLE_SIGNING_KEY: ArgFlag = flag("disposable-gas-payer");
@@ -3082,6 +3163,7 @@ pub mod args {
     pub const GENESIS_VALIDATOR_ADDRESS: Arg<EstablishedAddress> =
         arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
+    pub const HASH: Arg<String> = arg("hash");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
@@ -3096,6 +3178,7 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.";
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
+
     pub const LEDGER_ADDRESS: ArgDefault<Url> =
         arg("node").default(DefaultFn(|| {
             let raw = "http://127.0.0.1:26657";
@@ -3129,7 +3212,6 @@ pub mod args {
     pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
-    pub const PROPOSAL_OFFLINE: ArgFlag = flag("offline");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
     pub const PRE_GENESIS_PATH: ArgOpt<PathBuf> = arg_opt("pre-genesis-path");
     pub const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
@@ -3154,6 +3236,9 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
+    pub const REFUND: ArgFlag = flag("refund");
+    pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
+        arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
@@ -3162,6 +3247,7 @@ pub mod args {
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
     pub const SHIELDED: ArgFlag = flag("shielded");
+    pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
@@ -3179,6 +3265,7 @@ pub mod args {
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
     pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
+    pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
     pub const TOKEN_STR: Arg<String> = arg("token");
     pub const TRANSFER_SOURCE: Arg<WalletTransferSource> = arg("source");
@@ -3372,6 +3459,76 @@ pub mod args {
                     .def()
                     .help("If provided, dump also the diff of the last height"),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerUpdateDb {
+        pub updates: PathBuf,
+        pub dry_run: bool,
+        pub last_height: BlockHeight,
+    }
+
+    impl Args for LedgerUpdateDb {
+        fn parse(matches: &ArgMatches) -> Self {
+            let updates = PATH.parse(matches);
+            let dry_run = DRY_RUN_TX.parse(matches);
+            let last_height = BLOCK_HEIGHT.parse(matches);
+            Self {
+                updates,
+                dry_run,
+                last_height,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help(
+                "The path to a json of key-value pairs to update the DB with.",
+            ))
+            .arg(DRY_RUN_TX.def().help(
+                "If set, applies the updates but does not persist them. Using \
+                 for testing and debugging.",
+            ))
+            .arg(
+                BLOCK_HEIGHT
+                    .def()
+                    .help("The height at which the hard fork is happening."),
+            )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct LedgerQueryDb {
+        pub key: storage::Key,
+        pub hash: [u8; 32],
+        pub cf: storage::DbColFam,
+    }
+
+    impl Args for LedgerQueryDb {
+        fn parse(matches: &ArgMatches) -> Self {
+            let key = storage::Key::parse(DB_KEY.parse(matches)).unwrap();
+            let hex_hash = HASH.parse(matches);
+            let hash: [u8; 32] = HEXUPPER
+                .decode(hex_hash.to_uppercase().as_bytes())
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let cf =
+                storage::DbColFam::from_str(&DB_COLUMN_FAMILY.parse(matches))
+                    .unwrap();
+            Self { key, hash, cf }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DB_KEY.def().help("A database key to query"))
+                .arg(HASH.def().help(
+                    "The hex encoded type hash of the value contained under \
+                     the provided key.",
+                ))
+                .arg(DB_COLUMN_FAMILY.def().help(
+                    "The column family under which the key is kept. Defaults \
+                     to the subspace column family if none is provided.",
+                ))
         }
     }
 
@@ -4064,6 +4221,7 @@ pub mod args {
                 channel_id: self.channel_id,
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
+                refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
@@ -4081,6 +4239,7 @@ pub mod args {
             let channel_id = CHANNEL_ID.parse(matches);
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
+            let refund_target = REFUND_TARGET.parse(matches);
             let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
@@ -4096,6 +4255,7 @@ pub mod args {
                 channel_id,
                 timeout_height,
                 timeout_sec_offset,
+                refund_target,
                 memo,
                 tx_code_path,
             }
@@ -4120,6 +4280,10 @@ pub mod args {
                         .help("The timeout height of the destination chain."),
                 )
                 .arg(TIMEOUT_SEC_OFFSET.def().help("The timeout as seconds."))
+                .arg(REFUND_TARGET.def().help(
+                    "The refund target address when IBC shielded transfer \
+                     failure.",
+                ))
                 .arg(
                     IBC_TRANSFER_MEMO_PATH
                         .def()
@@ -4748,7 +4912,6 @@ pub mod args {
             InitProposal::<SdkTypes> {
                 tx: self.tx.to_sdk(ctx),
                 proposal_data: std::fs::read(self.proposal_data).expect(""),
-                is_offline: self.is_offline,
                 is_pgf_stewards: self.is_pgf_stewards,
                 is_pgf_funding: self.is_pgf_funding,
                 tx_code_path: self.tx_code_path,
@@ -4760,7 +4923,6 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
             let proposal_data = DATA_PATH.parse(matches);
-            let is_offline = PROPOSAL_OFFLINE.parse(matches);
             let is_pgf_stewards = PROPOSAL_PGF_STEWARD.parse(matches);
             let is_pgf_funding = PROPOSAL_PGF_FUNDING.parse(matches);
             let tx_code_path = PathBuf::from(TX_INIT_PROPOSAL);
@@ -4769,7 +4931,6 @@ pub mod args {
                 tx,
                 proposal_data,
                 tx_code_path,
-                is_offline,
                 is_pgf_stewards,
                 is_pgf_funding,
             }
@@ -4780,19 +4941,6 @@ pub mod args {
                 .arg(DATA_PATH.def().help(
                     "The data path file (json) that describes the proposal.",
                 ))
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help(
-                            "Flag if the proposal should be serialized \
-                             offline (only for default types).",
-                        )
-                        .conflicts_with_all([
-                            PROPOSAL_PGF_FUNDING.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                            PROPOSAL_ETH.name,
-                        ]),
-                )
                 .arg(
                     PROPOSAL_ETH
                         .def()
@@ -4835,12 +4983,9 @@ pub mod args {
                 tx: self.tx.to_sdk(ctx),
                 proposal_id: self.proposal_id,
                 vote: self.vote,
-                voter: ctx.borrow_chain_or_exit().get(&self.voter),
-                is_offline: self.is_offline,
-                proposal_data: self.proposal_data.map(|path| {
-                    std::fs::read(path)
-                        .expect("Should be able to read the file.")
-                }),
+                voter_address: ctx
+                    .borrow_chain_or_exit()
+                    .get(&self.voter_address),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             }
         }
@@ -4849,54 +4994,26 @@ pub mod args {
     impl Args for VoteProposal<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
             let vote = PROPOSAL_VOTE.parse(matches);
-            let voter = ADDRESS.parse(matches);
-            let is_offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_data = DATA_PATH_OPT.parse(matches);
+            let voter_address = ADDRESS.parse(matches);
             let tx_code_path = PathBuf::from(TX_VOTE_PROPOSAL);
 
             Self {
                 tx,
                 proposal_id,
                 vote,
-                is_offline,
-                voter,
-                proposal_data,
+                voter_address,
                 tx_code_path,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help("The proposal identifier.")
-                        .conflicts_with_all([
-                            PROPOSAL_OFFLINE.name,
-                            DATA_PATH_OPT.name,
-                        ]),
-                )
+                .arg(PROPOSAL_ID_OPT.def().help("The proposal identifier."))
                 .arg(PROPOSAL_VOTE.def().help(
                     "The vote for the proposal. Either yay, nay, or abstain.",
                 ))
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help("Flag if the proposal vote should run offline.")
-                        .conflicts_with(PROPOSAL_ID.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .help(
-                            "The data path file (json) that describes the \
-                             proposal.",
-                        )
-                        .requires(PROPOSAL_OFFLINE.name)
-                        .conflicts_with(PROPOSAL_ID.name),
-                )
                 .arg(ADDRESS.def().help("The address of the voter."))
         }
     }
@@ -4984,11 +5101,7 @@ pub mod args {
         /// Common query args
         pub query: Query<C>,
         /// Proposal id
-        pub proposal_id: Option<u64>,
-        /// Flag if proposal result should be run on offline data
-        pub offline: bool,
-        /// The folder containing the proposal and votes
-        pub proposal_folder: Option<PathBuf>,
+        pub proposal_id: u64,
     }
 
     impl CliToSdk<QueryProposalResult<SdkTypes>> for QueryProposalResult<CliTypes> {
@@ -4996,8 +5109,6 @@ pub mod args {
             QueryProposalResult::<SdkTypes> {
                 query: self.query.to_sdk(ctx),
                 proposal_id: self.proposal_id,
-                offline: self.offline,
-                proposal_folder: self.proposal_folder,
             }
         }
     }
@@ -5005,49 +5116,14 @@ pub mod args {
     impl Args for QueryProposalResult<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let proposal_id = PROPOSAL_ID_OPT.parse(matches);
-            let offline = PROPOSAL_OFFLINE.parse(matches);
-            let proposal_folder = DATA_PATH_OPT.parse(matches);
+            let proposal_id = PROPOSAL_ID.parse(matches);
 
-            Self {
-                query,
-                proposal_id,
-                offline,
-                proposal_folder,
-            }
+            Self { query, proposal_id }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help("The proposal identifier.")
-                        .conflicts_with_all([
-                            PROPOSAL_OFFLINE.name,
-                            DATA_PATH_OPT.name,
-                        ]),
-                )
-                .arg(
-                    PROPOSAL_OFFLINE
-                        .def()
-                        .help(
-                            "Flag if the proposal result should run on \
-                             offline data.",
-                        )
-                        .conflicts_with(PROPOSAL_ID.name)
-                        .requires(DATA_PATH_OPT.name),
-                )
-                .arg(
-                    DATA_PATH_OPT
-                        .def()
-                        .help(
-                            "The path to the folder containing the proposal \
-                             and votes files in json format.",
-                        )
-                        .conflicts_with(PROPOSAL_ID.name)
-                        .requires(PROPOSAL_OFFLINE.name),
-                )
+                .arg(PROPOSAL_ID.def().help("The proposal identifier."))
         }
     }
 
@@ -5243,6 +5319,7 @@ pub mod args {
                 owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
                 token: self.token.map(|x| chain_ctx.get(&x)),
                 no_conversions: self.no_conversions,
+                show_ibc_tokens: self.show_ibc_tokens,
             }
         }
     }
@@ -5253,11 +5330,13 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
+            let show_ibc_tokens = SHOW_IBC_TOKENS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
+                show_ibc_tokens,
             }
         }
 
@@ -5277,6 +5356,45 @@ pub mod args {
                     NO_CONVERSIONS.def().help(
                         "Whether not to automatically perform conversions.",
                     ),
+                )
+                .arg(SHOW_IBC_TOKENS.def().help(
+                    "Show IBC tokens. When the given token is an IBC denom, \
+                     IBC tokens will be shown even if this flag is false.",
+                ))
+        }
+    }
+
+    impl CliToSdk<QueryIbcToken<SdkTypes>> for QueryIbcToken<CliTypes> {
+        fn to_sdk(self, ctx: &mut Context) -> QueryIbcToken<SdkTypes> {
+            let query = self.query.to_sdk(ctx);
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            QueryIbcToken::<SdkTypes> {
+                query,
+                token: self.token,
+                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
+            }
+        }
+    }
+
+    impl Args for QueryIbcToken<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN_STR_OPT.parse(matches);
+            let owner = BALANCE_OWNER.parse(matches);
+            Self {
+                query,
+                owner,
+                token,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(TOKEN_STR_OPT.def().help("The base token to query."))
+                .arg(
+                    BALANCE_OWNER
+                        .def()
+                        .help("The account address whose token to query."),
                 )
         }
     }
@@ -5722,12 +5840,14 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = LEDGER_ADDRESS.parse(matches);
             let batch_size = BATCH_SIZE_OPT.parse(matches);
-            let last_query_height = BLOCK_HEIGHT_OPT.parse(matches);
+            let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
+            let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
             Self {
                 ledger_address,
                 batch_size,
+                start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
@@ -5740,9 +5860,14 @@ pub mod args {
                     "Optional batch size which determines how many txs to \
                      fetch before caching locally. Default is 1.",
                 ))
-                .arg(BLOCK_HEIGHT_OPT.def().help(
+                .arg(BLOCK_HEIGHT_TO_OPT.def().help(
                     "Option block height to sync up to. Default is latest.",
                 ))
+                .arg(
+                    BLOCK_HEIGHT_FROM_OPT
+                        .def()
+                        .help("Option block height to sync from."),
+                )
                 .arg(SPENDING_KEYS.def().help(
                     "List of new spending keys with which to check note \
                      ownership. These will be added to the shielded context.",
@@ -5760,6 +5885,7 @@ pub mod args {
             ShieldedSync {
                 ledger_address: self.ledger_address,
                 batch_size: self.batch_size,
+                start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
                     .spending_keys
@@ -5789,6 +5915,7 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
+                refund: self.refund,
             }
         }
     }
@@ -5802,6 +5929,7 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -5810,6 +5938,7 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
+                refund,
             }
         }
 
@@ -5830,6 +5959,11 @@ pub mod args {
                     CHANNEL_ID.def().help(
                         "The channel ID via which the token is received.",
                     ),
+                )
+                .arg(
+                    REFUND
+                        .def()
+                        .help("Generate the shielded transfer for refunding."),
                 )
         }
     }
@@ -7260,6 +7394,26 @@ pub mod args {
             .arg(USE_DEVICE.def().help(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet.",
+            ))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct MigrationJson {
+        pub path: PathBuf,
+    }
+
+    impl Args for MigrationJson {
+        fn parse(matches: &ArgMatches) -> Self {
+            let path = PATH.parse(matches);
+
+            Self { path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(PATH.def().help(
+                "Path to the migrations JSON file. Requires the binary to be \
+                 built with the \"migrations\" feature.",
             ))
         }
     }
