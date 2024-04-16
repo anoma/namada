@@ -234,19 +234,17 @@ pub struct EventTypeBuilder {
 }
 
 impl EventTypeBuilder {
-    /// Create a new [`EventTypeBuilder`] with the given domain.
+    /// Create a new [`EventTypeBuilder`] with the given type.
     #[inline]
-    pub fn new_with_domain(domain: impl Into<String>) -> Self {
-        Self {
-            inner: domain.into(),
-        }
+    pub fn new_with_type(ty: impl Into<String>) -> Self {
+        Self { inner: ty.into() }
     }
 
     /// Create a new [`EventTypeBuilder`] with the domain of the
     /// given event type.
     #[inline]
     pub fn new_of<E: EventToEmit>() -> Self {
-        Self::new_with_domain(E::DOMAIN)
+        Self::new_with_type(E::DOMAIN)
     }
 
     /// Append a new segment to the final [`EventType`] and return

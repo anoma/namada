@@ -339,13 +339,8 @@ impl TxEnv for Ctx {
 
     fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<(), Error> {
         let event: Event = event.into();
-        // TODO: remove this line
-        let event: ibc::IbcEvent = event.try_into().unwrap();
         let event = borsh::to_vec(&event).unwrap();
-        unsafe {
-            // TODO: change this to `namada_tx_emit_event`
-            namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
-        };
+        unsafe { namada_tx_emit_event(event.as_ptr() as _, event.len() as _) };
         Ok(())
     }
 
@@ -355,22 +350,16 @@ impl TxEnv for Ctx {
     }
 
     fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>, Error> {
-        // TODO: change this simply to `.to_string()`
-        let event_type = event_type.sub_domain().to_string();
-        // TODO: change this to `namada_tx_get_events`
+        let event_type = event_type.to_string();
         let read_result = unsafe {
-            namada_tx_get_ibc_events(
+            namada_tx_get_events(
                 event_type.as_ptr() as _,
                 event_type.len() as _,
             )
         };
         match read_from_buffer(read_result, namada_tx_result_buffer) {
-            // TODO: deserialize as `Vec<Event>`
-            Some(value) => Ok(Vec::<ibc::IbcEvent>::try_from_slice(&value[..])
-                .expect("The conversion shouldn't fail")
-                .into_iter()
-                .map(Event::from)
-                .collect()),
+            Some(value) => Ok(Vec::<Event>::try_from_slice(&value[..])
+                .expect("The conversion shouldn't fail")),
             None => Ok(Vec::new()),
         }
     }
