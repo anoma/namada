@@ -2089,7 +2089,7 @@ fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
         // Set a high gas limit to ensure that fee unshielding consumes it and
         // we don't go out of gas just because of the tx size
         "--gas-limit",
-        "7000",
+        "1000",
         "--gas-payer",
         ALBERT_KEY,
         "--gas-spending-key",
@@ -2107,8 +2107,12 @@ fn wrapper_fee_unshielding_out_of_gas() -> Result<()> {
         captured.result,
         captured.output
     );
-    // Assert that the failure happens with the wrapper transaction that gets
-    // rejected by mempool
+    assert!(captured.err_contains(
+        "Fee unshielding went out of gas: Gas error: Transaction gas limit \
+         exceeded"
+    ));
+    // Assert that the failure happens with the wrapper transaction (and not the
+    // inner) by checking that it gets rejected by mempool
     assert!(
         format!("{:?}", captured.result)
             .contains("Encountered error while broadcasting transaction")

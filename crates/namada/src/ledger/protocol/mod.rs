@@ -317,7 +317,9 @@ pub fn get_fee_unshielding_transaction(
 }
 
 /// Charge fee for the provided wrapper transaction. Returns error if:
-/// - The unshielding fails
+/// - The unshielding fails because of gas (other errors are ignored cause we
+///   still try to get the fees amount from the transparent balance and, if it
+///   works, execution can continue)
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
@@ -369,7 +371,7 @@ where
 }
 
 /// Executes the masp fee unshielding transaction. Returns `true if the unshield
-/// was succesfull, `false` otherwise and error in case of out-of-gas
+/// was successful, `false` otherwise and error in case of out-of-gas
 pub fn run_fee_unshielding<S, D, H, CA>(
     wrapper: &WrapperTx,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
@@ -406,7 +408,6 @@ where
         .map_err(|e| Error::GasError(e.to_string()))?;
     let ref_unshield_gas_meter = RefCell::new(unshield_gas_meter);
 
-    // If it fails just log it and still try to charge the gas fees
     let result = match wrapper.generate_fee_unshielding(
         get_transfer_hash_from_storage(*state),
         Some(TX_TRANSFER_WASM.to_string()),
@@ -452,6 +453,10 @@ where
                         "The unshielding tx is invalid, wasm run failed: {}",
                         e
                     );
+                    if let Error::GasError(_) = e {
+                        // Popagate only if it is a gas error
+                        return Err(e);
+                    }
 
                     false
                 }
