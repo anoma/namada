@@ -5,8 +5,11 @@ use std::sync::{Arc, Mutex};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::convert::AllowedConversion;
+use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::{Node, ViewingKey};
+use masp_primitives::sapling::{
+    Diversifier, Node, Note, Nullifier, ViewingKey,
+};
 use masp_primitives::transaction::builder::{Builder, MapBuilder};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::{I128Sum, ValueSum};
@@ -28,6 +31,7 @@ use namada_token as token;
 use thiserror::Error;
 
 use crate::error::Error;
+use crate::masp::{ShieldedContext, ShieldedUtils};
 
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<
@@ -131,6 +135,120 @@ pub struct MaspChange {
     pub asset: Address,
     /// the change in the token
     pub change: token::Change,
+}
+
+#[derive(Debug, Default)]
+/// Data returned by successfully scanning a tx
+pub(super) struct ScannedData {
+    pub div_map: HashMap<usize, Diversifier>,
+    pub memo_map: HashMap<usize, MemoBytes>,
+    pub note_map: HashMap<usize, Note>,
+    pub nf_map: HashMap<Nullifier, usize>,
+    pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
+    pub vk_map: HashMap<usize, ViewingKey>,
+    pub decrypted_note_cache: DecryptedDataCache,
+}
+
+impl ScannedData {
+    pub(super) fn apply_to<U: ShieldedUtils>(
+        mut self,
+        ctx: &mut ShieldedContext<U>,
+    ) {
+        for (k, v) in self.note_map.drain() {
+            ctx.note_map.insert(k, v);
+        }
+        for (k, v) in self.nf_map.drain() {
+            ctx.nf_map.insert(k, v);
+        }
+        for (k, v) in self.pos_map.drain() {
+            let map = ctx.pos_map.entry(k).or_default();
+            for ix in v {
+                map.insert(ix);
+            }
+        }
+        for (k, v) in self.div_map.drain() {
+            ctx.div_map.insert(k, v);
+        }
+        for (k, v) in self.vk_map.drain() {
+            ctx.vk_map.insert(k, v);
+        }
+        for (k, v) in self.memo_map.drain() {
+            ctx.memo_map.insert(k, v);
+        }
+        ctx.decrypted_note_cache.merge(self.decrypted_note_cache);
+    }
+
+    pub(super) fn merge(&mut self, mut other: Self) {
+        for (k, v) in other.note_map.drain() {
+            self.note_map.insert(k, v);
+        }
+        for (k, v) in other.nf_map.drain() {
+            self.nf_map.insert(k, v);
+        }
+        for (k, v) in other.pos_map.drain() {
+            let map = self.pos_map.entry(k).or_default();
+            for ix in v {
+                map.insert(ix);
+            }
+        }
+        for (k, v) in other.div_map.drain() {
+            self.div_map.insert(k, v);
+        }
+        for (k, v) in other.vk_map.drain() {
+            self.vk_map.insert(k, v);
+        }
+        for (k, v) in other.memo_map.drain() {
+            self.memo_map.insert(k, v);
+        }
+        for (k, v) in other.decrypted_note_cache.inner {
+            self.decrypted_note_cache.insert(k, v);
+        }
+    }
+}
+
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+/// Data extracted from a successfully decrypted MASP note
+pub struct DecryptedData {
+    pub tx: Transaction,
+    pub keys: BTreeSet<namada_core::storage::Key>,
+    pub delta: TransactionDelta,
+    pub epoch: Epoch,
+}
+
+/// A cache of decrypted txs that have not yet been
+/// updated to the shielded ctx. Necessary in case
+/// scanning gets interrupted.
+#[derive(Debug, Clone, Default, BorshSerialize, BorshDeserialize)]
+pub struct DecryptedDataCache {
+    inner: HashMap<(IndexedTx, ViewingKey), DecryptedData>,
+}
+
+impl DecryptedDataCache {
+    pub fn insert(
+        &mut self,
+        key: (IndexedTx, ViewingKey),
+        value: DecryptedData,
+    ) {
+        self.inner.insert(key, value);
+    }
+
+    pub fn merge(&mut self, mut other: Self) {
+        for (k, v) in other.inner.drain() {
+            self.insert(k, v);
+        }
+    }
+
+    pub fn contains(&self, ix: &IndexedTx, vk: &ViewingKey) -> bool {
+        self.inner
+            .keys()
+            .find_map(|(i, v)| (i==ix && v==vk).then_some(()))
+            .is_some()
+
+    }
+
+    pub fn drain(&mut self) -> std::collections::hash_map::Drain<'_, (IndexedTx, ViewingKey), DecryptedData>{
+        self.inner.drain()
+    }
 }
 
 /// A cache of fetched indexed transactions.

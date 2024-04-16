@@ -174,6 +174,12 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
     }
 }
 
+impl<'io, IO: Io> Drop for StdoutDrawer<'io, IO> {
+    fn drop(&mut self) {
+        display_line!(self.io, "\n\n");
+    }
+}
+
 pub struct CliLogging<'io, T, I, IO>
 where
     T: Debug,
@@ -268,7 +274,7 @@ impl<'io, IO: Io> CliLogger<'io, IO> {
     }
 }
 
-impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
+impl<'io, IO: Io + Send + Sync> ProgressLogger<IO> for CliLogger<'io, IO> {
     fn io(&self) -> &IO {
         let io = {
             let locked = self.drawer.lock().unwrap();
@@ -284,9 +290,9 @@ impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
         CliLogging::new(items, ProgressType::Fetch, self.drawer.clone())
     }
 
-    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry>
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
-        I: Iterator<Item = IndexedNoteEntry>,
+        I: Iterator<Item = IndexedNoteEntry> + Send,
     {
         CliLogging::new(items, ProgressType::Scan, self.drawer.clone())
     }
