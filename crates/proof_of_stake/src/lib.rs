@@ -3036,22 +3036,9 @@ fn prune_old_delegations(
         );
     let oldest_to_keep = current_epoch.checked_sub(delta).unwrap_or_default();
 
-    let to_remove = delegations
+    delegations
         .prev_ranges
-        .iter()
-        .filter_map(|(start, end)| {
-            if start < &oldest_to_keep && end < &oldest_to_keep {
-                Some(start)
-            } else {
-                None
-            }
-        })
-        .cloned()
-        .collect::<BTreeSet<_>>();
-
-    for start_epoch in to_remove {
-        delegations.prev_ranges.remove(&start_epoch);
-    }
+        .retain(|_start, end| *end >= oldest_to_keep);
 
     Ok(())
 }
