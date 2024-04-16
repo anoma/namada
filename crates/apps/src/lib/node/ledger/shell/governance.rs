@@ -355,7 +355,6 @@ where
                 shell.state.commit_tx();
                 Ok(true)
             } else {
-                println!("AAA {:?}", tx_result);
                 shell.state.drop_tx();
                 Ok(false)
             }
