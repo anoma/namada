@@ -1,6 +1,7 @@
 use core::str::FromStr;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -12,7 +13,7 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
-use namada_core::storage::{BlockHeight, Epoch, IndexedTx, Key, TxIndex};
+use namada_core::storage::{BlockHeight, IndexedTx, TxIndex};
 use namada_core::token::Transfer;
 use namada_ibc::IbcMessage;
 use namada_tx::data::{TxResult, WrapperTx};
@@ -23,7 +24,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::shielded_ctx::ShieldedContext;
-use crate::masp::types::{IndexedNoteEntry, PVKs, Unscanned};
+use crate::masp::types::{
+    ContextSyncStatus, IndexedNoteEntry, PVKs, ScannedData, TransactionDelta,
+    Unscanned,
+};
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
 use crate::queries::Client;
 use crate::{MaybeSend, MaybeSync};
@@ -128,7 +132,7 @@ pub(super) fn extract_payload(
 }
 
 // Retrieves all the indexes and tx events at the specified height which refer
-// to a valid masp transaction. If an index is given, it filters only the
+// to a valid MASP transaction. If an index is given, it filters only the
 // transactions with an index equal or greater to the provided one.
 pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
@@ -177,7 +181,7 @@ pub(super) enum ExtractShieldedActionArg<'args, C: Client> {
     Request((&'args C, BlockHeight, Option<TxIndex>)),
 }
 
-/// Extract the relevant shield portions of a [`Tx`], if any.
+/// Extract the relevant shielded portions of a [`Tx`], if any.
 pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
     tx: &Tx,
     action_arg: ExtractShieldedActionArg<'args, C>,
@@ -280,7 +284,7 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
     })
 }
 
-// Extract the changed keys and Transaction hash from a masp over ibc message
+// Extract the changed keys and Transaction hash from a MASP over ibc message
 pub(super) async fn extract_payload_from_shielded_action<
     'args,
     C: Client + Sync
@@ -510,118 +514,127 @@ pub mod fetch_channel {
     }
 }
 
-enum Action<U: ShieldedUtils> {
-    Complete,
-    Data(Arc<futures_locks::Mutex<ShieldedContext<U>>>, BlockHeight),
-}
-pub struct TaskManager<U: ShieldedUtils> {
-    action: Receiver<Action<U>>,
-    pub(super) latest_height: BlockHeight,
+/// The actions that the scanning process can
+/// schedule to be run on the main thread.
+#[allow(clippy::large_enum_variant)]
+enum Action {
+    /// Signal that the scanning process has ended and if it did so with
+    /// an error
+    Complete { with_error: bool },
+    /// Send a diff of data to be applied to the ctx before
+    /// persisting.
+    Data(ScannedData, IndexedTx),
 }
 
-#[derive(Clone)]
-pub(super) struct TaskRunner<U: ShieldedUtils> {
-    action: Sender<Action<U>>,
+/// A process on the main thread that listens for
+/// progress updates from the scanning process
+/// and applies all state changes that it
+/// schedules.
+pub struct TaskManager<U: ShieldedUtils> {
+    action: Receiver<Action>,
+    pub(super) latest_idx: IndexedTx,
     ctx: Arc<futures_locks::Mutex<ShieldedContext<U>>>,
 }
 
+#[derive(Clone)]
+/// A struct that allows the scanning process
+/// thread to communicate errors and actions back to
+/// the main process where they will be handled by
+/// a [`TaskManager`].
+pub(super) struct TaskScheduler<U> {
+    action: Sender<Action>,
+    _phantom: PhantomData<U>,
+}
+
 impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
-    /// Create a client proxy and spawn a process to forward
-    /// proxy requests.
-    pub(super) fn new(ctx: ShieldedContext<U>) -> (TaskRunner<U>, Self) {
-        let (save_send, save_recv) = tokio::sync::mpsc::channel(100);
+    pub(super) fn new(ctx: ShieldedContext<U>) -> (TaskScheduler<U>, Self) {
+        let (action_send, action_recv) = tokio::sync::mpsc::channel(100);
         (
-            TaskRunner {
-                action: save_send,
-                ctx: Arc::new(futures_locks::Mutex::new(ctx)),
+            TaskScheduler {
+                action: action_send,
+                _phantom: PhantomData,
             },
             TaskManager {
-                action: save_recv,
-                latest_height: Default::default(),
+                action: action_recv,
+                latest_idx: Default::default(),
+                ctx:  Arc::new(futures_locks::Mutex::new(ctx)),
             },
         )
     }
 
-    pub async fn run(&mut self) {
+    /// Run all actions scheduled by the scanning thread until
+    /// that process indicates it has finished.
+    pub async fn run(&mut self, native_token: &Address) -> Result<(), Error> {
         while let Some(action) = self.action.recv().await {
             match action {
-                Action::Complete => return,
-                Action::Data(data, height) => {
-                    self.latest_height = height;
-                    let locked = data.lock().await;
+                // On completion, update the height to which all keys have been
+                // synced and then save.
+                Action::Complete { with_error } => {
+                    if !with_error {
+                        let mut locked = self.ctx.lock().await;
+                        // update each key to be synced to the latest scanned height.
+                        for (_, h) in locked.vk_heights.iter_mut() {
+                            *h = Some(self.latest_idx);
+                        }
+                        // updated the spent notes and balances
+                        locked.nullify_spent_notes(native_token)?;
+                        _ = locked.save().await;
+                    }
+                }
+                Action::Data(scanned, idx) => {
+                    // track the latest scanned height
+                    self.latest_idx = idx;
+                    // apply state changes from the scanning process
+                    let mut locked = self.ctx.lock().await;
+                    scanned.apply_to(&mut locked);
+                    // possibly remove unneeded elements from the cache.
+                    locked.unscanned.scanned(&idx);
+                    // persist the changes
                     _ = locked.save().await;
                 }
             }
         }
+        Ok(())
     }
 }
 
-impl<U: ShieldedUtils + MaybeSync + MaybeSend> TaskRunner<U> {
-    pub(super) fn complete(&self) {
-        self.action.blocking_send(Action::Complete).unwrap()
+impl<U: ShieldedUtils> TaskScheduler<U> {
+    /// Signal the [`TaskManager`] that the scanning thread has completed
+    pub(super) fn complete(&self, with_error: bool) {
+        self.action
+            .blocking_send(Action::Complete { with_error })
+            .unwrap()
     }
 
-    pub(super) fn save(&self, latest_height: BlockHeight) {
+    /// Schedule the [`TaskManager`] to save the latest context
+    /// state changes.
+    pub(super) fn save(&self, data: ScannedData, latest_idx: IndexedTx) {
         self.action
-            .blocking_send(Action::Data(self.ctx.clone(), latest_height))
+            .blocking_send(Action::Data(data, latest_idx))
             .unwrap();
     }
 
-    pub(super) fn update_witness_map(
-        &self,
-        indexed_tx: IndexedTx,
-        stx: &Transaction,
-    ) -> Result<(), Error> {
-        let mut locked = self.acquire();
-        let res = locked.update_witness_map(indexed_tx, stx);
-        if res.is_err() {
-            self.complete()
-        }
-        res
-    }
-
+    /// Calls the `scan_tx` method of the shielded context
+    /// and sends any error to the [`TaskManager`]
     pub(super) fn scan_tx(
         &self,
+        sync_status: ContextSyncStatus,
         indexed_tx: IndexedTx,
-        epoch: Epoch,
-        tx: &BTreeSet<Key>,
-        stx: &Transaction,
+        tx_note_map: &BTreeMap<IndexedTx, usize>,
+        shielded: &Transaction,
         vk: &ViewingKey,
-        native_token: Address,
-    ) -> Result<(), Error> {
-        let mut locked = self.acquire();
-        let res = locked.scan_tx(indexed_tx, epoch, tx, stx, vk, native_token);
+    ) -> Result<(ScannedData, TransactionDelta), Error> {
+        let res = ShieldedContext::<U>::scan_tx(
+            sync_status,
+            indexed_tx,
+            tx_note_map,
+            shielded,
+            vk,
+        );
         if res.is_err() {
-            self.complete();
+            self.complete(true);
         }
         res
-    }
-
-    pub(super) fn get_vk_heights(
-        &self,
-    ) -> BTreeMap<ViewingKey, Option<IndexedTx>> {
-        let mut locked = self.acquire();
-        let mut vk_heights = BTreeMap::new();
-        std::mem::swap(&mut vk_heights, &mut locked.vk_heights);
-        vk_heights
-    }
-
-    pub(super) fn set_vk_heights(
-        &self,
-        mut vk_heights: BTreeMap<ViewingKey, Option<IndexedTx>>,
-    ) {
-        let mut locked = self.acquire();
-        std::mem::swap(&mut vk_heights, &mut locked.vk_heights);
-    }
-
-    /// Kids, don't try this at home.
-    fn acquire(&self) -> futures_locks::MutexGuard<ShieldedContext<U>> {
-        loop {
-            if let Ok(ctx) = self.ctx.try_lock() {
-                return ctx;
-            }
-            std::hint::spin_loop();
-        }
     }
 }
 
@@ -640,9 +653,9 @@ pub trait ProgressLogger<IO: Io> {
     where
         I: Iterator<Item = u64>;
 
-    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry>
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
-        I: Iterator<Item = IndexedNoteEntry>;
+        I: Iterator<Item = IndexedNoteEntry> + Send;
 
     fn left_to_fetch(&self) -> usize;
 }
@@ -707,7 +720,7 @@ impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
         }
     }
 
-    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry>
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
         I: IntoIterator<Item = IndexedNoteEntry>,
     {
