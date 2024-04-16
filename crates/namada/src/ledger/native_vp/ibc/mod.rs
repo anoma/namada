@@ -150,13 +150,13 @@ where
             .state
             .write_log()
             .get_events_of::<IbcEvent>()
-            .filter_map(|event| IbcEvent::try_from(event).ok())
             .collect();
-        if actual != ctx.borrow().event {
+        let ctx_borrow = ctx.borrow();
+        let expected: BTreeSet<_> = ctx_borrow.event.iter().collect();
+        if actual != expected {
             return Err(Error::IbcEvent(format!(
-                "The IBC event is invalid: Actual {:?}, Expected {:?}",
-                actual,
-                ctx.borrow().event
+                "The IBC event is invalid: Actual {actual:?}, Expected \
+                 {expected:?}",
             )));
         }
 
