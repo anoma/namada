@@ -4512,6 +4512,7 @@ dependencies = [
 name = "namada_core"
 version = "0.34.0"
 dependencies = [
+ "assert_matches",
  "bech32 0.8.1",
  "borsh 1.2.1",
  "borsh-ext",

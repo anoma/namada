@@ -76,6 +76,7 @@ uint = "0.9.5"
 zeroize.workspace = true
 
 [dev-dependencies]
+assert_matches.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 rand.workspace = true
