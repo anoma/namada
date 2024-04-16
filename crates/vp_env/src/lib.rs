@@ -7,10 +7,11 @@ pub mod collection_validation;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::event::{Event, EventType};
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_core::token::Transfer;
-use namada_ibc::{decode_message, IbcEvent, IbcMessage};
+use namada_ibc::{decode_message, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
 use namada_tx::Tx;
 
@@ -77,11 +78,11 @@ where
     /// Given the information about predecessor block epochs
     fn get_pred_epochs(&self) -> namada_storage::Result<Epochs>;
 
-    /// Get the IBC events.
-    fn get_ibc_events(
+    /// Get the events emitted by the current tx.
+    fn get_events(
         &self,
-        event_type: String,
-    ) -> Result<Vec<IbcEvent>, namada_storage::Error>;
+        event_type: &EventType,
+    ) -> Result<Vec<Event>, namada_storage::Error>;
 
     /// Storage prefix iterator, ordered by storage keys. It will try to get an
     /// iterator from the storage.

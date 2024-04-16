@@ -1882,8 +1882,8 @@ where
     Ok(len)
 }
 
-/// Getting the IBC event function exposed to the wasm VM VP environment.
-pub fn vp_get_ibc_events<MEM, D, H, EVAL, CA>(
+/// Expose the functionality to query events from the wasm VM's VP environment.
+pub fn vp_get_events<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<MEM, D, H, EVAL, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -1903,7 +1903,7 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
 
     let state = env.state();
-    let events = vp_host_fns::get_ibc_events(gas_meter, &state, event_type)?;
+    let events = vp_host_fns::get_events(gas_meter, &state, event_type)?;
     let value = events.serialize_to_vec();
     let len: i64 = value
         .len()

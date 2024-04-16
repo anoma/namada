@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
-use namada_core::event::EventTypeBuilder;
+use namada_core::event::{Event, EventTypeBuilder};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
@@ -16,7 +16,6 @@ use namada_state::{write_log, DBIter, StateRead, DB};
 use namada_tx::{Section, Tx};
 use thiserror::Error;
 
-use crate::ibc::IbcEvent;
 use crate::ledger::gas;
 use crate::ledger::gas::{GasMetering, VpGasMeter};
 
@@ -323,23 +322,21 @@ where
     Ok(state.in_mem().block.pred_epochs.clone())
 }
 
-/// Getting the IBC event.
-pub fn get_ibc_events<S>(
+/// Query events emitted by the current transaction.
+pub fn get_events<S>(
     _gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     event_type: String,
-) -> EnvResult<Vec<IbcEvent>>
+) -> EnvResult<Vec<Event>>
 where
     S: StateRead + Debug,
 {
-    let event_type = EventTypeBuilder::new_of::<IbcEvent>()
-        .with_segment(event_type)
-        .build();
+    let event_type = EventTypeBuilder::new_with_type(event_type).build();
 
     Ok(state
         .write_log()
         .lookup_events_with_prefix(&event_type)
-        .filter_map(|event| IbcEvent::try_from(event).ok())
+        .cloned()
         .collect())
 }
 
