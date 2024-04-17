@@ -45,7 +45,8 @@ where
     Ok(balance)
 }
 
-/// Get the effective circulating total supply of native tokens.
+/// Get the effective circulating total supply of native tokens. Does not
+/// consider the native balance in the PGF of Slash pool addresses.
 pub fn get_effective_total_native_supply<S>(
     storage: &S,
 ) -> namada_storage::Result<token::Amount>
@@ -54,14 +55,20 @@ where
 {
     let native_token = storage.get_native_token()?;
     let pgf_address = Address::Internal(InternalAddress::Pgf);
+    let slash_pool_address = Address::Internal(InternalAddress::PosSlashPool);
 
     let raw_total = read_total_supply(storage, &native_token)?;
     let pgf_balance = read_balance(storage, &native_token, &pgf_address)?;
+    let slash_pool_balance =
+        read_balance(storage, &native_token, &slash_pool_address)?;
 
     // Remove native balance in PGF address from the total supply
-    Ok(raw_total
-        .checked_sub(pgf_balance)
-        .expect("Raw total supply should be larger than PGF balance"))
+    let to_remove = pgf_balance
+        .checked_add(slash_pool_balance)
+        .expect("Adding PGF and Slash Pool balance should not overflow");
+    Ok(raw_total.checked_sub(to_remove).expect(
+        "Raw total supply should be larger than PGF + Slash Pool balance",
+    ))
 }
 
 /// Read the denomination of a given token, if any. Note that native
