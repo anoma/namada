@@ -18,7 +18,7 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::{pre_genesis, Wallet};
+use namada_sdk::wallet::{alias, pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -152,10 +152,21 @@ impl Finalized {
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
-                address,
-                alias,
+                address.clone(),
+                alias.clone(),
                 validator_wallet,
-            )
+            );
+            let address_alias = alias::validator_address(&alias);
+            wallet.insert_address(
+                address_alias.normalize(),
+                address.clone(),
+                false,
+            );
+            println!(
+                "\nAdded your validator address {} to the wallet with alias \
+                 \"{}\".",
+                address, address_alias
+            );
         }
 
         // Add some internal addresses to the wallet
