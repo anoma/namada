@@ -20,7 +20,7 @@ use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
     DelegationEpochs, Slash, UnbondDetails,
 };
-use crate::{bond_amount, storage_key, PosParams};
+use crate::{raw_bond_amount, storage_key, PosParams};
 
 /// Find all validators to which a given bond `owner` (or source) has a
 /// delegation
@@ -101,8 +101,7 @@ where
             },
         ) = validator?;
 
-        // TODO: Should use raw bonds or slashed stake??
-        let bond_amount = bond_amount(
+        let bond_amount = raw_bond_amount(
             storage,
             &BondId {
                 source: owner.clone(),

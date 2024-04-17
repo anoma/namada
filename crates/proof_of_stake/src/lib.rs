@@ -1587,18 +1587,15 @@ where
     commission_handle.set(storage, new_rate, current_epoch, params.pipeline_len)
 }
 
-/// Get the total bond amount, including slashes, for a given bond ID and epoch.
-/// Returns the bond amount after slashing. For future epochs the value is
-/// subject to change.
-pub fn bond_amount<S>(
+fn bond_amounts_for_query<S>(
     storage: &S,
+    params: &PosParams,
     bond_id: &BondId,
     epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
-    let params = read_pos_params(storage)?;
     // Outer key is the start epoch used to calculate slashes.
     let mut amounts: BTreeMap<Epoch, token::Amount> = BTreeMap::default();
 
@@ -1702,6 +1699,37 @@ where
             }
         }
     }
+    Ok(amounts)
+}
+
+/// Get the total bond amount, without applying slashes, for a given bond ID and
+/// epoch. For future epochs, the value is subject to change.
+pub fn raw_bond_amount<S>(
+    storage: &S,
+    bond_id: &BondId,
+    epoch: Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    let amounts = bond_amounts_for_query(storage, &params, bond_id, epoch)?;
+    Ok(amounts.values().cloned().sum())
+}
+
+/// Get the total bond amount, including slashes, for a given bond ID and epoch.
+/// Returns the bond amount after slashing. For future epochs, the value is
+/// subject to change.
+pub fn bond_amount<S>(
+    storage: &S,
+    bond_id: &BondId,
+    epoch: Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    let mut amounts = bond_amounts_for_query(storage, &params, bond_id, epoch)?;
 
     if !amounts.is_empty() {
         let slashes = find_validator_slashes(storage, &bond_id.validator)?;
