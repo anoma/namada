@@ -43,6 +43,7 @@ use crate::data::protocol::ProtocolTx;
 /// indicating the status of their submitted tx.
 /// The codes must not change with versions, only need ones may be added.
 #[derive(
+    Default,
     Debug,
     Copy,
     Clone,
@@ -58,6 +59,7 @@ pub enum ResultCode {
     // WARN: These codes shouldn't be changed between version!
     // =========================================================================
     /// Success
+    #[default]
     Ok = 0,
     /// Error in WASM tx execution
     WasmRuntimeError = 1,

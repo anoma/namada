@@ -2,7 +2,6 @@ use std::fmt::{Debug, Formatter};
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 
@@ -15,9 +14,7 @@ use namada::control_flow::time::Duration;
 use namada::core::collections::HashMap;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
-use namada::core::event::extend::{
-    Height as HeightAttr, ReadFromEventAttributes as _,
-};
+use namada::core::event::extend::Height as HeightAttr;
 use namada::core::event::Event;
 use namada::core::hash::Hash;
 use namada::core::key::tm_consensus_key_raw_hash;
@@ -40,6 +37,7 @@ use namada::state::{
 };
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
+use namada::tx::event::Code as CodeAttr;
 use namada_sdk::queries::Client;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
@@ -463,13 +461,10 @@ impl MockNode {
             .events
             .into_iter()
             .map(|e| {
-                let code = ResultCode::from_u32(
-                    e.attributes
-                        .get("code")
-                        .map(|e| u32::from_str(e).unwrap())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
+                let code = e
+                    .read_attribute_opt::<CodeAttr>()
+                    .unwrap()
+                    .unwrap_or_default();
                 if code == ResultCode::Ok {
                     NodeResults::Ok
                 } else {
@@ -589,13 +584,10 @@ impl MockNode {
             .events
             .into_iter()
             .map(|e| {
-                let code = ResultCode::from_u32(
-                    e.attributes
-                        .get("code")
-                        .map(|e| u32::from_str(e).unwrap())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
+                let code = e
+                    .read_attribute_opt::<CodeAttr>()
+                    .unwrap()
+                    .unwrap_or_default();
                 if code == ResultCode::Ok {
                     NodeResults::Ok
                 } else {
@@ -838,12 +830,12 @@ impl<'a> Client for &'a MockNode {
             .event_log()
             .iter()
             .flat_map(|event| {
-                let same_block_height =
-                    HeightAttr::read_from_event_attributes(&event.attributes)
-                        .map(|event_height| {
-                            BlockHeight(height.value()) == event_height
-                        })
-                        .unwrap_or(false);
+                let same_block_height = event
+                    .read_attribute::<HeightAttr>()
+                    .map(|event_height| {
+                        BlockHeight(height.value()) == event_height
+                    })
+                    .unwrap_or(false);
                 let same_encoded_event =
                     EncodedEvent::encode(event) == EncodedEvent(height.value());
 
@@ -853,18 +845,7 @@ impl<'a> Client for &'a MockNode {
                     None
                 }
             })
-            .map(|event| namada::tendermint::abci::Event {
-                kind: event.event_type.to_string(),
-                attributes: event
-                    .attributes
-                    .iter()
-                    .map(|(k, v)| namada::tendermint::abci::EventAttribute {
-                        key: k.parse().unwrap(),
-                        value: v.parse().unwrap(),
-                        index: true,
-                    })
-                    .collect(),
-            })
+            .map(|event| namada::tendermint::abci::Event::from(event.clone()))
             .collect();
         let has_events = !events.is_empty();
         Ok(tendermint_rpc::endpoint::block_results::Response {

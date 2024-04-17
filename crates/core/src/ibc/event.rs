@@ -69,11 +69,11 @@ impl TryFrom<Event> for IbcEvent {
     type Error = EventError;
 
     fn try_from(namada_event: Event) -> std::result::Result<Self, Self::Error> {
-        if namada_event.event_type.domain() != IbcEvent::DOMAIN {
+        if namada_event.kind().domain() != IbcEvent::DOMAIN {
             return Err(EventError::InvalidEventType);
         }
 
-        let event_type = namada_event.event_type.sub_domain();
+        let event_type = namada_event.kind().sub_domain();
 
         if !matches!(
             event_type,
@@ -86,7 +86,7 @@ impl TryFrom<Event> for IbcEvent {
         Ok(Self {
             event_type: event_type.to_owned(),
             attributes: {
-                let mut attrs = namada_event.attributes;
+                let mut attrs = namada_event.into_attributes();
                 attrs.with_attribute(event_domain_of::<Self>());
                 attrs
             },

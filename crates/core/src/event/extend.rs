@@ -22,6 +22,9 @@ pub trait AttributesMap {
 
     /// Check for the existence of an attribute.
     fn is_attribute(&self, key: &str) -> bool;
+
+    /// Iterate over all the key value pairs.
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)>;
 }
 
 impl AttributesMap for HashMap<String, String> {
@@ -42,6 +45,11 @@ impl AttributesMap for HashMap<String, String> {
     #[inline]
     fn is_attribute(&self, key: &str) -> bool {
         self.contains_key(key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter().map(|(k, v)| (k.as_str(), v.as_str()))
     }
 }
 
@@ -73,6 +81,12 @@ impl AttributesMap for Vec<crate::tendermint::abci::EventAttribute> {
     #[inline]
     fn is_attribute(&self, key: &str) -> bool {
         self.iter().any(|attr| attr.key == key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter()
+            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
     }
 }
 
@@ -106,6 +120,12 @@ impl AttributesMap
     #[inline]
     fn is_attribute(&self, key: &str) -> bool {
         self.iter().any(|attr| attr.key == key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter()
+            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
     }
 }
 

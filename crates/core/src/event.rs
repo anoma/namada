@@ -286,11 +286,11 @@ impl EventTypeBuilder {
 pub struct Event {
     /// The level of the event - whether it relates to a block or an individual
     /// transaction.
-    pub level: EventLevel,
+    level: EventLevel,
     /// The type of event.
-    pub event_type: EventType,
+    event_type: EventType,
     /// Key-value attributes of the event.
-    pub attributes: HashMap<String, String>,
+    attributes: HashMap<String, String>,
 }
 
 impl Display for Event {
@@ -330,16 +330,83 @@ pub enum EventError {
 }
 
 impl Event {
-    /// Create an applied tx event with empty attributes.
-    pub fn applied_tx() -> Self {
+    /// Create a new event with no attributes and the given parameters.
+    pub fn new(event_type: EventType, level: EventLevel) -> Self {
         Self {
-            event_type: event_type!("tx", "applied"),
-            level: EventLevel::Tx,
+            event_type,
+            level,
             attributes: HashMap::new(),
         }
     }
 
-    /// Get the value corresponding to a given attribute, if it exists.
+    /// Create an applied tx event with empty attributes.
+    pub fn applied_tx() -> Self {
+        Self::new(event_type!("tx", "applied"), EventLevel::Tx)
+    }
+
+    /// Return the level of the event.
+    #[inline]
+    pub fn level(&self) -> &EventLevel {
+        &self.level
+    }
+
+    /// Return the type of the event.
+    #[inline]
+    pub fn kind(&self) -> &EventType {
+        &self.event_type
+    }
+
+    /// Return a reference to the event's attributes.
+    #[deprecated = "Accessing the event attributes directly is deprecated. \
+                    Consider using domain types to compose events with \
+                    attributes."]
+    #[inline]
+    pub fn attributes(&self) -> &HashMap<String, String> {
+        &self.attributes
+    }
+
+    /// Return a mutable reference to the event's attributes.
+    #[deprecated = "Accessing the event attributes directly is deprecated. \
+                    Consider using domain types to compose events with \
+                    attributes."]
+    #[inline]
+    pub fn attributes_mut(&mut self) -> &mut HashMap<String, String> {
+        &mut self.attributes
+    }
+
+    /// Return the attributes of the event, destroying
+    /// it in the process.
+    #[inline]
+    pub fn into_attributes(self) -> HashMap<String, String> {
+        self.attributes
+    }
+
+    /// Check if this [`Event`] has a subset of the keys and values
+    /// in `attrs`.
+    #[inline]
+    pub fn has_subset_of_attrs<A: extend::AttributesMap>(
+        &self,
+        attrs: &A,
+    ) -> bool {
+        attrs.iter_attributes().all(|(key, value)| {
+            match self.attributes.get(key) {
+                Some(v) => v == value,
+                None => false,
+            }
+        })
+    }
+
+    /// Get the raw string value corresponding to a given attribute, if it
+    /// exists.
+    #[inline]
+    pub fn raw_read_attribute<'value, DATA>(&self) -> Option<&str>
+    where
+        DATA: extend::RawReadFromEventAttributes<'value>,
+    {
+        DATA::raw_read_opt_from_event_attributes(&self.attributes)
+    }
+
+    /// Get the value corresponding to a given attribute.
     #[inline]
     pub fn read_attribute<'value, DATA>(
         &self,
@@ -351,6 +418,20 @@ impl Event {
         DATA: extend::ReadFromEventAttributes<'value>,
     {
         DATA::read_from_event_attributes(&self.attributes)
+    }
+
+    /// Get the value corresponding to a given attribute, if it exists.
+    #[inline]
+    pub fn read_attribute_opt<'value, DATA>(
+        &self,
+    ) -> Result<
+        Option<<DATA as extend::ReadFromEventAttributes<'value>>::Value>,
+        EventError,
+    >
+    where
+        DATA: extend::ReadFromEventAttributes<'value>,
+    {
+        DATA::read_opt_from_event_attributes(&self.attributes)
     }
 
     /// Check if a certain attribute is present in the event.
@@ -417,7 +498,6 @@ impl From<IbcEvent> for Event {
     }
 }
 
-/// Convert our custom event into the necessary tendermint proto type
 impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
     fn from(event: Event) -> Self {
         Self {
@@ -445,6 +525,41 @@ impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
                 })
                 .chain(std::iter::once_with(|| {
                     crate::tendermint_proto::v0_37::abci::EventAttribute {
+                        key: "event-level".to_string(),
+                        value: event.level.to_string(),
+                        index: true,
+                    }
+                }))
+                .collect(),
+        }
+    }
+}
+
+impl From<Event> for crate::tendermint::abci::Event {
+    fn from(event: Event) -> Self {
+        Self {
+            kind: {
+                use extend::{Domain, RawReadFromEventAttributes};
+
+                if Domain::<Event>::check_if_present_in(&event.attributes) {
+                    // NB: encode the domain of the event in the attributes.
+                    // this is necessary for ibc events, as hermes is not
+                    // compatible with our event type format.
+                    event.event_type.sub_domain().to_string()
+                } else {
+                    event.event_type.to_string()
+                }
+            },
+            attributes: event
+                .attributes
+                .into_iter()
+                .map(|(key, value)| crate::tendermint::abci::EventAttribute {
+                    key,
+                    value,
+                    index: true,
+                })
+                .chain(std::iter::once_with(|| {
+                    crate::tendermint::abci::EventAttribute {
                         key: "event-level".to_string(),
                         value: event.level.to_string(),
                         index: true,

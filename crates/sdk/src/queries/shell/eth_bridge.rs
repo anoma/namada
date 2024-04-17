@@ -12,7 +12,6 @@ use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
 use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
-use namada_core::event::extend::ReadFromEventAttributes as _;
 use namada_core::keccak::KeccakHash;
 use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_core::token::Amount;
@@ -298,14 +297,12 @@ where
     // time of this query
     let completed_transfers = ctx.event_log.iter().filter_map(|ev| {
         let Ok(transfer_status) =
-            ethereum_structs::BpTransferStatus::try_from(&ev.event_type)
+            ethereum_structs::BpTransferStatus::try_from(ev.kind())
         else {
             return None;
         };
-        let tx_hash: KeccakHash =
-            ethereum_structs::BridgePoolTxHash::read_from_event_attributes(
-                &ev.attributes,
-            )
+        let tx_hash: KeccakHash = ev
+            .read_attribute::<ethereum_structs::BridgePoolTxHash>()
             .expect("The transfer hash must be available");
         if !transfer_hashes.swap_remove(&tx_hash) {
             return None;

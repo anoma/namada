@@ -151,11 +151,14 @@ impl From<ProposalEvent> for Event {
             ),
         };
 
-        Self {
-            event_type,
-            attributes,
-            level: EventLevel::Block,
+        let mut event = Self::new(event_type, EventLevel::Block);
+
+        #[allow(deprecated)]
+        {
+            *event.attributes_mut() = attributes;
         }
+
+        event
     }
 }
 

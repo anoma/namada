@@ -8,7 +8,7 @@ use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
 use namada::ledger::events::extend::{
-    ComposeEvent, Height, Info, RawReadFromEventAttributes, TxHash, ValidMaspTx,
+    ComposeEvent, Height, Info, TxHash, ValidMaspTx,
 };
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
@@ -345,10 +345,9 @@ where
                         tracing::trace!(
                             "all VPs accepted transaction {} storage \
                              modification {:#?}",
-                            TxHash::raw_read_from_event_attributes(
-                                &tx_event.attributes
-                            )
-                            .unwrap_or("<unknown>"),
+                            tx_event
+                                .raw_read_attribute::<TxHash>()
+                                .unwrap_or("<unknown>"),
                             result
                         );
 
@@ -392,10 +391,9 @@ where
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
                              modification {:#?}",
-                            TxHash::raw_read_from_event_attributes(
-                                &tx_event.attributes
-                            )
-                            .unwrap_or("<unknown>"),
+                            tx_event
+                                .raw_read_attribute::<TxHash>()
+                                .unwrap_or("<unknown>"),
                             result.vps_result.rejected_vps
                         );
                         // The fee unshield operation could still have been
@@ -434,10 +432,9 @@ where
                 ))) => {
                     tracing::info!(
                         "Wrapper transaction {} failed with: {}",
-                        TxHash::raw_read_from_event_attributes(
-                            &tx_event.attributes
-                        )
-                        .unwrap_or("<unknown>"),
+                        tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
                         msg,
                     );
                     tx_event
@@ -448,10 +445,9 @@ where
                 Err(msg) => {
                     tracing::info!(
                         "Transaction {} failed with: {}",
-                        TxHash::raw_read_from_event_attributes(
-                            &tx_event.attributes
-                        )
-                        .unwrap_or("<unknown>"),
+                        tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
                         msg
                     );
 
@@ -762,7 +758,6 @@ mod test_finalize_block {
     use namada::governance::storage::keys::get_proposal_execution_key;
     use namada::governance::storage::proposal::ProposalType;
     use namada::governance::{InitProposalData, VoteProposalData};
-    use namada::ledger::events::extend::ReadFromEventAttributes;
     use namada::ledger::gas::VpGasMeter;
     use namada::ledger::native_vp::parameters::ParametersVp;
     use namada::ledger::native_vp::NativeVp;
@@ -887,8 +882,9 @@ mod test_finalize_block {
             .iter()
             .enumerate()
         {
-            assert_eq!(event.event_type, APPLIED_TX);
-            let code = CodeAttr::read_from_event_attributes(&event.attributes)
+            assert_eq!(*event.kind(), APPLIED_TX);
+            let code = event
+                .read_attribute::<CodeAttr>()
                 .expect("Test failed")
                 .to_usize();
             assert_eq!(code, index.rem_euclid(2));
@@ -924,9 +920,8 @@ mod test_finalize_block {
         let mut resp = shell.finalize_block(req).expect("Test failed");
         assert_eq!(resp.len(), 1);
         let event = resp.remove(0);
-        assert_eq!(event.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event.attributes)
-            .expect("Test failed");
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
     }
 
@@ -1001,9 +996,8 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&result.attributes)
-            .expect("Test failed");
+        assert_eq!(*result.kind(), APPLIED_TX);
+        let code = result.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
 
         // --- The event is removed from the queue
@@ -1061,9 +1055,8 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&result.attributes)
-            .expect("Test failed");
+        assert_eq!(*result.kind(), APPLIED_TX);
+        let code = result.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
 
         // --- The event is removed from the queue
@@ -2462,9 +2455,8 @@ mod test_finalize_block {
                 ..Default::default()
             })
             .expect("Test failed")[0];
-        assert_eq!(event.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event.attributes)
-            .expect("Test failed");
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
 
         // the merkle tree root should not change after finalize_block
@@ -2621,13 +2613,11 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[0].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        assert_eq!(event[1].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[1].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for wrapper in [&wrapper, &new_wrapper] {
@@ -2898,21 +2888,17 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[0].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
-        assert_eq!(event[1].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[1].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
-        assert_eq!(event[2].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[2].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[2].kind(), APPLIED_TX);
+        let code = event[2].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::WasmRuntimeError);
-        assert_eq!(event[3].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[3].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[3].kind(), APPLIED_TX);
+        let code = event[3].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for valid_wrapper in [
@@ -3035,9 +3021,8 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event[0].attributes)
-            .expect("Test failed");
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
 
         assert!(
@@ -3111,9 +3096,8 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer
-        assert_eq!(event.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event.attributes)
-            .expect("Test failed");
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::WasmRuntimeError);
 
         let new_signer_balance = namada::token::read_balance(
@@ -3204,9 +3188,8 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer is 0
-        assert_eq!(event.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event.attributes)
-            .expect("Test failed");
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
         let balance: Amount =
             shell.state.read(&balance_key).unwrap().unwrap_or_default();
@@ -3300,9 +3283,8 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check fee payment
-        assert_eq!(event.event_type, APPLIED_TX);
-        let code = CodeAttr::read_from_event_attributes(&event.attributes)
-            .expect("Test failed");
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
 
         let new_proposer_balance = namada::token::read_balance(

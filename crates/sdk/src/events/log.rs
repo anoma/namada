@@ -96,7 +96,7 @@ impl EventLog {
     {
         let mut num_entries = 0;
         for event in events.into_iter() {
-            self.get_queue_of_type(&event.event_type).push(event);
+            self.get_queue_of_type(event.kind()).push(event);
             num_entries += 1;
         }
         tracing::debug!(num_entries, "Added new entries to the event log");
@@ -174,16 +174,12 @@ mod event_log_tests {
 
     /// Return a mock `FinalizeBlock` event.
     fn mock_event(event_type: EventType, hash: impl AsRef<str>) -> Event {
-        Event {
-            event_type,
-            level: EventLevel::Tx,
-            attributes: Default::default(),
-        }
-        .with(TxHash(Hash::try_from(hash.as_ref()).unwrap()))
-        .with(BridgePoolTxHash(
-            &KeccakHash::try_from(hash.as_ref()).unwrap(),
-        ))
-        .into()
+        Event::new(event_type, EventLevel::Tx)
+            .with(TxHash(Hash::try_from(hash.as_ref()).unwrap()))
+            .with(BridgePoolTxHash(
+                &KeccakHash::try_from(hash.as_ref()).unwrap(),
+            ))
+            .into()
     }
 
     /// Return a vector of mock `FinalizeBlock` events.

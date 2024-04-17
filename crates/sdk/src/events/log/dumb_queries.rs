@@ -36,16 +36,10 @@ impl QueryMatcher {
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
     pub fn matches(&self, event: &Event) -> bool {
-        if event.event_type != self.event_type {
+        if *event.kind() != self.event_type {
             return false;
         }
-
-        self.attributes.iter().all(|(key, value)| {
-            match event.attributes.get(key) {
-                Some(v) => v == value,
-                None => false,
-            }
-        })
+        event.has_subset_of_attrs(&self.attributes)
     }
 
     /// Returns a query matching the given relayed Bridge pool transaction hash.
@@ -131,6 +125,7 @@ impl QueryMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::extend::ComposeEvent;
     use crate::events::EventLevel;
 
     /// Test if query matching is working as expected.
@@ -141,34 +136,24 @@ mod tests {
 
         let tx_hash: Hash = HASH.parse().unwrap();
 
-        let mut attributes = HashMap::new();
-        attributes.with_attribute(TxHashAttr(tx_hash));
         let matcher = QueryMatcher {
             event_type: APPLIED_TX,
-            attributes,
+            attributes: {
+                let mut attrs = namada_core::collections::HashMap::new();
+                attrs.with_attribute(TxHashAttr(tx_hash));
+                attrs
+            },
         };
 
         let tests = {
-            let event_1 = Event {
-                event_type: UPDATE_CLIENT,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = namada_core::collections::HashMap::new();
-                    attrs.with_attribute(TxHashAttr(tx_hash));
-                    attrs
-                },
-            };
+            let event_1: Event = Event::new(UPDATE_CLIENT, EventLevel::Block)
+                .with(TxHashAttr(tx_hash))
+                .into();
             let applied_1 = false;
 
-            let event_2 = Event {
-                event_type: APPLIED_TX,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = namada_core::collections::HashMap::new();
-                    attrs.with_attribute(TxHashAttr(tx_hash));
-                    attrs
-                },
-            };
+            let event_2: Event = Event::new(APPLIED_TX, EventLevel::Tx)
+                .with(TxHashAttr(tx_hash))
+                .into();
             let applied_2 = true;
 
             [(event_1, applied_1), (event_2, applied_2)]
