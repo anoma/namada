@@ -6,7 +6,7 @@ use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
 
 use crate::events::extend::{ExtendAttributesMap, TxHash as TxHashAttr};
-use crate::events::{Event, EventType};
+use crate::events::{Event, EventType, EventTypeBuilder};
 use crate::ibc::core::client::types::Height as IbcHeight;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
@@ -16,6 +16,7 @@ use crate::ibc::event::{
     ClientId as ClientIdAttr, ConsensusHeights, PacketDstChannel,
     PacketDstPort, PacketSequence, PacketSrcChannel, PacketSrcPort,
 };
+use crate::ibc::{IbcEvent, IbcEventType};
 use crate::tx::event::types::APPLIED as APPLIED_TX;
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
@@ -99,7 +100,7 @@ impl QueryMatcher {
 
     /// Returns a query matching the given IBC packet parameters
     pub fn ibc_packet(
-        event_type: EventType,
+        event_type: IbcEventType,
         source_port: PortId,
         source_channel: ChannelId,
         destination_port: PortId,
@@ -116,7 +117,9 @@ impl QueryMatcher {
             .with_attribute(PacketSequence(sequence));
 
         Self {
-            event_type,
+            event_type: EventTypeBuilder::new_of::<IbcEvent>()
+                .with_segment(event_type.0)
+                .build(),
             attributes,
         }
     }

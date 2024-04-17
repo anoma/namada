@@ -56,10 +56,9 @@ use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
-use namada::ibc::event as ibc_events;
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, ToProto};
-use namada::ledger::events::EventType;
+use namada::ibc::{event as ibc_events, IbcEventType};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
@@ -1388,7 +1387,7 @@ fn transfer_token(
     )?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
-    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
+    check_ibc_packet_query(test_a, "send_packet", &packet)?;
 
     let height_a = query_height(test_a)?;
     let proof_commitment_on_a =
@@ -1412,11 +1411,7 @@ fn transfer_token(
     let events = get_events(test_b, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
-    check_ibc_packet_query(
-        test_b,
-        &"write_acknowledgement".parse().unwrap(),
-        &packet,
-    )?;
+    check_ibc_packet_query(test_b, "write_acknowledgement", &packet)?;
 
     // get the proof on Chain B
     let height_b = query_height(test_b)?;
@@ -2056,7 +2051,7 @@ fn check_ibc_update_query(
 
 fn check_ibc_packet_query(
     test: &Test,
-    event_type: &EventType,
+    event_type: &str,
     packet: &Packet,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -2064,7 +2059,7 @@ fn check_ibc_packet_query(
     let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
-        event_type,
+        &IbcEventType(event_type.to_owned()),
         &packet.port_id_on_a,
         &packet.chan_id_on_a,
         &packet.port_id_on_b,

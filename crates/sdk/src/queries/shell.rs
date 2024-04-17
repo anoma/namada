@@ -26,10 +26,11 @@ use namada_tx::data::TxResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::events::log::dumb_queries;
-use crate::events::{Event, EventType};
+use crate::events::Event;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
+use crate::ibc::IbcEventType;
 use crate::masp::MaspTokenRewardData;
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
@@ -113,7 +114,7 @@ router! {SHELL,
     ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
 
     // IBC packet event
-    ( "ibc_packet" / [event_type: EventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
+    ( "ibc_packet" / [event_type: IbcEventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
 }
 
 // Handlers:
@@ -538,7 +539,7 @@ where
 
 fn ibc_packet<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-    event_type: EventType,
+    event_type: IbcEventType,
     source_port: PortId,
     source_channel: ChannelId,
     destination_port: PortId,
