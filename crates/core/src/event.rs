@@ -484,7 +484,7 @@ impl From<IbcEvent> for Event {
     fn from(ibc_event: IbcEvent) -> Self {
         Self {
             event_type: EventTypeBuilder::new_of::<IbcEvent>()
-                .with_segment(ibc_event.event_type)
+                .with_segment(ibc_event.event_type.0)
                 .build(),
             level: EventLevel::Tx,
             attributes: {

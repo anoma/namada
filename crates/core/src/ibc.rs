@@ -13,7 +13,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use self::event::IbcEvent;
+pub use self::event::{IbcEvent, IbcEventType};
 use super::address::{Address, InternalAddress, HASH_LEN};
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;

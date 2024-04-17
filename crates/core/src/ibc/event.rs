@@ -45,6 +45,58 @@ pub mod types {
         event_type!(IbcEvent, UPDATE_CLIENT_EVENT);
 }
 
+/// IBC event kind.
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+)]
+#[repr(transparent)]
+pub struct IbcEventType(pub String);
+
+impl std::fmt::Display for IbcEventType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for IbcEventType {
+    type Err = std::convert::Infallible;
+
+    #[inline(always)]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(IbcEventType(s.to_owned()))
+    }
+}
+
+impl std::cmp::PartialEq<String> for IbcEventType {
+    fn eq(&self, other: &String) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl std::cmp::PartialEq<str> for IbcEventType {
+    fn eq(&self, other: &str) -> bool {
+        self.0.eq(other)
+    }
+}
+
+impl std::cmp::PartialEq<&str> for IbcEventType {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.eq(other)
+    }
+}
+
 /// Wrapped IbcEvent
 #[derive(
     Debug,
@@ -60,7 +112,7 @@ pub mod types {
 )]
 pub struct IbcEvent {
     /// The IBC event type
-    pub event_type: String,
+    pub event_type: IbcEventType,
     /// The attributes of the IBC event
     pub attributes: HashMap<String, String>,
 }
@@ -84,7 +136,7 @@ impl TryFrom<Event> for IbcEvent {
         }
 
         Ok(Self {
-            event_type: event_type.to_owned(),
+            event_type: IbcEventType(event_type.to_owned()),
             attributes: {
                 let mut attrs = namada_event.into_attributes();
                 attrs.with_attribute(event_domain_of::<Self>());
@@ -127,7 +179,7 @@ impl TryFrom<RawIbcEvent> for IbcEvent {
     type Error = super::Error;
 
     fn try_from(e: RawIbcEvent) -> Result<Self, super::Error> {
-        let event_type = e.event_type().to_string();
+        let event_type = IbcEventType(e.event_type().to_string());
         let abci_event =
             AbciEvent::try_from(e).map_err(super::Error::IbcEvent)?;
         let attributes: HashMap<_, _> = abci_event
@@ -528,7 +580,7 @@ mod tests {
         const EVENT_TYPE: &str = "update_account";
 
         let event: Event = IbcEvent {
-            event_type: EVENT_TYPE.into(),
+            event_type: IbcEventType(EVENT_TYPE.into()),
             attributes: Default::default(),
         }
         .into();

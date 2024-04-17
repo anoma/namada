@@ -591,6 +591,7 @@ where
 #[cfg(test)]
 mod event_composition_tests {
     use super::*;
+    use crate::ibc::IbcEventType;
 
     #[test]
     fn test_event_compose_basic() {
@@ -648,7 +649,7 @@ mod event_composition_tests {
     #[test]
     fn test_domain_of_composed_event() {
         let composite_event = IbcEvent {
-            event_type: "update_account".into(),
+            event_type: IbcEventType("update_account".into()),
             attributes: Default::default(),
         }
         .with(Log("this is sparta!".to_string()))
