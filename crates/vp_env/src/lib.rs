@@ -14,7 +14,7 @@ use namada_core::storage::{
 use namada_core::token::Transfer;
 use namada_ibc::{decode_message, IbcEvent, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
-use namada_tx::{Commitments, Tx};
+use namada_tx::{BatchedTx, Commitments, Tx};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -114,13 +114,12 @@ where
     /// Get the masp tx part of the shielded action
     fn get_shielded_action(
         &self,
-        // FIXME: if Tx and Commitments are frequently used together maybe
-        // create a new type
-        tx_data: &Tx,
-        cmt: &Commitments,
+        batched_tx: &BatchedTx,
     ) -> Result<Transaction, namada_storage::Error> {
-        let signed = tx_data;
-        let data = signed.data(cmt).ok_or_err_msg("No transaction data")?;
+        let data = batched_tx
+            .tx
+            .data(batched_tx.cmt)
+            .ok_or_err_msg("No transaction data")?;
         let transfer = match Transfer::try_from_slice(&data) {
             Ok(transfer) => Some(transfer),
             Err(_) => {
@@ -141,7 +140,8 @@ where
             .ok_or_err_msg("Missing transfer")?
             .shielded
             .ok_or_err_msg("unable to find shielded hash")?;
-        let masp_tx = signed
+        let masp_tx = batched_tx
+            .tx
             .get_section(&shielded_hash)
             .and_then(|x| x.as_ref().masp_tx())
             .ok_or_err_msg("unable to find shielded section")?;

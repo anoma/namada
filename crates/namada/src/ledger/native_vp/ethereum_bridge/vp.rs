@@ -8,7 +8,7 @@ use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
-use namada_tx::Tx;
+use namada_tx::{BatchedTx, Tx};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::state::StateRead;
@@ -93,7 +93,7 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        _: &Tx,
+        _: &BatchedTx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {
@@ -247,7 +247,7 @@ mod tests {
 
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
-        tx: &'a Tx,
+        batched_tx: &'a BatchedTx,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
@@ -256,7 +256,7 @@ mod tests {
         Ctx::new(
             &crate::ethereum_bridge::ADDRESS,
             state,
-            tx,
+            batched_tx,
             &TxIndex(0),
             gas_meter,
             keys_changed,
@@ -389,11 +389,18 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &batched_tx,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
     }
 
@@ -434,11 +441,18 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &batched_tx,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -482,11 +496,18 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                &batched_tx,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 }

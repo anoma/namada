@@ -15,7 +15,7 @@ use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_gas::GasMetering;
-use namada_tx::Tx;
+use namada_tx::{BatchedTx, Tx};
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
 
@@ -43,7 +43,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<(), Self::Error>;
@@ -68,8 +68,10 @@ where
     pub gas_meter: &'a RefCell<VpGasMeter>,
     /// Read-only state access.
     pub state: &'a S,
-    /// The transaction code is used for signature verification
-    pub tx: &'a Tx,
+    /// The batched transaction
+    // FIXME: should this just be the struct instead of a reference? Or maybe
+    // BatchedTx should just contain the actual data?
+    pub batched_tx: &'a BatchedTx<'a>,
     /// The transaction index is used to obtain the shielded transaction's
     /// parent
     pub tx_index: &'a TxIndex,
@@ -118,7 +120,7 @@ where
     pub fn new(
         address: &'a Address,
         state: &'a S,
-        tx: &'a Tx,
+        tx: &'a BatchedTx,
         tx_index: &'a TxIndex,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
@@ -131,7 +133,7 @@ where
             state,
             iterators: RefCell::new(PrefixIterators::default()),
             gas_meter,
-            tx,
+            batched_tx: tx,
             tx_index,
             keys_changed,
             verifiers,
@@ -445,7 +447,7 @@ where
                 self.state.in_mem(),
                 self.state.db(),
                 self.gas_meter,
-                self.tx,
+                self.batched_tx,
                 self.tx_index,
                 &mut iterators,
                 self.verifiers,
@@ -483,7 +485,7 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
-        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx)
+        vp_host_fns::get_tx_code_hash(self.gas_meter, self.batched_tx)
             .into_storage_result()
     }
 

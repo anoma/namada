@@ -12,7 +12,7 @@ use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
-use namada_tx::{Commitment, Section, Tx};
+use namada_tx::{BatchedTx, Commitment, Section, Tx};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
@@ -107,13 +107,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
 /// `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<S>(tx: &Tx, storage: &S) -> Result<()>
+pub fn check_tx_allowed<S>(batched_tx: &BatchedTx, storage: &S) -> Result<()>
 where
     S: StorageRead,
 {
+    let BatchedTx { tx, cmt } = batched_tx;
     if let TxType::Wrapper(_) = tx.header().tx_type {
         if let Some(code_sec) = tx
-            .get_section(tx.code_sechash())
+            .get_section(cmt.code_sechash())
             .and_then(|x| Section::code_sec(&x))
         {
             if crate::parameters::is_tx_allowed(storage, &code_sec.code.hash())
@@ -134,7 +135,7 @@ pub fn tx<S, CA>(
     state: &mut S,
     gas_meter: &RefCell<TxGasMeter>,
     tx_index: &TxIndex,
-    tx: &Tx,
+    batched_tx: &BatchedTx,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -142,15 +143,16 @@ where
     S: StateRead + State + StorageRead,
     CA: 'static + WasmCacheAccess,
 {
+    let BatchedTx { tx, cmt } = batched_tx;
     let tx_code = tx
-        .get_section(tx.code_sechash())
+        .get_section(cmt.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
-        .ok_or(Error::MissingSection(tx.code_sechash().to_string()))?;
+        .ok_or(Error::MissingSection(cmt.code_sechash().to_string()))?;
 
     // Check if the tx code is allowed (to be done after the check on the code
     // section commitment to let the replay protection mechanism run some
     // optimizations)
-    check_tx_allowed(tx, state)?;
+    check_tx_allowed(batched_tx, state)?;
 
     // If the transaction code has a tag, ensure that the tag hash equals the
     // transaction code's hash.
@@ -202,7 +204,7 @@ where
         &mut iterators,
         gas_meter,
         &sentinel,
-        tx,
+        batched_tx,
         tx_index,
         &mut verifiers,
         &mut result_buffer,
@@ -228,7 +230,8 @@ where
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, tx).map_err(Error::MemoryError)?;
+    } = memory::write_tx_inputs(memory, batched_tx)
+        .map_err(Error::MemoryError)?;
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
@@ -280,7 +283,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn vp<S, CA>(
     vp_code_hash: Hash,
-    tx: &Tx,
+    batched_tx: &BatchedTx,
     tx_index: &TxIndex,
     address: &Address,
     state: &S,
@@ -318,7 +321,7 @@ where
         state.in_mem(),
         state.db(),
         gas_meter,
-        tx,
+        batched_tx,
         tx_index,
         &mut iterators,
         verifiers,
@@ -338,7 +341,7 @@ where
         module,
         imports,
         &vp_code_hash,
-        tx,
+        batched_tx.tx,
         address,
         keys_changed,
         verifiers,
@@ -357,6 +360,7 @@ fn run_vp(
     verifiers: &BTreeSet<Address>,
     yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
 ) -> Result<()> {
+    // FIXME: need the batched tx as input for the vp too?
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,
@@ -1032,11 +1036,12 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1052,7 +1057,7 @@ mod tests {
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1111,6 +1116,7 @@ mod tests {
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
@@ -1118,7 +1124,7 @@ mod tests {
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
+                &batched_tx,
                 &tx_index,
                 &addr,
                 &state,
@@ -1143,6 +1149,7 @@ mod tests {
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
 
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
@@ -1150,7 +1157,7 @@ mod tests {
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
+                &batched_tx,
                 &tx_index,
                 &addr,
                 &state,
@@ -1196,10 +1203,11 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1216,9 +1224,10 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let error = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1264,11 +1273,12 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_no_op, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1324,10 +1334,11 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1398,11 +1409,12 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_read_key, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let error = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1450,10 +1462,11 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1524,12 +1537,13 @@ mod tests {
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
+                &batched_tx,
                 &tx_index,
                 &addr,
                 &state,
@@ -1573,6 +1587,7 @@ mod tests {
         wrapper_tx.add_code_from_hash(read_code_hash, None);
         tx.add_serialized_data(vec![]);
         wrapper_tx.add_serialized_data(vec![]);
+        let batched_tx = wrapper_tx.batch_tx(&wrapper_tx.commitments()[0]);
 
         // Check that using a disallowed wrapper tx leads to an error, but a raw
         // tx is ok even if not allowlisted
@@ -1584,9 +1599,9 @@ mod tests {
             .unwrap();
             state.commit_tx();
 
-            let result = check_tx_allowed(&wrapper_tx, &state);
+            let result = check_tx_allowed(&batched_tx, &state);
             assert_matches!(result.unwrap_err(), Error::DisallowedTx);
-            let result = check_tx_allowed(&tx, &state);
+            let result = check_tx_allowed(&batched_tx, &state);
             if let Err(result) = result {
                 assert!(!matches!(result, Error::DisallowedTx));
             }
@@ -1602,7 +1617,7 @@ mod tests {
             .unwrap();
             state.commit_tx();
 
-            let result = check_tx_allowed(&wrapper_tx, &state);
+            let result = check_tx_allowed(&batched_tx, &state);
             if let Err(result) = result {
                 assert!(!matches!(result, Error::DisallowedTx));
             }
@@ -1636,11 +1651,12 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1675,11 +1691,12 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1714,9 +1731,10 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1757,9 +1775,10 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
         let result = vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,
@@ -1794,12 +1813,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
 
         tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
+            &batched_tx,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1887,10 +1907,11 @@ mod tests {
         let len_key = Key::wasm_code_len(&code_hash);
         state.write_bytes(&key, vp_code).unwrap();
         state.write_bytes(&len_key, code_len).unwrap();
+        let batched_tx = outer_tx.batch_tx(&outer_tx.commitments()[0]);
 
         vp(
             code_hash,
-            &outer_tx,
+            &batched_tx,
             &tx_index,
             &addr,
             &state,

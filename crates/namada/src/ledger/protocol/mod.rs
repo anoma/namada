@@ -16,7 +16,7 @@ use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
 };
-use namada_tx::{Section, Tx};
+use namada_tx::{BatchedTx, Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -185,8 +185,15 @@ where
 {
     match tx.header().tx_type {
         // Raw trasaction type is allowed only for governance proposals
+        // FIXME: should we support governance bundles? Look how we load the
+        // data No bundles of governance transactions, only take the
+        // first one
         TxType::Raw => apply_wasm_tx(
-            tx,
+            // FIXME: manage error
+            BatchedTx {
+                tx: &tx,
+                cmt: tx.commitments().first().unwrap(),
+            },
             &tx_index,
             ShellParams {
                 tx_gas_meter,
@@ -198,8 +205,10 @@ where
         TxType::Protocol(protocol_tx) => {
             apply_protocol_tx(
                 protocol_tx.tx,
+                // FIXME: should we support protocol bundles?
                 // No bundles of protocol transactions, only take the first one
-                tx.header.commitments.first().map(|cmt| tx.data(cmt)),
+                // FIXME: manage error
+                tx.commitments().first().map(|cmt| tx.data(cmt).unwrap()),
                 state,
             )
         }
@@ -291,9 +300,9 @@ where
             // yes FIXME: do a single hash for the entire bundle, at
             // least for now, this way you can easily rebundle single failing
             // txs
-            for cmt in tx.header.commitments {
+            for cmt in tx.commitments() {
                 let mut inner_res = apply_wasm_tx(
-                    tx,
+                    BatchedTx { tx: &tx, cmt },
                     &tx_index,
                     ShellParams {
                         tx_gas_meter,
@@ -304,6 +313,8 @@ where
                 )?;
 
                 // FIXME: when to commit the hash of the bundle and when not?
+                // Probably commit when at least one the tx requires so and not
+                // commit when all the txs request to not be committed
 
                 // FIXME: how to manage the changed keys of the wrapper?
                 inner_res.wrapper_changed_keys = changed_keys;
@@ -454,7 +465,16 @@ where
                 // should contain any prior changes (if any)
                 state.write_log_mut().precommit_tx();
                 match apply_wasm_tx(
-                    fee_unshielding_tx,
+                    BatchedTx {
+                        tx: &fee_unshielding_tx,
+                        // No bundles for fee unshielding
+                        cmt: fee_unshielding_tx
+                            .header
+                            .commitments
+                            .first()
+                            // FIXME: manage unwrap
+                            .unwrap(),
+                    },
                     &TxIndex::default(),
                     ShellParams {
                         tx_gas_meter: &tx_gas_meter,
@@ -666,7 +686,7 @@ where
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
 pub fn apply_wasm_tx<'a, S, D, H, CA>(
-    tx: Tx,
+    batched_tx: BatchedTx,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
 ) -> Result<TxResult>
@@ -685,7 +705,7 @@ where
 
     // FIXME: check that this is the hash of the bundle, i.e. that it contains
     // all the commitments (it should already be the case)
-    let tx_hash = tx.raw_header_hash();
+    let tx_hash = batched_tx.tx.raw_header_hash();
     if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
     {
         // If the same transaction (or bundle) has already been committed in
@@ -694,7 +714,7 @@ where
     }
 
     let verifiers = execute_tx(
-        &tx,
+        &batched_tx,
         tx_index,
         state,
         tx_gas_meter,
@@ -703,7 +723,7 @@ where
     )?;
 
     let vps_result = check_vps(CheckVps {
-        tx: &tx,
+        batched_tx: &batched_tx,
         tx_index,
         state,
         tx_gas_meter: &mut tx_gas_meter.borrow_mut(),
@@ -803,7 +823,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 fn execute_tx<S, D, H, CA>(
-    tx: &Tx,
+    batched_tx: &BatchedTx,
     tx_index: &TxIndex,
     state: &mut S,
     tx_gas_meter: &RefCell<TxGasMeter>,
@@ -820,7 +840,7 @@ where
         state,
         tx_gas_meter,
         tx_index,
-        tx,
+        batched_tx,
         vp_wasm_cache,
         tx_wasm_cache,
     )
@@ -837,7 +857,7 @@ where
     S: State,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    tx: &'a Tx,
+    batched_tx: &'a BatchedTx<'a>,
     tx_index: &'a TxIndex,
     state: &'a S,
     tx_gas_meter: &'a mut TxGasMeter,
@@ -848,7 +868,7 @@ where
 /// Check the acceptance of a transaction by validity predicates
 fn check_vps<S, CA>(
     CheckVps {
-        tx,
+        batched_tx: tx,
         tx_index,
         state,
         tx_gas_meter,
@@ -887,7 +907,7 @@ where
 fn execute_vps<S, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
-    tx: &Tx,
+    batched_tx: &BatchedTx,
     tx_index: &TxIndex,
     state: &S,
     tx_gas_meter: &TxGasMeter,
@@ -917,7 +937,7 @@ where
 
                     wasm::run::vp(
                         vp_code_hash,
-                        tx,
+                        batched_tx,
                         tx_index,
                         addr,
                         state,
@@ -938,7 +958,7 @@ where
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
-                        tx,
+                        batched_tx,
                         tx_index,
                         &gas_meter,
                         &keys_changed,
@@ -949,18 +969,30 @@ where
                     match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
-                            pos.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::PosNativeVpError)
+                            pos.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::PosNativeVpError)
                         }
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
-                            ibc.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::IbcNativeVpError)
+                            ibc.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::IbcNativeVpError)
                         }
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
                             parameters
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::ParametersNativeVpError)
                         }
                         InternalAddress::PosSlashPool => Err(
@@ -969,37 +1001,61 @@ where
                         InternalAddress::Governance => {
                             let governance = GovernanceVp { ctx };
                             governance
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::GovernanceNativeVpError)
                         }
                         InternalAddress::Multitoken => {
                             let multitoken = MultitokenVp { ctx };
                             multitoken
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::MultitokenNativeVpError)
                         }
                         InternalAddress::EthBridge => {
                             let bridge = EthBridge { ctx };
                             bridge
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::EthBridgeNativeVpError)
                         }
                         InternalAddress::EthBridgePool => {
                             let bridge_pool = BridgePoolVp { ctx };
                             bridge_pool
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::BridgePoolNativeVpError)
                         }
                         InternalAddress::Pgf => {
                             let pgf_vp = PgfVp { ctx };
                             pgf_vp
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::PgfNativeVpError)
                         }
                         InternalAddress::Nut(_) => {
                             let non_usable_tokens = NonUsableTokens { ctx };
                             non_usable_tokens
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::NutNativeVpError)
                         }
                         internal_addr @ (InternalAddress::IbcToken(_)
@@ -1018,8 +1074,12 @@ where
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };
-                            masp.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::MaspNativeVpError)
+                            masp.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::MaspNativeVpError)
                         }
                         InternalAddress::TempStorage => Err(
                             // Temp storage changes must never be committed
@@ -1316,10 +1376,11 @@ mod tests {
         // gas meter with no gas left
         let gas_meter = TxGasMeter::new(0);
 
+        let batched_tx = dummy_tx.batch_tx(&dummy_tx.commitments()[0]);
         let result = execute_vps(
             verifiers,
             changed_keys,
-            &dummy_tx,
+            &batched_tx,
             &TxIndex::default(),
             &state,
             &gas_meter,

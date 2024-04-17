@@ -898,7 +898,6 @@ impl Section {
     Hash,
 )]
 pub struct Commitments {
-    // FIXME: should put these fields as private? Yes if possible. Maybe not
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
@@ -930,7 +929,8 @@ impl Commitments {
 // FIXME: for safet yreasons it would be better to not expose a function that
 // allows computing the Hash of the header over a single tx of the bundle
 // because in this case it could be possible for the caller to sign only a
-// single tx that could then be replayed
+// single tx that could then be replayed. The fields are public so this could be
+// done anyway
 
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
@@ -1670,6 +1670,19 @@ impl Tx {
         }
         self
     }
+
+    // FIXME: review the return type, maybe a slice?
+    // FIXME: rename?
+    pub fn commitments(&self) -> &Vec<Commitments> {
+        &self.header.commitments
+    }
+}
+
+impl<'tx> Tx {
+    // FIXME: new method to construct a BundledTx?
+    pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTx<'tx> {
+        BatchedTx { tx: self, cmt }
+    }
 }
 
 /// The type of an indexed transaction, wrapper or inner. If the latter, then
@@ -1722,5 +1735,27 @@ impl Default for IndexedTx {
             index: TxIndex(0),
             tx_type: IndexedTxType::Wrapper,
         }
+    }
+}
+
+// FIXME: I probably need two versions of this, one with the references and
+// another with the actual object for wasm? Not sure. AS long as I'm in protocol
+// I only need references and from wasm I need the actual data. But it looks
+// like I can't serialize this struct if it carries references. FIXME: rename?
+#[derive(Debug)]
+pub struct BatchedTx<'tx> {
+    pub tx: &'tx Tx,
+    pub cmt: &'tx Commitments,
+}
+
+impl BorshSerialize for BatchedTx<'_> {
+    fn serialize<W: std::io::prelude::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        // FIXME: check that this actually works
+        // FIXME: In case I need another struct in wasm with the owned objects
+        BorshSerialize::serialize(self.tx, writer)?;
+        BorshSerialize::serialize(self.cmt, writer)
     }
 }

@@ -1088,7 +1088,7 @@ pub async fn to_ledger_vector(
         ..Default::default()
     };
 
-    for cmt in &tx.header.commitments {
+    for cmt in tx.commitments() {
         // FIXME: need to push some string to differentiate between the
         // different txs of the bundle?
         let code_sec = tx

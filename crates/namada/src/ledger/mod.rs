@@ -80,16 +80,7 @@ mod dry_run_tx {
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
                 TxGasMeter::new_from_sub_limit(available_gas)
             }
-            TxType::Protocol(_) => {
-                // If dry run only the inner tx, use the max block gas as
-                // the gas limit
-                TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
-                ))
-            }
-            TxType::Raw => {
-                // Cast tx to a decrypted for execution
-
+            _ => {
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
                 TxGasMeter::new(GasLimit::from(
@@ -99,22 +90,26 @@ mod dry_run_tx {
         };
 
         let tx_gas_meter = RefCell::new(tx_gas_meter);
-        let mut data = protocol::apply_wasm_tx(
-            tx,
-            &TxIndex(0),
-            ShellParams::new(
-                &tx_gas_meter,
-                &mut temp_state,
-                &mut ctx.vp_wasm_cache,
-                &mut ctx.tx_wasm_cache,
-            ),
-        )
-        .into_storage_result()?;
-        cumulated_gas = cumulated_gas
-            .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas",
-            ))?;
+        for cmt in tx.commitments() {
+            let batched_tx = tx.batch_tx(cmt);
+            // FIXME: see how to handle tx result here
+            let mut data = protocol::apply_wasm_tx(
+                batched_tx,
+                &TxIndex(0),
+                ShellParams::new(
+                    &tx_gas_meter,
+                    &mut temp_state,
+                    &mut ctx.vp_wasm_cache,
+                    &mut ctx.tx_wasm_cache,
+                ),
+            )
+            .into_storage_result()?;
+            cumulated_gas = cumulated_gas
+                .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
+                .ok_or(namada_state::StorageError::SimpleMessage(
+                    "Overflow in gas",
+                ))?;
+        }
         // Account gas for both inner and wrapper (if available)
         data.gas_used = cumulated_gas;
         // NOTE: the keys changed by the wrapper transaction (if any) are

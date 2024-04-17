@@ -13,7 +13,7 @@ use namada_core::storage::{
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
-use namada_tx::{Section, Tx};
+use namada_tx::{BatchedTx, Section, Tx};
 use thiserror::Error;
 
 use crate::ibc::IbcEvent;
@@ -277,15 +277,15 @@ where
     Ok(hash)
 }
 
-/// Getting the block hash. The height is that of the block to which the
-/// current transaction is being applied.
+/// Getting the transaction's code hash.
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
-    tx: &Tx,
+    batched_tx: &BatchedTx,
 ) -> EnvResult<Option<Hash>> {
     add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
-    let hash = tx
-        .get_section(tx.code_sechash())
+    let hash = batched_tx
+        .tx
+        .get_section(batched_tx.cmt.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .map(|x| x.code.hash());
     Ok(hash)

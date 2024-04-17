@@ -8,7 +8,7 @@ use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;
-use namada_tx::Tx;
+use namada_tx::{BatchedTx, Tx};
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -51,7 +51,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        tx_data: &BatchedTx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -280,8 +280,8 @@ where
     }
 
     /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
-        tx.data().map_or_else(
+    pub fn is_valid_parameter(&self, batched_tx: &BatchedTx) -> Result<()> {
+        batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
                     "Token parameter changes require tx data to be present",
@@ -335,7 +335,7 @@ mod tests {
         state
     }
 
-    fn dummy_tx(state: &TestState) -> Tx {
+    fn dummy_tx(state: &TestState) -> BatchedTx {
         let tx_code = vec![];
         let tx_data = vec![];
         let mut tx = Tx::from_type(TxType::Raw);
@@ -347,7 +347,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        tx
+        tx.batch_tx(&tx.commitments()[0])
     }
 
     fn transfer(

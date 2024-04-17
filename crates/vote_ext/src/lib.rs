@@ -41,6 +41,7 @@ macro_rules! ethereum_tx_data_deserialize_inner {
     ($variant:ty) => {
         // FIXME: if this patter of Tx and Commitment appears often then maybe
         // use a custom Type
+        // FIXME: use BundledTx here
         impl TryFrom<(&Tx, &Commitments)> for $variant {
             type Error = TxError;
 

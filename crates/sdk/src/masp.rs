@@ -978,7 +978,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
 
         // Expect transaction
-        for cmt in &tx.header.commitments {
+        for cmt in tx.commitments() {
             let tx_data = tx.data(cmt).ok_or_else(|| {
                 Error::Other("Missing data section".to_string())
             })?;
@@ -2485,7 +2485,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         let tx = Tx::try_from(response_tx.tx.as_ref())
                             .map_err(|e| Error::Other(e.to_string()))?;
 
-                        for cmt in &tx.header.commitments {
+                        for cmt in tx.commitments() {
                             let should_process =
                                 !transfers.contains_key(&IndexedTx {
                                     height,

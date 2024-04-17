@@ -332,6 +332,7 @@ where
                 wrapper_args.as_mut(),
             )
             .map_err(Error::TxApply);
+            // FIXME: where to place these gas meters operations?
             let tx_gas_meter = tx_gas_meter.into_inner();
 
             // save the gas cost

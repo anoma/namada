@@ -6,7 +6,7 @@ use namada_core::address::{Address, InternalAddress};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
-use namada_tx::Tx;
+use namada_tx::{BatchedTx, Tx};
 use namada_vp_env::VpEnv;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -41,7 +41,7 @@ where
 
     fn validate_tx(
         &self,
-        _: &Tx,
+        _: &BatchedTx,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {
@@ -199,10 +199,11 @@ mod test_nuts {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let ctx = Ctx::<_, WasmCacheRwAccess>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,
-            &tx,
+            &batched_tx,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -226,7 +227,7 @@ mod test_nuts {
             println!("{key}: PRE={pre:?} POST={post:?}");
         }
 
-        vp.validate_tx(&tx, &keys_changed, &verifiers)
+        vp.validate_tx(&batched_tx, &keys_changed, &verifiers)
             .map_or_else(|_| false, |()| true)
     }
 

@@ -411,7 +411,7 @@ mod test_process_tx {
             TxType::Raw => {
                 assert_eq!(
                     code_sec.get_hash(),
-                    outer_tx.header.commitments[0].code_hash,
+                    outer_tx.commitments()[0].code_hash,
                 )
             }
             _ => panic!("Test failed: Expected Raw Tx"),
