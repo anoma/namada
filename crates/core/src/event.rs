@@ -303,6 +303,9 @@ impl Display for Event {
 /// Errors to do with emitting events.
 #[derive(Error, Debug, Clone)]
 pub enum EventError {
+    /// Invalid event domain.
+    #[error("Invalid event domain: {0}")]
+    InvalidDomain(String),
     /// Missing event domain.
     #[error("Missing the domain of the event")]
     MissingDomain,
@@ -403,7 +406,13 @@ impl From<IbcEvent> for Event {
                 .with_segment(ibc_event.event_type)
                 .build(),
             level: EventLevel::Tx,
-            attributes: ibc_event.attributes,
+            attributes: {
+                use extend::{event_domain_of, ExtendAttributesMap};
+
+                let mut attrs = ibc_event.attributes;
+                attrs.with_attribute(event_domain_of::<IbcEvent>());
+                attrs
+            },
         }
     }
 }
@@ -412,7 +421,18 @@ impl From<IbcEvent> for Event {
 impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
     fn from(event: Event) -> Self {
         Self {
-            r#type: event.event_type.to_string(),
+            r#type: {
+                use extend::{Domain, RawReadFromEventAttributes};
+
+                if Domain::<Event>::check_if_present_in(&event.attributes) {
+                    // NB: encode the domain of the event in the attributes.
+                    // this is necessary for ibc events, as hermes is not
+                    // compatible with our event type format.
+                    event.event_type.sub_domain().to_string()
+                } else {
+                    event.event_type.to_string()
+                }
+            },
             attributes: event
                 .attributes
                 .into_iter()

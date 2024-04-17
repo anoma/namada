@@ -13,7 +13,8 @@ use crate::address::{Address, MASP};
 use crate::borsh::*;
 use crate::collections::HashMap;
 use crate::event::extend::{
-    AttributesMap, EventAttributeEntry, ReadFromEventAttributes as _,
+    event_domain_of, AttributesMap, EventAttributeEntry,
+    ExtendAttributesMap as _, ReadFromEventAttributes as _,
 };
 use crate::event::{Event, EventError, EventToEmit as _};
 use crate::ibc::core::channel::types::packet::Packet;
@@ -84,7 +85,11 @@ impl TryFrom<Event> for IbcEvent {
 
         Ok(Self {
             event_type: event_type.to_owned(),
-            attributes: namada_event.attributes,
+            attributes: {
+                let mut attrs = namada_event.attributes;
+                attrs.with_attribute(event_domain_of::<Self>());
+                attrs
+            },
         })
     }
 }
@@ -510,4 +515,32 @@ pub fn packet_from_event_attributes<A: AttributesMap>(
         timeout_timestamp_on_b:
             PacketTimeoutTimestamp::read_from_event_attributes(attributes)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event::extend::{Domain, RawReadFromEventAttributes as _};
+    use crate::tendermint_proto::v0_37::abci::Event as AbciEventV037;
+
+    #[test]
+    fn test_domain_encoded_in_abci_event_attrs() {
+        const EVENT_TYPE: &str = "update_account";
+
+        let event: Event = IbcEvent {
+            event_type: EVENT_TYPE.into(),
+            attributes: Default::default(),
+        }
+        .into();
+
+        let event: AbciEventV037 = event.into();
+
+        assert_eq!(event.r#type, EVENT_TYPE);
+        assert_eq!(
+            Some(IbcEvent::DOMAIN),
+            Domain::<IbcEvent>::raw_read_opt_from_event_attributes(
+                &event.attributes
+            )
+        );
+    }
 }

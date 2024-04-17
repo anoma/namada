@@ -446,16 +446,66 @@ impl EventAttributeEntry<'static> for Success {
 }
 
 /// Extend an [`Event`] with a new domain.
-pub struct Domain(pub Cow<'static, str>);
+pub struct Domain<E>(PhantomData<E>);
 
-impl ExtendEvent for Domain {
+/// Build a new [`Domain`] to extend an [event](Event) with.
+pub const fn event_domain_of<E: EventToEmit>() -> Domain<E> {
+    Domain(PhantomData)
+}
+
+/// Parsed domain of some [event](Event).
+pub struct ParsedDomain<E> {
+    domain: String,
+    _marker: PhantomData<E>,
+}
+
+impl<E> ParsedDomain<E> {
+    /// Return the inner domain as a [`String`].
     #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(domain) = self;
+    pub fn into_inner(self) -> String {
+        self.domain
+    }
+}
 
-        event.event_type = EventTypeBuilder::new_with_domain(domain)
-            .with_segment(event.event_type.sub_domain())
-            .build();
+impl<E> From<ParsedDomain<E>> for String {
+    #[inline]
+    fn from(parsed_domain: ParsedDomain<E>) -> String {
+        parsed_domain.into_inner()
+    }
+}
+
+impl<E> FromStr for ParsedDomain<E>
+where
+    E: EventToEmit,
+{
+    type Err = EventError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == E::DOMAIN {
+            Ok(Self {
+                domain: s.to_owned(),
+                _marker: PhantomData,
+            })
+        } else {
+            Err(EventError::InvalidDomain(format!(
+                "Expected {:?}, but found {s:?}",
+                E::DOMAIN
+            )))
+        }
+    }
+}
+
+impl<E> EventAttributeEntry<'static> for Domain<E>
+where
+    E: EventToEmit,
+{
+    type Value = &'static str;
+    type ValueOwned = ParsedDomain<E>;
+
+    const KEY: &'static str = "event-domain";
+
+    fn into_value(self) -> Self::Value {
+        E::DOMAIN
     }
 }
 
@@ -590,14 +640,6 @@ mod event_composition_tests {
         }
 
         assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
-    }
-
-    #[test]
-    fn test_event_compose_change_domain() {
-        let composite: Event =
-            Event::applied_tx().with(Domain("sparta".into())).into();
-
-        assert_eq!(composite.event_type.domain(), "sparta");
     }
 
     #[test]
