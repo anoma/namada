@@ -120,28 +120,18 @@ where
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
-                        let proposal_code =
-                            gov_api::get_proposal_code(&shell.state, id)?;
-                        let result = execute_default_proposal(
-                            shell,
-                            id,
-                            proposal_code.clone(),
-                        )?;
                         tracing::info!(
                             "Default Governance proposal {} has been executed \
                              and passed.",
                             id,
                         );
 
-                        ProposalEvent::default_proposal_event(
-                            id,
-                            proposal_code.is_some(),
-                            result,
-                        )
+                        ProposalEvent::default_proposal_event(id, false, false)
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =
-                            gov_api::get_proposal_code(&shell.state, id)?;
+                            gov_api::get_proposal_code(&shell.state, id)?
+                                .unwrap_or_default();
                         let result = execute_default_proposal(
                             shell,
                             id,
@@ -154,11 +144,7 @@ where
                             if result { "successful" } else { "unsuccessful" }
                         );
 
-                        ProposalEvent::default_proposal_event(
-                            id,
-                            proposal_code.is_some(),
-                            result,
-                        )
+                        ProposalEvent::default_proposal_event(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
                         let result = execute_pgf_steward_proposal(
@@ -333,57 +319,50 @@ where
 fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
-    proposal_code: Option<Vec<u8>>,
+    proposal_code: Vec<u8>,
 ) -> namada::state::StorageResult<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    if let Some(code) = proposal_code {
-        let pending_execution_key = gov_storage::get_proposal_execution_key(id);
-        shell.state.write(&pending_execution_key, ())?;
+    let pending_execution_key = gov_storage::get_proposal_execution_key(id);
+    shell.state.write(&pending_execution_key, ())?;
 
-        let mut tx = Tx::from_type(TxType::Raw);
-        tx.header.chain_id = shell.chain_id.clone();
-        tx.set_data(Data::new(encode(&id)));
-        tx.set_code(Code::new(code, None));
+    let mut tx = Tx::from_type(TxType::Raw);
+    tx.header.chain_id = shell.chain_id.clone();
+    tx.set_data(Data::new(encode(&id)));
+    tx.set_code(Code::new(proposal_code, None));
 
-        let tx_result = protocol::dispatch_tx(
-            tx,
-            &[], /*  this is used to compute the fee
-                  * based on the code size. We dont
-                  * need it here. */
-            TxIndex::default(),
-            &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
-            &mut shell.state,
-            &mut shell.vp_wasm_cache,
-            &mut shell.tx_wasm_cache,
-            None,
-        );
-        shell
-            .state
-            .delete(&pending_execution_key)
-            .expect("Should be able to delete the storage.");
-        match tx_result {
-            Ok(tx_result) => {
-                if tx_result.is_accepted() {
-                    shell.state.commit_tx();
-                    Ok(true)
-                } else {
-                    Ok(false)
-                }
-            }
-            Err(_) => {
+    let tx_result = protocol::dispatch_tx(
+        tx,
+        &[], /*  this is used to compute the fee
+              * based on the code size. We dont
+              * need it here. */
+        TxIndex::default(),
+        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
+        &mut shell.state,
+        &mut shell.vp_wasm_cache,
+        &mut shell.tx_wasm_cache,
+        None,
+    );
+    shell
+        .state
+        .delete(&pending_execution_key)
+        .expect("Should be able to delete the storage.");
+    match tx_result {
+        Ok(tx_result) => {
+            if tx_result.is_accepted() {
+                shell.state.commit_tx();
+                Ok(true)
+            } else {
                 shell.state.drop_tx();
                 Ok(false)
             }
         }
-    } else {
-        tracing::info!(
-            "Governance proposal {} doesn't have any associated proposal code.",
-            id
-        );
-        Ok(true)
+        Err(_) => {
+            shell.state.drop_tx();
+            Ok(false)
+        }
     }
 }
 
