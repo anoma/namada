@@ -285,9 +285,11 @@ pub struct SlashedAmount {
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
-    pub commission_rate: Dec,
+    pub commission_rate: Option<Dec>,
     /// Validator max commission rate change per epoch
-    pub max_commission_change_per_epoch: Dec,
+    pub max_commission_change_per_epoch: Option<Dec>,
+    /// Query epoch
+    pub epoch: Epoch,
 }
 
 /// Epoched rewards products
@@ -547,6 +549,9 @@ pub enum ValidatorState {
     /// consensus due to a misbehavior
     Jailed,
 }
+
+/// The validator state from a query and the epoch when it was queried.
+pub type ValidatorStateInfo = (Option<ValidatorState>, Epoch);
 
 /// A slash applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.

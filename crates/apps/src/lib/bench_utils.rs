@@ -386,7 +386,7 @@ impl BenchShell {
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
     }
 
-    /// Execute the tx and retur a set of verifiers inserted by the tx.
+    /// Execute the tx and return a set of verifiers inserted by the tx.
     pub fn execute_tx(&mut self, tx: &Tx) -> BTreeSet<Address> {
         let gas_meter =
             RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
