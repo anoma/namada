@@ -51,17 +51,12 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Mutex;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
+use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::core::collections::HashSet;
-use namada::core::storage::{
-    BlockHeight, BlockResults, Epoch, EthEventsQueue, Header, Key, KeySeg,
-    KEY_SEGMENT_SEPARATOR,
-};
-use namada::core::time::DateTimeUtc;
-use namada::core::{decode, encode, ethereum_events, ethereum_structs};
+use namada::core::storage::{BlockHeight, Epoch, Header, Key, KeySeg};
+use namada::core::{decode, encode, ethereum_events};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::replay_protection;
@@ -77,9 +72,7 @@ use namada::storage::{
     DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
     SUBSPACE_CF,
 };
-use namada::token::ConversionState;
 use namada_sdk::migrations::DBUpdateVisitor;
-use namada_sdk::storage::types::CommitOnlyData;
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -95,6 +88,26 @@ use crate::config::utils::num_of_threads;
 /// Env. var to set a number of Rayon global worker threads
 const ENV_VAR_ROCKSDB_COMPACTION_THREADS: &str =
     "NAMADA_ROCKSDB_COMPACTION_THREADS";
+
+const BLOCK_HEIGHT_KEY: &str = "height";
+const NEXT_EPOCH_MIN_START_HEIGHT_KEY: &str = "next_epoch_min_start_height";
+const NEXT_EPOCH_MIN_START_TIME_KEY: &str = "next_epoch_min_start_time";
+const UPDATE_EPOCH_BLOCKS_DELAY_KEY: &str = "update_epoch_blocks_delay";
+const COMMIT_ONLY_DATA_KEY: &str = "commit_only_data_commitment";
+const CONVERSION_STATE_KEY: &str = "conversion_state";
+const ETHEREUM_HEIGHT_KEY: &str = "ethereum_height";
+const ETH_EVENTS_QUEUE_KEY: &str = "eth_events_queue";
+const RESULTS_KEY_PREFIX: &str = "results";
+const PRED_KEY_PREFIX: &str = "pred";
+
+const MERKLE_TREE_ROOT_KEY_SEGMENT: &str = "root";
+const MERKLE_TREE_STORE_KEY_SEGMENT: &str = "store";
+const BLOCK_HEADER_KEY_SEGMENT: &str = "header";
+const BLOCK_HASH_KEY_SEGMENT: &str = "hash";
+const BLOCK_TIME_KEY_SEGMENT: &str = "time";
+const EPOCH_KEY_SEGMENT: &str = "epoch";
+const PRED_EPOCHS_KEY_SEGMENT: &str = "pred_epochs";
+const ADDRESS_GEN_KEY_SEGMENT: &str = "address_gen";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -224,35 +237,74 @@ impl RocksDB {
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))
     }
 
-    /// Persist the diff of an account subspace key-val under the height where
-    /// it was changed.
-    fn write_subspace_diff(
+    fn read_value<T>(
         &self,
-        height: BlockHeight,
-        key: &Key,
-        old_value: Option<&[u8]>,
-        new_value: Option<&[u8]>,
-        persist_diffs: bool,
-    ) -> Result<()> {
-        let cf = if persist_diffs {
-            self.get_column_family(DIFFS_CF)?
-        } else {
-            self.get_column_family(ROLLBACK_CF)?
-        };
-        let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+    ) -> Result<Option<T>>
+    where
+        T: BorshDeserialize,
+    {
+        self.read_value_bytes(cf, key)?
+            .map(|bytes| decode(bytes).map_err(Error::CodingError))
+            .transpose()
+    }
 
-        if let Some(old_value) = old_value {
-            self.0
-                .put_cf(cf, old_val_key, old_value)
-                .map_err(|e| Error::DBError(e.into_string()))?;
-        }
+    fn read_value_bytes(
+        &self,
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+    ) -> Result<Option<Vec<u8>>> {
+        self.0
+            .get_cf(cf, key.as_ref())
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
 
-        if let Some(new_value) = new_value {
-            self.0
-                .put_cf(cf, new_val_key, new_value)
-                .map_err(|e| Error::DBError(e.into_string()))?;
+    fn add_state_value_to_batch<T>(
+        &self,
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+        value: &T,
+        batch: &mut RocksDBWriteBatch,
+    ) -> Result<()>
+    where
+        T: BorshSerialize,
+    {
+        if let Some(current_value) = self
+            .0
+            .get_cf(cf, key.as_ref())
+            .map_err(|e| Error::DBError(e.into_string()))?
+        {
+            batch.0.put_cf(
+                cf,
+                format!("{PRED_KEY_PREFIX}/{}", key.as_ref()),
+                current_value,
+            );
         }
+        self.add_value_to_batch(cf, key, value, batch);
         Ok(())
+    }
+
+    fn add_value_to_batch<T>(
+        &self,
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+        value: &T,
+        batch: &mut RocksDBWriteBatch,
+    ) where
+        T: BorshSerialize,
+    {
+        self.add_value_bytes_to_batch(cf, key, encode(&value), batch)
+    }
+
+    fn add_value_bytes_to_batch(
+        &self,
+        cf: &ColumnFamily,
+        key: impl AsRef<str>,
+        value: Vec<u8>,
+        batch: &mut RocksDBWriteBatch,
+    ) {
+        batch.0.put_cf(cf, key.as_ref(), value);
     }
 
     /// Persist the diff of an account subspace key-val under the height where
@@ -283,12 +335,6 @@ impl RocksDB {
         Ok(())
     }
 
-    fn exec_batch(&mut self, batch: WriteBatch) -> Result<()> {
-        self.0
-            .write(batch)
-            .map_err(|e| Error::DBError(e.into_string()))
-    }
-
     /// Dump last known block
     pub fn dump_block(
         &self,
@@ -301,13 +347,10 @@ impl RocksDB {
             .get_column_family(STATE_CF)
             .expect("State column family should exist");
 
-        let last_height: BlockHeight = decode(
-            self.0
-                .get_cf(state_cf, "height")
-                .expect("Unable to read DB")
-                .expect("No block height found"),
-        )
-        .expect("Unable to decode block height");
+        let last_height = self
+            .read_value(state_cf, BLOCK_HEIGHT_KEY)
+            .expect("Unable to read DB")
+            .expect("No block height found");
 
         let height = height.unwrap_or(last_height);
 
@@ -465,9 +508,8 @@ impl RocksDB {
             return Ok(());
         }
 
-        let mut batch = WriteBatch::default();
-        let previous_height =
-            BlockHeight::from(u64::from(last_block.height) - 1);
+        let mut batch = RocksDB::batch();
+        let previous_height = last_block.height.prev_height();
 
         let state_cf = self.get_column_family(STATE_CF)?;
         // Revert the non-height-prepended metadata storage keys which get
@@ -475,21 +517,26 @@ impl RocksDB {
         // three keys in storage we can only perform one rollback before
         // restarting the chain
         tracing::info!("Reverting non-height-prepended metadata keys");
-        batch.put_cf(state_cf, "height", encode(&previous_height));
+        batch
+            .0
+            .put_cf(state_cf, BLOCK_HEIGHT_KEY, encode(&previous_height));
         for metadata_key in [
-            "next_epoch_min_start_height",
-            "next_epoch_min_start_time",
-            "commit_only_data_commitment",
-            "update_epoch_blocks_delay",
+            NEXT_EPOCH_MIN_START_HEIGHT_KEY,
+            NEXT_EPOCH_MIN_START_TIME_KEY,
+            COMMIT_ONLY_DATA_KEY,
+            UPDATE_EPOCH_BLOCKS_DELAY_KEY,
         ] {
-            let previous_key = format!("pred/{}", metadata_key);
+            let previous_key = format!("{PRED_KEY_PREFIX}/{metadata_key}");
             let previous_value = self
-                .0
-                .get_cf(state_cf, previous_key.as_bytes())
-                .map_err(|e| Error::DBError(e.to_string()))?
+                .read_value_bytes(state_cf, &previous_key)?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
 
-            batch.put_cf(state_cf, metadata_key, previous_value);
+            self.add_value_bytes_to_batch(
+                state_cf,
+                metadata_key,
+                previous_value,
+                &mut batch,
+            );
             // NOTE: we cannot restore the "pred/" keys themselves since we
             // don't have their predecessors in storage, but there's no need to
             // since we cannot do more than one rollback anyway because of
@@ -500,19 +547,26 @@ impl RocksDB {
         if last_block.pred_epochs.get_epoch(previous_height)
             != Some(last_block.epoch)
         {
-            let previous_key = "pred/conversion_state".to_string();
+            let previous_key =
+                format!("{PRED_KEY_PREFIX}/{CONVERSION_STATE_KEY}");
             let previous_value = self
-                .0
-                .get_cf(state_cf, previous_key.as_bytes())
-                .map_err(|e| Error::DBError(e.to_string()))?
+                .read_value_bytes(state_cf, &previous_key)?
                 .ok_or(Error::UnknownKey { key: previous_key })?;
-            batch.put_cf(state_cf, "conversion_state", previous_value);
+            self.add_value_bytes_to_batch(
+                state_cf,
+                CONVERSION_STATE_KEY,
+                previous_value,
+                &mut batch,
+            );
         }
 
         // Delete block results for the last block
         let block_cf = self.get_column_family(BLOCK_CF)?;
         tracing::info!("Removing last block results");
-        batch.delete_cf(block_cf, format!("results/{}", last_block.height));
+        batch.0.delete_cf(
+            block_cf,
+            format!("{RESULTS_KEY_PREFIX}/{}", last_block.height),
+        );
 
         // Restore the state of replay protection to the last block
         let reprot_cf = self.get_column_family(REPLAY_PROTECTION_CF)?;
@@ -522,7 +576,7 @@ impl RocksDB {
             let hash = namada::core::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let key = replay_protection::last_key(&hash);
-            batch.delete_cf(reprot_cf, key.to_string());
+            batch.0.delete_cf(reprot_cf, key.to_string());
         }
 
         for (ref hash_str, _, _) in self.iter_replay_protection_buffer() {
@@ -530,13 +584,13 @@ impl RocksDB {
                 .expect("Failed hash conversion");
             let last_key = replay_protection::last_key(&hash);
             // Restore "buffer" bucket to "last"
-            batch.put_cf(reprot_cf, last_key.to_string(), vec![]);
+            batch.0.put_cf(reprot_cf, last_key.to_string(), vec![]);
 
             // Remove anything in the buffer from the "all" prefix. Note that
             // some hashes might be missing from "all" if they have been
             // deleted, this is fine, in this case just continue
             let all_key = replay_protection::all_key(&hash);
-            batch.delete_cf(reprot_cf, all_key.to_string());
+            batch.0.delete_cf(reprot_cf, all_key.to_string());
         }
 
         // Execute next step in parallel
@@ -553,12 +607,14 @@ impl RocksDB {
                     previous_height,
                     last_block.height,
                 )? {
-                    Some(previous_value) => batch.lock().unwrap().put_cf(
+                    Some(previous_value) => batch.lock().unwrap().0.put_cf(
                         subspace_cf,
                         &key,
                         previous_value,
                     ),
-                    None => batch.lock().unwrap().delete_cf(subspace_cf, &key),
+                    None => {
+                        batch.lock().unwrap().0.delete_cf(subspace_cf, &key)
+                    }
                 }
 
                 Ok(())
@@ -584,7 +640,7 @@ impl RocksDB {
             if self.read_subspace_val(&diff_new_key)?.is_none() {
                 // If there is no new value, it has been deleted in this
                 // block and we have to restore it
-                batch.put_cf(subspace_cf, key_str, val)
+                batch.0.put_cf(subspace_cf, key_str, val)
             }
         }
 
@@ -598,7 +654,7 @@ impl RocksDB {
             // If there is no new value, it has been deleted in this
             // block and we have to restore it
             keys_with_old_value.insert(key_str.clone());
-            batch.put_cf(subspace_cf, key_str, val)
+            batch.0.put_cf(subspace_cf, key_str, val)
         }
         // Then the new keys
         for (key_str, _val, _) in
@@ -607,7 +663,7 @@ impl RocksDB {
             if !keys_with_old_value.contains(&key_str) {
                 // If there was no old value it means that the key was newly
                 // written in the last block and we have to delete it
-                batch.delete_cf(subspace_cf, key_str)
+                batch.0.delete_cf(subspace_cf, key_str)
             }
         }
 
@@ -624,7 +680,7 @@ impl RocksDB {
                 // Empty prefix string to prevent stripping
                 PrefixIterator::new(iter, String::default()),
             ) {
-                batch.delete_cf(cf, key);
+                batch.0.delete_cf(cf, key);
             }
         };
         // Delete any height-prepended key in subspace diffs
@@ -680,259 +736,119 @@ impl DB for RocksDB {
     }
 
     fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
-        // Block height
         let state_cf = self.get_column_family(STATE_CF)?;
-        let height: BlockHeight = match self
-            .0
-            .get_cf(state_cf, "height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => {
-                // TODO if there's an issue decoding this height, should we try
-                // load its predecessor instead?
-                decode(bytes).map_err(Error::CodingError)?
-            }
-            None => return Ok(None),
-        };
-
-        // Block results
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let results_path = format!("results/{}", height.raw());
-        let results: BlockResults = match self
-            .0
-            .get_cf(block_cf, results_path)
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => return Ok(None),
-        };
+
+        // Block height
+        let height: BlockHeight =
+            match self.read_value(state_cf, BLOCK_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
+            };
 
         // Epoch start height and time
-        let next_epoch_min_start_height: BlockHeight = match self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load next epoch start height from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let next_epoch_min_start_time: DateTimeUtc = match self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_time")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load next epoch start time from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let update_epoch_blocks_delay: Option<u32> = match self
-            .0
-            .get_cf(state_cf, "update_epoch_blocks_delay")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load epoch update block delay from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let commit_only_data: CommitOnlyData = match self
-            .0
-            .get_cf(state_cf, "commit_only_data_commitment")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load commit only data commitment from the DB"
-                );
-                return Ok(None);
-            }
-        };
-        let conversion_state: ConversionState = match self
-            .0
-            .get_cf(state_cf, "conversion_state")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load conversion state from the DB");
-                return Ok(None);
-            }
-        };
-
-        let ethereum_height: Option<ethereum_structs::BlockHeight> = match self
-            .0
-            .get_cf(state_cf, "ethereum_height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!("Couldn't load ethereum height from the DB");
-                return Ok(None);
-            }
-        };
-
-        let eth_events_queue: EthEventsQueue = match self
-            .0
-            .get_cf(state_cf, "eth_events_queue")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-            None => {
-                tracing::error!(
-                    "Couldn't load the eth events queue from the DB"
-                );
-                return Ok(None);
-            }
-        };
-
-        // Load data at the height
-        let prefix = format!("{}/", height.raw());
-        let mut read_opts = ReadOptions::default();
-        read_opts.set_total_order_seek(false);
-        let next_height_prefix = format!("{}/", height.next_height().raw());
-        read_opts.set_iterate_upper_bound(next_height_prefix);
-        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        let mut hash = None;
-        let mut time = None;
-        let mut epoch: Option<Epoch> = None;
-        let mut pred_epochs = None;
-        let mut address_gen = None;
-        for value in self.0.iterator_cf_opt(
-            block_cf,
-            read_opts,
-            IteratorMode::From(prefix.as_bytes(), Direction::Forward),
-        ) {
-            let (key, bytes) = match value {
-                Ok(data) => data,
-                Err(e) => return Err(Error::DBError(e.into_string())),
+        let next_epoch_min_start_height =
+            match self.read_value(state_cf, NEXT_EPOCH_MIN_START_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
             };
-            let path = &String::from_utf8((*key).to_vec()).map_err(|e| {
-                Error::Temporary {
-                    error: format!(
-                        "Cannot convert path from utf8 bytes to string: {}",
-                        e
-                    ),
-                }
-            })?;
-            let segments: Vec<&str> =
-                path.split(KEY_SEGMENT_SEPARATOR).collect();
-            match segments.get(1) {
-                Some(prefix) => match *prefix {
-                    // Restore the base tree and the CommitData tree of Merkle
-                    // tree
-                    "tree" => match segments.get(2) {
-                        Some(s) => {
-                            let st = StoreType::from_str(s)?;
-                            match segments.get(3) {
-                                Some(&"root") => merkle_tree_stores.set_root(
-                                    &st,
-                                    decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
-                                Some(&"store") => merkle_tree_stores
-                                    .set_store(st.decode_store(bytes)?),
-                                _ => unknown_key_error(path)?,
-                            }
-                        }
-                        None => unknown_key_error(path)?,
-                    },
-                    "header" => {
-                        // the block header doesn't have to be restored
-                    }
-                    "hash" => {
-                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "time" => {
-                        time = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "epoch" => {
-                        epoch = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "pred_epochs" => {
-                        pred_epochs =
-                            Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "address_gen" => {
-                        address_gen =
-                            Some(decode(bytes).map_err(Error::CodingError)?);
-                    }
-                    _ => unknown_key_error(path)?,
-                },
-                None => unknown_key_error(path)?,
-            }
-        }
-        // Restore subtrees of Merkle tree
-        if let Some(epoch) = epoch {
-            for st in StoreType::iter_subtrees() {
-                if *st == StoreType::CommitData {
-                    // CommitData tree has been already restored
-                    continue;
-                }
-                let key_prefix = tree_key_prefix_with_epoch(st, epoch);
-                let root_key =
-                    key_prefix.clone().with_segment("root".to_owned());
-                if let Some(bytes) = self
-                    .0
-                    .get_cf(block_cf, &root_key.to_string())
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                {
-                    merkle_tree_stores.set_root(
-                        st,
-                        decode(bytes).map_err(Error::CodingError)?,
-                    );
-                }
-                let store_key = key_prefix.with_segment("store".to_owned());
-                if let Some(bytes) = self
-                    .0
-                    .get_cf(block_cf, &store_key.to_string())
-                    .map_err(|e| Error::DBError(e.into_string()))?
-                {
-                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
-                }
-            }
-        }
-        match (hash, time, epoch, pred_epochs, address_gen) {
-            (
-                Some(hash),
-                Some(time),
-                Some(epoch),
-                Some(pred_epochs),
-                Some(address_gen),
-            ) => Ok(Some(BlockStateRead {
-                merkle_tree_stores,
-                hash,
-                height,
-                time,
-                epoch,
-                pred_epochs,
-                results,
-                conversion_state,
-                next_epoch_min_start_height,
-                next_epoch_min_start_time,
-                update_epoch_blocks_delay,
-                address_gen,
-                ethereum_height,
-                eth_events_queue,
-                commit_only_data,
-            })),
-            _ => Err(Error::Temporary {
-                error: "Essential data couldn't be read from the DB"
-                    .to_string(),
-            }),
-        }
+
+        let next_epoch_min_start_time =
+            match self.read_value(state_cf, NEXT_EPOCH_MIN_START_TIME_KEY)? {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+
+        let update_epoch_blocks_delay =
+            match self.read_value(state_cf, UPDATE_EPOCH_BLOCKS_DELAY_KEY)? {
+                Some(d) => d,
+                None => return Ok(None),
+            };
+
+        let commit_only_data =
+            match self.read_value(state_cf, COMMIT_ONLY_DATA_KEY)? {
+                Some(d) => d,
+                None => return Ok(None),
+            };
+
+        let conversion_state =
+            match self.read_value(state_cf, CONVERSION_STATE_KEY)? {
+                Some(c) => c,
+                None => return Ok(None),
+            };
+
+        let ethereum_height =
+            match self.read_value(state_cf, ETHEREUM_HEIGHT_KEY)? {
+                Some(h) => h,
+                None => return Ok(None),
+            };
+
+        let eth_events_queue =
+            match self.read_value(state_cf, ETH_EVENTS_QUEUE_KEY)? {
+                Some(q) => q,
+                None => return Ok(None),
+            };
+
+        // Block results
+        let results_key = format!("{RESULTS_KEY_PREFIX}/{}", height.raw());
+        let results = match self.read_value(block_cf, results_key)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        // Read the block state one by one for simplicity because we need only 5
+        // values for now. We can revert to use `iterator_cf_opt` with
+        // the prefix to read more state values.
+        let prefix = height.raw();
+
+        // Resotring the Mekle tree later
+
+        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
+        let hash = match self.read_value(block_cf, hash_key)? {
+            Some(h) => h,
+            None => return Ok(None),
+        };
+
+        let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
+        let time = match self.read_value(block_cf, time_key)? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        let epoch = match self.read_value(block_cf, epoch_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let pred_epochs_key = format!("{prefix}/{PRED_EPOCHS_KEY_SEGMENT}");
+        let pred_epochs = match self.read_value(block_cf, pred_epochs_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let address_gen_key = format!("{prefix}/{ADDRESS_GEN_KEY_SEGMENT}");
+        let address_gen = match self.read_value(block_cf, address_gen_key)? {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        Ok(Some(BlockStateRead {
+            hash,
+            height,
+            time,
+            epoch,
+            pred_epochs,
+            results,
+            conversion_state,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
+            update_epoch_blocks_delay,
+            address_gen,
+            ethereum_height,
+            eth_events_queue,
+            commit_only_data,
+        }))
     }
 
     fn add_block_to_batch(
@@ -960,219 +876,127 @@ impl DB for RocksDB {
             commit_only_data,
         }: BlockStateWrite = state;
 
-        // Epoch start height and time
         let state_cf = self.get_column_family(STATE_CF)?;
-        if let Some(current_value) = self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_height")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(
-                state_cf,
-                "pred/next_epoch_min_start_height",
-                current_value,
-            );
-        }
-        batch.0.put_cf(
-            state_cf,
-            "next_epoch_min_start_height",
-            encode(&next_epoch_min_start_height),
-        );
 
-        if let Some(current_value) = self
-            .0
-            .get_cf(state_cf, "next_epoch_min_start_time")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(
-                state_cf,
-                "pred/next_epoch_min_start_time",
-                current_value,
-            );
-        }
-        batch.0.put_cf(
+        // Epoch start height and time
+        self.add_state_value_to_batch(
             state_cf,
-            "next_epoch_min_start_time",
-            encode(&next_epoch_min_start_time),
-        );
-        if let Some(current_value) = self
-            .0
-            .get_cf(state_cf, "update_epoch_blocks_delay")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(
-                state_cf,
-                "pred/update_epoch_blocks_delay",
-                current_value,
-            );
-        }
-        batch.0.put_cf(
+            NEXT_EPOCH_MIN_START_HEIGHT_KEY,
+            &next_epoch_min_start_height,
+            batch,
+        )?;
+        self.add_state_value_to_batch(
             state_cf,
-            "update_epoch_blocks_delay",
-            encode(&update_epoch_blocks_delay),
-        );
+            NEXT_EPOCH_MIN_START_TIME_KEY,
+            &next_epoch_min_start_time,
+            batch,
+        )?;
 
-        // Commitment to the only data commit
-        if let Some(current_value) = self
-            .0
-            .get_cf(state_cf, "commit_only_data_commitment")
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            // Write the predecessor value for rollback
-            batch.0.put_cf(
-                state_cf,
-                "pred/commit_only_data_commitment",
-                current_value,
-            );
-        }
-        batch.0.put_cf(
+        self.add_state_value_to_batch(
             state_cf,
-            "commit_only_data_commitment",
-            commit_only_data.serialize(),
-        );
+            UPDATE_EPOCH_BLOCKS_DELAY_KEY,
+            &update_epoch_blocks_delay,
+            batch,
+        )?;
+
+        self.add_state_value_to_batch(
+            state_cf,
+            COMMIT_ONLY_DATA_KEY,
+            &commit_only_data,
+            batch,
+        )?;
 
         // Save the conversion state when the epoch is updated
         if is_full_commit {
-            if let Some(current_value) = self
-                .0
-                .get_cf(state_cf, "conversion_state")
-                .map_err(|e| Error::DBError(e.into_string()))?
-            {
-                // Write the predecessor value for rollback
-                batch.0.put_cf(
-                    state_cf,
-                    "pred/conversion_state",
-                    current_value,
-                );
-            }
-            batch.0.put_cf(
+            self.add_state_value_to_batch(
                 state_cf,
-                "conversion_state",
-                encode(conversion_state),
-            );
+                CONVERSION_STATE_KEY,
+                &conversion_state,
+                batch,
+            )?;
         }
 
-        batch
-            .0
-            .put_cf(state_cf, "ethereum_height", encode(&ethereum_height));
-        batch
-            .0
-            .put_cf(state_cf, "eth_events_queue", encode(&eth_events_queue));
+        self.add_value_to_batch(
+            state_cf,
+            ETHEREUM_HEIGHT_KEY,
+            &ethereum_height,
+            batch,
+        );
+        self.add_value_to_batch(
+            state_cf,
+            ETH_EVENTS_QUEUE_KEY,
+            &eth_events_queue,
+            batch,
+        );
 
         let block_cf = self.get_column_family(BLOCK_CF)?;
+        let prefix = height.raw();
+
         // Merkle tree
-        {
-            for st in StoreType::iter() {
-                if *st == StoreType::Base
-                    || *st == StoreType::CommitData
-                    || is_full_commit
-                {
-                    let key_prefix = match st {
-                        StoreType::Base | StoreType::CommitData => {
-                            tree_key_prefix_with_height(st, height)
-                        }
-                        _ => tree_key_prefix_with_epoch(st, epoch),
-                    };
-                    let root_key =
-                        key_prefix.clone().with_segment("root".to_owned());
-                    batch.0.put_cf(
-                        block_cf,
-                        root_key.to_string(),
-                        encode(merkle_tree_stores.root(st)),
-                    );
-                    let store_key = key_prefix.with_segment("store".to_owned());
-                    batch.0.put_cf(
-                        block_cf,
-                        store_key.to_string(),
-                        merkle_tree_stores.store(st).encode(),
-                    );
-                }
+        for st in StoreType::iter() {
+            if *st == StoreType::Base
+                || *st == StoreType::CommitData
+                || is_full_commit
+            {
+                let key_prefix = match st {
+                    StoreType::Base | StoreType::CommitData => {
+                        tree_key_prefix_with_height(st, height)
+                    }
+                    _ => tree_key_prefix_with_epoch(st, epoch),
+                };
+                let root_key =
+                    format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+                self.add_value_to_batch(
+                    block_cf,
+                    root_key,
+                    merkle_tree_stores.root(st),
+                    batch,
+                );
+                let store_key =
+                    format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+                self.add_value_bytes_to_batch(
+                    block_cf,
+                    store_key,
+                    merkle_tree_stores.store(st).encode(),
+                    batch,
+                );
             }
         }
 
         // Block header
-        let prefix_key = Key::from(height.to_db_key());
-        {
-            if let Some(h) = header {
-                let key = prefix_key
-                    .push(&"header".to_owned())
-                    .map_err(Error::KeyError)?;
-                batch
-                    .0
-                    .put_cf(block_cf, key.to_string(), h.serialize_to_vec());
-            }
+        if let Some(h) = header {
+            let header_key = format!("{prefix}/{BLOCK_HEADER_KEY_SEGMENT}");
+            self.add_value_to_batch(block_cf, header_key, &h, batch);
         }
         // Block hash
-        {
-            let key = prefix_key
-                .push(&"hash".to_owned())
-                .map_err(Error::KeyError)?;
-            batch.0.put_cf(block_cf, key.to_string(), encode(&hash));
-        }
+        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
+        self.add_value_to_batch(block_cf, hash_key, &hash, batch);
         // Block time
-        {
-            let key = prefix_key
-                .push(&"time".to_owned())
-                .map_err(Error::KeyError)?;
-            batch.0.put_cf(block_cf, key.to_string(), encode(&time));
-        }
+        let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
+        self.add_value_to_batch(block_cf, time_key, &time, batch);
         // Block epoch
-        {
-            let key = prefix_key
-                .push(&"epoch".to_owned())
-                .map_err(Error::KeyError)?;
-            batch.0.put_cf(block_cf, key.to_string(), encode(&epoch));
-        }
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        self.add_value_to_batch(block_cf, epoch_key, &epoch, batch);
         // Block results
-        {
-            let results_path = format!("results/{}", height.raw());
-            batch.0.put_cf(block_cf, results_path, encode(&results));
-        }
+        let results_key = format!("{RESULTS_KEY_PREFIX}/{}", height.raw());
+        self.add_value_to_batch(block_cf, results_key, &results, batch);
         // Predecessor block epochs
-        {
-            let key = prefix_key
-                .push(&"pred_epochs".to_owned())
-                .map_err(Error::KeyError)?;
-            batch
-                .0
-                .put_cf(block_cf, key.to_string(), encode(&pred_epochs));
-        }
+        let pred_epochs_key = format!("{prefix}/{PRED_EPOCHS_KEY_SEGMENT}");
+        self.add_value_to_batch(block_cf, pred_epochs_key, &pred_epochs, batch);
         // Address gen
-        {
-            let key = prefix_key
-                .push(&"address_gen".to_owned())
-                .map_err(Error::KeyError)?;
-            batch
-                .0
-                .put_cf(block_cf, key.to_string(), encode(&address_gen));
-        }
+        let address_gen_key = format!("{prefix}/{ADDRESS_GEN_KEY_SEGMENT}");
+        self.add_value_to_batch(block_cf, address_gen_key, &address_gen, batch);
 
         // Block height
-        batch.0.put_cf(state_cf, "height", encode(&height));
+        self.add_value_to_batch(state_cf, BLOCK_HEIGHT_KEY, &height, batch);
 
         Ok(())
     }
 
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let prefix_key = Key::from(height.to_db_key());
-        let key = prefix_key
-            .push(&"header".to_owned())
-            .map_err(Error::KeyError)?;
-        let value = self
-            .0
-            .get_cf(block_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?;
-        match value {
-            Some(v) => Ok(Some(
-                Header::try_from_slice(&v[..])
-                    .map_err(Error::BorshCodingError)?,
-            )),
-            None => Ok(None),
-        }
+        let header_key = format!("{}/{BLOCK_HEADER_KEY_SEGMENT}", height.raw());
+        self.read_value(block_cf, header_key)
     }
 
     fn read_merkle_tree_stores(
@@ -1195,27 +1019,18 @@ impl DB for RocksDB {
                 }
                 _ => tree_key_prefix_with_epoch(st, epoch),
             };
-            let root_key = key_prefix.clone().with_segment("root".to_owned());
-            let bytes = self
-                .0
-                .get_cf(block_cf, root_key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?;
-            match bytes {
-                Some(b) => {
-                    let root = decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_root(st, root);
-                }
+            let root_key =
+                format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+            match self.read_value(block_cf, root_key)? {
+                Some(root) => merkle_tree_stores.set_root(st, root),
                 None => return Ok(None),
             }
 
-            let store_key = key_prefix.with_segment("store".to_owned());
-            let bytes = self
-                .0
-                .get_cf(block_cf, store_key.to_string())
-                .map_err(|e| Error::DBError(e.into_string()))?;
-            match bytes {
-                Some(b) => {
-                    merkle_tree_stores.set_store(st.decode_store(b)?);
+            let store_key =
+                format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+            match self.read_value_bytes(block_cf, store_key)? {
+                Some(bytes) => {
+                    merkle_tree_stores.set_store(st.decode_store(bytes)?)
                 }
                 None => return Ok(None),
             }
@@ -1258,17 +1073,12 @@ impl DB for RocksDB {
         } else {
             old_and_new_diff_key(key, height)?.1
         };
-
-        self.0
-            .get_cf(diffs_cf, key)
-            .map_err(|e| Error::DBError(e.into_string()))
+        self.read_value_bytes(diffs_cf, key)
     }
 
     fn read_subspace_val(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-        self.0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))
+        self.read_value_bytes(subspace_cf, key.to_string())
     }
 
     fn read_subspace_val_with_height(
@@ -1282,11 +1092,7 @@ impl DB for RocksDB {
         let (old_val_key, new_val_key) = old_and_new_diff_key(key, height)?;
 
         // If it has a "new" val, it was written at this height
-        match self
-            .0
-            .get_cf(diffs_cf, new_val_key)
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
+        match self.read_value_bytes(diffs_cf, new_val_key)? {
             Some(new_val) => {
                 return Ok(Some(new_val));
             }
@@ -1294,12 +1100,7 @@ impl DB for RocksDB {
                 // If it has an "old" val, it was deleted at this height
                 if self.0.key_may_exist_cf(diffs_cf, &old_val_key) {
                     // check if it actually exists
-                    if self
-                        .0
-                        .get_cf(diffs_cf, old_val_key)
-                        .map_err(|e| Error::DBError(e.into_string()))?
-                        .is_some()
-                    {
+                    if self.read_value_bytes(diffs_cf, old_val_key)?.is_some() {
                         return Ok(None);
                     }
                 }
@@ -1313,10 +1114,7 @@ impl DB for RocksDB {
             // Try to find the next diff on this key
             let (old_val_key, new_val_key) =
                 old_and_new_diff_key(key, BlockHeight(raw_height))?;
-            let old_val = self
-                .0
-                .get_cf(diffs_cf, &old_val_key)
-                .map_err(|e| Error::DBError(e.into_string()))?;
+            let old_val = self.read_value_bytes(diffs_cf, &old_val_key)?;
             // If it has an "old" val, it's the one we're looking for
             match old_val {
                 Some(bytes) => return Ok(Some(bytes)),
@@ -1326,9 +1124,7 @@ impl DB for RocksDB {
                     if self.0.key_may_exist_cf(diffs_cf, &new_val_key) {
                         // check if it actually exists
                         if self
-                            .0
-                            .get_cf(diffs_cf, new_val_key)
-                            .map_err(|e| Error::DBError(e.into_string()))?
+                            .read_value_bytes(diffs_cf, new_val_key)?
                             .is_some()
                         {
                             return Ok(None);
@@ -1353,41 +1149,15 @@ impl DB for RocksDB {
         value: impl AsRef<[u8]>,
         persist_diffs: bool,
     ) -> Result<i64> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-        let value = value.as_ref();
-        let size_diff = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let size_diff = value.len() as i64 - prev_value.len() as i64;
-                self.write_subspace_diff(
-                    height,
-                    key,
-                    Some(&prev_value),
-                    Some(value),
-                    persist_diffs,
-                )?;
-                size_diff
-            }
-            None => {
-                self.write_subspace_diff(
-                    height,
-                    key,
-                    None,
-                    Some(value),
-                    persist_diffs,
-                )?;
-                value.len() as i64
-            }
-        };
-
-        // Write the new key-val
-        self.0
-            .put_cf(subspace_cf, key.to_string(), value)
-            .map_err(|e| Error::DBError(e.into_string()))?;
-
+        let mut batch = RocksDB::batch();
+        let size_diff = self.batch_write_subspace_val(
+            &mut batch,
+            height,
+            key,
+            value,
+            persist_diffs,
+        )?;
+        self.exec_batch(batch)?;
         Ok(size_diff)
     }
 
@@ -1397,33 +1167,14 @@ impl DB for RocksDB {
         key: &Key,
         persist_diffs: bool,
     ) -> Result<i64> {
-        let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-
-        // Check the length of previous value, if any
-        let prev_len = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let prev_len = prev_value.len() as i64;
-                self.write_subspace_diff(
-                    height,
-                    key,
-                    Some(&prev_value),
-                    None,
-                    persist_diffs,
-                )?;
-                prev_len
-            }
-            None => 0,
-        };
-
-        // Delete the key-val
-        self.0
-            .delete_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?;
-
+        let mut batch = RocksDB::batch();
+        let prev_len = self.batch_delete_subspace_val(
+            &mut batch,
+            height,
+            key,
+            persist_diffs,
+        )?;
+        self.exec_batch(batch)?;
         Ok(prev_len)
     }
 
@@ -1431,8 +1182,10 @@ impl DB for RocksDB {
         RocksDBWriteBatch::default()
     }
 
-    fn exec_batch(&mut self, batch: Self::WriteBatch) -> Result<()> {
-        self.exec_batch(batch.0)
+    fn exec_batch(&self, batch: Self::WriteBatch) -> Result<()> {
+        self.0
+            .write(batch.0)
+            .map_err(|e| Error::DBError(e.into_string()))
     }
 
     fn batch_write_subspace_val(
@@ -1445,36 +1198,33 @@ impl DB for RocksDB {
     ) -> Result<i64> {
         let value = value.as_ref();
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
-        let size_diff = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(old_value) => {
-                let size_diff = value.len() as i64 - old_value.len() as i64;
-                // Persist the previous value
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    Some(&old_value),
-                    Some(value),
-                    persist_diffs,
-                )?;
-                size_diff
-            }
-            None => {
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    None,
-                    Some(value),
-                    persist_diffs,
-                )?;
-                value.len() as i64
-            }
-        };
+        let size_diff =
+            match self.read_value_bytes(subspace_cf, key.to_string())? {
+                Some(old_value) => {
+                    let size_diff = value.len() as i64 - old_value.len() as i64;
+                    // Persist the previous value
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        Some(&old_value),
+                        Some(value),
+                        persist_diffs,
+                    )?;
+                    size_diff
+                }
+                None => {
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        None,
+                        Some(value),
+                        persist_diffs,
+                    )?;
+                    value.len() as i64
+                }
+            };
 
         // Write the new key-val
         batch.0.put_cf(subspace_cf, key.to_string(), value);
@@ -1492,26 +1242,23 @@ impl DB for RocksDB {
         let subspace_cf = self.get_column_family(SUBSPACE_CF)?;
 
         // Check the length of previous value, if any
-        let prev_len = match self
-            .0
-            .get_cf(subspace_cf, key.to_string())
-            .map_err(|e| Error::DBError(e.into_string()))?
-        {
-            Some(prev_value) => {
-                let prev_len = prev_value.len() as i64;
-                // Persist the previous value
-                self.batch_write_subspace_diff(
-                    batch,
-                    height,
-                    key,
-                    Some(&prev_value),
-                    None,
-                    persist_diffs,
-                )?;
-                prev_len
-            }
-            None => 0,
-        };
+        let prev_len =
+            match self.read_value_bytes(subspace_cf, key.to_string())? {
+                Some(prev_value) => {
+                    let prev_len = prev_value.len() as i64;
+                    // Persist the previous value
+                    self.batch_write_subspace_diff(
+                        batch,
+                        height,
+                        key,
+                        Some(&prev_value),
+                        None,
+                        persist_diffs,
+                    )?;
+                    prev_len
+                }
+                None => 0,
+            };
 
         // Delete the key-val
         batch.0.delete_cf(subspace_cf, key.to_string());
@@ -1527,10 +1274,10 @@ impl DB for RocksDB {
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
-        let root_key = key_prefix.clone().with_segment("root".to_owned());
-        batch.0.delete_cf(block_cf, root_key.to_string());
-        let store_key = key_prefix.with_segment("store".to_owned());
-        batch.0.delete_cf(block_cf, store_key.to_string());
+        let root_key = format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+        batch.0.delete_cf(block_cf, root_key);
+        let store_key = format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+        batch.0.delete_cf(block_cf, store_key);
         Ok(())
     }
 
@@ -1563,9 +1310,12 @@ impl DB for RocksDB {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
 
-        batch
-            .0
-            .put_cf(replay_protection_cf, key.to_string(), vec![]);
+        self.add_value_bytes_to_batch(
+            replay_protection_cf,
+            key.to_string(),
+            vec![],
+            batch,
+        );
 
         Ok(())
     }
@@ -1642,21 +1392,12 @@ impl DB for RocksDB {
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        let last_height: BlockHeight = {
-            let state_cf = self.get_column_family(STATE_CF)?;
-
-            decode(
-                self.0
-                    .get_cf(state_cf, "height")
-                    .map_err(|e| Error::DBError(e.to_string()))?
-                    .ok_or_else(|| {
-                        Error::DBError("No block height found".to_string())
-                    })?,
-            )
-            .map_err(|e| {
-                Error::DBError(format!("Unable to decode block height: {e}"))
-            })?
-        };
+        let state_cf = self.get_column_family(STATE_CF)?;
+        let last_height: BlockHeight = self
+            .read_value(state_cf, BLOCK_HEIGHT_KEY)?
+            .ok_or_else(|| {
+                Error::DBError("No block height found".to_string())
+            })?;
         let desired_height = height.unwrap_or(last_height);
 
         if desired_height != last_height {
@@ -1672,7 +1413,12 @@ impl DB for RocksDB {
 
         // Write the new key-val in the Db column family
         let cf_name = self.get_column_family(cf.to_str())?;
-        batch.0.put_cf(cf_name, key.to_string(), val);
+        self.add_value_bytes_to_batch(
+            cf_name,
+            key.to_string(),
+            val.to_vec(),
+            batch,
+        );
 
         // If the CF is subspace, additionally update the diffs
         if cf == &DbColFam::SUBSPACE {
@@ -1682,7 +1428,12 @@ impl DB for RocksDB {
                 .join(key)
                 .to_string();
 
-            batch.0.put_cf(diffs_cf, diffs_key, val);
+            self.add_value_bytes_to_batch(
+                diffs_cf,
+                diffs_key,
+                val.to_vec(),
+                batch,
+            );
         }
 
         Ok(())
@@ -1723,8 +1474,7 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
                     .get_column_family(cf_str)
                     .expect("Failed to read column family from storage");
                 self.db
-                    .0
-                    .get_cf(cf, key.to_string())
+                    .read_value_bytes(cf, key.to_string())
                     .expect("Failed to get key from storage")
             }
         }
@@ -1737,25 +1487,12 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
     }
 
     fn delete(&mut self, key: &Key, cf: &DbColFam) {
-        let last_height: BlockHeight = {
-            let state_cf = self.db.get_column_family(STATE_CF).unwrap();
-
-            decode(
-                self.db
-                    .0
-                    .get_cf(state_cf, "height")
-                    .map_err(|e| Error::DBError(e.to_string()))
-                    .unwrap()
-                    .ok_or_else(|| {
-                        Error::DBError("No block height found".to_string())
-                    })
-                    .unwrap(),
-            )
-            .map_err(|e| {
-                Error::DBError(format!("Unable to decode block height: {e}"))
-            })
+        let state_cf = self.db.get_column_family(STATE_CF).unwrap();
+        let last_height: BlockHeight = self
+            .db
+            .read_value(state_cf, BLOCK_HEIGHT_KEY)
             .unwrap()
-        };
+            .unwrap();
         match cf {
             DbColFam::SUBSPACE => {
                 self.db
@@ -2040,12 +1777,6 @@ fn old_and_new_diff_key(
     Ok((old.to_string(), new.to_string()))
 }
 
-fn unknown_key_error(key: &str) -> Result<()> {
-    Err(Error::UnknownKey {
-        key: key.to_owned(),
-    })
-}
-
 /// Try to increase NOFILE limit and set the `max_open_files` limit to it in
 /// RocksDB options.
 fn set_max_open_files(cf_opts: &mut rocksdb::Options) {
@@ -2105,10 +1836,14 @@ mod imp {
 
 #[cfg(test)]
 mod test {
-    use namada::core::address::EstablishedAddressGen;
+    use namada::address::EstablishedAddressGen;
     use namada::core::hash::Hash;
     use namada::core::storage::{BlockHash, Epochs};
+    use namada::ledger::storage::ConversionState;
     use namada::state::{MerkleTree, Sha256Hasher};
+    use namada::storage::{BlockResults, EthEventsQueue};
+    use namada::time::DateTimeUtc;
+    use namada_sdk::storage::types::CommitOnlyData;
     use tempfile::tempdir;
     use test_log::test;
 
@@ -2118,7 +1853,7 @@ mod test {
     #[test]
     fn test_load_state() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let db = open(dir.path(), None).unwrap();
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight::default();
@@ -2140,7 +1875,7 @@ mod test {
             &ConversionState::default(),
         )
         .unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         let _state = db
             .read_last_block()
@@ -2166,7 +1901,7 @@ mod test {
             true,
         )
         .unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         db.write_subspace_val(last_height, &key, vec![1_u8, 1, 1, 0], true)
             .unwrap();
@@ -2181,7 +1916,7 @@ mod test {
             true,
         )
         .unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         db.write_subspace_val(last_height, &key, vec![2_u8, 2, 2, 0], true)
             .unwrap();
@@ -2224,7 +1959,7 @@ mod test {
         let last_height = BlockHeight(222);
         db.batch_delete_subspace_val(&mut batch, last_height, &batch_key, true)
             .unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         db.delete_subspace_val(last_height, &key, true).unwrap();
 
@@ -2253,7 +1988,7 @@ mod test {
     #[test]
     fn test_prefix_iter() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let db = open(dir.path(), None).unwrap();
 
         let prefix_0 = Key::parse("0").unwrap();
         let key_0_a = prefix_0.push(&"a".to_string()).unwrap();
@@ -2278,7 +2013,7 @@ mod test {
             db.batch_write_subspace_val(&mut batch, height, key, [0_u8], true)
                 .unwrap();
         }
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         // Prefix "0" shouldn't match prefix "01"
         let itered_keys: Vec<Key> = db
@@ -2369,7 +2104,7 @@ mod test {
                 &conversion_state_0,
             )
             .unwrap();
-            db.exec_batch(batch.0).unwrap();
+            db.exec_batch(batch).unwrap();
 
             // Write second block
             let mut batch = RocksDB::batch();
@@ -2439,7 +2174,7 @@ mod test {
                 &conversion_state_1,
             )
             .unwrap();
-            db.exec_batch(batch.0).unwrap();
+            db.exec_batch(batch).unwrap();
 
             // Check that the values are as expected from second block
             let added = db.read_subspace_val(&add_key).unwrap();
@@ -2520,7 +2255,7 @@ mod test {
             false,
         )
         .unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
@@ -2561,7 +2296,7 @@ mod test {
         )
         .unwrap();
         db.prune_non_persisted_diffs(&mut batch, height_0).unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
@@ -2613,7 +2348,7 @@ mod test {
         )
         .unwrap();
         db.prune_non_persisted_diffs(&mut batch, height_1).unwrap();
-        db.exec_batch(batch.0).unwrap();
+        db.exec_batch(batch).unwrap();
 
         {
             let diffs_cf = db.get_column_family(DIFFS_CF).unwrap();
