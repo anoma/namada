@@ -247,7 +247,7 @@ pub fn is_max_proposal_period_key(key: &Key) -> bool {
              && max_proposal_period_param == Keys::VALUES.max_period)
 }
 
-/// Check if key is a min grace epochs key
+/// Check if key is a commit proposal key
 pub fn is_commit_proposal_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
         DbKeySeg::AddressSeg(addr),
@@ -261,7 +261,7 @@ pub fn is_commit_proposal_key(key: &Key) -> bool {
     )
 }
 
-/// Check if key is a commit proposal key
+/// Check if key is a min grace epochs key
 pub fn is_min_grace_epochs_key(key: &Key) -> bool {
     matches!(&key.segments[..], [
                     DbKeySeg::AddressSeg(addr),

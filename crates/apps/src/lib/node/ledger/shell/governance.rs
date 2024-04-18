@@ -432,7 +432,7 @@ where
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
-                        "Added/Updated ContinousPgf from proposal id {}: set \
+                        "Added/Updated ContinuousPgf from proposal id {}: set \
                          {} to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
@@ -443,7 +443,7 @@ where
                     pgf_storage::fundings_handle()
                         .remove(state, &target.target())?;
                     tracing::info!(
-                        "Removed ContinousPgf from proposal id {}: set {} to \
+                        "Removed ContinuousPgf from proposal id {}: set {} to \
                          {}.",
                         proposal_id,
                         target.amount().to_string_native(),
