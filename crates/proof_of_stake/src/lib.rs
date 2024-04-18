@@ -3018,8 +3018,9 @@ where
         bond_holders.insert(storage, validator.clone(), first_delegation)?;
     }
 
-    // Todo: possibly update the data by pruning old pairs in
-    // `delegations.prev_ranges`??
+    // Only prune in `remove_delegation_target` to keep the operations lean.
+    // After all, `prev_ranges` only grows when `remove_delegation_target` is
+    // called.
 
     Ok(())
 }
