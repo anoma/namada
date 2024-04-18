@@ -263,6 +263,20 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 /// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
+/// Contains information on epoch periods (start, end) in which a delegator had
+/// a bonded with a certain validator. The `end` epoch is the first epoch at
+/// which the bond ceased to exist (exclusive).
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct DelegationEpochs {
+    /// Previous ranges during which a bond existed (Map<start, end>)
+    pub prev_ranges: BTreeMap<Epoch, Epoch>,
+    /// The last range during which a bond existed
+    pub last_range: (Epoch, Option<Epoch>),
+}
+
+/// The set of all target validators for a given delegator.
+pub type DelegationTargets = LazyMap<Address, DelegationEpochs>;
+
 #[derive(
     Debug,
     Clone,
