@@ -8,8 +8,6 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
-use super::IbcShieldedTransfer;
-use crate::address::{Address, MASP};
 use crate::borsh::*;
 use crate::collections::HashMap;
 use crate::event::extend::{
@@ -29,7 +27,6 @@ use crate::ibc::core::host::types::identifiers::{
     ConnectionId as IbcConnectionId, PortId, Sequence,
 };
 use crate::ibc::primitives::Timestamp;
-use crate::masp::PaymentAddress;
 use crate::tendermint::abci::Event as AbciEvent;
 
 pub mod types {
@@ -399,150 +396,6 @@ impl<'ack> EventAttributeEntry<'ack> for PacketAck<'ack> {
     type ValueOwned = String;
 
     const KEY: &'static str = "packet_ack";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Extend an [`Event`] with shielded receiver data.
-pub struct ShieldedReceiver<'addr>(pub &'addr PaymentAddress);
-
-impl<'addr> EventAttributeEntry<'addr> for ShieldedReceiver<'addr> {
-    type Value = &'addr PaymentAddress;
-    type ValueOwned = PaymentAddress;
-
-    const KEY: &'static str = "receiver";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Receiving end of some IBC transaction.
-pub enum IbcReceiver<S, T> {
-    /// Shielded account receiver.
-    Shielded(S),
-    /// Transparent account receiver.
-    Transparent(T),
-}
-
-/// Owned variant of an [`IbcReceiver`].
-pub type OwnedIbcReceiver = IbcReceiver<PaymentAddress, Address>;
-
-/// Borrowed variant of an [`IbcReceiver`].
-pub type BorrowedIbcReceiver<'addr> =
-    IbcReceiver<&'addr PaymentAddress, &'addr Address>;
-
-impl FromStr for OwnedIbcReceiver {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Address::decode(s)
-            .map(IbcReceiver::Transparent)
-            .map_err(|_| ())
-            .or_else(|_| {
-                PaymentAddress::from_str(s)
-                    .map(IbcReceiver::Shielded)
-                    .map_err(|_| ())
-            })
-            .map_err(|()| {
-                format!(
-                    "IBC receiver address neither transparent nor shielded: \
-                     {s:?}"
-                )
-            })
-    }
-}
-
-impl OwnedIbcReceiver {
-    /// Return a reference to the owned values.
-    pub fn as_ref(&self) -> BorrowedIbcReceiver<'_> {
-        match self {
-            Self::Transparent(addr) => IbcReceiver::Transparent(addr),
-            Self::Shielded(addr) => IbcReceiver::Shielded(addr),
-        }
-    }
-}
-
-impl BorrowedIbcReceiver<'_> {
-    /// Return a transparent address from this [`IbcReceiver`].
-    pub fn transparent_address(&self) -> &Address {
-        match self {
-            Self::Transparent(addr) => addr,
-            Self::Shielded(_) => &MASP,
-        }
-    }
-}
-
-impl<'addr> std::fmt::Display for BorrowedIbcReceiver<'addr> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Transparent(addr) => write!(f, "{addr}"),
-            Self::Shielded(addr) => write!(f, "{addr}"),
-        }
-    }
-}
-
-impl std::fmt::Display for OwnedIbcReceiver {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Transparent(addr) => write!(f, "{addr}"),
-            Self::Shielded(addr) => write!(f, "{addr}"),
-        }
-    }
-}
-
-/// Extend an [`Event`] with receiver data.
-pub struct Receiver<'addr>(pub BorrowedIbcReceiver<'addr>);
-
-impl<'addr> EventAttributeEntry<'addr> for Receiver<'addr> {
-    type Value = BorrowedIbcReceiver<'addr>;
-    type ValueOwned = OwnedIbcReceiver;
-
-    const KEY: &'static str = "receiver";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Extend an [`Event`] with shielded transfer data.
-pub struct ShieldedTransfer<'tx>(pub &'tx IbcShieldedTransfer);
-
-impl<'tx> EventAttributeEntry<'tx> for ShieldedTransfer<'tx> {
-    type Value = &'tx IbcShieldedTransfer;
-    type ValueOwned = IbcShieldedTransfer;
-
-    const KEY: &'static str = "memo";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Extend an [`Event`] with trace hash data.
-pub struct TraceHash<'hash>(pub &'hash str);
-
-impl<'hash> EventAttributeEntry<'hash> for TraceHash<'hash> {
-    type Value = &'hash str;
-    type ValueOwned = String;
-
-    const KEY: &'static str = "trace_hash";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Extend an [`Event`] with denomination data.
-pub struct Denomination<'denom>(pub &'denom str);
-
-impl<'denom> EventAttributeEntry<'denom> for Denomination<'denom> {
-    type Value = &'denom str;
-    type ValueOwned = String;
-
-    const KEY: &'static str = "denom";
 
     fn into_value(self) -> Self::Value {
         self.0
