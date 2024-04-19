@@ -131,7 +131,7 @@ impl<'de> Deserialize<'de> for KeccakHash {
         impl<'de> de::Visitor<'de> for KeccakVisitor {
             type Value = KeccakHash;
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "a string containing a keccak hash")
             }
 

@@ -159,7 +159,7 @@ impl string_encoding::Format for PaymentAddress {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PAYMENT_ADDRESS_SIZE);
-        bytes.push(self.is_pinned() as u8);
+        bytes.push(u8::from(self.is_pinned()));
         bytes.extend_from_slice(self.0.to_bytes().as_slice());
         bytes
     }

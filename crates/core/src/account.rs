@@ -31,6 +31,11 @@ pub struct AccountPublicKeysMap {
 }
 
 impl FromIterator<common::PublicKey> for AccountPublicKeysMap {
+    /// Creates a value from an iterator.
+    ///
+    /// # Panics
+    ///
+    /// Panics when given more than 255 keys.
     fn from_iter<T: IntoIterator<Item = common::PublicKey>>(iter: T) -> Self {
         let mut pk_to_idx = HashMap::new();
         let mut idx_to_pk = HashMap::new();
@@ -41,8 +46,11 @@ impl FromIterator<common::PublicKey> for AccountPublicKeysMap {
                     "Only up to 255 signers are allowed in a multisig account"
                 );
             }
-            pk_to_idx.insert(public_key.to_owned(), index as u8);
-            idx_to_pk.insert(index as u8, public_key.to_owned());
+            #[allow(clippy::cast_possible_truncation)]
+            let ix = u8::try_from(index).unwrap();
+
+            pk_to_idx.insert(public_key.to_owned(), ix);
+            idx_to_pk.insert(ix, public_key.to_owned());
         }
 
         Self {

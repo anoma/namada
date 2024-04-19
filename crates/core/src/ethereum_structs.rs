@@ -2,7 +2,7 @@
 use std::fmt;
 use std::io::Read;
 use std::num::NonZeroU64;
-use std::ops::{Add, AddAssign, Deref};
+use std::ops::Deref;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use ethbridge_structs::*;
@@ -98,6 +98,33 @@ impl EthBridgeEvent {
 #[repr(transparent)]
 pub struct BlockHeight(Uint256);
 
+impl BlockHeight {
+    /// Get the next block height.
+    ///
+    /// # Panic
+    ///
+    /// Panics on overflow.
+    pub fn next(&self) -> Self {
+        self.unchecked_add(1_u64)
+    }
+
+    /// Unchecked epoch addition.
+    ///
+    /// # Panic
+    ///
+    /// Panics on overflow. Care must be taken to only use this with trusted
+    /// values that are known to be in a limited range (e.g. system parameters
+    /// but not e.g. transaction variables).
+    pub fn unchecked_add(&self, rhs: impl Into<BlockHeight>) -> Self {
+        use num_traits::CheckedAdd;
+        Self(
+            self.0
+                .checked_add(&rhs.into())
+                .expect("Block height addition shouldn't overflow"),
+        )
+    }
+}
+
 impl fmt::Display for BlockHeight {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -131,20 +158,6 @@ impl From<BlockHeight> for Uint256 {
 impl<'a> From<&'a BlockHeight> for &'a Uint256 {
     fn from(BlockHeight(height): &'a BlockHeight) -> Self {
         height
-    }
-}
-
-impl Add for BlockHeight {
-    type Output = BlockHeight;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl AddAssign for BlockHeight {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
     }
 }
 
