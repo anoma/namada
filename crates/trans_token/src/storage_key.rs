@@ -198,9 +198,14 @@ impl ShieldedActionOwner<'_> {
     pub fn to_address_ref(&self) -> &Address {
         match self {
             Self::Owner(addr) => addr,
-            Self::Minted => &Address::Internal(
-                InternalAddress::Ibc,
-            ),
+            Self::Minted => &Address::Internal(InternalAddress::Ibc),
+        }
+    }
+
+    pub fn to_balance_key(&self, token: &Address) -> storage::Key {
+        match self {
+            ShieldedActionOwner::Owner(addr) => balance_key(token, addr),
+            ShieldedActionOwner::Minted => minted_balance_key(token),
         }
     }
 }

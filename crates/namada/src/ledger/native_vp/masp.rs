@@ -30,9 +30,10 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    balance_key, is_any_token_balance_key, is_masp_allowed_key, is_masp_key,
+    is_any_shielded_action_balance_key, is_masp_allowed_key, is_masp_key,
     is_masp_nullifier_key, is_masp_tx_pin_key, masp_commitment_anchor_key,
     masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
+    ShieldedActionOwner,
 };
 use token::Amount;
 
@@ -299,31 +300,39 @@ where
         // Get the changed balance keys
         let counterparts_balances: Vec<_> = keys_changed
             .iter()
-            .filter_map(is_any_token_balance_key)
+            .filter_map(is_any_shielded_action_balance_key)
             .collect();
 
-        for [token, counterpart] in counterparts_balances {
+        for (token, counterpart) in counterparts_balances {
             let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
                 "No denomination found in storage for the given token",
             )?;
             unepoched_tokens(token, denom, &mut result.tokens)?;
-            let counterpart_balance_key = balance_key(token, counterpart);
-            let pre_balance: Amount = self
+            let counterpart_balance_key = counterpart.to_balance_key(token);
+            let mut pre_balance: Amount = self
                 .ctx
                 .read_pre(&counterpart_balance_key)?
                 .unwrap_or_default();
-            let post_balance: Amount = self
+            let mut post_balance: Amount = self
                 .ctx
                 .read_post(&counterpart_balance_key)?
                 .unwrap_or_default();
+            if let ShieldedActionOwner::Minted = counterpart {
+                // When receiving ibc transfers we mint and also shield so we
+                // have two credits/debits, we need to mock the mint balance as
+                // the opposite change
+                std::mem::swap(&mut pre_balance, &mut post_balance);
+            }
             // Public keys must be the hash of the sources/targets
             let address_hash = TransparentAddress(<[u8; 20]>::from(
                 ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    &counterpart.serialize_to_vec(),
+                    &counterpart.to_address_ref().serialize_to_vec(),
                 )),
             ));
 
-            result.decoder.insert(address_hash, counterpart.clone());
+            result
+                .decoder
+                .insert(address_hash, counterpart.to_address_ref().clone());
             *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
                 ValueSum::from_pair(token.clone(), pre_balance).unwrap();
             *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
@@ -359,9 +368,9 @@ fn validate_transparent_input<A: Authorization>(
     epoch: Epoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
-) -> Result<bool> {
-    // Ensure that the account of this transparent input has authorized this
-    // transaction
+) -> Result<()> {
+    // A decrease in the balance of an account needs to be
+    // authorized by the account of this transparent input
     signers.insert(vin.address);
     // Non-masp sources add to the transparent tx pool
     *transparent_tx_pool = transparent_tx_pool
@@ -409,8 +418,12 @@ fn validate_transparent_input<A: Authorization>(
                 // If such an epoched asset type is available in the
                 // conversion tree, then we must reject the unepoched
                 // variant
-                tracing::debug!("epoch is missing from asset type");
-                return Ok(false);
+                let error =
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "epoch is missing from asset type",
+                    ));
+                tracing::debug!("{error}");
+                return Err(error);
             } else {
                 // Otherwise note the contribution to this transparent input
                 let amount =
@@ -427,9 +440,15 @@ fn validate_transparent_input<A: Authorization>(
             }
         }
         // unrecognized asset
-        _ => return Ok(false),
+        _ => {
+            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Unable to decode asset type",
+            ));
+            tracing::debug!("{error}");
+            return Err(error);
+        }
     };
-    Ok(true)
+    Ok(())
 }
 
 // Handle transparent output
@@ -439,7 +458,7 @@ fn validate_transparent_output(
     transparent_tx_pool: &mut I128Sum,
     epoch: Epoch,
     conversion_state: &ConversionState,
-) -> Result<bool> {
+) -> Result<()> {
     // Non-masp destinations subtract from transparent tx pool
     *transparent_tx_pool = transparent_tx_pool
         .checked_sub(
@@ -488,9 +507,15 @@ fn validate_transparent_output(
                 })?;
         }
         // unrecognized asset
-        _ => return Ok(false),
+        _ => {
+            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Unable to decode asset type",
+            ));
+            tracing::debug!("{error}");
+            return Err(error);
+        }
     };
-    Ok(true)
+    Ok(())
 }
 
 // Update the transaction value pool and also ensure that the Transaction is
@@ -504,34 +529,30 @@ fn validate_transparent_bundle(
     epoch: Epoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
-) -> Result<bool> {
+) -> Result<()> {
     if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
         for vin in transp_bundle.vin.iter() {
-            if !validate_transparent_input(
+            validate_transparent_input(
                 vin,
                 changed_balances,
                 transparent_tx_pool,
                 epoch,
                 conversion_state,
                 signers,
-            )? {
-                return Ok(false);
-            }
+            )?;
         }
 
         for out in transp_bundle.vout.iter() {
-            if !validate_transparent_output(
+            validate_transparent_output(
                 out,
                 changed_balances,
                 transparent_tx_pool,
                 epoch,
                 conversion_state,
-            )? {
-                return Ok(false);
-            }
+            )?;
         }
     }
-    Ok(true)
+    Ok(())
 }
 
 // Verify that the pre balance + the Sapling value balance = the post balance
@@ -543,7 +564,7 @@ fn verify_sapling_balancing_value(
     target_epoch: Epoch,
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
-) -> Result<bool> {
+) -> Result<()> {
     let mut acc = pre.clone();
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
@@ -579,10 +600,25 @@ fn verify_sapling_balancing_value(
                     acc -= decoded_change;
                 }
             }
-            _ => return Ok(false),
+            _ => {
+                let error =
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Unable to decode asset type",
+                    ));
+                tracing::debug!("{error}");
+                return Err(error);
+            }
         }
     }
-    Ok(acc == *post)
+    if acc == *post {
+        Ok(())
+    } else {
+        let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+            "MASP balance change not equal to Sapling value balance",
+        ));
+        tracing::debug!("{error}");
+        Err(error)
+    }
 }
 
 impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
@@ -605,7 +641,9 @@ where
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
         {
-            let error = native_vp::Error::new_const("MASP transaction is expired").into();
+            let error =
+                native_vp::Error::new_const("MASP transaction is expired")
+                    .into();
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -671,32 +709,76 @@ where
             }
         }
 
+        let ibc_address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &Address::Internal(namada_core::address::InternalAddress::Ibc)
+                    .serialize_to_vec(),
+            )),
+        ));
+
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
-            let Some(signer) = changed_balances.decoder.get(&signer) else {
-                let error = native_vp::Error::new_const("Cannot decode signer").into();
+            if signer == ibc_address_hash {
+                // If the IBC address is a signatory, then it means that either
+                // Tx - Transaction(s) causes a decrease in the IBC balance or
+                // one of the Transactions' transparent inputs is the IBC. We
+                // can't check whether such an action has been authorized by the
+                // original sender since their address is not in this Namada
+                // instance. However, we do know that the overall changes in the
+                // IBC state are okay since the IBC VP does check this
+                // transaction. So the best we can do is just to ensure that
+                // funds intended for the IBC are not being siphoned from the
+                // Transactions inside this Tx. We achieve this by not allowing
+                // the IBC to be in the transparent output of any of the
+                // Transaction(s).
+                if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+                    for vout in transp_bundle.vout.iter() {
+                        if vout.address == ibc_address_hash {
+                            let error = native_vp::Error::new_const(
+                                "Simultaneous credit and debit of IBC account \
+                                 in a MASP transaction not allowed",
+                            )
+                            .into();
+                            tracing::debug!("{error}");
+                            return Err(error);
+                        }
+                    }
+                }
+            } else if let Some(signer) = changed_balances.decoder.get(&signer) {
+                // Otherwise the signer must be decodable so that we can
+                // manually check the signatures
+                let public_keys_index_map =
+                    crate::account::public_keys_index_map(
+                        &self.ctx.pre(),
+                        signer,
+                    )?;
+                let threshold =
+                    crate::account::threshold(&self.ctx.pre(), signer)?
+                        .unwrap_or(1);
+                let max_signatures_per_transaction =
+                    crate::parameters::max_signatures_per_transaction(
+                        &self.ctx.pre(),
+                    )?;
+                let mut gas_meter = self.ctx.gas_meter.borrow_mut();
+                tx_data
+                    .verify_signatures(
+                        &[tx_data.raw_header_hash()],
+                        public_keys_index_map,
+                        &Some(signer.clone()),
+                        threshold,
+                        max_signatures_per_transaction,
+                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
+                    )
+                    .map_err(native_vp::Error::new)?;
+            } else {
+                // We are not able to decode the signer, so just fail
+                let error = native_vp::Error::new_const(
+                    "Unable to decode a transaction signer",
+                )
+                .into();
                 tracing::debug!("{error}");
                 return Err(error);
-            };
-            let public_keys_index_map =
-                crate::account::public_keys_index_map(&self.ctx.pre(), signer)?;
-            let threshold = crate::account::threshold(&self.ctx.pre(), signer)?
-                .unwrap_or(1);
-            let max_signatures_per_transaction =
-                crate::parameters::max_signatures_per_transaction(
-                    &self.ctx.pre(),
-                )?;
-            let mut gas_meter = self.ctx.gas_meter.borrow_mut();
-            tx_data
-                .verify_signatures(
-                    &[tx_data.raw_header_hash()],
-                    public_keys_index_map,
-                    &Some(signer.clone()),
-                    threshold,
-                    max_signatures_per_transaction,
-                    || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
-                )
-                .map_err(native_vp::Error::new)?;
+            }
         }
 
         // Ensure that the shielded transaction exactly balances

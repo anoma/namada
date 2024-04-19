@@ -33,7 +33,9 @@ use namada_tx::Tx;
 use crate::address::{Address, InternalAddress};
 use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::ethereum_events::EthAddress;
-use crate::ledger::native_vp::{self, Ctx, NativeVp, SignedAmount, StorageReader};
+use crate::ledger::native_vp::{
+    self, Ctx, NativeVp, SignedAmount, StorageReader,
+};
 use crate::storage::Key;
 use crate::token::storage_key::balance_key;
 use crate::token::Amount;
