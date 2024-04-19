@@ -21,7 +21,7 @@ use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
-use namada::tx::event::{Code, InnerTx};
+use namada::tx::event::{Batch, Code};
 use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
@@ -216,97 +216,84 @@ where
                 continue;
             }
 
-            let (mut tx_event, tx_gas_meter, mut wrapper_args) =
-                match &tx_header.tx_type {
-                    TxType::Wrapper(wrapper) => {
-                        stats.increment_wrapper_txs();
-                        let tx_event = new_tx_event(&tx, height.0);
-                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                        if let Some(code_sec) = tx
-                            .get_section(tx.code_sechash())
-                            .and_then(|x| Section::code_sec(x.as_ref()))
-                        {
-                            stats.increment_tx_type(
-                                code_sec.code.hash().to_string(),
-                            );
-                        }
-                        (
-                            tx_event,
-                            gas_meter,
-                            Some(WrapperArgs {
-                                block_proposer: &native_block_proposer_address,
-                                is_committed_fee_unshield: false,
-                            }),
-                        )
-                    }
-                    TxType::Raw => {
-                        tracing::error!(
-                            "Internal logic error: FinalizeBlock received a \
-                             TxType::Raw transaction"
+            let (tx_gas_meter, mut wrapper_args) = match &tx_header.tx_type {
+                TxType::Wrapper(wrapper) => {
+                    stats.increment_wrapper_txs();
+                    let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                    if let Some(code_sec) = tx
+                        .get_section(tx.code_sechash())
+                        .and_then(|x| Section::code_sec(x.as_ref()))
+                    {
+                        stats.increment_tx_type(
+                            code_sec.code.hash().to_string(),
                         );
-                        continue;
                     }
-                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                        ProtocolTxType::BridgePoolVext
-                        | ProtocolTxType::BridgePool
-                        | ProtocolTxType::ValSetUpdateVext
-                        | ProtocolTxType::ValidatorSetUpdate => (
-                            new_tx_event(&tx, height.0),
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                        ),
-                        ProtocolTxType::EthEventsVext => {
-                            let ext =
+                    (
+                        gas_meter,
+                        Some(WrapperArgs {
+                            block_proposer: &native_block_proposer_address,
+                            is_committed_fee_unshield: false,
+                        }),
+                    )
+                }
+                TxType::Raw => {
+                    tracing::error!(
+                        "Internal logic error: FinalizeBlock received a \
+                         TxType::Raw transaction"
+                    );
+                    continue;
+                }
+                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::BridgePoolVext
+                    | ProtocolTxType::BridgePool
+                    | ProtocolTxType::ValSetUpdateVext
+                    | ProtocolTxType::ValidatorSetUpdate => {
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
+                    }
+                    ProtocolTxType::EthEventsVext => {
+                        let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
                             .unwrap();
-                            if self
-                                .mode
-                                .get_validator_address()
-                                .map(|validator| {
-                                    validator == &ext.data.validator_addr
-                                })
-                                .unwrap_or(false)
-                            {
-                                for event in ext.data.ethereum_events.iter() {
-                                    self.mode.dequeue_eth_event(event);
-                                }
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
+                        {
+                            for event in ext.data.ethereum_events.iter() {
+                                self.mode.dequeue_eth_event(event);
                             }
-                            (
-                                new_tx_event(&tx, height.0),
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
                         }
-                        ProtocolTxType::EthereumEvents => {
-                            let digest =
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
+                    }
+                    ProtocolTxType::EthereumEvents => {
+                        let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
                                 &tx,
                             ).unwrap();
-                            if let Some(address) =
-                                self.mode.get_validator_address().cloned()
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
+                        {
+                            let this_signer = &(
+                                address,
+                                self.state.in_mem().get_last_block_height(),
+                            );
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
                             {
-                                let this_signer = &(
-                                    address,
-                                    self.state.in_mem().get_last_block_height(),
-                                );
-                                for MultiSignedEthEvent { event, signers } in
-                                    &digest.events
-                                {
-                                    if signers.contains(this_signer) {
-                                        self.mode.dequeue_eth_event(event);
-                                    }
+                                if signers.contains(this_signer) {
+                                    self.mode.dequeue_eth_event(event);
                                 }
                             }
-                            (
-                                new_tx_event(&tx, height.0),
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
                         }
-                    },
-                };
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
+                    }
+                },
+            };
             let replay_protection_hashes =
                 if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
                     Some(ReplayProtectionHashes {
@@ -317,6 +304,7 @@ where
                     None
                 };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
+            let tx_event = new_tx_event(&tx, height.0);
             let tx_result = protocol::dispatch_tx(
                 tx.clone(),
                 processed_tx.tx.as_ref(),
@@ -332,7 +320,6 @@ where
                 wrapper_args.as_mut(),
             )
             .map_err(Error::TxApply);
-            // FIXME: where to place these gas meters operations?
             let tx_gas_meter = tx_gas_meter.into_inner();
 
             // save the gas cost
@@ -342,12 +329,13 @@ where
                 tx_gas_meter.get_tx_consumed_gas().into(),
             );
 
+            // FIXME: use a single event and use prefixes for the single inner
+            // tx. Use just the index as the discriminant? I still believe the
+            // hash of the Commitments is better, also because in the event the
+            // has is the one of the wrapper, having the hash of the Commitment
+            // could be slightly better
             match tx_result {
-                // FIXME: I need to be able to track the events/result of the
-                // single tx inside a bundle FIXME: probably
-                // need to do this match directly in dispatch_tx
-                // FIXME: even though looping in here is probably easier -> Yes
-                // seems like so FIXME: or I could extend
+                // FIXME: I could extend
                 // TxResult to be collection of results and then manage them
                 // here. Ah but I also need to commit or dump the state which is
                 // ok for atmoic bnundles but for non-atomic ones I need to
@@ -391,19 +379,31 @@ where
                 // better to create a Hash with the header object and a mocked
                 // commitments section that only carries that specific
                 // commitment
-                // FIXME: so also need to pass the tx event so that I can
-                // populate it on the other side
                 Ok(result) => {
+                    // FIXME: when to commit the hash of the bundle and when
+                    // not? Probably commit when at least one the tx requires so
+                    // and not commit when all the txs request to not be
+                    // committed FIXME: IMPORTANT! REMOVAL
+                    // LOGIC FOR BUNDLE (REFARDLESS OF IT
+                    // BEING ATOMIC OR NOT): IF AT LEAST ONE OF THE
+                    // TXS SHOULD HAVE ITS HASH COMMITTED, THAN COMMIT THE HASH
+                    // OF THE BUNDLE, OTHERWISE NOT
+                    // FIXME: after I've executed the cmts there still might
+                    // need some things to append to the wrapper event? Yes, for
+                    // sure the exit status of the entire batch for atomic ones
                     if result.is_accepted() {
                         if wrapper_args
                             .map(|args| args.is_committed_fee_unshield)
                             .unwrap_or_default()
+                            //FIXME: here I manage the inner tx masp, how to do this now. So I could have a masp tx in the wrapper and multiple in the batch and I need to discriminate which one is valid. So here I need to inspect the result of every cmt and set the attrbute in their specific logs
                             || result.vps_result.accepted_vps.contains(
                                 &Address::Internal(
                                     address::InternalAddress::Masp,
                                 ),
                             )
                         {
+                            // FIXME: wrong, I need one attribute for the
+                            // wrapper and then one for every valid inner masp
                             tx_event.extend(ValidMaspTx(tx_index));
                         }
                         tracing::trace!(
@@ -419,9 +419,12 @@ where
                             result.wrapper_changed_keys.iter().cloned(),
                         );
                         stats.increment_successful_txs();
+                        // FIXME: here
                         self.commit_inner_tx_hash(replay_protection_hashes);
 
+                        // FIXME: here
                         self.state.commit_tx();
+                        // FIXME: check these events
                         if !tx_event.contains_key("code") {
                             tx_event.extend(Code(ResultCode::Ok));
                             self.state
@@ -482,8 +485,10 @@ where
                     }
                     tx_event
                         .extend(WithGasUsed(result.gas_used))
-                        .extend(Info("Check inner_tx for result.".to_string()))
-                        .extend(InnerTx(&result));
+                        .extend(Info("Check batch for result.".to_string()))
+                        // FIXME: need to append somethin else? Only the result
+                        // of the entire batch if it is atomic
+                        .extend(Batch(&result));
                 }
                 Err(Error::TxApply(protocol::Error::WrapperRunnerError(
                     msg,
@@ -493,6 +498,10 @@ where
                         tx_event["hash"],
                         msg,
                     );
+                    // FIXME: could the fee unshielding have been committed
+                    // here?? No but maybe it's better to do the check all the
+                    // times, the flag is written only after we called commit
+                    // anyway -> Do like this
                     tx_event
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
@@ -504,6 +513,19 @@ where
                         tx_event["hash"],
                         msg
                     );
+                    // FIXME: what if a single one of the transactions in the
+                    // batch returns an error? Probably it shouldn't do it, I
+                    // should only propagate errors that affect the entire
+                    // batch, i.e. gas errors or wrapper errors
+                    // FIXME: but I still need to append something to the log,
+                    // which I cannot do here if I don't return anything but gas
+                    // errors FIXME: also, about gas errors,
+                    // if the 3rd tx runs out of gas but the first two succeeded
+                    // and the batch is non-atomic I must commit the first two
+                    // and emit their result in the log IMPORTANT
+                    // FIXME: should I put the Error in TxResult? => Then I'd
+                    // need to always produce the event with the batch
+                    // attribute. But this is probably the only solution
 
                     // If user transaction didn't fail
                     // because of out of gas nor invalid
@@ -542,8 +564,6 @@ where
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()));
 
-                    // If wrapper, invalid tx error code
-                    tx_event.extend(Code(ResultCode::InvalidTx));
                     // The fee unshield operation could still have been
                     // committed
                     if wrapper_args
@@ -555,6 +575,8 @@ where
                     tx_event.extend(Code(ResultCode::WasmRuntimeError));
                 }
             }
+            // FIXME: probably better to move the ValidMaspTx attribute for fee
+            // unshielding here
             response.events.emit(tx_event);
         }
 

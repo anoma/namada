@@ -924,6 +924,18 @@ impl Commitments {
     pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
         &self.memo_hash
     }
+
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(self.serialize_to_vec());
+        hasher
+    }
+
+    /// Get the hash of this Commitments
+    pub fn get_hash(&self) -> namada_core::hash::Hash {
+        namada_core::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
 }
 
 // FIXME: for safet yreasons it would be better to not expose a function that
@@ -1679,7 +1691,6 @@ impl Tx {
 }
 
 impl<'tx> Tx {
-    // FIXME: new method to construct a BundledTx?
     pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTx<'tx> {
         BatchedTx { tx: self, cmt }
     }

@@ -1223,6 +1223,7 @@ where
         )));
     }
 
+    // FIXME: worng! Use sechashes!!!
     let wrapper_hash = wrapper.header_hash();
     if temp_state
         .has_replay_protection_entry(&wrapper_hash)

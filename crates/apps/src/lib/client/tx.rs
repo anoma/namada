@@ -750,7 +750,7 @@ pub async fn submit_transfer(
                     // If a transaction is shielded
                     tx_epoch.is_some() &&
                     // And it is rejected by a VP
-                    matches!(resp.inner_tx_result(), InnerTxResult::VpsRejected(_)) =>
+                    matches!(resp.batch_result(), InnerTxResult::VpsRejected(_)) =>
                 {
                     let submission_epoch = rpc::query_and_print_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch

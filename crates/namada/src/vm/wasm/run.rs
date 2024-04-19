@@ -131,11 +131,11 @@ where
 /// Execute a transaction code. Returns the set verifiers addresses requested by
 /// the transaction.
 #[allow(clippy::too_many_arguments)]
-pub fn tx<S, CA>(
+pub fn tx<'tx, S, CA>(
     state: &mut S,
     gas_meter: &RefCell<TxGasMeter>,
     tx_index: &TxIndex,
-    batched_tx: &BatchedTx,
+    batched_tx: &BatchedTx<'tx>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>
@@ -314,6 +314,8 @@ where
             hasher: PhantomData,
             cache_access: PhantomData,
         };
+    // FIXME: if troubles dealing with the lifetime of batched_tx just split the
+    // struct into its fields
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,

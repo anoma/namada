@@ -1,6 +1,6 @@
 //! The ledger's protocol
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Debug;
 
 use borsh_ext::BorshSerializeExt;
@@ -11,12 +11,13 @@ use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::{FullAccessState, StorageWrite};
+use namada_state::{BlockHeight, FullAccessState, StorageWrite};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
+    BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags, VpsResult,
+    WrapperTx,
 };
-use namada_tx::{BatchedTx, Section, Tx};
+use namada_tx::{new_tx_event, BatchedTx, Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -175,8 +176,6 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-    // FIXME: since we evaluate the TxResult in a function called here there's
-    // probably no need to return it
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -185,37 +184,47 @@ where
 {
     match tx.header().tx_type {
         // Raw trasaction type is allowed only for governance proposals
-        // FIXME: should we support governance bundles? Look how we load the
-        // data No bundles of governance transactions, only take the
-        // first one
-        TxType::Raw => apply_wasm_tx(
-            // FIXME: manage error
-            BatchedTx {
-                tx: &tx,
-                cmt: tx.commitments().first().unwrap(),
-            },
-            &tx_index,
-            ShellParams {
-                tx_gas_meter,
-                state,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            },
-        ),
+        // No bundles of governance transactions, just take the first one
+        TxType::Raw => {
+            // FIXME: manage the unwrap
+            let cmt = tx.commitments().first().unwrap();
+            let result = apply_wasm_tx(
+                BatchedTx { tx: &tx, cmt },
+                &tx_index,
+                ShellParams {
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+            )?;
+            Ok(TxResult {
+                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
+                wrapper_changed_keys: Default::default(),
+                batch_results: [(cmt.get_hash(), Ok(result))]
+                    .into_iter()
+                    .collect(),
+            })
+        }
         TxType::Protocol(protocol_tx) => {
-            apply_protocol_tx(
-                protocol_tx.tx,
-                // FIXME: should we support protocol bundles?
-                // No bundles of protocol transactions, only take the first one
-                // FIXME: manage error
-                tx.commitments().first().map(|cmt| tx.data(cmt).unwrap()),
-                state,
-            )
+            // FIXME: should we support protocol bundles?
+            // No bundles of protocol transactions, only take the first one
+            // FIXME: manage the unwrap
+            let cmt = tx.commitments().first().unwrap();
+            let result =
+                apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
+
+            Ok(TxResult {
+                batch_results: [(cmt.get_hash(), Ok(result))]
+                    .into_iter()
+                    .collect(),
+                ..Default::default()
+            })
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
-            let changed_keys = apply_wrapper_tx(
+            let mut tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
@@ -229,80 +238,10 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
-            // FIXME: I need to itreate on the transactions, should I do that
-            // here or in finalize block where I call this? Probably less code
-            // to change if I iterate in finalzie block but it would be slightly
-            // preferable here in terms of scope/readbility
-            // FIXME: problem is that once I merge with tx queue removal PR
-            // iterating in finalize block doesn't work anymore, unless I do
-            // some sort of trick and change the tx type from wrapper to raw,
-            // but I believe it's better to do everything here
-            // FIXME: the only things I really need to merge in between two
-            // inners are the gas meter (easy) and replay protection (more
-            // complicated. Specifically, I need to see if one of the previous
-            // txs had the same hash of this one and if that was committed or
-            // not based on the possible errors) FIXME: actually,
-            // can I have in a bundle more than one tx with the same hash??? yes
-            // I can unless I change the vector with an HashSet(or better the
-            // deterministic version of it). But even in this case I could have
-            // two commitments with the same code and data but different memo,
-            // so overall a different header hash. In case, should I prevent
-            // this, does it make sense? FIXME: wait I'm actually
-            // doing reprot based on the tx header hash but now the header
-            // contains all the txs! THIS IS WRONG! I need a resolution to the
-            // single tx hash -> this also invalidates the topic on the
-            // signature, I need to sign only the minimal hash (not necessary
-            // actually, I could still sign everything)
-            // FIXME: so for reprot I have to mock the old version of the tx
-            // Header, with only one Commitment FIXME: actually
-            // wait, maybe if I sign the entire header (with all the
-            // commitments), I can only use the complete hash, instead of the
-            // mocked single ones, because replying a single tx extracted from
-            // here would be impossible since the signature is done on the
-            // entire set. Yes but:
-            //    - I still need replay protection INSIDE the bundle (do I?
-            //      Isn't this up to the user creating and signign the bundle to
-            //      not duplicate transactions? Also because it's useless, if
-            //      the first tx fails because of logic the same will be for the
-            //      second, and if they fail because of gas or signature same
-            //      will be for the second, so no reason to put two exact txs in
-            //      there. What about the memo? Well the memo would lead to a
-            //      different hash anyway so they are considered two different
-            //      txs)
-            //    - Makes reprot a little less intuitive, what if I have a
-            //      non.atomic bundle in which 3 transactions pass and two fails
-            //      because of gas? I'd still need to write the hash of the
-            //      entire bundle. This should be fine, the two failed txs will
-            //      be put in another bundle with a different hash and
-            //      reexecuted
-            // FIXME: I'm in favor of a single hash even though it might seem a
-            // little bit dirtier, if it's safe to use. Alos. if I use multiple
-            // hashes, the logic for removing the wrapper hash become a bit less
-            // intuitive, when would we be allowed to remove it? When at least
-            // one of the inner txs has its hash committed? Probably yes
-            // FIXME: for the single hash we'll definetely need the hashset
-            // though and signatures on the entire hash FIXME: but
-            // let's say only one of the txs fails and it fails because of
-            // invalid section commitment, in this case I should remove the
-            // inner hash and leave the wrapper one, correct? Not anymore
-            // becuase I would end up replaying the valid transactions if the
-            // bundle was non-atomic IMPORTANT! REMOVAL LOGIC FOR BUNDLE
-            // (REFARDLESS OF IT BEING ATOMIC OR NOT): IF AT LEAST ONE OF THE
-            // TXS SHOULD HAVE ITS HASH COMMITTED, THAN COMMIT THE HASH OF THE
-            // BUNDLE, OTHERWISE NOT FIXME: do it alltogether, the
-            // reason is that removing hashes of replay protection ease
-            // rewrapping and resubmission but in this case one shouold
-            // eliminate the extra section anyway FIXME: especially
-            // review the trick to remove the hash of the wrapper if I commit
-            // the inner in the context of the bundle, is it still doable? If
-            // yes with both the approaches? If yes does it need any
-            // modifications? The atomicity of the tx changes anything? Probably
-            // yes FIXME: do a single hash for the entire bundle, at
-            // least for now, this way you can easily rebundle single failing
-            // txs
+
             for cmt in tx.commitments() {
-                let mut inner_res = apply_wasm_tx(
-                    BatchedTx { tx: &tx, cmt },
+                let mut inner_res = match apply_wasm_tx(
+                    tx.batch_tx(cmt),
                     &tx_index,
                     ShellParams {
                         tx_gas_meter,
@@ -310,20 +249,22 @@ where
                         vp_wasm_cache,
                         tx_wasm_cache,
                     },
-                )?;
+                ) {
+                    Err(e @ Error::GasError(_)) => {
+                        // Gas error aborts the exeuction of the entire batch
+                        // FIXME: maybe implement a method on Error called
+                        // recoverable() and check that here?
+                        return Err(e);
+                    }
+                    // FIXME: we keep going even for atomic batches which could
+                    // instead be aborted, should we do that?
+                    res => res.map_err(|msg| msg.to_string()),
+                };
 
-                // FIXME: when to commit the hash of the bundle and when not?
-                // Probably commit when at least one the tx requires so and not
-                // commit when all the txs request to not be committed
-
-                // FIXME: how to manage the changed keys of the wrapper?
-                inner_res.wrapper_changed_keys = changed_keys;
-
-                // FIXME: call the function to handle the state and the logs
-                // here
+                tx_result.batch_results.insert(cmt.get_hash(), inner_res);
+                // FIXME: need to precommit the write_log here
             }
-
-            Ok(inner_res)
+            Ok(tx_result)
         }
     }
 }
@@ -348,8 +289,6 @@ where
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
-///
-/// Returns the set of changed storage keys.
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: Tx,
     wrapper: &WrapperTx,
@@ -357,14 +296,14 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'_, S, D, H, CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-) -> Result<BTreeSet<Key>>
+) -> Result<TxResult>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let mut changed_keys = BTreeSet::default();
+    let mut wrapper_changed_keys = BTreeSet::default();
 
     // Write wrapper tx hash to storage
     shell_params
@@ -378,7 +317,7 @@ where
         wrapper,
         fee_unshield_transaction,
         &mut shell_params,
-        &mut changed_keys,
+        &mut wrapper_changed_keys,
         wrapper_args,
     )?;
 
@@ -389,7 +328,11 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(changed_keys)
+    Ok(TxResult {
+        gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
+        wrapper_changed_keys,
+        batch_results: HashMap::default(),
+    })
 }
 
 /// Retrieve the Masp `Transaction` for fee unshielding from the provided
@@ -437,7 +380,10 @@ where
     } = shell_params;
 
     // Unshield funds if requested
-    let requires_fee_unshield = if let Some(transaction) = masp_transaction {
+    // FIXME: there's still a problem, this could fail but than an inner tx
+    // could carry a valid masp_tx. In the logs I need to specify which one are
+    // valid!
+    let is_valid_fee_unshielding = if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
         let  tx_gas_meter =
@@ -494,6 +440,7 @@ where
                                 result.vps_result.rejected_vps
                             );
                         }
+                        result.is_accepted()
                     }
                     Err(e) => {
                         state.write_log_mut().drop_tx_keep_precommit();
@@ -502,13 +449,15 @@ where
                              {}",
                             e
                         );
+                        false
                     }
                 }
             }
-            Err(e) => tracing::error!("{}", e),
+            Err(e) => {
+                tracing::error!("{}", e);
+                false
+            }
         }
-
-        true
     } else {
         false
     };
@@ -528,7 +477,7 @@ where
     state.write_log_mut().commit_tx();
     // Update the flag only after the fee payment has been committed
     if let Some(args) = wrapper_args {
-        args.is_committed_fee_unshield = requires_fee_unshield;
+        args.is_committed_fee_unshield = is_valid_fee_unshielding;
     }
 
     Ok(())
@@ -689,7 +638,7 @@ pub fn apply_wasm_tx<'a, S, D, H, CA>(
     batched_tx: BatchedTx,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -703,8 +652,6 @@ where
         tx_wasm_cache,
     } = shell_params;
 
-    // FIXME: check that this is the hash of the bundle, i.e. that it contains
-    // all the commitments (it should already be the case)
     let tx_hash = batched_tx.tx.raw_header_hash();
     if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
     {
@@ -731,15 +678,11 @@ where
         vp_wasm_cache,
     })?;
 
-    // FIXME: all these must be managed per single tx in the bundle
-    let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
     let ibc_events = state.write_log_mut().take_ibc_events();
 
-    Ok(TxResult {
-        gas_used,
-        wrapper_changed_keys: Default::default(),
+    Ok(BatchedTxResult {
         changed_keys,
         vps_result,
         initialized_accounts,
@@ -758,7 +701,7 @@ pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
     data: Option<Vec<u8>>,
     state: &mut WlState<D, H>,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -815,7 +758,7 @@ where
                 "Attempt made to apply an unimplemented protocol transaction, \
                  no actions will be taken"
             );
-            Ok(TxResult::default())
+            Ok(BatchedTxResult::default())
         }
     }
 }
@@ -1178,7 +1121,7 @@ mod tests {
     fn apply_eth_tx<D, H>(
         tx: EthereumTxData,
         state: &mut WlState<D, H>,
-    ) -> Result<TxResult>
+    ) -> Result<BatchedTxResult>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,

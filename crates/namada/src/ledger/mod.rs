@@ -25,7 +25,7 @@ mod dry_run_tx {
 
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
-    use namada_tx::data::GasLimit;
+    use namada_tx::data::{GasLimit, TxResult};
 
     use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
@@ -53,14 +53,12 @@ mod dry_run_tx {
         let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
-        let mut cumulated_gas = Gas::default();
-
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let tx_gas_meter = match tx.header().tx_type {
+        let (mut tx_result, tx_gas_meter) = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let tx_gas_meter =
                     RefCell::new(TxGasMeter::new(wrapper.gas_limit.to_owned()));
-                protocol::apply_wrapper_tx(
+                let tx_result = protocol::apply_wrapper_tx(
                     tx.clone(),
                     &wrapper,
                     None,
@@ -76,24 +74,26 @@ mod dry_run_tx {
                 .into_storage_result()?;
 
                 temp_state.write_log_mut().commit_tx();
-                cumulated_gas = tx_gas_meter.borrow_mut().get_tx_consumed_gas();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
-                TxGasMeter::new_from_sub_limit(available_gas)
+                (tx_result, TxGasMeter::new_from_sub_limit(available_gas))
             }
             _ => {
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
-                TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
-                ))
+                (
+                    TxResult::default(),
+                    TxGasMeter::new(GasLimit::from(
+                        namada_parameters::get_max_block_gas(ctx.state)
+                            .unwrap(),
+                    )),
+                )
             }
         };
 
         let tx_gas_meter = RefCell::new(tx_gas_meter);
         for cmt in tx.commitments() {
             let batched_tx = tx.batch_tx(cmt);
-            // FIXME: see how to handle tx result here
-            let mut data = protocol::apply_wasm_tx(
+            let mut batched_tx_result = protocol::apply_wasm_tx(
                 batched_tx,
                 &TxIndex(0),
                 ShellParams::new(
@@ -103,18 +103,15 @@ mod dry_run_tx {
                     &mut ctx.tx_wasm_cache,
                 ),
             )
-            .into_storage_result()?;
-            cumulated_gas = cumulated_gas
-                .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas",
-                ))?;
+            .into_storage_result()
+            .map_err(|err| err.to_string());
+            tx_result
+                .batch_results
+                .insert(cmt.get_hash(), batched_tx_result);
         }
         // Account gas for both inner and wrapper (if available)
-        data.gas_used = cumulated_gas;
-        // NOTE: the keys changed by the wrapper transaction (if any) are
-        // not returned from this function
-        let data = data.serialize_to_vec();
+        tx_result.gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
+        let data = tx_result.serialize_to_vec();
         Ok(EncodedResponseQuery {
             data,
             proof: None,
@@ -281,13 +278,23 @@ mod test {
         outer_tx.header.chain_id = client.state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash, None));
         outer_tx.set_data(Data::new(vec![]));
+        let cmt = outer_tx.commitments().first().unwrap();
         let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()
             .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
-        assert!(result.data.is_accepted());
+        assert!(
+            result
+                .data
+                .batch_results
+                .get(&cmt.get_hash())
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_accepted()
+        );
 
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();

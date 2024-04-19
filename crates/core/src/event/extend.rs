@@ -111,13 +111,23 @@ impl ExtendEvent for Info {
 }
 
 /// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct ValidMaspTx(pub usize);
+pub struct ValidMaspTx(pub (usize, Option<Hash>));
 
 impl ExtendEvent for ValidMaspTx {
     #[inline]
     fn extend_event(self, event: &mut Event) {
-        let Self(masp_tx_index) = self;
-        event["is_valid_masp_tx"] = masp_tx_index.to_string();
+        let Self((masp_tx_index, cmt_hash)) = self;
+        let attribute = if let Some(hash) = cmt_hash {
+            // FIXME: need another leading part here? Starting with the hash
+            // could be hard to understand
+            format!("{hash}/is_valid_masp_tx")
+        } else {
+            "is_valid_masp_tx".to_string()
+        };
+        // FIXME: should we put the index of the tx in the block at the root
+        // level of the even attributes instead of as the value of the masp
+        // attribute?
+        event[&attribute] = masp_tx_index.to_string();
     }
 }
 

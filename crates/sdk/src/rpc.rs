@@ -38,7 +38,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
 };
 use namada_state::LastBlock;
-use namada_tx::data::{ResultCode, TxResult};
+use namada_tx::data::{BatchedTxResult, ResultCode, TxResult};
 use serde::Serialize;
 
 use crate::args::InputAmount;
@@ -514,21 +514,42 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = if result.is_accepted() {
-        format!(
-            "Transaction was successfully applied. Used {} gas.",
-            result.gas_used
-        )
-    } else {
-        format!(
-            "Transaction was rejected by VPs: {}\nErrors: {}\nChanged keys: {}",
-            serde_json::to_string_pretty(&result.vps_result.rejected_vps)
-                .unwrap(),
-            serde_json::to_string_pretty(&result.vps_result.errors).unwrap(),
-            serde_json::to_string_pretty(&result.changed_keys).unwrap(),
-        )
-    };
-    display_line!(context.io(), "Dry-run result: {result_str}");
+    // FIXME: here log the result of the batch if it is atomic (need the
+    // attribute in the event)
+    let result_str = format!("Transaction consumed {} gas.", result.gas_used);
+    let mut cmt_result_str = String::new();
+    for (cmt_hash, cmt_result) in &result.batch_results {
+        match cmt_result {
+            Ok(result) => {
+                if result.is_accepted() {
+                    cmt_result_str.push_str(
+                        "Commitments {cmt_hash} was succesfully applied",
+                    );
+                } else {
+                    cmt_result_str.push_str(&format!(
+                        "Commitments {} was rejected by VPs: {}\nErrors: \
+                         {}\nChanged keys: {}",
+                        cmt_hash,
+                        serde_json::to_string_pretty(
+                            &result.vps_result.rejected_vps
+                        )
+                        .unwrap(),
+                        serde_json::to_string_pretty(&result.vps_result.errors)
+                            .unwrap(),
+                        serde_json::to_string_pretty(&result.changed_keys)
+                            .unwrap(),
+                    ))
+                }
+            }
+            Err(msg) => cmt_result_str.push_str(&format!(
+                "Commitments {cmt_hash} failed with error: {msg}"
+            )),
+        }
+    }
+    display_line!(
+        context.io(),
+        "Dry-run result: {result_str}. {cmt_result_str}"
+    );
     Ok(result)
 }
 
@@ -554,28 +575,28 @@ pub enum TxBroadcastData {
 /// A parsed event from tendermint relating to a transaction
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
-    /// Result of inner tx (wasm), if any
-    pub inner_tx: Option<TxResult>,
+    /// Result of the tx batch (wasm), if any
+    pub batch: Option<TxResult>,
     /// Response additional information
     pub info: String,
     /// Response log
     pub log: String,
     /// Block height
     pub height: BlockHeight,
-    /// Transaction height
+    /// Transaction hash
     pub hash: String,
     /// Response code
     pub code: ResultCode,
-    /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
+    /// Gas used.
     pub gas_used: String,
 }
 
 /// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
 pub enum InnerTxResult<'a> {
     /// Tx is applied and accepted by all VPs
-    Success(&'a TxResult),
+    Success(&'a BatchedTxResult),
     /// Some VPs rejected the tx
-    VpsRejected(&'a TxResult),
+    VpsRejected(&'a BatchedTxResult),
     /// Transaction failed in some other way
     OtherFailure,
 }
@@ -588,9 +609,7 @@ impl TryFrom<Event> for TxResponse {
             format!("Field \"{field}\" not present in event")
         }
 
-        let inner_tx = event
-            .get("inner_tx")
-            .map(|s| TxResult::from_str(s).unwrap());
+        let batch = event.get("batch").map(|s| TxResult::from_str(s).unwrap());
         let hash = event
             .get("hash")
             .ok_or_else(|| missing_field_err("hash"))?
@@ -609,6 +628,8 @@ impl TryFrom<Event> for TxResponse {
                 .ok_or_else(|| missing_field_err("height"))?,
         )
         .map_err(|e| e.to_string())?;
+        // FIXME: I need to populate this in finalize block with the code for
+        // the enitre batch
         let code = ResultCode::from_str(
             event.get("code").ok_or_else(|| missing_field_err("code"))?,
         )
@@ -619,7 +640,7 @@ impl TryFrom<Event> for TxResponse {
             .clone();
 
         Ok(TxResponse {
-            inner_tx,
+            batch,
             info,
             hash,
             log,
@@ -638,17 +659,27 @@ impl TxResponse {
         })
     }
 
-    /// Check the result of the inner tx. This should not be used with wrapper
+    /// Check the result of the batch. This should not be used with wrapper
     /// txs.
-    pub fn inner_tx_result(&self) -> InnerTxResult<'_> {
-        if let Some(tx) = self.inner_tx.as_ref() {
-            if tx.is_accepted() {
-                InnerTxResult::Success(tx)
-            } else {
-                InnerTxResult::VpsRejected(tx)
+    pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
+        if let Some(tx) = self.batch.as_ref() {
+            let mut result = HashMap::default();
+            for (cmt_hash, cmt_result) in &tx.batch_results {
+                let value = match cmt_result {
+                    Ok(res) => {
+                        if res.is_accepted() {
+                            InnerTxResult::Success(res)
+                        } else {
+                            InnerTxResult::VpsRejected(res)
+                        }
+                    }
+                    Err(_) => InnerTxResult::OtherFailure,
+                };
+                result.insert(cmt_hash.to_owned(), value);
             }
+            result
         } else {
-            InnerTxResult::OtherFailure
+            HashMap::default()
         }
     }
 }
@@ -722,7 +753,7 @@ pub async fn query_tx_response<C: crate::queries::Client + Sync>(
     let height = BlockHeight::from_str(event_map["height"])
         .map_err(|_| TError::parse("Error parsing BlockHeight".to_string()))?;
     let result = TxResponse {
-        inner_tx,
+        batch: inner_tx,
         info: event_map["info"].to_string(),
         log: event_map["log"].to_string(),
         height,

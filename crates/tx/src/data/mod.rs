@@ -13,7 +13,7 @@ pub mod protocol;
 /// wrapper txs with encrypted payloads
 pub mod wrapper;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -176,6 +176,35 @@ pub struct TxResult {
     pub gas_used: Gas,
     /// Storage keys touched by the wrapper transaction
     pub wrapper_changed_keys: BTreeSet<storage::Key>,
+    /// The results of the batch, indexed by the hash of the specific
+    /// [`Commitments`]
+    // FIXME: let's do like this, For the tx in its entirety I always publish
+    // the exitcode as an attribute (even if the batch is non-atomic). If the
+    // batch is non-atomic this exit code is the one fo the wrapper tx, if it
+    // atomic it's the result of the atomic batch. Then I publish the results
+    // in this field and I don't publish any more attributes in the events
+    // FIXME: I don't quite like this idea though, would rather decompose into
+    // the events -> I could do like I do currently, if transaction didn't
+    // raise an error set the code and then the BatchTxResult, if it did error
+    // log just the code and the error message. For the entire TxResult
+    // instead, just extract the gas used and the wrapper_changed_keys and log
+    // them separately without publishing the entire Txresult in the log => Ok
+    // but do this after, first implement the other option
+    pub batch_results: HashMap<Hash, Result<BatchedTxResult, String>>,
+}
+
+/// The result of a specific tx in a batch
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Serialize,
+    Deserialize,
+)]
+pub struct BatchedTxResult {
     /// Storage keys touched by the transaction
     pub changed_keys: BTreeSet<storage::Key>,
     /// The results of all the triggered validity predicates by the transaction
@@ -188,7 +217,7 @@ pub struct TxResult {
     pub eth_bridge_events: BTreeSet<EthBridgeEvent>,
 }
 
-impl TxResult {
+impl BatchedTxResult {
     /// Check if the tx has been accepted by all the VPs
     pub fn is_accepted(&self) -> bool {
         self.vps_result.rejected_vps.is_empty()
@@ -265,13 +294,42 @@ impl fmt::Display for TxResult {
         if f.alternate() {
             write!(
                 f,
-                "Transaction is {}. Gas used: {};{} VPs result: {}",
+                "Transaction is valid. Gas used: {}",
+                // FIXME: I definetely need something for the atomic bundle
+                // result but maybe not here. Probably I should just append to
+                // the event? I believe so yeah FIXME: also
+                // print all the inner results. Yes but maybe not here? No way?
+                // Do that here! Ah no but I need an identifier for each
+                // commitments and I believe I don't have them here, so I just
+                // need to write this struct in the event under the specific
+                // commit of this tx
+                self.gas_used,
+            )
+        } else {
+            write!(f, "{}", serde_json::to_string(self).unwrap())
+        }
+    }
+}
+
+impl FromStr for TxResult {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
+impl fmt::Display for BatchedTxResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if f.alternate() {
+            write!(
+                f,
+                "Transaction is {}. {} VPs result: {}",
                 if self.is_accepted() {
                     "valid"
                 } else {
                     "invalid"
                 },
-                self.gas_used,
                 iterable_to_string("Changed keys", self.changed_keys.iter()),
                 self.vps_result,
             )
@@ -281,7 +339,7 @@ impl fmt::Display for TxResult {
     }
 }
 
-impl FromStr for TxResult {
+impl FromStr for BatchedTxResult {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
