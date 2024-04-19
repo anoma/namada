@@ -4,6 +4,7 @@ use namada_core::address::{self, Address};
 
 /// governance CLI structures
 pub mod cli;
+pub mod event;
 /// governance parameters
 pub mod parameters;
 /// governance public good fundings

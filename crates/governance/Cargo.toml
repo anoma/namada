@@ -30,6 +30,7 @@ namada_trans_token = {path = "../trans_token"}
 borsh.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
+konst.workspace = true
 proptest = { workspace = true, optional = true }
 serde_json.workspace = true
 serde.workspace = true

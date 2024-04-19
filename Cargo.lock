@@ -4674,6 +4674,7 @@ version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
+ "konst",
  "linkme",
  "namada_core",
  "namada_macros",
