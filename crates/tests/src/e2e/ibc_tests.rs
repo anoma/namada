@@ -56,9 +56,10 @@ use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
+use namada::ibc::event as ibc_events;
+use namada::ibc::event::IbcEventType;
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, ToProto};
-use namada::ibc::{event as ibc_events, IbcEventType};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;

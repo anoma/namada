@@ -2,6 +2,7 @@
 
 mod actions;
 pub mod context;
+pub mod event;
 pub mod parameters;
 pub mod storage;
 
@@ -50,6 +51,7 @@ use namada_core::ibc::core::channel::types::msgs::{
 };
 use namada_core::ibc::core::entrypoint::{execute, validate};
 use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -64,6 +66,8 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("IBC event error: {0}")]
+    IbcEvent(RawIbcEventError),
     #[error("Decoding IBC data error")]
     DecodingData,
     #[error("Decoding message error: {0}")]

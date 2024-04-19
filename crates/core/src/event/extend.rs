@@ -618,7 +618,6 @@ where
 #[cfg(test)]
 mod event_composition_tests {
     use super::*;
-    use crate::ibc::IbcEventType;
 
     #[test]
     fn test_event_height_parse() {
@@ -684,23 +683,6 @@ mod event_composition_tests {
             .into();
 
         assert_eq!(base_event.attributes, expected_attrs);
-    }
-
-    #[test]
-    fn test_domain_of_composed_event() {
-        let composite_event = IbcEvent {
-            event_type: IbcEventType("update_account".into()),
-            attributes: Default::default(),
-        }
-        .with(Log("this is sparta!".to_string()))
-        .with(Height(300.into()))
-        .with(TxHash(Hash::default()));
-
-        fn event_domain<E: EventToEmit>(_: &E) -> &'static str {
-            E::DOMAIN
-        }
-
-        assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
     }
 
     #[test]

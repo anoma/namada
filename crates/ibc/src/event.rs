@@ -3,39 +3,41 @@
 use std::cmp::Ordering;
 use std::str::FromStr;
 
+use namada_core::borsh::*;
+use namada_core::collections::HashMap;
+use namada_core::event::extend::{
+    event_domain_of, AttributesMap, EventAttributeEntry, ExtendAttributesMap,
+    ReadFromEventAttributes as _,
+};
+use namada_core::event::{
+    Event, EventError, EventLevel, EventToEmit, EventTypeBuilder,
+};
+use namada_core::ibc::core::channel::types::packet::Packet;
+use namada_core::ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
+use namada_core::ibc::core::client::types::events::{
+    CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
+};
+use namada_core::ibc::core::client::types::{Height as IbcHeight, HeightError};
+use namada_core::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
+use namada_core::ibc::core::host::types::identifiers::{
+    ChannelId as IbcChannelId, ClientId as IbcClientId,
+    ConnectionId as IbcConnectionId, PortId, Sequence,
+};
+use namada_core::ibc::primitives::Timestamp;
+use namada_core::tendermint::abci::Event as AbciEvent;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
-use crate::borsh::*;
-use crate::collections::HashMap;
-use crate::event::extend::{
-    event_domain_of, AttributesMap, EventAttributeEntry,
-    ExtendAttributesMap as _, ReadFromEventAttributes as _,
-};
-use crate::event::{Event, EventError, EventToEmit as _};
-use crate::ibc::core::channel::types::packet::Packet;
-use crate::ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
-use crate::ibc::core::client::types::events::{
-    CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
-};
-use crate::ibc::core::client::types::{Height as IbcHeight, HeightError};
-use crate::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
-use crate::ibc::core::host::types::identifiers::{
-    ChannelId as IbcChannelId, ClientId as IbcClientId,
-    ConnectionId as IbcConnectionId, PortId, Sequence,
-};
-use crate::ibc::primitives::Timestamp;
-use crate::tendermint::abci::Event as AbciEvent;
-
 pub mod types {
     //! IBC event types.
 
+    use namada_core::event::EventType;
+    use namada_core::event_type;
+    use namada_core::ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
+
     use super::IbcEvent;
-    use crate::event::EventType;
-    use crate::event_type;
-    use crate::ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
 
     /// Update client.
     pub const UPDATE_CLIENT: EventType =
@@ -59,6 +61,28 @@ pub mod types {
 )]
 #[repr(transparent)]
 pub struct IbcEventType(pub String);
+
+impl EventToEmit for IbcEvent {
+    const DOMAIN: &'static str = "ibc";
+}
+
+impl From<IbcEvent> for Event {
+    fn from(ibc_event: IbcEvent) -> Self {
+        let mut event = Self::new(
+            EventTypeBuilder::new_of::<IbcEvent>()
+                .with_segment(ibc_event.event_type.0)
+                .build(),
+            EventLevel::Tx,
+        );
+        #[allow(deprecated)]
+        {
+            *event.attributes_mut() =
+                ibc_event.attributes.into_iter().collect();
+        }
+        event.extend(event_domain_of::<IbcEvent>());
+        event
+    }
+}
 
 impl std::fmt::Display for IbcEventType {
     #[inline]
@@ -350,7 +374,7 @@ impl FromStr for TimeoutHeight {
     type Err = HeightError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        crate::ibc::core::client::types::Height::from_str(s).map_or_else(
+        namada_core::ibc::core::client::types::Height::from_str(s).map_or_else(
             |err| match err {
                 HeightError::ZeroHeight => {
                     Ok(TimeoutHeight(IbcTimeoutHeight::Never))
@@ -449,12 +473,17 @@ pub fn packet_from_event_attributes<A: AttributesMap>(
 
 #[cfg(test)]
 mod tests {
+    use namada_core::event::extend::{
+        ComposeEvent as _, Domain, Height, Log,
+        RawReadFromEventAttributes as _, TxHash,
+    };
+    use namada_core::hash::Hash;
+    use namada_core::tendermint_proto::v0_37::abci::Event as AbciEventV037;
+
     use super::*;
-    use crate::event::extend::{Domain, RawReadFromEventAttributes as _};
-    use crate::tendermint_proto::v0_37::abci::Event as AbciEventV037;
 
     #[test]
-    fn test_domain_encoded_in_abci_event_attrs() {
+    fn test_ibc_domain_encoded_in_abci_event_attrs() {
         const EVENT_TYPE: &str = "update_account";
 
         let event: Event = IbcEvent {
@@ -472,5 +501,22 @@ mod tests {
                 &event.attributes
             )
         );
+    }
+
+    #[test]
+    fn test_domain_of_composed_ibc_event() {
+        let composite_event = IbcEvent {
+            event_type: IbcEventType("update_account".into()),
+            attributes: Default::default(),
+        }
+        .with(Log("this is sparta!".to_string()))
+        .with(Height(300.into()))
+        .with(TxHash(Hash::default()));
+
+        fn event_domain<E: EventToEmit>(_: &E) -> &'static str {
+            E::DOMAIN
+        }
+
+        assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
     }
 }

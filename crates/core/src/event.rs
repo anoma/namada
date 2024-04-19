@@ -16,7 +16,6 @@ use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
 use crate::ethereum_structs::EthBridgeEvent;
-use crate::ibc::IbcEvent;
 
 #[doc(hidden)]
 #[macro_export]
@@ -73,10 +72,6 @@ pub trait EventToEmit: Into<Event> {
 
 impl EventToEmit for Event {
     const DOMAIN: &'static str = "unknown";
-}
-
-impl EventToEmit for IbcEvent {
-    const DOMAIN: &'static str = "ibc";
 }
 
 impl EventToEmit for EthBridgeEvent {
@@ -496,25 +491,6 @@ impl From<&EthBridgeEvent> for Event {
                     attributes.with_attribute(BridgePoolTxHash(tx_hash));
                     attributes
                 },
-            },
-        }
-    }
-}
-
-impl From<IbcEvent> for Event {
-    fn from(ibc_event: IbcEvent) -> Self {
-        Self {
-            event_type: EventTypeBuilder::new_of::<IbcEvent>()
-                .with_segment(ibc_event.event_type.0)
-                .build(),
-            level: EventLevel::Tx,
-            attributes: {
-                use extend::{event_domain_of, ExtendAttributesMap};
-
-                let mut attrs: BTreeMap<_, _> =
-                    ibc_event.attributes.into_iter().collect();
-                attrs.with_attribute(event_domain_of::<IbcEvent>());
-                attrs
             },
         }
     }

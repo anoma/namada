@@ -7,7 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod ibc {
-    pub use namada_core::ibc::IbcEvent;
+    pub use namada_ibc::event::{IbcEvent, IbcEventType};
     pub use namada_ibc::storage::is_ibc_key;
 }
 

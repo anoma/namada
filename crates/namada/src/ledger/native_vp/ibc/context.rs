@@ -6,6 +6,7 @@ use borsh_ext::BorshSerializeExt;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::Epochs;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_ibc::event::IbcEvent;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
 use namada_sdk::events::log::dumb_queries;
 use namada_sdk::events::{Event, EventTypeBuilder};
@@ -13,7 +14,6 @@ use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
 use namada_vp_env::VpEnv;
 
 use crate::address::{Address, InternalAddress};
-use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
