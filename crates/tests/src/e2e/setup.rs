@@ -1286,25 +1286,31 @@ pub fn setup_gaia() -> Result<Test> {
 
     // Add tokens to a user account
     let account = find_gaia_address(&test, constants::GAIA_USER)?;
-    let args = ["add-genesis-account", &account, "1000stake,1000samoleans"];
+    let args = [
+        "genesis",
+        "add-genesis-account",
+        &account,
+        "10000stake,1000samoleans",
+    ];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 
     // Add the stake token to the relayer
     let account = find_gaia_address(&test, constants::GAIA_RELAYER)?;
-    let args = ["add-genesis-account", &account, "10000stake"];
+    let args = ["genesis", "add-genesis-account", &account, "10000stake"];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 
     // Add the stake token to the validator
     let validator = find_gaia_address(&test, constants::GAIA_VALIDATOR)?;
     let stake = "100000000000stake";
-    let args = ["add-genesis-account", &validator, stake];
+    let args = ["genesis", "add-genesis-account", &validator, stake];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 
     // stake
     let args = [
+        "genesis",
         "gentx",
         constants::GAIA_VALIDATOR,
         stake,
@@ -1316,7 +1322,7 @@ pub fn setup_gaia() -> Result<Test> {
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 
-    let args = ["collect-gentxs"];
+    let args = ["genesis", "collect-gentxs"];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 

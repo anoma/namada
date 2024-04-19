@@ -686,6 +686,23 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
     file.write_all(values.to_string().as_bytes()).map_err(|e| {
         eyre!(format!("Writing a Gaia config file failed: {}", e))
     })?;
+
+    let app_path = test.test_dir.as_ref().join("gaia/config/app.toml");
+    let s = std::fs::read_to_string(&app_path)
+        .expect("Reading Gaia app.toml failed");
+    let mut values = s
+        .parse::<toml::Value>()
+        .expect("Parsing Gaia app.toml failed");
+    if let Some(mininum_gas_prices) = values.get_mut("minimum-gas-prices") {
+        *mininum_gas_prices = "0.0001stake".into();
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&app_path)?;
+    file.write_all(values.to_string().as_bytes())
+        .map_err(|e| eyre!(format!("Writing a Gaia app.toml failed: {}", e)))?;
+
     Ok(())
 }
 
