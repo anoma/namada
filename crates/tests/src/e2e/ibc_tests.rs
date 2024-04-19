@@ -2174,6 +2174,8 @@ fn transfer_from_gaia(
         &amount,
         "--from",
         sender.as_ref(),
+        "--gas-prices",
+        "0.001stake",
         "--node",
         &rpc,
         "--keyring-backend",
