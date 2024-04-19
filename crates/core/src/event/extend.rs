@@ -594,6 +594,19 @@ mod event_composition_tests {
     use crate::ibc::IbcEventType;
 
     #[test]
+    fn test_event_height_parse() {
+        let event: Event =
+            Event::applied_tx().with(Height(BlockHeight(300))).into();
+
+        let height = event.raw_read_attribute::<Height>().unwrap();
+        assert_eq!(height, "300");
+        assert_eq!(height.parse::<u64>().unwrap(), 300u64);
+
+        let height = event.read_attribute::<Height>().unwrap();
+        assert_eq!(height, BlockHeight(300));
+    }
+
+    #[test]
     fn test_event_compose_basic() {
         let expected_attrs = {
             let mut attrs = HashMap::new();
