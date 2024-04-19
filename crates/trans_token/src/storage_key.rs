@@ -203,6 +203,13 @@ impl ShieldedActionOwner<'_> {
             ),
         }
     }
+
+    pub fn to_balance_key(&self, token: &Address) -> storage::Key {
+        match self {
+            ShieldedActionOwner::Owner(addr) => balance_key(token, addr),
+            ShieldedActionOwner::Minted => minted_balance_key(token),
+        }
+    }
 }
 
 /// Check if the given storage key is a balance key for a shielded action. If it
