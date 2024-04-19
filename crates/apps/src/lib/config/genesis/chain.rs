@@ -18,7 +18,7 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::wallet::store::AddressVpType;
-use namada_sdk::wallet::{alias, pre_genesis, Wallet};
+use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -155,17 +155,6 @@ impl Finalized {
                 address.clone(),
                 alias.clone(),
                 validator_wallet,
-            );
-            let address_alias = alias::validator_address(&alias);
-            wallet.insert_address(
-                address_alias.normalize(),
-                address.clone(),
-                false,
-            );
-            println!(
-                "\nAdded your validator address {} to the wallet with alias \
-                 \"{}\".",
-                address, address_alias
             );
         }
 
