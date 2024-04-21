@@ -11,7 +11,7 @@ use namada::ledger::parameters::{self, EpochDuration};
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestState;
 pub use namada::tx::data::TxType;
-use namada::tx::Tx;
+use namada::tx::{Commitments, Tx};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::run::Error;
 use namada::vm::wasm::{self, TxCache, VpCache};
@@ -58,7 +58,9 @@ pub struct TestTxEnv {
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
+    //FIXME: put these two together?
     pub tx: Tx,
+    pub cmt: Commitments,
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
@@ -68,6 +70,7 @@ impl Default for TestTxEnv {
             wasm::compilation_cache::common::testing::cache();
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
+        let cmt = tx.commitments().get(0).unwrap().to_owned();
         tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {
             state,
@@ -85,6 +88,7 @@ impl Default for TestTxEnv {
             tx_wasm_cache,
             tx_cache_dir,
             tx,
+            cmt,
         }
     }
 }
@@ -227,6 +231,7 @@ impl TestTxEnv {
             &self.gas_meter,
             &self.tx_index,
             &self.tx,
+            &self.cmt,
             &mut self.vp_wasm_cache,
             &mut self.tx_wasm_cache,
         )
@@ -349,6 +354,7 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 tx,
+                                cmt,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -358,6 +364,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 tx,
+                                cmt,
                                 tx_index,
                                 result_buffer,
                                 yielded_value,
@@ -392,6 +399,7 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 tx,
+                                cmt,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -401,6 +409,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 tx,
+                                cmt,
                                 tx_index,
                                 result_buffer,
                                 yielded_value,
@@ -435,6 +444,7 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 tx,
+                                cmt,
                             }: &mut TestTxEnv| {
 
                             let tx_env = vm::host_env::testing::tx_env(
@@ -444,6 +454,7 @@ mod native_tx_host_env {
                                 gas_meter,
                                 sentinel,
                                 tx,
+                                cmt,
                                 tx_index,
                                 result_buffer,
                                 yielded_value,
@@ -745,6 +756,7 @@ mod tests {
             tx_wasm_cache,
             tx_cache_dir: _,
             tx,
+            cmt,
         } = test_env;
 
         let tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
@@ -754,6 +766,7 @@ mod tests {
             gas_meter,
             sentinel,
             tx,
+            cmt,
             tx_index,
             result_buffer,
             yielded_value,

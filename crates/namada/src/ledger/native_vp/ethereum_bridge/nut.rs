@@ -203,7 +203,8 @@ mod test_nuts {
         let ctx = Ctx::<_, WasmCacheRwAccess>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,
-            &batched_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,

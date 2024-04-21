@@ -347,6 +347,8 @@ where
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));
+        //FIXME: manage unwrap
+        let cmt = tx.commitments().get(0).unwrap().to_owned();
 
         let tx_result = protocol::dispatch_tx(
             tx,
@@ -365,14 +367,17 @@ where
             .delete(&pending_execution_key)
             .expect("Should be able to delete the storage.");
         match tx_result {
-            Ok(tx_result) => {
-                if tx_result.is_accepted() {
+            Ok(tx_result) => match tx_result.batch_results.get(&cmt.get_hash())
+            {
+                Some(Ok(batched_result)) if batched_result.is_accepted() => {
                     shell.state.commit_tx();
                     Ok(true)
-                } else {
+                }
+                _ => {
+                    shell.state.drop_tx();
                     Ok(false)
                 }
-            }
+            },
             Err(_) => {
                 shell.state.drop_tx();
                 Ok(false)

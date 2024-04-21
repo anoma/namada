@@ -14,7 +14,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
-use namada_tx::{Authorization, Commitments, Signed, Tx, TxError};
+use namada_tx::{Authorization, BatchedTx, Commitments, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
@@ -39,17 +39,12 @@ pub struct VoteExtension {
 
 macro_rules! ethereum_tx_data_deserialize_inner {
     ($variant:ty) => {
-        // FIXME: if this patter of Tx and Commitment appears often then maybe
-        // use a custom Type
-        // FIXME: use BundledTx here
-        impl TryFrom<(&Tx, &Commitments)> for $variant {
+        impl<'tx> TryFrom<BatchedTx<'tx>> for $variant {
             type Error = TxError;
 
-            fn try_from(
-                indexed_tx: (&Tx, &Commitments),
-            ) -> Result<Self, TxError> {
+            fn try_from(batched_tx: BatchedTx) -> Result<Self, TxError> {
                 let tx_data =
-                    indexed_tx.0.data(indexed_tx.1).ok_or_else(|| {
+                    batched_tx.tx.data(batched_tx.cmt).ok_or_else(|| {
                         TxError::Deserialization(
                             "Expected protocol tx type associated data".into(),
                         )
@@ -124,17 +119,17 @@ ethereum_tx_data_declare! {
     }
 }
 
-impl TryFrom<(&Tx, &Commitments)> for EthereumTxData {
+impl<'tx> TryFrom<BatchedTx<'tx>> for EthereumTxData {
     type Error = TxError;
 
-    fn try_from(indexed_tx: (&Tx, &Commitments)) -> Result<Self, TxError> {
-        let TxType::Protocol(protocol_tx) = indexed_tx.0.header().tx_type
+    fn try_from(batched_tx: BatchedTx) -> Result<Self, TxError> {
+        let TxType::Protocol(protocol_tx) = batched_tx.tx.header().tx_type
         else {
             return Err(TxError::Deserialization(
                 "Expected protocol tx type".into(),
             ));
         };
-        let Some(tx_data) = indexed_tx.0.data(indexed_tx.1) else {
+        let Some(tx_data) = batched_tx.tx.data(batched_tx.cmt) else {
             return Err(TxError::Deserialization(
                 "Expected protocol tx type associated data".into(),
             ));

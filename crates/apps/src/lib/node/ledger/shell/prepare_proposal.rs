@@ -695,7 +695,10 @@ mod test_prepare_proposal {
 
         let tx_bytes = rsp.txs.remove(0);
         let got = Tx::try_from(&tx_bytes[..]).unwrap();
-        let eth_tx_data = (&got).try_into().expect("Test failed");
+        let eth_tx_data = got
+            .batch_tx(&got.commitments()[0])
+            .try_into()
+            .expect("Test failed");
         let rsp_ext = match eth_tx_data {
             EthereumTxData::EthEventsVext(ext) => ext,
             _ => panic!("Test failed"),
@@ -1339,8 +1342,10 @@ mod test_prepare_proposal {
             // since no events with valid nonces are contained in the vote
             // extension, we drop it from the proposal
             for tx in proposed_txs {
-                if ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
-                    .is_ok()
+                if ethereum_tx_data_variants::EthEventsVext::try_from(
+                    tx.batch_tx(&tx.commitments()[0]),
+                )
+                .is_ok()
                 {
                     panic!(
                         "No ethereum events should have been found in the \
@@ -1388,7 +1393,9 @@ mod test_prepare_proposal {
             let mut ext = 'ext: {
                 for tx in proposed_txs {
                     if let Ok(ext) =
-                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                        ethereum_tx_data_variants::EthEventsVext::try_from(
+                            tx.batch_tx(&tx.commitments()[0]),
+                        )
                     {
                         break 'ext ext;
                     }

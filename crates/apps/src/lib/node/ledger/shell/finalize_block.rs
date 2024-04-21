@@ -220,13 +220,15 @@ where
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
                     let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                    if let Some(code_sec) = tx
-                        .get_section(tx.code_sechash())
-                        .and_then(|x| Section::code_sec(x.as_ref()))
-                    {
-                        stats.increment_tx_type(
-                            code_sec.code.hash().to_string(),
-                        );
+                    for cmt in tx.commitments() {
+                        if let Some(code_sec) = tx
+                            .get_section(cmt.code_sechash())
+                            .and_then(|x| Section::code_sec(x.as_ref()))
+                        {
+                            stats.increment_tx_type(
+                                code_sec.code.hash().to_string(),
+                            );
+                        }
                     }
                     (
                         gas_meter,
@@ -253,7 +255,8 @@ where
                     ProtocolTxType::EthEventsVext => {
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
-                                &tx,
+                                //FIXME: manage unwrap
+                                tx.batch_tx(tx.commitments().get(0).unwrap()),
                             )
                             .unwrap();
                         if self
@@ -273,7 +276,9 @@ where
                     ProtocolTxType::EthereumEvents => {
                         let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
+                                //FIXME: manage unwrap
+                                //FIXME: can come up with a better interface for tx for which we know there's only one element in the batch?
+                                tx.batch_tx(tx.commitments().get(0).unwrap()),
                             ).unwrap();
                         if let Some(address) =
                             self.mode.get_validator_address().cloned()
@@ -304,7 +309,7 @@ where
                     None
                 };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let tx_event = new_tx_event(&tx, height.0);
+            let mut tx_event = new_tx_event(&tx, height.0);
             let tx_result = protocol::dispatch_tx(
                 tx.clone(),
                 processed_tx.tx.as_ref(),
@@ -328,7 +333,9 @@ where
                 tx_hash,
                 tx_gas_meter.get_tx_consumed_gas().into(),
             );
+            //FIXME: would be nice to come up with an abstraction for things that must be managed at the inner tx level and things that must be managed at the batch level
 
+            //FIXME: should export this match to a separate function?
             // FIXME: use a single event and use prefixes for the single inner
             // tx. Use just the index as the discriminant? I still believe the
             // hash of the Commitments is better, also because in the event the
@@ -379,7 +386,7 @@ where
                 // better to create a Hash with the header object and a mocked
                 // commitments section that only carries that specific
                 // commitment
-                Ok(result) => {
+                Ok(tx_result) => {
                     // FIXME: when to commit the hash of the bundle and when
                     // not? Probably commit when at least one the tx requires so
                     // and not commit when all the txs request to not be
@@ -388,107 +395,133 @@ where
                     // BEING ATOMIC OR NOT): IF AT LEAST ONE OF THE
                     // TXS SHOULD HAVE ITS HASH COMMITTED, THAN COMMIT THE HASH
                     // OF THE BUNDLE, OTHERWISE NOT
-                    // FIXME: after I've executed the cmts there still might
-                    // need some things to append to the wrapper event? Yes, for
-                    // sure the exit status of the entire batch for atomic ones
-                    if result.is_accepted() {
-                        if wrapper_args
-                            .map(|args| args.is_committed_fee_unshield)
-                            .unwrap_or_default()
-                            //FIXME: here I manage the inner tx masp, how to do this now. So I could have a masp tx in the wrapper and multiple in the batch and I need to discriminate which one is valid. So here I need to inspect the result of every cmt and set the attrbute in their specific logs
-                            || result.vps_result.accepted_vps.contains(
-                                &Address::Internal(
-                                    address::InternalAddress::Masp,
-                                ),
-                            )
-                        {
-                            // FIXME: wrong, I need one attribute for the
-                            // wrapper and then one for every valid inner masp
-                            tx_event.extend(ValidMaspTx(tx_index));
-                        }
-                        tracing::trace!(
-                            "all VPs accepted transaction {} storage \
-                             modification {:#?}",
-                            tx_event["hash"],
-                            result
-                        );
-
-                        changed_keys
-                            .extend(result.changed_keys.iter().cloned());
-                        changed_keys.extend(
-                            result.wrapper_changed_keys.iter().cloned(),
-                        );
-                        stats.increment_successful_txs();
-                        // FIXME: here
-                        self.commit_inner_tx_hash(replay_protection_hashes);
-
-                        // FIXME: here
-                        self.state.commit_tx();
-                        // FIXME: check these events
-                        if !tx_event.contains_key("code") {
-                            tx_event.extend(Code(ResultCode::Ok));
-                            self.state
-                                .in_mem_mut()
-                                .block
-                                .results
-                                .accept(tx_index);
-                        }
-                        // events from other sources
-                        response.events.extend(
-                            // ibc events
-                            result
-                                .ibc_events
-                                .iter()
-                                .cloned()
-                                .map(|ibc_event| {
-                                    ibc_event.with(Height(height)).into()
-                                })
-                                // eth bridge events
-                                .chain(
-                                    result
-                                        .eth_bridge_events
-                                        .iter()
-                                        .map(Event::from),
-                                ),
-                        );
-                    } else {
-                        // this branch can only be reached by inner txs
-                        tracing::trace!(
-                            "some VPs rejected transaction {} storage \
-                             modification {:#?}",
-                            tx_event["hash"],
-                            result.vps_result.rejected_vps
-                        );
-                        // The fee unshield operation could still have been
-                        // committed
-                        if wrapper_args
-                            .map(|args| args.is_committed_fee_unshield)
-                            .unwrap_or_default()
-                        {
-                            tx_event.extend(ValidMaspTx(tx_index));
-                        }
-
-                        // If an inner tx failed for any reason but invalid
-                        // signature, commit its hash to storage, otherwise
-                        // allow for a replay
-                        if !result
-                            .vps_result
-                            .status_flags
-                            .contains(VpStatusFlags::INVALID_SIGNATURE)
-                        {
-                            self.commit_inner_tx_hash(replay_protection_hashes);
-                        }
-
-                        stats.increment_rejected_txs();
-                        self.state.drop_tx();
-                        tx_event.extend(Code(ResultCode::InvalidTx));
-                    }
+                    changed_keys
+                        .extend(tx_result.wrapper_changed_keys.iter().cloned());
                     tx_event
-                        .extend(WithGasUsed(result.gas_used))
+                        .extend(WithGasUsed(tx_result.gas_used))
                         .extend(Info("Check batch for result.".to_string()))
                         // FIXME: need to append somethin else? Only the result
                         // of the entire batch if it is atomic
-                        .extend(Batch(&result));
+                        //FIXME: actually also if it's non-atomic, in that case jsut set it to Ok. Do this at the end thoug, after I've analyzed the entire batch
+                        .extend(Batch(&tx_result));
+                    //FIXME: what should be the default here?
+                    let mut commit_batch_hash = false;
+                    //FIXME: here I have the results of the inner, I can decide here if the hash of the batch must be committed or not
+                    for (cmt_hash, batched_result) in tx_result.batch_results {
+                        match batched_result {
+                            Ok(result) => {
+                                if result.is_accepted() {
+                                    if result.vps_result.accepted_vps.contains(
+                                        &Address::Internal(
+                                            address::InternalAddress::Masp,
+                                        ),
+                                    ) {
+                                        tx_event.extend(ValidMaspTx((
+                                            tx_index,
+                                            Some(cmt_hash),
+                                        )));
+                                    }
+                                    tracing::trace!(
+                                        "all VPs accepted inner tx {} storage \
+                             modification {:#?}",
+                                        cmt_hash,
+                                        result
+                                    );
+
+                                    //FIXME: if the batch is atomic all these operations must be reverted!
+                                    changed_keys.extend(
+                                        result.changed_keys.iter().cloned(),
+                                    );
+                                    //FIXME: here if the batch is atomic I need to wait to set this
+                                    //FIXME: actually, the number fo succesfull txs can be managed separately after we've anakyzed the batch
+                                    stats.increment_successful_txs();
+                                    commit_batch_hash = true;
+                                    // FIXME: here
+                                    //FIXME: is it oke to commit or drop here and then manage replay protection only at the end? I think so
+                                    self.state.commit_tx();
+                                    // FIXME: check these events
+                                    if !tx_event.contains_key("code") {
+                                        tx_event.extend(Code(ResultCode::Ok));
+                                        self.state
+                                            .in_mem_mut()
+                                            .block
+                                            .results
+                                            .accept(tx_index);
+                                    }
+                                    // events from other sources
+                                    response.events.extend(
+                                        // ibc events
+                                        result
+                                            .ibc_events
+                                            .iter()
+                                            .cloned()
+                                            .map(|ibc_event| {
+                                                ibc_event
+                                                    .with(Height(height))
+                                                    .into()
+                                            })
+                                            // eth bridge events
+                                            .chain(
+                                                result
+                                                    .eth_bridge_events
+                                                    .iter()
+                                                    .map(Event::from),
+                                            ),
+                                    );
+                                } else {
+                                    // this branch can only be reached by inner txs
+                                    tracing::trace!(
+                                "some VPs rejected inner tx {} storage \
+                             modification {:#?}",
+                                        cmt_hash,
+                                result.vps_result.rejected_vps
+                            );
+
+                                    // If an inner tx failed for any reason but invalid
+                                    // signature, commit its hash to storage, otherwise
+                                    // allow for a replay
+                                    if !result.vps_result.status_flags.contains(
+                                        VpStatusFlags::INVALID_SIGNATURE,
+                                    ) {
+                                        commit_batch_hash = true;
+                                    }
+
+                                    //FIXME: what to do here if batch is atomic?
+                                    stats.increment_rejected_txs();
+                                    self.state.drop_tx();
+                                    tx_event
+                                        .extend(Code(ResultCode::InvalidTx));
+                                }
+                            }
+                            //FIXME: I cannot use a string here, I need the exact type of the error I believe
+                            Err(msg) => {
+                                //FIXME: improve
+                                // If inner transaction didn't fail
+                                // because of invalid
+                                // section commitment, commit its hash to prevent replays
+                                if matches!(
+                                    tx_header.tx_type,
+                                    TxType::Wrapper(_)
+                                ) {
+                                    if !matches!(
+                                        msg,
+                                        Error::TxApply(
+                                            protocol::Error::MissingSection(_)
+                                        )
+                                    ) {
+                                        self.commit_batch_hash(
+                                            replay_protection_hashes,
+                                        );
+                                    }
+                                }
+                                //FIXME: manage the commit or not here, the events, the cahgned keys (if needed) and the counter of succesful transactions
+                            }
+                        }
+                    }
+                    if commit_batch_hash {
+                        // If at least one of the inner txs of the batch requires its hash to be committed than commit the hash of the entire batch
+                        self.commit_batch_hash(replay_protection_hashes);
+                    }
                 }
                 Err(Error::TxApply(protocol::Error::WrapperRunnerError(
                     msg,
@@ -498,28 +531,19 @@ where
                         tx_event["hash"],
                         msg,
                     );
-                    // FIXME: could the fee unshielding have been committed
-                    // here?? No but maybe it's better to do the check all the
-                    // times, the flag is written only after we called commit
-                    // anyway -> Do like this
                     tx_event
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
                         .extend(Code(ResultCode::InvalidTx));
                 }
                 Err(msg) => {
+                    // This branch represents an error that affect the entire batch
                     tracing::info!(
                         "Transaction {} failed with: {}",
                         tx_event["hash"],
                         msg
                     );
-                    // FIXME: what if a single one of the transactions in the
-                    // batch returns an error? Probably it shouldn't do it, I
-                    // should only propagate errors that affect the entire
-                    // batch, i.e. gas errors or wrapper errors
-                    // FIXME: but I still need to append something to the log,
-                    // which I cannot do here if I don't return anything but gas
-                    // errors FIXME: also, about gas errors,
+                    // FIXME: also, about gas errors,
                     // if the 3rd tx runs out of gas but the first two succeeded
                     // and the batch is non-atomic I must commit the first two
                     // and emit their result in the log IMPORTANT
@@ -527,6 +551,7 @@ where
                     // need to always produce the event with the batch
                     // attribute. But this is probably the only solution
 
+                    //FIXME: maybe use a method on error to decide if we should commit or not
                     // If user transaction didn't fail
                     // because of out of gas nor invalid
                     // section commitment, commit its hash to prevent replays
@@ -535,13 +560,10 @@ where
                             msg,
                             Error::TxApply(protocol::Error::GasError(_))
                                 | Error::TxApply(
-                                    protocol::Error::MissingSection(_)
-                                )
-                                | Error::TxApply(
                                     protocol::Error::ReplayAttempt(_)
                                 )
                         ) {
-                            self.commit_inner_tx_hash(replay_protection_hashes);
+                            self.commit_batch_hash(replay_protection_hashes);
                         } else if let Error::TxApply(
                             protocol::Error::ReplayAttempt(_),
                         ) = msg
@@ -557,6 +579,7 @@ where
                         }
                     }
 
+                    //FIXME: how to manage these two? Depends on atomicity
                     stats.increment_errored_txs();
                     self.state.drop_tx();
 
@@ -564,19 +587,17 @@ where
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()));
 
-                    // The fee unshield operation could still have been
-                    // committed
-                    if wrapper_args
-                        .map(|args| args.is_committed_fee_unshield)
-                        .unwrap_or_default()
-                    {
-                        tx_event.extend(ValidMaspTx(tx_index));
-                    }
+                    //FIXME: still ok to use this error code?
                     tx_event.extend(Code(ResultCode::WasmRuntimeError));
                 }
             }
-            // FIXME: probably better to move the ValidMaspTx attribute for fee
-            // unshielding here
+            // Check the commitment of the fee unshielding regardless of the exit status, it could be committed even in case of errors
+            if wrapper_args
+                .map(|args| args.is_committed_fee_unshield)
+                .unwrap_or_default()
+            {
+                tx_event.extend(ValidMaspTx((tx_index, None)));
+            }
             response.events.emit(tx_event);
         }
 
@@ -721,11 +742,11 @@ where
         Ok(())
     }
 
-    // Write the inner tx hash to storage and remove the corresponding wrapper
-    // hash since it's redundant (we check the inner tx hash too when validating
+    // Write the batch hash to storage and remove the corresponding wrapper
+    // hash since it's redundant (we check the batch hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
-    fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
+    fn commit_batch_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
         if let Some(ReplayProtectionHashes {
             raw_header_hash,
             header_hash,
@@ -2532,25 +2553,21 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(
-            shell
-                .shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
+            .unwrap_or_default());
         // Check that the hash is present in the merkle tree
-        assert!(
-            !shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&wrapper_hash_key)
-                .unwrap()
-        );
+        assert!(!shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&wrapper_hash_key)
+            .unwrap());
     }
 
     /// Test that a tx that has already been applied in the same block
@@ -2632,20 +2649,16 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap_or_default()
-            );
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap_or_default()
-            );
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+                .unwrap_or_default());
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.header_hash())
+                .unwrap_or_default());
         }
     }
 
@@ -2799,37 +2812,27 @@ mod test_finalize_block {
             unsigned_wrapper,
             wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(
-                        &valid_wrapper.raw_header_hash()
-                    )
-                    .unwrap_or_default()
-            );
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap_or_default()
-            );
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash())
+                .unwrap_or_default());
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.header_hash())
+                .unwrap_or_default());
         }
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .expect("test failed")
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
+            .expect("test failed"));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.header_hash())
+            .unwrap_or_default());
     }
 
     #[test]
@@ -2895,20 +2898,16 @@ mod test_finalize_block {
             .as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
 
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_hash)
-                .unwrap_or_default()
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.raw_header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_hash)
+            .unwrap_or_default());
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper.raw_header_hash())
+            .unwrap_or_default());
     }
 
     // Test that the fees are paid even if the inner transaction fails and its
@@ -3301,11 +3300,9 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(
-            enqueued_slashes_handle()
-                .at(&Epoch::default())
-                .is_empty(&shell.state)?
-        );
+        assert!(enqueued_slashes_handle()
+            .at(&Epoch::default())
+            .is_empty(&shell.state)?);
         assert_eq!(
             get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
@@ -3324,21 +3321,17 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(
-                enqueued_slashes_handle()
-                    .at(&epoch)
-                    .is_empty(&shell.state)?
-            );
+            assert!(enqueued_slashes_handle()
+                .at(&epoch)
+                .is_empty(&shell.state)?);
             assert_eq!(
                 get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(
-            !enqueued_slashes_handle()
-                .at(&processing_epoch)
-                .is_empty(&shell.state)?
-        );
+        assert!(!enqueued_slashes_handle()
+            .at(&processing_epoch)
+            .is_empty(&shell.state)?);
 
         // Advance to the processing epoch
         loop {
@@ -3361,11 +3354,9 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(
-                    enqueued_slashes_handle()
-                        .at(&shell.state.in_mem().block.epoch)
-                        .is_empty(&shell.state)?
-                );
+                assert!(enqueued_slashes_handle()
+                    .at(&shell.state.in_mem().block.epoch)
+                    .is_empty(&shell.state)?);
                 let stake1 = read_validator_stake(
                     &shell.state,
                     &params,
@@ -3852,13 +3843,11 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         tracing::debug!("Advancing to epoch 7");
 
@@ -3923,22 +3912,18 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(
-            namada_proof_of_stake::is_validator_frozen(
-                &shell.state,
-                &val1.address,
-                current_epoch,
-                &params
-            )
-            .unwrap()
-        );
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::is_validator_frozen(
+            &shell.state,
+            &val1.address,
+            current_epoch,
+            &params
+        )
+        .unwrap());
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(
@@ -4806,10 +4791,12 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
+        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -4817,11 +4804,9 @@ mod test_finalize_block {
             shell.vp_wasm_cache.clone(),
         );
         let parameters = ParametersVp { ctx };
-        assert!(
-            parameters
-                .validate_tx(&tx, &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(parameters
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .is_ok());
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();

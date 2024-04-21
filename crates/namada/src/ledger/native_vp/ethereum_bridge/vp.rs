@@ -179,6 +179,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
+    use namada_tx::Commitments;
     use rand::Rng;
 
     use super::*;
@@ -247,7 +248,8 @@ mod tests {
 
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
-        batched_tx: &'a BatchedTx,
+        tx: &'a Tx,
+        cmt: &'a Commitments,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
@@ -256,7 +258,8 @@ mod tests {
         Ctx::new(
             &crate::ethereum_bridge::ADDRESS,
             state,
-            batched_tx,
+            tx,
+            cmt,
             &TxIndex(0),
             gas_meter,
             keys_changed,
@@ -392,7 +395,8 @@ mod tests {
         let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
             ctx: setup_ctx(
-                &batched_tx,
+                batched_tx.tx,
+                batched_tx.cmt,
                 &state,
                 &gas_meter,
                 &keys_changed,
@@ -444,7 +448,8 @@ mod tests {
         let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
             ctx: setup_ctx(
-                &batched_tx,
+                batched_tx.tx,
+                batched_tx.cmt,
                 &state,
                 &gas_meter,
                 &keys_changed,
@@ -499,7 +504,8 @@ mod tests {
         let batched_tx = tx.batch_tx(&tx.commitments()[0]);
         let vp = EthBridge {
             ctx: setup_ctx(
-                &batched_tx,
+                batched_tx.tx,
+                batched_tx.cmt,
                 &state,
                 &gas_meter,
                 &keys_changed,

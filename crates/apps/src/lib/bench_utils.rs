@@ -72,8 +72,8 @@ use namada::ledger::queries::{
 };
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
-use namada::tx::data::{Fee, TxResult, VpsResult};
-use namada::tx::{Authorization, Code, Data, Section, Tx};
+use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
+use namada::tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -129,6 +129,7 @@ pub struct BenchShell {
     pub inner: Shell,
     // Cache of the masp transactions and their changed keys in the last block
     // committed, the tx index coincides with the index in this collection
+    //FIXME: need batched_Tx here?
     pub last_block_masp_txs: Vec<(Tx, BTreeSet<Key>)>,
     // NOTE: Temporary directory should be dropped last since Shell need to
     // flush data on drop
@@ -236,8 +237,9 @@ impl Default for BenchShell {
             None,
             vec![&defaults::albert_keypair()],
         );
+        let batched_tx = signed_tx.batch_tx(&signed_tx.commitments()[0]);
 
-        bench_shell.execute_tx(&signed_tx);
+        bench_shell.execute_tx(&batched_tx);
         bench_shell.state.commit_tx();
 
         // Initialize governance proposal
@@ -261,8 +263,9 @@ impl Default for BenchShell {
             Some(vec![content_section]),
             vec![&defaults::albert_keypair()],
         );
+        let batched_tx = signed_tx.batch_tx(&signed_tx.commitments()[0]);
 
-        bench_shell.execute_tx(&signed_tx);
+        bench_shell.execute_tx(&batched_tx);
         bench_shell.state.commit_tx();
         bench_shell.commit_block();
 
@@ -387,14 +390,15 @@ impl BenchShell {
     }
 
     /// Execute the tx and retur a set of verifiers inserted by the tx.
-    pub fn execute_tx(&mut self, tx: &Tx) -> BTreeSet<Address> {
+    pub fn execute_tx(&mut self, batched_tx: &BatchedTx) -> BTreeSet<Address> {
         let gas_meter =
             RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
         run::tx(
             &mut self.inner.state,
             &gas_meter,
             &TxIndex(0),
-            tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut self.inner.vp_wasm_cache,
             &mut self.inner.tx_wasm_cache,
         )
@@ -882,15 +886,22 @@ impl Client for BenchShell {
                 self.last_block_masp_txs
                     .iter()
                     .enumerate()
-                    .map(|(idx, (_tx, changed_keys))| {
+                    .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult {
                             gas_used: 0.into(),
                             wrapper_changed_keys: Default::default(),
-                            changed_keys: changed_keys.to_owned(),
-                            vps_result: VpsResult::default(),
-                            initialized_accounts: vec![],
-                            ibc_events: BTreeSet::default(),
-                            eth_bridge_events: BTreeSet::default(),
+                            batch_results: [(
+                                tx.commitments()[0].get_hash(),
+                                Ok(BatchedTxResult {
+                                    changed_keys: changed_keys.to_owned(),
+                                    vps_result: VpsResult::default(),
+                                    initialized_accounts: vec![],
+                                    ibc_events: BTreeSet::default(),
+                                    eth_bridge_events: BTreeSet::default(),
+                                }),
+                            )]
+                            .into_iter()
+                            .collect(),
                         };
                         namada::tendermint::abci::Event {
                             kind: "applied".to_string(),
@@ -1027,7 +1038,6 @@ impl BenchShieldedCtx {
                 self.shielded,
                 &self.shell,
                 &StdIo,
-                1,
                 None,
                 None,
                 &[spending_key.into()],
@@ -1145,8 +1155,10 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer =
-            Transfer::deserialize(&mut tx.data().unwrap().as_slice()).unwrap();
+        let transfer = Transfer::deserialize(
+            &mut tx.data(&tx.commitments()[0]).unwrap().as_slice(),
+        )
+        .unwrap();
         let masp_tx = tx
             .get_section(&transfer.shielded.unwrap())
             .unwrap()

@@ -1341,7 +1341,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1596,7 +1597,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1691,7 +1693,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1789,7 +1792,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1886,7 +1890,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1963,7 +1968,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2040,7 +2046,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2135,7 +2142,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2230,7 +2238,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2307,7 +2316,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2357,7 +2367,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2434,7 +2445,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2484,7 +2496,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2561,7 +2574,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2611,7 +2625,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2688,7 +2703,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2755,7 +2771,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2832,7 +2849,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2899,7 +2917,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2976,7 +2995,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3043,7 +3063,8 @@ mod test {
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &batched_tx,
+            &tx,
+            &tx.commitments()[0],
             &tx_index,
             &gas_meter,
             &keys_changed,

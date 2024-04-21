@@ -967,7 +967,10 @@ where
                     let ext = try_vote_extension!(
                         "Ethereum events",
                         response,
-                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
+                        //FIXME: manage unwrap
+                        ethereum_tx_data_variants::EthEventsVext::try_from(
+                            tx.batch_tx(tx.commitments().get(0).unwrap())
+                        ),
                     );
                     if let Err(err) = validate_eth_events_vext(
                         &self.state,
@@ -988,7 +991,8 @@ where
                         "Bridge pool roots",
                         response,
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            &tx
+                            //FIXME: manage unwrap
+                            tx.batch_tx(tx.commitments().get(0).unwrap())
                         ),
                     );
                     if let Err(err) = validate_bp_roots_vext(
@@ -1010,7 +1014,8 @@ where
                         "validator set update",
                         response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            &tx
+                            //FIXME: manage unwrap
+                            tx.batch_tx(tx.commitments().get(0).unwrap())
                         ),
                     );
                     if let Err(err) = validate_valset_upd_vext(
@@ -1047,17 +1052,7 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
-                // Tx allowlist
-                if let Err(err) = check_tx_allowed(&tx, &self.state) {
-                    response.code = ResultCode::TxNotAllowlisted.into();
-                    response.log = format!(
-                        "{INVALID_MSG}: Wrapper transaction code didn't pass \
-                         the allowlist checks {}",
-                        err
-                    );
-                    return response;
-                }
-
+                // Validate wrapper first
                 // Tx gas limit
                 let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
@@ -1080,24 +1075,6 @@ where
                     return response;
                 }
 
-                // Replay protection check
-                let inner_tx_hash = tx.raw_header_hash();
-                if self
-                    .state
-                    .has_replay_protection_entry(&tx.raw_header_hash())
-                    .expect("Error while checking inner tx hash key in storage")
-                {
-                    response.code = ResultCode::ReplayTx.into();
-                    response.log = format!(
-                        "{INVALID_MSG}: Inner transaction hash {} already in \
-                         storage, replay attempt",
-                        inner_tx_hash
-                    );
-                    return response;
-                }
-
-                let tx = Tx::try_from(tx_bytes)
-                    .expect("Deserialization shouldn't fail");
                 let wrapper_hash = &tx.header_hash();
                 if self.state.has_replay_protection_entry(wrapper_hash).expect(
                     "Error while checking wrapper tx hash key in storage",
@@ -1122,6 +1099,41 @@ where
                     response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
                     return response;
+                }
+
+                // Validate the inner txs after. Even if the batch is non-atomic we still reject it even if just one of the inner txs is invalid
+                //FIXME: move this before fee check?
+                for cmt in tx.commitments() {
+                    // Tx allowlist
+                    if let Err(err) =
+                        check_tx_allowed(&tx.batch_tx(cmt), &self.state)
+                    {
+                        response.code = ResultCode::TxNotAllowlisted.into();
+                        response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction code didn't pass \
+                         the allowlist checks {}",
+                        err
+                    );
+                        return response;
+                    }
+
+                    // Replay protection check at the batch level (no single inner-tx hash)
+                    let inner_tx_hash = tx.raw_header_hash();
+                    if self
+                        .state
+                        .has_replay_protection_entry(&tx.raw_header_hash())
+                        .expect(
+                            "Error while checking inner tx hash key in storage",
+                        )
+                    {
+                        response.code = ResultCode::ReplayTx.into();
+                        response.log = format!(
+                        "{INVALID_MSG}: Inner transaction hash {} already in \
+                         storage, replay attempt",
+                        inner_tx_hash
+                    );
+                        return response;
+                    }
                 }
             }
             TxType::Raw => {
@@ -1199,7 +1211,7 @@ where
     }
 }
 
-/// Checks that neither the wrapper nor the inner transaction have already
+/// Checks that neither the wrapper nor the inner transaction batch have already
 /// been applied. Requires a [`TempWlState`] to perform the check during
 /// block construction and validation
 pub fn replay_protection_checks<D, H>(
@@ -1223,7 +1235,6 @@ where
         )));
     }
 
-    // FIXME: worng! Use sechashes!!!
     let wrapper_hash = wrapper.header_hash();
     if temp_state
         .has_replay_protection_entry(&wrapper_hash)
@@ -1380,7 +1391,8 @@ where
     temp_state.write_log_mut().precommit_tx();
 
     let result = apply_wasm_tx(
-        unshield,
+        //FIXME: manage unwrap
+        unshield.batch_tx(unshield.commitments().get(0).unwrap()),
         &TxIndex::default(),
         ShellParams::new(
             &RefCell::new(TxGasMeter::new(fee_unshielding_gas_limit)),
@@ -1996,7 +2008,9 @@ mod shell_tests {
             .unwrap();
             let tx = Tx::try_from(&serialized_tx[..]).unwrap();
 
-            match ethereum_tx_data_variants::ValSetUpdateVext::try_from(&tx) {
+            match ethereum_tx_data_variants::ValSetUpdateVext::try_from(
+                tx.batch_tx(&tx.commitments()[0]),
+            ) {
                 Ok(signed_valset_upd) => break signed_valset_upd,
                 Err(_) => continue,
             }
@@ -2048,7 +2062,10 @@ mod shell_tests {
 
         // check data inside tx
         let vote_extension =
-            ethereum_tx_data_variants::EthEventsVext::try_from(&tx).unwrap();
+            ethereum_tx_data_variants::EthEventsVext::try_from(
+                tx.batch_tx(&tx.commitments()[0]),
+            )
+            .unwrap();
         assert_eq!(
             vote_extension.data.ethereum_events,
             vec![ethereum_event_0, ethereum_event_1]

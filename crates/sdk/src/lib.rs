@@ -82,7 +82,7 @@ impl<T> MaybeSend for T where T: ?Sized {}
 /// An interface for high-level interaction with the Namada SDK
 pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// A client with async request dispatcher method
-    type Client: queries::Client + MaybeSend + Sync + Clone;
+    type Client: queries::Client + MaybeSend + Sync;
     /// Captures the interactive parts of the wallet's functioning
     type WalletUtils: WalletIo + WalletStorage + MaybeSend + MaybeSync;
     /// Abstracts platform specific details away from the logic of shielded pool
@@ -552,8 +552,8 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         args: &args::Tx,
         signing_data: SigningTxData,
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
-        + MaybeSend
-        + MaybeSync,
+            + MaybeSend
+            + MaybeSync,
         user_data: D,
     ) -> crate::error::Result<()>
     where
@@ -699,7 +699,7 @@ where
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
-    C: queries::Client + MaybeSend + Sync + Clone,
+    C: queries::Client + MaybeSend + Sync,
     U: WalletIo + WalletStorage + MaybeSync + MaybeSend,
     V: ShieldedUtils + MaybeSend + MaybeSync,
     I: Io + MaybeSend + MaybeSync,

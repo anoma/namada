@@ -8,7 +8,7 @@ use namada::ledger::gas::VpGasMeter;
 use namada::ledger::storage::mockdb::MockDB;
 use namada::ledger::storage::testing::TestState;
 use namada::tx::data::TxType;
-use namada::tx::Tx;
+use namada::tx::{Commitments, Tx};
 use namada::vm::prefix_iter::PrefixIterators;
 use namada::vm::wasm::{self, VpCache};
 use namada::vm::{self, WasmCacheRwAccess};
@@ -43,7 +43,9 @@ pub struct TestVpEnv {
     pub state: TestState,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: RefCell<VpGasMeter>,
+    //FIXME: put these two together?
     pub tx: Tx,
+    pub cmt: Commitments,
     pub tx_index: TxIndex,
     pub keys_changed: BTreeSet<storage::Key>,
     pub verifiers: BTreeSet<Address>,
@@ -66,6 +68,7 @@ impl Default for TestVpEnv {
 
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
+        let cmt = tx.commitments().get(0).unwrap().to_owned();
         tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {
             addr: address::testing::established_address_1(),
@@ -75,6 +78,7 @@ impl Default for TestVpEnv {
                 &TxGasMeter::new_from_sub_limit(1_000_000_000_000.into()),
             )),
             tx,
+            cmt,
             tx_index: TxIndex::default(),
             keys_changed: BTreeSet::default(),
             verifiers: BTreeSet::default(),
@@ -254,6 +258,7 @@ mod native_vp_host_env {
                                 iterators,
                                 gas_meter,
                                 tx,
+                                cmt,
                                 tx_index,
                                 keys_changed,
                                 verifiers,
@@ -270,6 +275,7 @@ mod native_vp_host_env {
                                 iterators,
                                 gas_meter,
                                 tx,
+                                cmt,
                                 tx_index,
                                 verifiers,
                                 result_buffer,
@@ -298,6 +304,7 @@ mod native_vp_host_env {
                                 iterators,
                                 gas_meter,
                                 tx,
+                                cmt,
                                 tx_index,
                                 keys_changed,
                                 verifiers,
@@ -314,6 +321,7 @@ mod native_vp_host_env {
                                 iterators,
                                 gas_meter,
                                 tx,
+                                cmt,
                                 tx_index,
                                 verifiers,
                                 result_buffer,

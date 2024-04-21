@@ -190,6 +190,13 @@ pub struct TxResult {
     // instead, just extract the gas used and the wrapper_changed_keys and log
     // them separately without publishing the entire Txresult in the log => Ok
     // but do this after, first implement the other option
+    //FIXME: here it would be nice to have the actual error but I don't have that type in here. Maybe I can create a new error here. The only thing I need is to know if I need to remove the hash or not. A bit of an overkille honestly to create a new type just for that. Other options:
+    //    - I move this TxResult type to the namada crate
+    //    - In dispatch tx I also return another associated data that carries that information (don't like this too much)
+    //    - I move the Error type that I need here -> This is probablhy the better -> Not feasible, too many dependencies for other crates
+    //    - I keep this struct but dispatch_tx reutrn something slithly different and when I have to log it I convert it to this type
+    //FIXME: wait! I can just use a different Result type. Yeah but dispatch_tx returns the TxResult
+    //FIXME: should i make this result generic?
     pub batch_results: HashMap<Hash, Result<BatchedTxResult, String>>,
 }
 

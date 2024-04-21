@@ -18,9 +18,7 @@ use namada::core::collections::{HashMap, HashSet};
 use namada::core::hash::Hash;
 use namada::core::key::*;
 use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
-use namada::core::storage::{
-    BlockHeight, BlockResults, Epoch, IndexedTx, Key, KeySeg,
-};
+use namada::core::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::core::token::{Change, MaspDigitPos};
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
@@ -39,6 +37,7 @@ use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
 use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
+use namada::tx::IndexedTx;
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,

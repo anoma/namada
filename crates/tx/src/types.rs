@@ -897,6 +897,7 @@ impl Section {
     PartialOrd,
     Hash,
 )]
+//FIXME: rename to InnerTx?
 pub struct Commitments {
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
@@ -1753,6 +1754,7 @@ impl Default for IndexedTx {
 // another with the actual object for wasm? Not sure. AS long as I'm in protocol
 // I only need references and from wasm I need the actual data. But it looks
 // like I can't serialize this struct if it carries references. FIXME: rename?
+//FIXME: if  not used much remove this
 #[derive(Debug)]
 pub struct BatchedTx<'tx> {
     pub tx: &'tx Tx,

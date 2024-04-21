@@ -53,6 +53,7 @@ impl TestNativeVpEnv {
             &self.address,
             &self.tx_env.state,
             &self.tx_env.tx,
+            &self.tx_env.cmt,
             &self.tx_env.tx_index,
             gas_meter,
             &self.keys_changed,
@@ -62,7 +63,7 @@ impl TestNativeVpEnv {
         let native_vp = init_native_vp(ctx);
 
         native_vp.validate_tx(
-            &self.tx_env.tx,
+            &self.tx_env.tx.batch_tx(&self.tx_env.cmt),
             &self.keys_changed,
             &self.verifiers,
         )

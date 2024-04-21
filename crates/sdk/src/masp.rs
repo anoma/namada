@@ -733,7 +733,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
-    pub async fn fetch<C: Client + Sync + Clone, IO: Io>(
+    pub async fn fetch<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         logger: &impl ProgressLogger<IO>,
@@ -823,7 +823,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    pub async fn fetch_shielded_transfers<C: Client + Sync + Clone, IO: Io>(
+    pub async fn fetch_shielded_transfers<C: Client + Sync, IO: Io>(
         &self,
         client: &C,
         logger: &impl ProgressLogger<IO>,
@@ -906,7 +906,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx<'args, C: Client + Sync + Clone>(
+    async fn extract_masp_tx<'args, C: Client + Sync>(
         tx: &Tx,
         action_arg: ExtractShieldedActionArg<'args, C>,
     ) -> Result<ExtractedMaspTxs, Error> {
@@ -1022,7 +1022,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     extract_payload_from_shielded_action::<C>(
                         &tx_data,
                         &cmt_hash,
-                        action_arg.clone(),
+                        &action_arg,
                     )
                     .await
                     .ok()
@@ -1767,7 +1767,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// keys to try to decrypt the output notes. If no transaction is pinned at
     /// the given payment address fails with
     /// `PinnedBalanceError::NoTransactionPinned`.
-    pub async fn compute_pinned_balance<C: Client + Sync + Clone>(
+    pub async fn compute_pinned_balance<C: Client + Sync>(
         client: &C,
         owner: PaymentAddress,
         viewing_key: &ViewingKey,
@@ -2441,7 +2441,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// transactions. If an owner is specified, then restrict the set to only
     /// transactions crediting/debiting the given owner. If token is specified,
     /// then restrict set to only transactions involving the given token.
-    pub async fn query_tx_deltas<C: Client + Sync + Clone, IO: Io>(
+    pub async fn query_tx_deltas<C: Client + Sync, IO: Io>(
         &mut self,
         client: &C,
         io: &IO,
@@ -2705,20 +2705,16 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         }))
 }
 
-#[derive(Clone)]
-enum ExtractShieldedActionArg<'args, C: Client + Sync + Clone> {
+enum ExtractShieldedActionArg<'args, C: Client + Sync> {
     Event(&'args crate::tendermint::abci::Event),
     Request((&'args C, BlockHeight, Option<TxIndex>)),
 }
 
 // Extract the changed keys and Transaction hash from a masp over ibc message
-async fn extract_payload_from_shielded_action<
-    'args,
-    C: Client + Sync + Clone,
->(
+async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     tx_data: &[u8],
     cmt_hash: &Hash,
-    args: ExtractShieldedActionArg<'args, C>,
+    args: &ExtractShieldedActionArg<'args, C>,
 ) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
@@ -2781,8 +2777,8 @@ async fn extract_payload_from_shielded_action<
     Ok(result)
 }
 
-fn get_sending_result<C: Client + Sync + Clone>(
-    args: ExtractShieldedActionArg<'_, C>,
+fn get_sending_result<C: Client + Sync>(
+    args: &ExtractShieldedActionArg<'_, C>,
     // FIXME: should embed this arg in ExtractShieldedActionArg?
     cmt_hash: &Hash,
 ) -> Result<BatchedTxResult, Error> {
@@ -2798,15 +2794,15 @@ fn get_sending_result<C: Client + Sync + Clone>(
     get_tx_result(tx_event, cmt_hash)
 }
 
-async fn get_receiving_result<C: Client + Sync + Clone>(
-    args: ExtractShieldedActionArg<'_, C>,
+async fn get_receiving_result<C: Client + Sync>(
+    args: &ExtractShieldedActionArg<'_, C>,
     cmt_hash: &Hash,
 ) -> Result<BatchedTxResult, Error> {
     let tx_event = match args {
-        ExtractShieldedActionArg::Event(event) => {
+        &ExtractShieldedActionArg::Event(event) => {
             std::borrow::Cow::Borrowed(event)
         }
-        ExtractShieldedActionArg::Request((client, height, index)) => {
+        &ExtractShieldedActionArg::Request((client, height, index)) => {
             std::borrow::Cow::Owned(
                 get_indexed_masp_events_at_height(client, height, index)
                     .await?

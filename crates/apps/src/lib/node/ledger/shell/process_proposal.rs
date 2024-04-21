@@ -303,60 +303,71 @@ where
                 }
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
-                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
-                            .map_err(|err| err.to_string())
-                            .and_then(|ext| {
-                                validate_eth_events_vext(
-                                    &self.state,
-                                    &ext.0,
-                                    self.state.in_mem().get_last_block_height(),
-                                )
-                                .map(|_| TxResult {
-                                    code: ResultCode::Ok.into(),
-                                    info: "Process Proposal accepted this \
+                        //FIXME: manage unwrawp
+                        ethereum_tx_data_variants::EthEventsVext::try_from(
+                            tx.batch_tx(tx.commitments().get(0).unwrap()),
+                        )
+                        .map_err(|err| err.to_string())
+                        .and_then(|ext| {
+                            validate_eth_events_vext(
+                                &self.state,
+                                &ext.0,
+                                self.state.in_mem().get_last_block_height(),
+                            )
+                            .map(|_| TxResult {
+                                code: ResultCode::Ok.into(),
+                                info: "Process Proposal accepted this \
                                            transaction"
-                                        .into(),
-                                })
-                                .map_err(|err| err.to_string())
+                                    .into(),
                             })
-                            .unwrap_or_else(|err| TxResult {
+                            .map_err(|err| err.to_string())
+                        })
+                        .unwrap_or_else(|err| {
+                            TxResult {
                                 code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Ethereum \
                                      events vote extensions was invalid: {err}"
                                 ),
-                            })
+                            }
+                        })
                     }
                     ProtocolTxType::BridgePoolVext => {
-                        ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
-                            .map_err(|err| err.to_string())
-                            .and_then(|ext| {
-                                validate_bp_roots_vext(
-                                    &self.state,
-                                    &ext.0,
-                                    self.state.in_mem().get_last_block_height(),
-                                )
-                                .map(|_| TxResult {
-                                    code: ResultCode::Ok.into(),
-                                    info: "Process Proposal accepted this \
+                        //FIXME: manage unwrap
+                        ethereum_tx_data_variants::BridgePoolVext::try_from(
+                            tx.batch_tx(tx.commitments().get(0).unwrap()),
+                        )
+                        .map_err(|err| err.to_string())
+                        .and_then(|ext| {
+                            validate_bp_roots_vext(
+                                &self.state,
+                                &ext.0,
+                                self.state.in_mem().get_last_block_height(),
+                            )
+                            .map(|_| TxResult {
+                                code: ResultCode::Ok.into(),
+                                info: "Process Proposal accepted this \
                                            transaction"
-                                        .into(),
-                                })
-                                .map_err(|err| err.to_string())
+                                    .into(),
                             })
-                            .unwrap_or_else(|err| TxResult {
+                            .map_err(|err| err.to_string())
+                        })
+                        .unwrap_or_else(|err| {
+                            TxResult {
                                 code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Bridge pool \
                                      root's vote extensions was invalid: {err}"
                                 ),
-                            })
+                            }
+                        })
                     }
                     ProtocolTxType::ValSetUpdateVext => {
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            &tx,
+                            //FIXME: manage unwrap
+                            tx.batch_tx(tx.commitments().get(0).unwrap()),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -403,6 +414,8 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
+                //FIXME: do the checks for every cmt
+                // Validate wrapper first
                 // Account for the tx's resources
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
@@ -414,17 +427,6 @@ where
                         code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
                             .to_string(),
-                    };
-                }
-
-                // Tx allowlist
-                if let Err(err) = check_tx_allowed(&tx, &self.state) {
-                    return TxResult {
-                        code: ResultCode::TxNotAllowlisted.into(),
-                        info: format!(
-                            "Tx code didn't pass the allowlist check: {}",
-                            err
-                        ),
                     };
                 }
 
@@ -463,7 +465,7 @@ where
                 }
 
                 // Check that the fee payer has sufficient balance.
-                match process_proposal_fee_check(
+                if let Err(e) = process_proposal_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
@@ -471,15 +473,32 @@ where
                     vp_wasm_cache,
                     tx_wasm_cache,
                 ) {
-                    Ok(()) => TxResult {
-                        code: ResultCode::Ok.into(),
-                        info: "Process proposal accepted this transaction"
-                            .into(),
-                    },
-                    Err(e) => TxResult {
+                    return TxResult {
                         code: ResultCode::FeeError.into(),
                         info: e.to_string(),
-                    },
+                    };
+                }
+
+                //FIXME: move this before fee check? Should be pretty cheap
+                // Validate the inner txs after. Even if the batch is non-atomic we still reject it even if just one of the inner txs is invalid
+                for cmt in tx.commitments() {
+                    // Tx allowlist
+                    if let Err(err) =
+                        check_tx_allowed(&tx.batch_tx(cmt), &self.state)
+                    {
+                        return TxResult {
+                            code: ResultCode::TxNotAllowlisted.into(),
+                            info: format!(
+                                "Tx code didn't pass the allowlist check: {}",
+                                err
+                            ),
+                        };
+                    }
+                }
+
+                TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "Process proposal accepted this transaction".into(),
                 }
             }
         }

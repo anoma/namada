@@ -254,6 +254,7 @@ where
                         // Gas error aborts the exeuction of the entire batch
                         // FIXME: maybe implement a method on Error called
                         // recoverable() and check that here?
+                        //FIXME: for recoverable errors I still need to save somewhere their exact type or I need a flag to know whether I should write the inner hash or not
                         return Err(e);
                     }
                     // FIXME: we keep going even for atomic batches which could
@@ -262,7 +263,7 @@ where
                 };
 
                 tx_result.batch_results.insert(cmt.get_hash(), inner_res);
-                // FIXME: need to precommit the write_log here
+                // FIXME: need to precommit (or drop) the write_log here
             }
             Ok(tx_result)
         }
@@ -783,7 +784,8 @@ where
         state,
         tx_gas_meter,
         tx_index,
-        batched_tx,
+        batched_tx.tx,
+        batched_tx.cmt,
         vp_wasm_cache,
         tx_wasm_cache,
     )
@@ -880,7 +882,8 @@ where
 
                     wasm::run::vp(
                         vp_code_hash,
-                        batched_tx,
+                        batched_tx.tx,
+                        batched_tx.cmt,
                         tx_index,
                         addr,
                         state,
@@ -901,7 +904,8 @@ where
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
-                        batched_tx,
+                        batched_tx.tx,
+                        batched_tx.cmt,
                         tx_index,
                         &gas_meter,
                         &keys_changed,

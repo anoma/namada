@@ -131,7 +131,12 @@ where
                     return false;
                 }
             };
-            match (&tx).try_into().ok() {
+            //FIXME: manage unwrap
+            match tx
+                .batch_tx(tx.commitments().get(0).unwrap())
+                .try_into()
+                .ok()
+            {
                 Some(EthereumTxData::BridgePoolVext(_)) => true,
                 Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least
