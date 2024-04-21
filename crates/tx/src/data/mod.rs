@@ -14,6 +14,7 @@ pub mod protocol;
 pub mod wrapper;
 
 use std::collections::{BTreeSet, HashMap};
+use std::error::Error;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -33,6 +34,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -160,18 +162,12 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 }
 
 /// Transaction application result
+// The generic is only used to return typed errors in protocol for error management with regards to replay protection, whereas for logging we use strings
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
-    Clone,
-    Debug,
-    Default,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    Serialize,
-    Deserialize,
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
-pub struct TxResult {
+pub struct TxResult<T> {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
     /// Storage keys touched by the wrapper transaction
@@ -197,8 +193,44 @@ pub struct TxResult {
     //    - I keep this struct but dispatch_tx reutrn something slithly different and when I have to log it I convert it to this type
     //FIXME: wait! I can just use a different Result type. Yeah but dispatch_tx returns the TxResult
     //FIXME: should i make this result generic?
-    pub batch_results: HashMap<Hash, Result<BatchedTxResult, String>>,
+    pub batch_results: HashMap<Hash, Result<BatchedTxResult, T>>,
 }
+
+impl<T> Default for TxResult<T> {
+    fn default() -> Self {
+        Self {
+            gas_used: Default::default(),
+            wrapper_changed_keys: Default::default(),
+            batch_results: Default::default(),
+        }
+    }
+}
+
+impl<T: Display> TxResult<T> {
+    pub fn to_result_string(self) -> TxResult<String> {
+        //FIXME: improve
+        let mut batch_results: HashMap<Hash, Result<BatchedTxResult, String>> =
+            Default::default();
+
+        for (hash, res) in self.batch_results {
+            let res = match res {
+                Ok(value) => Ok(value),
+                Err(e) => Err(e.to_string()),
+            };
+            batch_results.insert(hash, res);
+        }
+
+        TxResult {
+            gas_used: self.gas_used,
+            wrapper_changed_keys: self.wrapper_changed_keys,
+            batch_results,
+        }
+    }
+}
+
+//FIXME: also need to implement for the Error? Maybe not
+#[cfg(feature = "migrations")]
+namada_macros::derive_borshdeserializer!(TxResult::<String>);
 
 /// The result of a specific tx in a batch
 #[derive(
@@ -296,7 +328,7 @@ pub struct VpsResult {
     pub status_flags: VpStatusFlags,
 }
 
-impl fmt::Display for TxResult {
+impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
             write!(
@@ -318,7 +350,7 @@ impl fmt::Display for TxResult {
     }
 }
 
-impl FromStr for TxResult {
+impl<T: DeserializeOwned> FromStr for TxResult<T> {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

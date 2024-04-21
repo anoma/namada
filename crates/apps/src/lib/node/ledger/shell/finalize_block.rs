@@ -395,19 +395,10 @@ where
                     // BEING ATOMIC OR NOT): IF AT LEAST ONE OF THE
                     // TXS SHOULD HAVE ITS HASH COMMITTED, THAN COMMIT THE HASH
                     // OF THE BUNDLE, OTHERWISE NOT
-                    changed_keys
-                        .extend(tx_result.wrapper_changed_keys.iter().cloned());
-                    tx_event
-                        .extend(WithGasUsed(tx_result.gas_used))
-                        .extend(Info("Check batch for result.".to_string()))
-                        // FIXME: need to append somethin else? Only the result
-                        // of the entire batch if it is atomic
-                        //FIXME: actually also if it's non-atomic, in that case jsut set it to Ok. Do this at the end thoug, after I've analyzed the entire batch
-                        .extend(Batch(&tx_result));
                     //FIXME: what should be the default here?
                     let mut commit_batch_hash = false;
                     //FIXME: here I have the results of the inner, I can decide here if the hash of the batch must be committed or not
-                    for (cmt_hash, batched_result) in tx_result.batch_results {
+                    for (cmt_hash, batched_result) in &tx_result.batch_results {
                         match batched_result {
                             Ok(result) => {
                                 if result.is_accepted() {
@@ -418,7 +409,7 @@ where
                                     ) {
                                         tx_event.extend(ValidMaspTx((
                                             tx_index,
-                                            Some(cmt_hash),
+                                            Some(*cmt_hash),
                                         )));
                                     }
                                     tracing::trace!(
@@ -493,7 +484,6 @@ where
                                         .extend(Code(ResultCode::InvalidTx));
                                 }
                             }
-                            //FIXME: I cannot use a string here, I need the exact type of the error I believe
                             Err(msg) => {
                                 //FIXME: improve
                                 // If inner transaction didn't fail
@@ -505,13 +495,9 @@ where
                                 ) {
                                     if !matches!(
                                         msg,
-                                        Error::TxApply(
-                                            protocol::Error::MissingSection(_)
-                                        )
+                                        protocol::Error::MissingSection(_)
                                     ) {
-                                        self.commit_batch_hash(
-                                            replay_protection_hashes,
-                                        );
+                                        commit_batch_hash = true;
                                     }
                                 }
                                 //FIXME: manage the commit or not here, the events, the cahgned keys (if needed) and the counter of succesful transactions
@@ -522,6 +508,15 @@ where
                         // If at least one of the inner txs of the batch requires its hash to be committed than commit the hash of the entire batch
                         self.commit_batch_hash(replay_protection_hashes);
                     }
+                    changed_keys
+                        .extend(tx_result.wrapper_changed_keys.iter().cloned());
+                    tx_event
+                        .extend(WithGasUsed(tx_result.gas_used))
+                        .extend(Info("Check batch for result.".to_string()))
+                        // FIXME: need to append somethin else? Only the result
+                        // of the entire batch if it is atomic
+                        //FIXME: actually also if it's non-atomic, in that case jsut set it to Ok. Do this at the end thoug, after I've analyzed the entire batch
+                        .extend(Batch(&tx_result.to_result_string()));
                 }
                 Err(Error::TxApply(protocol::Error::WrapperRunnerError(
                     msg,

@@ -176,7 +176,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-) -> Result<TxResult>
+) -> Result<TxResult<Error>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -259,7 +259,8 @@ where
                     }
                     // FIXME: we keep going even for atomic batches which could
                     // instead be aborted, should we do that?
-                    res => res.map_err(|msg| msg.to_string()),
+                    //FIXME: improve this
+                    res => res,
                 };
 
                 tx_result.batch_results.insert(cmt.get_hash(), inner_res);
@@ -297,7 +298,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'_, S, D, H, CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-) -> Result<TxResult>
+) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,

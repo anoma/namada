@@ -141,7 +141,7 @@ pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
-    DryRun(TxResult),
+    DryRun(TxResult<String>),
 }
 
 impl ProcessTxResponse {

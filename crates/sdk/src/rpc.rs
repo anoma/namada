@@ -506,7 +506,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_tx::data::TxResult, Error> {
+) -> Result<namada_tx::data::TxResult<String>, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()
@@ -515,7 +515,7 @@ pub async fn dry_run_tx<N: Namada>(
     )?
     .data;
     // FIXME: here log the result of the batch if it is atomic (need the
-    // attribute in the event)
+    // attribute in the event). Actually even if it is non-atomic
     let result_str = format!("Transaction consumed {} gas.", result.gas_used);
     let mut cmt_result_str = String::new();
     for (cmt_hash, cmt_result) in &result.batch_results {
@@ -576,7 +576,7 @@ pub enum TxBroadcastData {
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
     /// Result of the tx batch (wasm), if any
-    pub batch: Option<TxResult>,
+    pub batch: Option<TxResult<String>>,
     /// Response additional information
     pub info: String,
     /// Response log

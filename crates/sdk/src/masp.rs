@@ -929,8 +929,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             "Missing required tx result in event".to_string(),
                         )
                     })?;
-                let result = TxResult::from_str(tx_result_str)
-                    .map_err(|e| Error::Other(e.to_string()))?;
+                let result: TxResult<String> =
+                    TxResult::from_str(tx_result_str)
+                        .map_err(|e| Error::Other(e.to_string()))?;
                 let mut changed_keys_vec = BTreeMap::default();
                 for (cmt_hash, cmt_result) in result.batch_results {
                     if tx_event
@@ -2837,8 +2838,9 @@ fn get_tx_result(
         .iter()
         .find_map(|attribute| {
             if attribute.key == "batch" {
-                let tx_result = TxResult::from_str(&attribute.value)
-                    .expect("The event value should be parsable");
+                let tx_result: TxResult<String> =
+                    TxResult::from_str(&attribute.value)
+                        .expect("The event value should be parsable");
                 // FIXME: improve here
                 match tx_result.batch_results.get(cmt_hash) {
                     Some(res) => match res {

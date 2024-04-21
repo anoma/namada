@@ -38,7 +38,7 @@ impl ExtendEvent for Code {
 }
 
 /// Extend an [`Event`] with batch data.
-pub struct Batch<'result>(pub &'result TxResult);
+pub struct Batch<'result>(pub &'result TxResult<String>);
 
 impl ExtendEvent for Batch<'_> {
     #[inline]
