@@ -303,7 +303,7 @@ where
                 }
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
-                        //FIXME: manage unwrawp
+                        // FIXME: manage unwrawp
                         ethereum_tx_data_variants::EthEventsVext::try_from(
                             tx.batch_tx(tx.commitments().get(0).unwrap()),
                         )
@@ -317,7 +317,7 @@ where
                             .map(|_| TxResult {
                                 code: ResultCode::Ok.into(),
                                 info: "Process Proposal accepted this \
-                                           transaction"
+                                       transaction"
                                     .into(),
                             })
                             .map_err(|err| err.to_string())
@@ -334,7 +334,7 @@ where
                         })
                     }
                     ProtocolTxType::BridgePoolVext => {
-                        //FIXME: manage unwrap
+                        // FIXME: manage unwrap
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
                             tx.batch_tx(tx.commitments().get(0).unwrap()),
                         )
@@ -348,7 +348,7 @@ where
                             .map(|_| TxResult {
                                 code: ResultCode::Ok.into(),
                                 info: "Process Proposal accepted this \
-                                           transaction"
+                                       transaction"
                                     .into(),
                             })
                             .map_err(|err| err.to_string())
@@ -366,7 +366,7 @@ where
                     }
                     ProtocolTxType::ValSetUpdateVext => {
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            //FIXME: manage unwrap
+                            // FIXME: manage unwrap
                             tx.batch_tx(tx.commitments().get(0).unwrap()),
                         )
                         .map_err(|err| err.to_string())
@@ -414,7 +414,7 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
-                //FIXME: do the checks for every cmt
+                // FIXME: do the checks for every cmt
                 // Validate wrapper first
                 // Account for the tx's resources
                 let allocated_gas =
@@ -479,8 +479,10 @@ where
                     };
                 }
 
-                //FIXME: move this before fee check? Should be pretty cheap
-                // Validate the inner txs after. Even if the batch is non-atomic we still reject it even if just one of the inner txs is invalid
+                // FIXME: move this before fee check? Should be pretty cheap
+                // Validate the inner txs after. Even if the batch is non-atomic
+                // we still reject it even if just one of the inner txs is
+                // invalid
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =

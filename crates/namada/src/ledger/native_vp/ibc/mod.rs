@@ -334,8 +334,8 @@ pub fn get_dummy_header() -> crate::storage::Header {
 
 /// A dummy validator used for testing
 #[cfg(any(test, feature = "testing"))]
-pub fn get_dummy_genesis_validator(
-) -> namada_proof_of_stake::types::GenesisValidator {
+pub fn get_dummy_genesis_validator()
+-> namada_proof_of_stake::types::GenesisValidator {
     use crate::core::address::testing::established_address_1;
     use crate::core::dec::Dec;
     use crate::core::key::testing::common_sk_from_simple_seed;
@@ -1235,9 +1235,10 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert!(ibc
-            .validate_tx(&batched_tx, &keys_changed, &verifiers)
-            .is_ok());
+        assert!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]

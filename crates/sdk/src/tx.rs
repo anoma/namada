@@ -149,7 +149,7 @@ impl ProcessTxResponse {
     // all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(
         &self,
-        //FIXME: probably better to pass Commitments directly in here
+        // FIXME: probably better to pass Commitments directly in here
         cmt_hash: &Hash,
     ) -> Option<&BatchedTxResult> {
         match self {

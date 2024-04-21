@@ -87,8 +87,8 @@ fn transfer(c: &mut Criterion) {
                             TransferSource::Address(defaults::albert_address()),
                             TransferTarget::PaymentAddress(albert_payment_addr),
                         );
-                    shielded_ctx.shell.execute_tx(&shield_tx);
-                    shielded_ctx.shell.commit_masp_tx(shield_tx);
+                    shielded_ctx.shell.execute_tx(&&shield_tx.to_ref());
+                    shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
                     shielded_ctx.shell.commit_block();
 
                     let (shielded_ctx, signed_tx) = match bench_name {
@@ -122,7 +122,7 @@ fn transfer(c: &mut Criterion) {
                     (shielded_ctx, signed_tx)
                 },
                 |(shielded_ctx, signed_tx)| {
-                    shielded_ctx.shell.execute_tx(signed_tx);
+                    shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -166,7 +166,7 @@ fn bond(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 BenchShell::default,
-                |shell| shell.execute_tx(signed_tx),
+                |shell| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -209,7 +209,7 @@ fn unbond(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 BenchShell::default,
-                |shell| shell.execute_tx(signed_tx),
+                |shell| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -280,7 +280,7 @@ fn withdraw(c: &mut Criterion) {
                         _ => panic!("Unexpected bench test"),
                     };
 
-                    shell.execute_tx(&unbond_tx);
+                    shell.execute_tx(&unbond_tx.to_ref());
                     shell.state.commit_tx();
 
                     // Advance Epoch for pipeline and unbonding length
@@ -296,7 +296,7 @@ fn withdraw(c: &mut Criterion) {
 
                     shell
                 },
-                |shell| shell.execute_tx(signed_tx),
+                |shell| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -334,7 +334,7 @@ fn redelegate(c: &mut Criterion) {
                 // Prepare the redelegation tx
                 (shell, redelegation(validator_2))
             },
-            |(shell, tx)| shell.execute_tx(tx),
+            |(shell, tx)| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -359,7 +359,7 @@ fn reveal_pk(c: &mut Criterion) {
     c.bench_function("reveal_pk", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&tx),
+            |shell| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -385,7 +385,7 @@ fn update_account(c: &mut Criterion) {
         public_keys: vec![defaults::albert_keypair().ref_to()],
         threshold: None,
     };
-    let vp = shell.generate_tx(
+    let batched_tx = shell.generate_tx(
         TX_UPDATE_ACCOUNT_WASM,
         data,
         None,
@@ -396,7 +396,7 @@ fn update_account(c: &mut Criterion) {
     c.bench_function("update_account", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&vp),
+            |shell| shell.execute_tx(&batched_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -439,7 +439,7 @@ fn init_account(c: &mut Criterion) {
     c.bench_function("init_account", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&tx),
+            |shell| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -529,7 +529,7 @@ fn init_proposal(c: &mut Criterion) {
 
                     (shell, signed_tx)
                 },
-                |(shell, signed_tx)| shell.execute_tx(signed_tx),
+                |(shell, signed_tx)| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -574,7 +574,7 @@ fn vote_proposal(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             b.iter_batched_ref(
                 BenchShell::default,
-                |shell| shell.execute_tx(signed_tx),
+                |shell| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -654,7 +654,7 @@ fn become_validator(c: &mut Criterion) {
                     .unwrap();
                 shell
             },
-            |shell| shell.execute_tx(&tx),
+            |shell| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -676,7 +676,7 @@ fn change_validator_commission(c: &mut Criterion) {
     c.bench_function("change_validator_commission", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -704,7 +704,7 @@ fn change_consensus_key(c: &mut Criterion) {
     c.bench_function("change_consensus_key", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -734,7 +734,7 @@ fn change_validator_metadata(c: &mut Criterion) {
     c.bench_function("change_validator_metadata", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -821,8 +821,8 @@ fn ibc(c: &mut Criterion) {
                                 TransferSource::Address(defaults::albert_address()),
                                 TransferTarget::PaymentAddress(albert_payment_addr),
                             );
-                            shielded_ctx.shell.execute_tx(&shield_tx);
-                            shielded_ctx.shell.commit_masp_tx(shield_tx);
+                            shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
+                            shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
                             shielded_ctx.shell.commit_block();
 
                             shielded_ctx.generate_shielded_action(
@@ -835,7 +835,7 @@ fn ibc(c: &mut Criterion) {
                     };
                     (shielded_ctx, signed_tx)
                 },
-                |(shielded_ctx, signed_tx)| shielded_ctx.shell.execute_tx(signed_tx),
+                |(shielded_ctx, signed_tx)| shielded_ctx.shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });
@@ -884,7 +884,7 @@ fn unjail_validator(c: &mut Criterion) {
 
                 shell
             },
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -921,7 +921,7 @@ fn tx_bridge_pool(c: &mut Criterion) {
     c.bench_function("bridge pool", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&tx),
+            |shell| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -950,7 +950,7 @@ fn resign_steward(c: &mut Criterion) {
 
                 (shell, tx)
             },
-            |(shell, tx)| shell.execute_tx(tx),
+            |(shell, tx)| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -986,7 +986,7 @@ fn update_steward_commission(c: &mut Criterion) {
 
                 (shell, tx)
             },
-            |(shell, tx)| shell.execute_tx(tx),
+            |(shell, tx)| shell.execute_tx(&tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -1005,7 +1005,7 @@ fn deactivate_validator(c: &mut Criterion) {
     c.bench_function("deactivate_validator", |b| {
         b.iter_batched_ref(
             BenchShell::default,
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -1045,7 +1045,7 @@ fn reactivate_validator(c: &mut Criterion) {
 
                 shell
             },
-            |shell| shell.execute_tx(&signed_tx),
+            |shell| shell.execute_tx(&signed_tx.to_ref()),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -1098,7 +1098,7 @@ fn claim_rewards(c: &mut Criterion) {
 
                     shell
                 },
-                |shell| shell.execute_tx(signed_tx),
+                |shell| shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });

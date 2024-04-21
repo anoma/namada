@@ -335,7 +335,7 @@ mod tests {
         state
     }
 
-    //FIXME: custom type?
+    // FIXME: custom type?
     fn dummy_tx(state: &TestState) -> (Tx, Commitments) {
         let tx_code = vec![];
         let tx_data = vec![];
@@ -412,9 +412,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -452,9 +453,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -515,9 +517,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -574,9 +577,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -626,9 +630,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -687,9 +692,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -728,9 +734,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -770,9 +777,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]

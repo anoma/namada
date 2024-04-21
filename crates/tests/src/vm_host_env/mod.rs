@@ -570,7 +570,12 @@ mod tests {
                 env.tx = tx;
                 env.tx.clone()
             });
-            assert_eq!(signed_tx_data.data().as_ref(), Some(data));
+            assert_eq!(
+                signed_tx_data
+                    .data(&signed_tx_data.commitments()[0])
+                    .as_ref(),
+                Some(data)
+            );
             assert!(
                 signed_tx_data
                     .verify_signatures(
@@ -721,7 +726,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
 
         // Commit
@@ -755,7 +760,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -796,7 +801,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
 
         // Commit
@@ -830,7 +835,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -872,7 +877,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
 
         // Commit
@@ -906,7 +911,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -950,7 +955,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
 
         // Commit
@@ -984,7 +989,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -1028,7 +1033,7 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
 
         // Commit
@@ -1063,7 +1068,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -1116,7 +1121,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         // VP should fail because the transfer channel cannot be closed
         assert!(matches!(
             result.expect_err("validation succeeded unexpectedly"),
@@ -1168,7 +1173,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
     }
 
@@ -1215,15 +1220,18 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was escrowed
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let token_vp_result =
-            ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
+        let token_vp_result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &escrow,
+        );
         assert!(token_vp_result.is_ok());
 
         // Commit
@@ -1263,7 +1271,7 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
@@ -1350,14 +1358,17 @@ mod tests {
         let mut env = tx_host_env::take();
         // The token must be part of the verifier set (checked by MultitokenVp)
         env.verifiers.insert(ibc_token);
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(
             result.is_ok(),
             "Expected VP to accept the tx, got {result:?}"
         );
         // Check if the token was burned
-        let result =
-            ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &minted_key,
+        );
         assert!(
             result.is_ok(),
             "Expected VP to accept the tx, got {result:?}"
@@ -1427,22 +1438,25 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was minted
         // The token must be part of the verifier set (checked by MultitokenVp)
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
         env.verifiers.insert(ibc_token.clone());
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(
             result.is_ok(),
             "Expected VP to accept the tx, got {result:?}"
         );
         // Check if the token was minted
         let minted_key = token::storage_key::minted_balance_key(&ibc_token);
-        let result =
-            ibc::validate_multitoken_vp_from_tx(&env, &tx, &minted_key);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &minted_key,
+        );
         assert!(
             result.is_ok(),
             "Expected VP to accept the tx, got {result:?}"
@@ -1514,7 +1528,7 @@ mod tests {
 
         // Check if the transaction is valid
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the ack has an error due to the invalid packet data
         tx_host_env::set(env);
@@ -1607,11 +1621,14 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was unescrowed
-        let result =
-            ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &escrow_key,
+        );
         assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
@@ -1706,11 +1723,14 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was unescrowed
-        let result =
-            ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow_key);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &escrow_key,
+        );
         assert!(result.is_ok());
         // Check the balance
         tx_host_env::set(env);
@@ -1801,14 +1821,18 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &escrow,
+        );
         assert!(result.is_ok());
     }
 
@@ -1885,14 +1909,18 @@ mod tests {
 
         // Check
         let env = tx_host_env::take();
-        let result = ibc::validate_ibc_vp_from_tx(&env, &tx);
+        let result = ibc::validate_ibc_vp_from_tx(&env, &tx.batch_first_tx());
         assert!(result.is_ok());
         // Check if the token was refunded
         let escrow = token::storage_key::balance_key(
             &token,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let result = ibc::validate_multitoken_vp_from_tx(&env, &tx, &escrow);
+        let result = ibc::validate_multitoken_vp_from_tx(
+            &env,
+            &tx.batch_first_tx(),
+            &escrow,
+        );
         assert!(result.is_ok());
     }
 }

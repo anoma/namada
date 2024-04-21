@@ -126,20 +126,20 @@ fn vp_implicit(c: &mut Criterion) {
 
         if bench_name != "reveal_pk" {
             // Reveal public key
-            shell.execute_tx(&reveal_pk);
+            shell.execute_tx(&reveal_pk.to_ref());
             shell.state.commit_tx();
             shell.commit_block();
         }
 
         if bench_name == "transfer" || bench_name == "pos" {
             // Transfer some tokens to the implicit address
-            shell.execute_tx(&received_transfer);
+            shell.execute_tx(&received_transfer.to_ref());
             shell.state.commit_tx();
             shell.commit_block();
         }
 
         // Run the tx to validate
-        let verifiers_from_tx = shell.execute_tx(tx);
+        let verifiers_from_tx = shell.execute_tx(&tx.to_ref());
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
@@ -153,7 +153,8 @@ fn vp_implicit(c: &mut Criterion) {
                 assert!(
                     run::vp(
                         vp_code_hash,
-                        tx,
+                        &tx.tx,
+                        &tx.cmt,
                         &TxIndex(0),
                         &Address::from(&implicit_account.to_public()),
                         &shell.state,
@@ -291,7 +292,7 @@ fn vp_user(c: &mut Criterion) {
     ]) {
         let mut shell = BenchShell::default();
 
-        let verifiers_from_tx = shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
@@ -307,7 +308,8 @@ fn vp_user(c: &mut Criterion) {
                 assert!(
                     run::vp(
                         vp_code_hash,
-                        signed_tx,
+                        &signed_tx.tx,
+                        &signed_tx.cmt,
                         &TxIndex(0),
                         &defaults::validator_address(),
                         &shell.state,

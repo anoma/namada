@@ -897,7 +897,7 @@ impl Section {
     PartialOrd,
     Hash,
 )]
-//FIXME: rename to InnerTx?
+// FIXME: rename to InnerTx?
 pub struct Commitments {
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
@@ -1689,11 +1689,24 @@ impl Tx {
     pub fn commitments(&self) -> &Vec<Commitments> {
         &self.header.commitments
     }
+
+    pub fn owned_batch_tx(self, cmt: Commitments) -> OwnedBatchedTx {
+        OwnedBatchedTx { tx: self, cmt }
+    }
 }
 
 impl<'tx> Tx {
     pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTx<'tx> {
         BatchedTx { tx: self, cmt }
+    }
+
+    // FIXME: need something similiar for the Owned version in benches?
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_first_tx(&'tx self) -> BatchedTx<'tx> {
+        BatchedTx {
+            tx: self,
+            cmt: self.commitments().get(0).unwrap(),
+        }
     }
 }
 
@@ -1754,7 +1767,7 @@ impl Default for IndexedTx {
 // another with the actual object for wasm? Not sure. AS long as I'm in protocol
 // I only need references and from wasm I need the actual data. But it looks
 // like I can't serialize this struct if it carries references. FIXME: rename?
-//FIXME: if  not used much remove this
+// FIXME: if  not used much remove this
 #[derive(Debug)]
 pub struct BatchedTx<'tx> {
     pub tx: &'tx Tx,
@@ -1770,5 +1783,21 @@ impl BorshSerialize for BatchedTx<'_> {
         // FIXME: In case I need another struct in wasm with the owned objects
         BorshSerialize::serialize(self.tx, writer)?;
         BorshSerialize::serialize(self.cmt, writer)
+    }
+}
+
+// FIXME: rename?
+pub struct OwnedBatchedTx {
+    pub tx: Tx,
+    pub cmt: Commitments,
+}
+
+impl OwnedBatchedTx {
+    // FIXME: check if only used for benchmarks and conditionally compile
+    pub fn to_ref(&self) -> BatchedTx {
+        BatchedTx {
+            tx: &self.tx,
+            cmt: &self.cmt,
+        }
     }
 }

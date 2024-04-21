@@ -1125,19 +1125,21 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        assert!(vp(
-            code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache.clone(),
-        )
-        .is_ok());
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &outer_tx.commitments()[0],
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache.clone(),
+            )
+            .is_ok()
+        );
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -1156,19 +1158,21 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        assert!(vp(
-            code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache,
-        )
-        .is_err());
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &outer_tx.commitments()[0],
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1540,19 +1544,21 @@ mod tests {
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
-        assert!(vp(
-            code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
-            &tx_index,
-            &addr,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            vp_cache,
-        )
-        .is_err());
+        assert!(
+            vp(
+                code_hash,
+                &outer_tx,
+                &outer_tx.commitments()[0],
+                &tx_index,
+                &addr,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_cache,
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -254,12 +254,14 @@ where
                         // Gas error aborts the exeuction of the entire batch
                         // FIXME: maybe implement a method on Error called
                         // recoverable() and check that here?
-                        //FIXME: for recoverable errors I still need to save somewhere their exact type or I need a flag to know whether I should write the inner hash or not
+                        // FIXME: for recoverable errors I still need to save
+                        // somewhere their exact type or I need a flag to know
+                        // whether I should write the inner hash or not
                         return Err(e);
                     }
                     // FIXME: we keep going even for atomic batches which could
                     // instead be aborted, should we do that?
-                    //FIXME: improve this
+                    // FIXME: improve this
                     res => res,
                 };
 

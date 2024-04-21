@@ -43,7 +43,7 @@ pub struct TestVpEnv {
     pub state: TestState,
     pub iterators: PrefixIterators<'static, MockDB>,
     pub gas_meter: RefCell<VpGasMeter>,
-    //FIXME: put these two together?
+    // FIXME: put these two together?
     pub tx: Tx,
     pub cmt: Commitments,
     pub tx_index: TxIndex,

@@ -131,7 +131,7 @@ where
                     return false;
                 }
             };
-            //FIXME: manage unwrap
+            // FIXME: manage unwrap
             match tx
                 .batch_tx(tx.commitments().get(0).unwrap())
                 .try_into()

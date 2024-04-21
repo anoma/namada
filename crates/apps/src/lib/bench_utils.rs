@@ -73,7 +73,9 @@ use namada::ledger::queries::{
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
-use namada::tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
+use namada::tx::{
+    Authorization, BatchedTx, Code, Data, OwnedBatchedTx, Section, Tx,
+};
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
 use namada_sdk::masp::{
@@ -129,7 +131,7 @@ pub struct BenchShell {
     pub inner: Shell,
     // Cache of the masp transactions and their changed keys in the last block
     // committed, the tx index coincides with the index in this collection
-    //FIXME: need batched_Tx here?
+    // FIXME: need batched_Tx here?
     pub last_block_masp_txs: Vec<(Tx, BTreeSet<Key>)>,
     // NOTE: Temporary directory should be dropped last since Shell need to
     // flush data on drop
@@ -237,9 +239,8 @@ impl Default for BenchShell {
             None,
             vec![&defaults::albert_keypair()],
         );
-        let batched_tx = signed_tx.batch_tx(&signed_tx.commitments()[0]);
 
-        bench_shell.execute_tx(&batched_tx);
+        bench_shell.execute_tx(&signed_tx.to_ref());
         bench_shell.state.commit_tx();
 
         // Initialize governance proposal
@@ -263,9 +264,8 @@ impl Default for BenchShell {
             Some(vec![content_section]),
             vec![&defaults::albert_keypair()],
         );
-        let batched_tx = signed_tx.batch_tx(&signed_tx.commitments()[0]);
 
-        bench_shell.execute_tx(&batched_tx);
+        bench_shell.execute_tx(&signed_tx.to_ref());
         bench_shell.state.commit_tx();
         bench_shell.commit_block();
 
@@ -291,7 +291,7 @@ impl BenchShell {
         shielded: Option<Transaction>,
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
-    ) -> Tx {
+    ) -> OwnedBatchedTx {
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
 
         // NOTE: here we use the code hash to avoid including the cost for the
@@ -327,10 +327,15 @@ impl BenchShell {
             )));
         }
 
-        tx
+        let cmt = tx.commitments().get(0).unwrap().clone();
+        tx.owned_batch_tx(cmt)
     }
 
-    pub fn generate_ibc_tx(&self, wasm_code_path: &str, data: Vec<u8>) -> Tx {
+    pub fn generate_ibc_tx(
+        &self,
+        wasm_code_path: &str,
+        data: Vec<u8>,
+    ) -> OwnedBatchedTx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
         let code_hash = self
@@ -343,10 +348,11 @@ impl BenchShell {
 
         tx.set_data(Data::new(data));
         // NOTE: the Ibc VP doesn't actually check the signature
-        tx
+        let cmt = tx.commitments().get(0).unwrap().clone();
+        tx.owned_batch_tx(cmt)
     }
 
-    pub fn generate_ibc_transfer_tx(&self) -> Tx {
+    pub fn generate_ibc_transfer_tx(&self) -> OwnedBatchedTx {
         let token = PrefixedCoin {
             denom: address::testing::nam().to_string().parse().unwrap(),
             amount: Amount::native_whole(1000)
@@ -605,7 +611,7 @@ impl BenchShell {
     }
 }
 
-pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
+pub fn generate_foreign_key_tx(signer: &SecretKey) -> OwnedBatchedTx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
@@ -624,7 +630,8 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> Tx {
         None,
     )));
 
-    tx
+    let cmt = tx.commitments().get(0).unwrap().clone();
+    tx.owned_batch_tx(cmt)
 }
 
 pub struct BenchShieldedCtx {
@@ -1026,7 +1033,7 @@ impl BenchShieldedCtx {
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> (Self, Tx) {
+    ) -> (Self, OwnedBatchedTx) {
         let denominated_amount = DenominatedAmount::native(amount);
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
@@ -1116,7 +1123,7 @@ impl BenchShieldedCtx {
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> (Self, Tx) {
+    ) -> (Self, OwnedBatchedTx) {
         let (ctx, tx) = self.generate_masp_tx(
             amount,
             source.clone(),
@@ -1155,11 +1162,11 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = Transfer::deserialize(
-            &mut tx.data(&tx.commitments()[0]).unwrap().as_slice(),
-        )
-        .unwrap();
+        let transfer =
+            Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
+                .unwrap();
         let masp_tx = tx
+            .tx
             .get_section(&transfer.shielded.unwrap())
             .unwrap()
             .masp_tx()
@@ -1172,7 +1179,7 @@ impl BenchShieldedCtx {
         let mut ibc_tx = ctx
             .shell
             .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
-        ibc_tx.add_masp_tx_section(masp_tx);
+        ibc_tx.tx.add_masp_tx_section(masp_tx);
 
         (ctx, ibc_tx)
     }

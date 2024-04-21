@@ -967,7 +967,7 @@ where
                     let ext = try_vote_extension!(
                         "Ethereum events",
                         response,
-                        //FIXME: manage unwrap
+                        // FIXME: manage unwrap
                         ethereum_tx_data_variants::EthEventsVext::try_from(
                             tx.batch_tx(tx.commitments().get(0).unwrap())
                         ),
@@ -991,7 +991,7 @@ where
                         "Bridge pool roots",
                         response,
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            //FIXME: manage unwrap
+                            // FIXME: manage unwrap
                             tx.batch_tx(tx.commitments().get(0).unwrap())
                         ),
                     );
@@ -1014,7 +1014,7 @@ where
                         "validator set update",
                         response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            //FIXME: manage unwrap
+                            // FIXME: manage unwrap
                             tx.batch_tx(tx.commitments().get(0).unwrap())
                         ),
                     );
@@ -1101,8 +1101,9 @@ where
                     return response;
                 }
 
-                // Validate the inner txs after. Even if the batch is non-atomic we still reject it even if just one of the inner txs is invalid
-                //FIXME: move this before fee check?
+                // Validate the inner txs after. Even if the batch is non-atomic
+                // we still reject it even if just one of the inner txs is
+                // invalid FIXME: move this before fee check?
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =
@@ -1110,14 +1111,15 @@ where
                     {
                         response.code = ResultCode::TxNotAllowlisted.into();
                         response.log = format!(
-                        "{INVALID_MSG}: Wrapper transaction code didn't pass \
-                         the allowlist checks {}",
-                        err
-                    );
+                            "{INVALID_MSG}: Wrapper transaction code didn't \
+                             pass the allowlist checks {}",
+                            err
+                        );
                         return response;
                     }
 
-                    // Replay protection check at the batch level (no single inner-tx hash)
+                    // Replay protection check at the batch level (no single
+                    // inner-tx hash)
                     let inner_tx_hash = tx.raw_header_hash();
                     if self
                         .state
@@ -1128,10 +1130,10 @@ where
                     {
                         response.code = ResultCode::ReplayTx.into();
                         response.log = format!(
-                        "{INVALID_MSG}: Inner transaction hash {} already in \
-                         storage, replay attempt",
-                        inner_tx_hash
-                    );
+                            "{INVALID_MSG}: Inner transaction hash {} already \
+                             in storage, replay attempt",
+                            inner_tx_hash
+                        );
                         return response;
                     }
                 }
@@ -1391,7 +1393,7 @@ where
     temp_state.write_log_mut().precommit_tx();
 
     let result = apply_wasm_tx(
-        //FIXME: manage unwrap
+        // FIXME: manage unwrap
         unshield.batch_tx(unshield.commitments().get(0).unwrap()),
         &TxIndex::default(),
         ShellParams::new(

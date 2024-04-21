@@ -58,7 +58,7 @@ pub struct TestTxEnv {
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
-    //FIXME: put these two together?
+    // FIXME: put these two together?
     pub tx: Tx,
     pub cmt: Commitments,
 }

@@ -13,8 +13,8 @@ pub use namada_core::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
     Code, Commitment, Commitments, CompressedSignature, Data, DecodeError,
-    Header, IndexedTx, IndexedTxType, MaspBuilder, Memo, Section, Signed,
-    Signer, Tx, TxError, VerifySigError,
+    Header, IndexedTx, IndexedTxType, MaspBuilder, Memo, OwnedBatchedTx,
+    Section, Signed, Signer, Tx, TxError, VerifySigError,
 };
 
 #[cfg(test)]
