@@ -954,6 +954,7 @@ pub enum AmountError {
 
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and strategies for tokens
+#[allow(clippy::arithmetic_side_effects)]
 pub mod testing {
     use proptest::option;
     use proptest::prelude::*;
@@ -962,6 +963,78 @@ pub mod testing {
     use crate::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+
+    impl std::ops::Add for Amount {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for Amount {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub for Amount {
+        type Output = Self;
+
+        fn sub(self, rhs: Self) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::SubAssign for Amount {
+        fn sub_assign(&mut self, rhs: Self) {
+            *self = *self - rhs;
+        }
+    }
+
+    impl<T> std::ops::Mul<T> for Amount
+    where
+        T: Into<Self>,
+    {
+        type Output = Amount;
+
+        fn mul(self, rhs: T) -> Self::Output {
+            self.checked_mul(rhs.into()).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<Amount> for u64 {
+        type Output = Amount;
+
+        fn mul(self, rhs: Amount) -> Self::Output {
+            rhs * self
+        }
+    }
+
+    impl std::ops::Mul<Uint> for Amount {
+        type Output = Amount;
+
+        fn mul(mut self, rhs: Uint) -> Self::Output {
+            self.raw *= rhs;
+            self
+        }
+    }
+
+    impl std::ops::Div<u64> for Amount {
+        type Output = Self;
+
+        fn div(self, rhs: u64) -> Self::Output {
+            Self {
+                raw: self.raw / Uint::from(rhs),
+            }
+        }
+    }
+
+    impl std::iter::Sum for Amount {
+        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(Amount::zero(), |a, b| a + b)
+        }
+    }
 
     prop_compose! {
         /// Generate an arbitrary denomination
@@ -1021,6 +1094,8 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+
     use super::*;
 
     #[test]
@@ -1202,9 +1277,35 @@ mod tests {
         let two = Amount::from(2);
         let three = Amount::from(3);
         let dec = Dec::from_str("0.34").unwrap();
-        assert_eq!(one.mul_ceil(dec), one);
-        assert_eq!(two.mul_ceil(dec), one);
-        assert_eq!(three.mul_ceil(dec), two);
+        assert_eq!(one.mul_ceil(dec).unwrap(), one);
+        assert_eq!(two.mul_ceil(dec).unwrap(), one);
+        assert_eq!(three.mul_ceil(dec).unwrap(), two);
+
+        assert_matches!(one.mul_ceil(-dec), Err(_));
+        assert_matches!(one.mul_ceil(-Dec::new(1, 12).unwrap()), Err(_));
+        assert_matches!(
+            Amount::native_whole(1).mul_ceil(-Dec::new(1, 12).unwrap()),
+            Err(_)
+        );
+    }
+
+    #[test]
+    fn test_token_amount_mul_floor() {
+        let zero = Amount::zero();
+        let one = Amount::from(1);
+        let two = Amount::from(2);
+        let three = Amount::from(3);
+        let dec = Dec::from_str("0.34").unwrap();
+        assert_eq!(one.mul_floor(dec).unwrap(), zero);
+        assert_eq!(two.mul_floor(dec).unwrap(), zero);
+        assert_eq!(three.mul_floor(dec).unwrap(), one);
+
+        assert_matches!(one.mul_floor(-dec), Err(_));
+        assert_matches!(one.mul_floor(-Dec::new(1, 12).unwrap()), Err(_));
+        assert_matches!(
+            Amount::native_whole(1).mul_floor(-Dec::new(1, 12).unwrap()),
+            Err(_)
+        );
     }
 
     #[test]

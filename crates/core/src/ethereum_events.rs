@@ -435,6 +435,7 @@ pub mod tests {
 }
 
 #[allow(missing_docs)]
+#[allow(clippy::arithmetic_side_effects)]
 /// Test helpers
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 pub mod testing {
@@ -455,6 +456,22 @@ pub mod testing {
         160, 184, 105, 145, 198, 33, 139, 54, 193, 209, 157, 74, 46, 158, 176,
         206, 54, 6, 235, 72,
     ]);
+
+    impl std::ops::Add<u64> for Uint {
+        type Output = Self;
+
+        fn add(self, rhs: u64) -> Self::Output {
+            (ethUint(self.0) + rhs).into()
+        }
+    }
+
+    impl std::ops::Sub<u64> for Uint {
+        type Output = Self;
+
+        fn sub(self, rhs: u64) -> Self::Output {
+            (ethUint(self.0) - rhs).into()
+        }
+    }
 
     pub fn arbitrary_eth_address() -> EthAddress {
         DAI_ERC20_ETH_ADDRESS

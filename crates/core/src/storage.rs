@@ -1971,7 +1971,7 @@ pub mod tests {
 /// Helpers for testing with storage types.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::ops::Add;
+    use std::ops::{Add, AddAssign, Sub};
 
     use proptest::collection;
     use proptest::prelude::*;
@@ -1990,6 +1990,15 @@ pub mod testing {
         }
     }
 
+    impl<T> AddAssign<T> for BlockHeight
+    where
+        T: Into<BlockHeight>,
+    {
+        fn add_assign(&mut self, rhs: T) {
+            *self = self.checked_add(rhs.into()).unwrap()
+        }
+    }
+
     impl<T> Add<T> for Epoch
     where
         T: Into<Epoch>,
@@ -1998,6 +2007,17 @@ pub mod testing {
 
         fn add(self, rhs: T) -> Self::Output {
             self.checked_add(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> Sub<T> for Epoch
+    where
+        T: Into<Epoch>,
+    {
+        type Output = Epoch;
+
+        fn sub(self, rhs: T) -> Self::Output {
+            self.checked_sub(rhs.into()).unwrap()
         }
     }
 

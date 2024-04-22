@@ -466,10 +466,93 @@ impl Debug for Dec {
 
 /// Helpers for testing.
 #[cfg(any(test, feature = "testing"))]
+#[allow(clippy::arithmetic_side_effects, clippy::cast_lossless)]
 pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
+
+    impl std::ops::Add<Dec> for Dec {
+        type Output = Dec;
+
+        fn add(self, rhs: Dec) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for Dec {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub<Dec> for Dec {
+        type Output = Dec;
+
+        fn sub(self, rhs: Dec) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl<T> std::ops::Mul<T> for Dec
+    where
+        T: Into<Self>,
+    {
+        type Output = Dec;
+
+        fn mul(self, rhs: T) -> Self::Output {
+            self.checked_mul(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> std::ops::Div<T> for Dec
+    where
+        T: Into<Self>,
+    {
+        type Output = Self;
+
+        fn div(self, rhs: T) -> Self::Output {
+            self.trunc_div(&rhs.into()).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<token::Amount> for Dec {
+        type Output = token::Amount;
+
+        fn mul(self, rhs: token::Amount) -> Self::Output {
+            if !self.is_negative() {
+                (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
+            } else {
+                panic!(
+                    "Dec is negative and cannot produce a valid Amount output"
+                );
+            }
+        }
+    }
+
+    impl std::ops::Mul<token::Change> for Dec {
+        type Output = token::Change;
+
+        fn mul(self, rhs: token::Change) -> Self::Output {
+            let tot = rhs * self.0;
+            let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
+            tot.checked_div(I256(denom)).unwrap()
+        }
+    }
+
+    impl std::iter::Sum for Dec {
+        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(Dec::zero(), |a, b| a + b)
+        }
+    }
+
+    impl std::ops::Neg for Dec {
+        type Output = Dec;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
+        }
+    }
 
     /// Generate an arbitrary non-negative `Dec`
     pub fn arb_non_negative_dec() -> impl Strategy<Value = Dec> {
@@ -600,13 +683,13 @@ mod test_dec {
         let dec = Dec::from_str("2.76").unwrap();
 
         debug_assert_eq!(
-            Dec::from(amt),
+            Dec::try_from(amt).unwrap(),
             Dec::new(1018, 6).expect("Test failed")
         );
         debug_assert_eq!(dec * amt, token::Amount::from(2809u64));
 
         let chg = -amt.change();
-        debug_assert_eq!(dec * chg, Change::from(-2809i64));
+        debug_assert_eq!(dec * chg, token::Change::from(-2809i64));
     }
 
     #[test]
@@ -696,12 +779,12 @@ mod test_dec {
     fn test_ceiling() {
         let neg = Dec::from_str("-2.4").expect("Test failed");
         assert_eq!(
-            neg.ceil(),
+            neg.ceil().unwrap(),
             Dec::from_str("-2").expect("Test failed").to_i256()
         );
         let pos = Dec::from_str("2.4").expect("Test failed");
         assert_eq!(
-            pos.ceil(),
+            pos.ceil().unwrap(),
             Dec::from_str("3").expect("Test failed").to_i256()
         );
     }

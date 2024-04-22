@@ -849,6 +849,53 @@ impl TryFrom<I256> for i128 {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
+/// Testing helpers
+pub mod testing {
+    use super::*;
+
+    impl Uint {
+        /// Returns a pair `((self * num) / denom, (self * num) % denom)`.
+        ///
+        /// # Panics
+        ///
+        /// Panics if `denom` is zero.
+        pub fn mul_div(&self, num: Self, denom: Self) -> (Self, Self) {
+            self.checked_mul_div(num, denom).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for I256 {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub<I256> for I256 {
+        type Output = Self;
+
+        fn sub(self, rhs: I256) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<I256> for I256 {
+        type Output = Self;
+
+        fn mul(self, rhs: I256) -> Self::Output {
+            self.checked_mul(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Neg for I256 {
+        type Output = Self;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_uint {
     use std::str::FromStr;
@@ -892,19 +939,13 @@ mod test_uint {
         );
     }
 
-    /// Test that adding one to the max signed
-    /// value gives zero.
+    /// Test that checked add and sub stays below max signed value
     #[test]
     fn test_max_signed_value() {
         let signed = I256::try_from(MAX_SIGNED_VALUE).expect("Test failed");
         let one = I256::try_from(Uint::from(1u64)).expect("Test failed");
-        let overflow = signed + one;
-        assert_eq!(
-            overflow,
-            I256::try_from(Uint::zero()).expect("Test failed")
-        );
-        assert!(signed.checked_add(&one).is_none());
-        assert!((-signed).checked_sub(&one).is_none());
+        assert!(signed.checked_add(one).is_none());
+        assert!((-signed).checked_sub(one).is_none());
     }
 
     /// Sanity on our constants and that the minus zero representation
@@ -918,7 +959,7 @@ mod test_uint {
         assert_eq!(larger, MINUS_ZERO);
         assert!(I256::try_from(MINUS_ZERO).is_err());
         let zero = Uint::zero();
-        assert_eq!(zero, zero.negate());
+        assert_eq!(zero, zero.negate().0);
     }
 
     /// Test that we correctly reserve the right bit for indicating the
@@ -995,8 +1036,8 @@ mod test_uint {
     /// Test that ordering is correctly implemented
     #[test]
     fn test_ord() {
-        let this = Amount::from_uint(1, 0).unwrap().change();
-        let that = Amount::native_whole(1000).change();
+        let this = token::Amount::from_uint(1, 0).unwrap().change();
+        let that = token::Amount::native_whole(1000).change();
         assert!(this <= that);
         assert!(-this <= that);
         assert!(-this >= -that);
@@ -1023,15 +1064,16 @@ mod test_uint {
         let one = I256::from(1);
         let two = I256::from(2);
         let dec = Dec::from_str("0.25").unwrap();
-        assert_eq!(one.mul_ceil(dec), one);
-        assert_eq!(two.mul_ceil(dec), one);
-        assert_eq!(I256::from(4).mul_ceil(dec), one);
-        assert_eq!(I256::from(5).mul_ceil(dec), two);
+        let neg_dec = dec.checked_neg().unwrap();
+        assert_eq!(one.mul_ceil(dec).unwrap(), one);
+        assert_eq!(two.mul_ceil(dec).unwrap(), one);
+        assert_eq!(I256::from(4).mul_ceil(dec).unwrap(), one);
+        assert_eq!(I256::from(5).mul_ceil(dec).unwrap(), two);
 
-        assert_eq!((-one).mul_ceil(-dec), one);
+        assert_eq!((-one).mul_ceil(neg_dec).unwrap(), one);
 
-        assert_eq!((-one).mul_ceil(dec), I256::zero());
-        assert_eq!(one.mul_ceil(-dec), I256::zero());
+        assert_eq!((-one).mul_ceil(dec).unwrap(), I256::zero());
+        assert_eq!(one.mul_ceil(neg_dec).unwrap(), I256::zero());
     }
 
     #[test]

@@ -330,6 +330,24 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
     }
 }
 
+/// Helpers for testing with storage types.
+#[cfg(any(test, feature = "testing"))]
+#[allow(clippy::arithmetic_side_effects)]
+pub mod testing {
+    use super::*;
+    use crate::token;
+
+    impl Mul<token::Amount> for FractionalVotingPower {
+        type Output = token::Amount;
+
+        fn mul(self, rhs: token::Amount) -> Self::Output {
+            let whole: Uint = rhs.into();
+            let fraction = (self.0 * whole).to_integer();
+            Amount::from_uint(fraction, 0u8).unwrap()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
