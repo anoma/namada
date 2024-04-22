@@ -4506,6 +4506,8 @@ name = "namada_controller"
 version = "0.34.0"
 dependencies = [
  "namada_core",
+ "smooth-operator",
+ "thiserror",
 ]
 
 [[package]]
