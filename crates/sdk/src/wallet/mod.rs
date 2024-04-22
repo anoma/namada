@@ -544,34 +544,33 @@ impl<U: WalletStorage> Wallet<U> {
     /// Try to find an alias of the base token in the given IBC denomination
     /// from the wallet. If not found, formats the IBC denomination into a
     /// string.
-    pub fn lookup_ibc_token_alias(&self, ibc_denom: impl AsRef<str>) -> String {
+    pub fn lookup_ibc_token_alias_atomic(
+        &self,
+        ibc_denom: impl AsRef<str>,
+    ) -> Result<String, LoadStoreError> {
         // Convert only an IBC denom or a Namada address since an NFT trace
         // doesn't have the alias
         is_ibc_denom(&ibc_denom)
             .map(|(trace_path, base_token)| {
                 let base_token_alias = match Address::decode(&base_token) {
-                    Ok(base_token) => self
-                        .lookup_alias_atomic(&base_token)
-                        .expect("Failed to read from the wallet storage."),
+                    Ok(base_token) => self.lookup_alias_atomic(&base_token)?,
                     Err(_) => base_token,
                 };
-                if trace_path.is_empty() {
+                let alias = if trace_path.is_empty() {
                     base_token_alias
                 } else {
                     format!("{}/{}", trace_path, base_token_alias)
-                }
+                };
+                Ok(alias)
             })
             .or_else(|| {
                 // It's not an IBC denom, but could be a raw Namada address
                 match Address::decode(&ibc_denom) {
-                    Ok(addr) => Some(
-                        self.lookup_alias_atomic(&addr)
-                            .expect("Failed to read from the wallet storage."),
-                    ),
+                    Ok(addr) => Some(self.lookup_alias_atomic(&addr)),
                     Err(_) => None,
                 }
             })
-            .unwrap_or(ibc_denom.as_ref().to_string())
+            .unwrap_or(Ok(ibc_denom.as_ref().to_string()))
     }
 
     /// Find the viewing key with the given alias in the wallet and return it

@@ -767,9 +767,11 @@ async fn lookup_token_alias(
             )
             .await
             {
-                Ok(ibc_trace) => {
-                    context.wallet().await.lookup_ibc_token_alias(ibc_trace)
-                }
+                Ok(ibc_trace) => context
+                    .wallet()
+                    .await
+                    .lookup_ibc_token_alias_atomic(ibc_trace)
+                    .expect("Failed to read from the wallet storage"),
                 Err(_) => token.to_string(),
             }
         }
@@ -802,8 +804,11 @@ async fn query_tokens(
         {
             let ibc_denom =
                 rpc::query_ibc_denom(context, token.to_string(), owner).await;
-            let alias =
-                context.wallet().await.lookup_ibc_token_alias(ibc_denom);
+            let alias = context
+                .wallet()
+                .await
+                .lookup_ibc_token_alias_atomic(ibc_denom)
+                .expect("Failed to read from the wallet storage");
             tokens.insert(alias, token.clone());
             // we don't need to check other IBC prefixes
             return tokens;
@@ -840,8 +845,11 @@ async fn query_tokens(
     {
         Ok(ibc_tokens) => {
             for (trace, addr) in ibc_tokens {
-                let ibc_trace_alias =
-                    context.wallet().await.lookup_ibc_token_alias(trace);
+                let ibc_trace_alias = context
+                    .wallet()
+                    .await
+                    .lookup_ibc_token_alias_atomic(trace)
+                    .expect("Failed to read from the wallet storage");
                 tokens.insert(ibc_trace_alias, addr);
             }
         }
@@ -868,8 +876,11 @@ pub async fn query_ibc_tokens(
     match rpc::query_ibc_tokens(context, token, owner.as_ref()).await {
         Ok(ibc_tokens) => {
             for (trace, addr) in ibc_tokens {
-                let alias =
-                    context.wallet().await.lookup_ibc_token_alias(trace);
+                let alias = context
+                    .wallet()
+                    .await
+                    .lookup_ibc_token_alias_atomic(trace)
+                    .expect("Failed to read from the wallet storage");
                 display_line!(context.io(), "{}: {}", alias, addr);
             }
         }
