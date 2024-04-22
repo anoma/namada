@@ -523,6 +523,11 @@ impl FromStr for I256 {
 }
 
 impl I256 {
+    /// Compute the two's complement of a number.
+    pub fn negate(&self) -> Self {
+        Self(self.0.negate())
+    }
+
     /// Check if the amount is not negative (greater
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
@@ -1082,7 +1087,7 @@ mod test_uint {
 
     #[test]
     fn test_i256_str_roundtrip() {
-        let minus_one = I256(I256::one().0.negate());
+        let minus_one = I256::one().negate();
         let minus_one_str = minus_one.to_string();
         assert_eq!(minus_one_str, "-1");
 
