@@ -3108,7 +3108,12 @@ pub mod testing {
             _anchor: bls12_381::Scalar,
             _merkle_path: MerklePath<Node>,
         ) -> Result<
-            ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, PublicKey),
+            (
+                [u8; GROTH_PROOF_SIZE],
+                jubjub::ExtendedPoint,
+                jubjub::Fr,
+                PublicKey,
+            ),
             (),
         > {
             // Initialize secure RNG
@@ -3150,7 +3155,7 @@ pub mod testing {
             proof
                 .write(&mut zkproof[..])
                 .expect("should be able to serialize a proof");
-            Ok((zkproof, value_commitment, rk))
+            Ok((zkproof, value_commitment, rcv, rk))
         }
 
         fn output_proof(
@@ -3161,7 +3166,8 @@ pub mod testing {
             _rcm: jubjub::Fr,
             asset_type: AssetType,
             value: u64,
-        ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint) {
+        ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, jubjub::Fr)
+        {
             // Initialize secure RNG
             let mut rng = self.0.lock().unwrap();
 
@@ -3200,7 +3206,7 @@ pub mod testing {
                 .write(&mut zkproof[..])
                 .expect("should be able to serialize a proof");
 
-            (zkproof, value_commitment_point)
+            (zkproof, value_commitment_point, rcv)
         }
 
         fn convert_proof(
@@ -3210,8 +3216,10 @@ pub mod testing {
             value: u64,
             _anchor: bls12_381::Scalar,
             _merkle_path: MerklePath<Node>,
-        ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint), ()>
-        {
+        ) -> Result<
+            ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, jubjub::Fr),
+            (),
+        > {
             // Initialize secure RNG
             let mut rng = self.0.lock().unwrap();
 
@@ -3248,7 +3256,7 @@ pub mod testing {
                 .write(&mut zkproof[..])
                 .expect("should be able to serialize a proof");
 
-            Ok((zkproof, value_commitment))
+            Ok((zkproof, value_commitment, rcv))
         }
 
         fn binding_sig(
