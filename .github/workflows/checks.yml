@@ -92,7 +92,9 @@ jobs:
           key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
+        uses: mozilla-actions/sccache-action@v0.0.4
+        with:
+          version: "v0.7.7"
       - name: Start sccache server
         run: sccache --start-server
       - name: ${{ matrix.make.name }}
