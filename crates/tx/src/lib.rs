@@ -12,7 +12,7 @@ pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, Code,
-    Commitment, CompressedSignature, Data, DecodeError, Header, MaspBuilder,
+    Commitment, CompressedAuthorization, Data, DecodeError, Header, MaspBuilder,
     Memo, Section, Signed, Signer, Tx, TxError, VerifySigError,
 };
 

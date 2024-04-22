@@ -13,7 +13,7 @@ use namada::governance::cli::onchain::{
 };
 use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::tx::{CompressedSignature, Section, Signer, Tx};
+use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::validator_consensus_key;
@@ -115,7 +115,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
                 .expect("unable to parse signature from Ledger");
         // Signatures from the Ledger come back in compressed
         // form
-        let compressed = CompressedSignature {
+        let compressed = CompressedAuthorization {
             targets: response.raw_indices,
             signer: Signer::PubKeys(vec![pubkey]),
             signatures: [(0, signature)].into(),
@@ -133,7 +133,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
                 .expect("unable to parse signature from Ledger");
         // Signatures from the Ledger come back in compressed
         // form
-        let compressed = CompressedSignature {
+        let compressed = CompressedAuthorization {
             targets: response.wrapper_indices,
             signer: Signer::PubKeys(vec![pubkey]),
             signatures: [(0, signature)].into(),

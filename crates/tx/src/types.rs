@@ -554,7 +554,7 @@ impl Authorization {
     Serialize,
     Deserialize,
 )]
-pub struct CompressedSignature {
+pub struct CompressedAuthorization {
     /// The hash of the section being signed
     pub targets: Vec<u8>,
     /// The public keys against which the signatures should be verified
@@ -563,7 +563,7 @@ pub struct CompressedSignature {
     pub signatures: BTreeMap<u8, common::Signature>,
 }
 
-impl CompressedSignature {
+impl CompressedAuthorization {
     /// Decompress this signature object with respect to the given transaction
     /// by looking up the necessary section hashes. Used by constrained hardware
     /// wallets.
