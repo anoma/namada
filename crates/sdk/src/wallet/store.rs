@@ -656,7 +656,8 @@ impl Store {
         self.pkhs.extend(pkhs);
 
         self.addresses
-            .extend([(address_alias.clone(), validator_address.clone())]);
+            .insert(address_alias.clone(), validator_address.clone());
+
         println!(
             "\nAdded the validator address {} to the wallet with alias \"{}\".",
             &validator_address, address_alias
