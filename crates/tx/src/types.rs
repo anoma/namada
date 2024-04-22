@@ -1586,3 +1586,19 @@ impl Tx {
         self
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::BTreeMap;
+
+    use borsh::schema::BorshSchema;
+
+    /// Test that the BorshSchema for Tx gets generated without any name
+    /// conflicts
+    #[test]
+    fn test_tx_schema() {
+        let _declaration = super::Tx::declaration();
+        let mut definitions = BTreeMap::new();
+        super::Tx::add_definitions_recursively(&mut definitions);
+    }
+}
