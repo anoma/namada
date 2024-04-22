@@ -489,7 +489,7 @@ pub async fn save_initialized_accounts<N: Namada>(
         );
         // Store newly initialized account addresses in the wallet
         for (ix, address) in initialized_accounts.iter().enumerate() {
-        let encoded = address.encode();
+            let encoded = address.encode();
             let alias: Cow<str> = match &args.initialized_account_alias {
                 Some(initialized_account_alias) => {
                     if len == 1 {
