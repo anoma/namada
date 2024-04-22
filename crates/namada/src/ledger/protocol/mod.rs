@@ -9,6 +9,7 @@ use masp_primitives::transaction::Transaction;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
+use namada_events::extend::{ComposeEvent, Height as HeightAttr};
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
@@ -495,13 +496,17 @@ where
     .unwrap();
 
     const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
-        std::borrow::Cow::Borrowed("fee-payment");
+        std::borrow::Cow::Borrowed("wrapper-fee-payment");
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             let fees =
                 crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
                     .map_err(|e| Error::FeeError(e.to_string()))?;
+
+            let current_block_height =
+                state.in_mem().get_last_block_height() + 1;
+
             if let Some(post_bal) = balance.checked_sub(fees) {
                 token_transfer(
                     state,
@@ -512,13 +517,16 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                state.write_log_mut().emit_event(TokenEvent::BalanceChange {
-                    descriptor: FEE_PAYMENT_DESCRIPTOR,
-                    token: wrapper.fee.token.clone(),
-                    account: Some(wrapper.fee_payer()),
-                    post_balance: post_bal.into(),
-                    diff: fees.change().negate(),
-                });
+                state.write_log_mut().emit_event(
+                    TokenEvent::BalanceChange {
+                        descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        token: wrapper.fee.token.clone(),
+                        account: Some(wrapper.fee_payer()),
+                        post_balance: post_bal.into(),
+                        diff: fees.change().negate(),
+                    }
+                    .with(HeightAttr(current_block_height)),
+                );
 
                 Ok(())
             } else {
@@ -541,13 +549,16 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                state.write_log_mut().emit_event(TokenEvent::BalanceChange {
-                    descriptor: FEE_PAYMENT_DESCRIPTOR,
-                    token: wrapper.fee.token.clone(),
-                    account: Some(wrapper.fee_payer()),
-                    post_balance: namada_core::uint::ZERO,
-                    diff: balance.change().negate(),
-                });
+                state.write_log_mut().emit_event(
+                    TokenEvent::BalanceChange {
+                        descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        token: wrapper.fee.token.clone(),
+                        account: Some(wrapper.fee_payer()),
+                        post_balance: namada_core::uint::ZERO,
+                        diff: balance.change().negate(),
+                    }
+                    .with(HeightAttr(current_block_height)),
+                );
 
                 Err(Error::FeeError(
                     "Transparent balance of wrapper's signer was insufficient \
