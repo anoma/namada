@@ -240,7 +240,7 @@ where
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
 
             for cmt in tx.commitments() {
-                let mut inner_res = match apply_wasm_tx(
+                match apply_wasm_tx(
                     tx.batch_tx(cmt),
                     &tx_index,
                     ShellParams {
@@ -254,19 +254,27 @@ where
                         // Gas error aborts the exeuction of the entire batch
                         // FIXME: maybe implement a method on Error called
                         // recoverable() and check that here?
-                        // FIXME: for recoverable errors I still need to save
-                        // somewhere their exact type or I need a flag to know
-                        // whether I should write the inner hash or not
+                        state.write_log_mut().drop_tx_keep_precommit();
                         return Err(e);
+                    }
+                    res @ Err(_) => {
+                        // Need to drop to prevent next txs in the batch from
+                        // reading invalid states FIXME:
+                        // this means that the precommit field in the write log
+                        // cannot be a vector cause the indexes don't
+                        // necessarely match
+                        state.write_log_mut().drop_tx_keep_precommit();
+                        tx_result.batch_results.insert(cmt.get_hash(), res);
                     }
                     // FIXME: we keep going even for atomic batches which could
                     // instead be aborted, should we do that?
-                    // FIXME: improve this
-                    res => res,
+                    res @ Ok(_) => {
+                        // FIXME: wait what about the events? I should be able
+                        // to precommit those too!!!
+                        state.write_log_mut().precommit_tx();
+                        tx_result.batch_results.insert(cmt.get_hash(), res);
+                    }
                 };
-
-                tx_result.batch_results.insert(cmt.get_hash(), inner_res);
-                // FIXME: need to precommit (or drop) the write_log here
             }
             Ok(tx_result)
         }
