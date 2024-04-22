@@ -12,6 +12,7 @@ use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
+use namada_token::event::TokenEvent;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
@@ -493,12 +494,15 @@ where
     )
     .unwrap();
 
+    const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
+        std::borrow::Cow::Borrowed("fee-payment");
+
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             let fees =
                 crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
                     .map_err(|e| Error::FeeError(e.to_string()))?;
-            if balance.checked_sub(fees).is_some() {
+            if let Some(post_bal) = balance.checked_sub(fees) {
                 token_transfer(
                     state,
                     &wrapper.fee.token,
@@ -506,7 +510,17 @@ where
                     block_proposer,
                     fees,
                 )
-                .map_err(|e| Error::FeeError(e.to_string()))
+                .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                state.write_log_mut().emit_event(TokenEvent::BalanceChange {
+                    descriptor: FEE_PAYMENT_DESCRIPTOR,
+                    token: wrapper.fee.token.clone(),
+                    account: Some(wrapper.fee_payer()),
+                    post_balance: post_bal.into(),
+                    diff: fees.change().negate(),
+                });
+
+                Ok(())
             } else {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
@@ -526,6 +540,14 @@ where
                     balance,
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                state.write_log_mut().emit_event(TokenEvent::BalanceChange {
+                    descriptor: FEE_PAYMENT_DESCRIPTOR,
+                    token: wrapper.fee.token.clone(),
+                    account: Some(wrapper.fee_payer()),
+                    post_balance: namada_core::uint::ZERO,
+                    diff: balance.change().negate(),
+                });
 
                 Err(Error::FeeError(
                     "Transparent balance of wrapper's signer was insufficient \
