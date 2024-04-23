@@ -22,13 +22,7 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
         amount,
         ref payer,
     } = transfer.gas_fee;
-    token::undenominated_transfer(
-        ctx,
-        payer,
-        &BRIDGE_POOL_ADDRESS,
-        fee_token_addr,
-        amount,
-    )?;
+    token::transfer(ctx, payer, &BRIDGE_POOL_ADDRESS, fee_token_addr, amount)?;
     debug_log!("Bridge pool token transfer succeeded");
     let TransferToEthereum {
         asset,
@@ -39,23 +33,11 @@ fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
     // if minting wNam, escrow the correct amount
     if asset == native_erc20_address(ctx)? {
         let nam_addr = ctx.get_native_token()?;
-        token::undenominated_transfer(
-            ctx,
-            sender,
-            &address::ETH_BRIDGE,
-            &nam_addr,
-            amount,
-        )?;
+        token::transfer(ctx, sender, &address::ETH_BRIDGE, &nam_addr, amount)?;
     } else {
         // Otherwise we escrow ERC20 tokens.
         let token = transfer.token_address();
-        token::undenominated_transfer(
-            ctx,
-            sender,
-            &BRIDGE_POOL_ADDRESS,
-            &token,
-            amount,
-        )?;
+        token::transfer(ctx, sender, &BRIDGE_POOL_ADDRESS, &token, amount)?;
     }
     debug_log!("Bridge pool escrow succeeded");
     // add transfer into the pool
