@@ -369,7 +369,11 @@ where
                                 .accept(tx_index);
                         }
                         // events from other sources
-                        response.events.extend(result.events.iter().cloned());
+                        response.events.emit_many(
+                            result.events.iter().map(|event| {
+                                event.clone().with(Height(height))
+                            }),
+                        );
                     } else {
                         // this branch can only be reached by inner txs
                         tracing::trace!(
