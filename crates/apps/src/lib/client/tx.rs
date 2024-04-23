@@ -389,10 +389,11 @@ pub async fn submit_change_consensus_key(
                     namada.io(),
                     "New consensus key stored with alias \
                      \"{consensus_key_alias}\". It will become active \
-                     {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline \
-                     offset from the current epoch, at which point you'll \
-                     need to give the new key to CometBFT in order to be able \
-                     to sign with it in consensus.",
+                     {EPOCH_SWITCH_BLOCKS_DELAY} blocks before the start of \
+                     the pipeline epoch relative to the current epoch \
+                     (current epoch + pipeline offset), at which point you \
+                     will need to give the new key to CometBFT in order to be \
+                     able to sign with it in consensus.",
                 );
             }
         } else {
