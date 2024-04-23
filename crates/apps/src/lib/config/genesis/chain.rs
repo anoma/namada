@@ -152,10 +152,10 @@ impl Finalized {
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
-                address,
-                alias,
+                address.clone(),
+                alias.clone(),
                 validator_wallet,
-            )
+            );
         }
 
         // Add some internal addresses to the wallet

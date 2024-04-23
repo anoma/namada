@@ -1944,7 +1944,7 @@ fn submit_votes(test: &Test) -> Result<()> {
         "--vote",
         "yay",
         "--address",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &rpc,
     ];
