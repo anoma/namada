@@ -131,11 +131,11 @@ struct AbstractPosState {
     below_capacity_set:
         BTreeMap<Epoch, BTreeMap<ReverseOrdTokenAmount, VecDeque<Address>>>,
     /// Below-threshold validator set. Pipelined.
-    below_threshold_set: BTreeMap<Epoch, HashSet<Address>>,
+    below_threshold_set: BTreeMap<Epoch, BTreeSet<Address>>,
     /// Jailed validators per epoch
-    jailed_validators: BTreeMap<Epoch, HashSet<Address>>,
+    jailed_validators: BTreeMap<Epoch, BTreeSet<Address>>,
     /// Inactive validators per epoch
-    inactive_validators: BTreeMap<Epoch, HashSet<Address>>,
+    inactive_validators: BTreeMap<Epoch, BTreeSet<Address>>,
     /// Validator states. Pipelined.
     validator_states: BTreeMap<Epoch, BTreeMap<Address, ValidatorState>>,
     /// Unbonded bonds. The outer key for Epoch is pipeline + unbonding +
@@ -2854,7 +2854,7 @@ impl ReferenceStateMachine for AbstractPosState {
                             .below_threshold_set
                             .entry(current_epoch + offset)
                             .or_default()
-                            .swap_remove(address);
+                            .remove(address);
                         debug_assert!(removed);
                     } else if state
                         .jailed_validators
@@ -4347,7 +4347,7 @@ impl AbstractPosState {
             ValidatorState::BelowThreshold => {
                 // We know that this validator will be promoted into one of the
                 // higher sets, so first remove from the below-threshold set.
-                below_thresh_set.swap_remove(validator);
+                below_thresh_set.remove(validator);
 
                 let num_consensus =
                     consensus_set.iter().fold(0, |sum, (_, validators)| {
