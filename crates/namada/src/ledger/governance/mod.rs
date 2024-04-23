@@ -127,7 +127,7 @@ where
                     }
                 },
                 _ => {
-                    // Other actions are not relevant to PoS VP
+                    // Other actions are not relevant to Governance VP
                     continue;
                 }
             }
@@ -719,6 +719,8 @@ where
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
         let min_period_parameter_key =
             gov_storage::get_min_proposal_voting_period_key();
+        let max_latency_paramater_key =
+            gov_storage::get_max_proposal_latency_key();
 
         let current_epoch = self.ctx.get_block_epoch()?;
 
@@ -771,8 +773,8 @@ where
             .into());
         }
 
-        // TODO: HACK THAT NEEDS TO BE PROPERLY FIXED WITH PARAM
-        let latency = 30u64;
+        let latency: u64 =
+            self.force_read(&max_latency_paramater_key, ReadType::Pre)?;
         if start_epoch.0 - current_epoch.0 > latency {
             return Err(native_vp::Error::new_alloc(format!(
                 "Starting epoch {start_epoch} of the proposal with id \
