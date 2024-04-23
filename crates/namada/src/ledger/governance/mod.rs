@@ -1478,8 +1478,6 @@ mod test {
         let funds_key = get_funds_key(proposal_id);
         let commiting_key =
             get_committing_proposals_key(proposal_id, grace_epoch);
-        // let governance_balance_key = balance_key(&nam(), &ADDRESS);
-        // let author_balance_key = balance_key(&nam(), signer_address);
 
         transfer(state, signer_address, &ADDRESS, funds);
 
