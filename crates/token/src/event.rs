@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use namada_core::address::Address;
 use namada_core::uint::{Uint, I256};
-use namada_events::extend::{ComposeEvent, EventAttributeEntry};
+use namada_events::extend::{Closure, ComposeEvent, EventAttributeEntry};
 use namada_events::{Event, EventLevel, EventToEmit};
 
 pub mod types {
@@ -78,8 +78,9 @@ pub enum TokenEvent {
         /// The diff between the pre and post balance
         /// (`pre_balance` + `diff` = `post_balance`).
         diff: I256,
-        /// The balance that `account` ended up with.
-        post_balance: Uint,
+        /// The balance that `account` ended up with,
+        /// if it is known.
+        post_balance: Option<Uint>,
     },
 }
 
@@ -101,7 +102,11 @@ impl From<TokenEvent> for Event {
                 .with(BalanceChangeKind(&descriptor))
                 .with(TokenAddress(token))
                 .with(BalanceDiff(&diff))
-                .with(PostBalance(&post_balance))
+                .with(Closure(|event: &mut Event| {
+                    if let Some(post_balance) = post_balance {
+                        event.extend(PostBalance(&post_balance));
+                    }
+                }))
                 .into(),
         }
     }

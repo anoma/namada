@@ -536,7 +536,7 @@ where
                         target: BalanceChangeTarget::Internal(
                             wrapper.fee_payer(),
                         ),
-                        post_balance: post_bal.into(),
+                        post_balance: Some(post_bal.into()),
                         diff: fees.change().negate(),
                     }
                     .with(HeightAttr(current_block_height))
@@ -571,7 +571,7 @@ where
                         target: BalanceChangeTarget::Internal(
                             wrapper.fee_payer(),
                         ),
-                        post_balance: namada_core::uint::ZERO,
+                        post_balance: Some(namada_core::uint::ZERO),
                         diff: balance.change().negate(),
                     }
                     .with(HeightAttr(current_block_height))
