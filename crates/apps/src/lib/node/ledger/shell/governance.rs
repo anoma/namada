@@ -23,8 +23,10 @@ use namada::proof_of_stake::storage::{
     read_total_active_stake, validator_state_handle,
 };
 use namada::proof_of_stake::types::{BondId, ValidatorState};
-use namada::sdk::events::EmitEvents;
+use namada::sdk::events::{EmitEvents, EventLevel};
 use namada::state::StorageWrite;
+use namada::token::event::{BalanceChangeTarget, TokenEvent};
+use namada::token::read_balance;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
 
@@ -163,6 +165,7 @@ where
                         let native_token = &shell.state.get_native_token()?;
                         let result = execute_pgf_funding_proposal(
                             &mut shell.state,
+                            events,
                             native_token,
                             payments,
                             id,
@@ -399,6 +402,7 @@ where
 
 fn execute_pgf_funding_proposal<D, H>(
     state: &mut WlState<D, H>,
+    events: &mut impl EmitEvents,
     token: &Address,
     fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
@@ -437,25 +441,57 @@ where
                 }
             },
             PGFAction::Retro(target) => {
-                let result = match &target {
-                    PGFTarget::Internal(target) => token::transfer(
-                        state,
-                        token,
-                        &ADDRESS,
-                        &target.target,
-                        target.amount,
+                let (result, event) = match &target {
+                    PGFTarget::Internal(target) => (
+                        token::transfer(
+                            state,
+                            token,
+                            &ADDRESS,
+                            &target.target,
+                            target.amount,
+                        ),
+                        TokenEvent::BalanceChange {
+                            level: EventLevel::Block,
+                            descriptor: "pgf-payments".into(),
+                            token: token.clone(),
+                            target: BalanceChangeTarget::Internal(
+                                target.target.clone(),
+                            ),
+                            post_balance: read_balance(
+                                state,
+                                token,
+                                &target.target,
+                            )
+                            .ok()
+                            .map(|balance| balance.into()),
+                            diff: target.amount.change().negate(),
+                        },
                     ),
-                    PGFTarget::Ibc(target) => {
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target)
-                    }
+                    PGFTarget::Ibc(target) => (
+                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        TokenEvent::BalanceChange {
+                            level: EventLevel::Block,
+                            descriptor: "pgf-payments-over-ibc".into(),
+                            token: token.clone(),
+                            target: BalanceChangeTarget::External(
+                                target.target.clone(),
+                            ),
+                            post_balance: None,
+                            diff: target.amount.change().negate(),
+                        },
+                    ),
                 };
                 match result {
-                    Ok(()) => tracing::info!(
-                        "Execute RetroPgf from proposal id {}: sent {} to {}.",
-                        proposal_id,
-                        target.amount().to_string_native(),
-                        target.target()
-                    ),
+                    Ok(()) => {
+                        tracing::info!(
+                            "Execute RetroPgf from proposal id {}: sent {} to \
+                             {}.",
+                            proposal_id,
+                            target.amount().to_string_native(),
+                            target.target()
+                        );
+                        events.emit(event);
+                    }
                     Err(e) => tracing::warn!(
                         "Error in RetroPgf transfer from proposal id {}, \
                          amount {} to {}: {}",
