@@ -2158,11 +2158,17 @@ pub async fn build_vote_proposal(
 
     // Check if the voting period is still valid for the voter
     if !proposal.can_be_voted(current_epoch, is_validator) {
-        eprintln!("Proposal {} cannot be voted on anymore.", proposal_id);
+        edisplay_line!(
+            context.io(),
+            "Proposal {} cannot be voted on anymore.",
+            proposal_id
+        );
         if is_validator {
-            eprintln!(
+            edisplay_line!(
+                context.io(),
                 "NB: voter address {} is a validator, and validators can only \
-                 vote on proposals within the first 2/3 of the voting period.",
+                 vote on proposals within the first 2/3 of the voting period. \
+                 The voting period specifically for validators has ended.",
                 voter_address
             );
         }
@@ -2179,7 +2185,8 @@ pub async fn build_vote_proposal(
                 .await?;
 
         if stake.is_zero() {
-            eprintln!(
+            edisplay_line!(
+                context.io(),
                 "Voter address {} is a validator but has no stake, so it has \
                  no votes.",
                 voter_address
@@ -2205,7 +2212,8 @@ pub async fn build_vote_proposal(
         ) {
             vec![voter_address.clone()]
         } else {
-            eprintln!(
+            edisplay_line!(
+                context.io(),
                 "Voter address {} is a validator that is either jailed or \
                  inactive, and so it may not vote in governance at this \
                  moment.",
@@ -2253,7 +2261,8 @@ pub async fn build_vote_proposal(
 
         // Check that there are delegations to vote with
         if delegation_validators.is_empty() {
-            eprintln!(
+            edisplay_line!(
+                context.io(),
                 "Voter address {} does not have any delegations.",
                 voter_address
             );
