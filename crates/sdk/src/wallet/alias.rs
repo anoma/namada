@@ -161,3 +161,8 @@ pub fn validator_consensus_key(validator_alias: &Alias) -> Alias {
 pub fn validator_tendermint_node_key(validator_alias: &Alias) -> Alias {
     format!("{validator_alias}-tendermint-node-key").into()
 }
+
+/// Default alias of a validator's account address
+pub fn validator_address(validator_alias: &Alias) -> Alias {
+    format!("{validator_alias}-validator").into()
+}

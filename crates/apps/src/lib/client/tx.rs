@@ -16,7 +16,7 @@ use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::{CompressedSignature, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
-use namada_sdk::wallet::alias::validator_consensus_key;
+use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
@@ -389,10 +389,11 @@ pub async fn submit_change_consensus_key(
                     namada.io(),
                     "New consensus key stored with alias \
                      \"{consensus_key_alias}\". It will become active \
-                     {EPOCH_SWITCH_BLOCKS_DELAY} blocks before pipeline \
-                     offset from the current epoch, at which point you'll \
-                     need to give the new key to CometBFT in order to be able \
-                     to sign with it in consensus.",
+                     {EPOCH_SWITCH_BLOCKS_DELAY} blocks before the start of \
+                     the pipeline epoch relative to the current epoch \
+                     (current epoch + pipeline offset), at which point you \
+                     will need to give the new key to CometBFT in order to be \
+                     able to sign with it in consensus.",
                 );
             }
         } else {
@@ -422,6 +423,7 @@ pub async fn submit_become_validator(
     let protocol_key_alias = format!("{}-protocol-key", alias);
     let eth_hot_key_alias = format!("{}-eth-hot-key", alias);
     let eth_cold_key_alias = format!("{}-eth-cold-key", alias);
+    let address_alias = validator_address(&alias.clone().into());
 
     let mut wallet = namada.wallet_mut().await;
     let consensus_key = args
@@ -588,6 +590,11 @@ pub async fn submit_become_validator(
 
         // add validator address and keys to the wallet
         let mut wallet = namada.wallet_mut().await;
+        wallet.insert_address(
+            address_alias.normalize(),
+            args.address.clone(),
+            false,
+        );
         wallet.add_validator_data(args.address.clone(), validator_keys);
         wallet
             .save()
@@ -628,6 +635,13 @@ pub async fn submit_become_validator(
             namada.io(),
             "  Consensus key \"{}\"",
             consensus_key_alias
+        );
+        display_line!(
+            namada.io(),
+            "Your validator address {} has been stored in the wallet with \
+             alias \"{}\".",
+            args.address,
+            address_alias
         );
         display_line!(
             namada.io(),
