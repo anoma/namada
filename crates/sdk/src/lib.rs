@@ -68,6 +68,8 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
+pub const DEFAULT_GAS_LIMIT: u64 = 25_000;
+
 #[cfg(not(feature = "async-send"))]
 pub trait MaybeSync {}
 #[cfg(not(feature = "async-send"))]
@@ -138,7 +140,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             wrapper_fee_payer: None,
             fee_token: self.native_token(),
             fee_unshield: None,
-            gas_limit: GasLimit::from(20_000),
+            gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
             expiration: None,
             disposable_signing_key: false,
             chain_id: None,
@@ -663,7 +665,7 @@ where
                 wrapper_fee_payer: None,
                 fee_token: native_token,
                 fee_unshield: None,
-                gas_limit: GasLimit::from(20_000),
+                gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
                 expiration: None,
                 disposable_signing_key: false,
                 chain_id: None,
