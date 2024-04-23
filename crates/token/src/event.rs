@@ -69,6 +69,8 @@ impl FromStr for BalanceChangeTarget {
 pub enum TokenEvent {
     /// Balance change event.
     BalanceChange {
+        /// Whether the balance change occurred at the block or tx level.
+        level: EventLevel,
         /// Describes the reason of the balance change.
         descriptor: Cow<'static, str>,
         /// The address of the token whose balance was updated.
@@ -92,12 +94,13 @@ impl From<TokenEvent> for Event {
     fn from(token_event: TokenEvent) -> Self {
         match token_event {
             TokenEvent::BalanceChange {
+                level,
                 descriptor,
                 token,
                 target,
                 diff,
                 post_balance,
-            } => Self::new(types::BALANCE_CHANGE, EventLevel::Tx)
+            } => Self::new(types::BALANCE_CHANGE, level)
                 .with(TargetAccount(target))
                 .with(BalanceChangeKind(&descriptor))
                 .with(TokenAddress(token))

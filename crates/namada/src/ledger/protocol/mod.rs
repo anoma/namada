@@ -12,6 +12,7 @@ use namada_core::storage::Key;
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
+use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
@@ -531,6 +532,7 @@ where
 
                 state.write_log_mut().emit_event(
                     TokenEvent::BalanceChange {
+                        level: EventLevel::Tx,
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         token: wrapper.fee.token.clone(),
                         target: BalanceChangeTarget::Internal(
@@ -566,6 +568,7 @@ where
 
                 state.write_log_mut().emit_event(
                     TokenEvent::BalanceChange {
+                        level: EventLevel::Tx,
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         token: wrapper.fee.token.clone(),
                         target: BalanceChangeTarget::Internal(
