@@ -66,7 +66,7 @@ validator_stake_threshold = "1000000"
 # The length, in blocks, of the sliding window for consensus validators
 # inactivity verification
 liveness_window_check = 10_000
-# The minimum required activity of consensus validators, in percentage, over 
+# The minimum required activity of consensus validators, in percentage, over
 # the `liveness_window_check`
 liveness_threshold = "0.9"
 # The P gain factor in the Proof of Stake rewards controller
@@ -88,6 +88,8 @@ max_proposal_period = 27
 max_proposal_content_size = 10000
 # minimum epochs between end and activation epoch
 min_proposal_grace_epochs = 6
+# maximum number of epochs between current epoch and start epoch
+max_proposal_latency = 30
 
 # Public goods funding parameters
 [pgf_params]

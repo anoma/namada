@@ -266,6 +266,10 @@ where
 
     let max_proposal_period: u64 = get_max_proposal_period(storage)?;
 
+    let key = governance_keys::get_max_proposal_latency_key();
+    let max_proposal_latency: u64 =
+        storage.read(&key)?.expect("Parameter should be defined.");
+
     Ok(GovernanceParameters {
         min_proposal_fund,
         max_proposal_code_size,
@@ -273,6 +277,7 @@ where
         max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
+        max_proposal_latency,
     })
 }
 

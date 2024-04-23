@@ -452,6 +452,8 @@ pub struct GovernanceParams {
     pub max_proposal_content_size: u64,
     /// Minimum number of epochs between the end and activation epochs
     pub min_proposal_grace_epochs: u64,
+    /// Maximum number of epochs between current epcoh and start epochs
+    pub max_proposal_latency: u64,
 }
 
 #[derive(
