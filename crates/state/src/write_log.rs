@@ -32,10 +32,6 @@ pub enum Error {
     WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
-    #[error(
-        "Trying to cast a temporary write to a persistent storage modification"
-    )]
-    TempToPersistentModificationCast,
 }
 
 /// Result for functions that may fail
@@ -58,57 +54,6 @@ pub enum StorageModification {
         /// Validity predicate hash bytes
         vp_code_hash: Hash,
     },
-    /// Temporary value. This value will be never written to the storage. After
-    /// writing a temporary value, it can't be mutated with normal write.
-    Temp {
-        /// Value bytes
-        value: Vec<u8>,
-    },
-}
-
-/// A persistent storage modification. Associated data is present as a reference
-/// to the corresponding [`StorageModification`] present in the write log
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PersistentStorageModification<'wl> {
-    /// Write a new value
-    Write {
-        /// Value bytes
-        value: &'wl Vec<u8>,
-    },
-    /// Delete an existing key-value
-    Delete,
-    /// Initialize a new account with established address and a given validity
-    /// predicate hash. The key for `InitAccount` inside the [`WriteLog`] must
-    /// point to its validity predicate.
-    InitAccount {
-        /// Validity predicate hash bytes
-        vp_code_hash: &'wl Hash,
-    },
-}
-
-impl<'wl> TryFrom<&'wl StorageModification>
-    for PersistentStorageModification<'wl>
-{
-    type Error = Error;
-
-    fn try_from(
-        value: &'wl StorageModification,
-    ) -> std::prelude::v1::Result<Self, Self::Error> {
-        match value {
-            StorageModification::Write { value } => {
-                Ok(PersistentStorageModification::Write { value })
-            }
-            StorageModification::Delete => {
-                Ok(PersistentStorageModification::Delete)
-            }
-            StorageModification::InitAccount { vp_code_hash } => {
-                Ok(PersistentStorageModification::InitAccount { vp_code_hash })
-            }
-            StorageModification::Temp { value: _ } => {
-                Err(Error::TempToPersistentModificationCast)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +77,9 @@ pub struct WriteLog {
     pub(crate) block_write_log: HashMap<storage::Key, StorageModification>,
     /// The storage modifications for the current transaction
     pub(crate) tx_write_log: HashMap<storage::Key, StorageModification>,
+    /// Temporary key-values for the current transaction that are dropped after
+    /// tx and its verifying VPs execution is done
+    pub(crate) tx_temp_log: HashMap<storage::Key, Vec<u8>>,
     /// A precommit bucket for the `tx_write_log`. This is useful for
     /// validation when a clean `tx_write_log` is needed without committing any
     /// modification already in there. These modifications can be temporarily
@@ -171,6 +119,7 @@ impl Default for WriteLog {
             address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
             tx_write_log: HashMap::with_capacity(100),
+            tx_temp_log: HashMap::with_capacity(1),
             tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
             replay_protection: HashMap::with_capacity(1_000),
@@ -179,8 +128,8 @@ impl Default for WriteLog {
 }
 
 impl WriteLog {
-    /// Read a value at the given key and return the value and the gas cost,
-    /// returns [`None`] if the key is not present in the write log
+    /// Read a non-temp value at the given key and return the value and the gas
+    /// cost, returns [`None`] if the key is not present in the write log
     pub fn read(
         &self,
         key: &storage::Key,
@@ -206,49 +155,11 @@ impl WriteLog {
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
                     }
-                    StorageModification::Temp { ref value } => {
-                        key.len() + value.len()
-                    }
                 };
                 (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
             }
             None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
         }
-    }
-
-    /// Read a non-temporary value at the given key and return the value and the
-    /// gas cost, returns [`None`] if the key is not present in the write
-    /// log
-    pub fn read_persistent(
-        &self,
-        key: &storage::Key,
-    ) -> (Option<PersistentStorageModification>, u64) {
-        for bucket in [
-            &self.tx_write_log,
-            &self.tx_precommit_write_log,
-            &self.block_write_log,
-        ] {
-            if let Some(modification) = bucket.get(key) {
-                let gas = match modification {
-                    StorageModification::Write { ref value } => {
-                        key.len() + value.len()
-                    }
-                    StorageModification::Delete => key.len(),
-                    StorageModification::InitAccount { ref vp_code_hash } => {
-                        key.len() + vp_code_hash.len()
-                    }
-                    StorageModification::Temp { .. } => continue,
-                };
-                return (
-                    Some(modification.try_into().expect(
-                        "Temporary value should have been filtered out",
-                    )),
-                    gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-                );
-            }
-        }
-
-        (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
     }
 
     /// Read a value before the latest tx execution at the given key and return
@@ -268,11 +179,23 @@ impl WriteLog {
                     StorageModification::InitAccount { ref vp_code_hash } => {
                         key.len() + vp_code_hash.len()
                     }
-                    StorageModification::Temp { ref value } => {
-                        key.len() + value.len()
-                    }
                 };
                 (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+            }
+            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
+        }
+    }
+
+    /// Read a temp value at the given key and return the value and the gas
+    /// cost, returns [`None`] if the key is not present in the temp write
+    /// log
+    pub fn read_temp(&self, key: &storage::Key) -> (Option<&Vec<u8>>, u64) {
+        // try to read from tx write log first
+        match self.tx_temp_log.get(key) {
+            Some(value) => {
+                let gas = key.len() + value.len();
+
+                (Some(value), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
             }
             None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
         }
@@ -290,6 +213,9 @@ impl WriteLog {
     ) -> Result<(u64, i64)> {
         let len = value.len();
         let gas = key.len() + len;
+        if self.tx_temp_log.contains_key(key) {
+            return Err(Error::UpdateTemporaryValue);
+        }
         let size_diff = match self
             .tx_write_log
             .get(key)
@@ -307,9 +233,6 @@ impl WriteLog {
                     // gas in case of an error because execution will terminate
                     // anyway and this cannot be exploited to run the vm forever
                     return Err(Error::UpdateVpOfNewAccount);
-                }
-                StorageModification::Temp { .. } => {
-                    return Err(Error::UpdateTemporaryValue);
                 }
             },
             // set just the length of the value because we don't know if
@@ -333,6 +256,9 @@ impl WriteLog {
         key: &storage::Key,
         value: Vec<u8>,
     ) -> Result<()> {
+        if self.tx_temp_log.contains_key(key) {
+            return Err(Error::UpdateTemporaryValue);
+        }
         if let Some(prev) = self
             .block_write_log
             .insert(key.clone(), StorageModification::Write { value })
@@ -340,9 +266,6 @@ impl WriteLog {
             match prev {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
-                }
-                StorageModification::Temp { .. } => {
-                    return Err(Error::UpdateTemporaryValue);
                 }
                 StorageModification::Write { .. }
                 | StorageModification::Delete => {}
@@ -363,14 +286,12 @@ impl WriteLog {
         key: &storage::Key,
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
-        let len = value.len();
-        let gas = key.len() + len;
-        let size_diff = match self
+        if let Some(prev) = self
             .tx_write_log
             .get(key)
             .or_else(|| self.tx_precommit_write_log.get(key))
         {
-            Some(prev) => match prev {
+            match prev {
                 StorageModification::Write { .. } => {
                     // Cannot overwrite a write request with a temporary one
                     return Err(Error::WriteTempAfterWrite);
@@ -381,17 +302,19 @@ impl WriteLog {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::UpdateVpOfNewAccount);
                 }
-                StorageModification::Temp { ref value } => {
-                    len as i64 - value.len() as i64
-                }
-            },
+            }
+        }
+
+        let len = value.len();
+        let gas = key.len() + len;
+        let size_diff = match self.tx_temp_log.get(key) {
+            Some(prev) => len as i64 - prev.len() as i64,
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
             None => len as i64,
         };
 
-        self.tx_write_log
-            .insert(key.clone(), StorageModification::Temp { value });
+        self.tx_temp_log.insert(key.clone(), value);
 
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
@@ -417,7 +340,6 @@ impl WriteLog {
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
                 }
-                StorageModification::Temp { ref value } => value.len() as i64,
             },
             // set 0 because we don't know if the previous value exists on the
             // storage
@@ -446,8 +368,7 @@ impl WriteLog {
                     return Err(Error::DeleteVp);
                 }
                 StorageModification::Write { .. }
-                | StorageModification::Delete
-                | StorageModification::Temp { .. } => {}
+                | StorageModification::Delete => {}
             }
         };
         Ok(())
@@ -491,13 +412,7 @@ impl WriteLog {
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log
             .iter()
-            .filter_map(|(key, modification)| match modification {
-                StorageModification::Write { .. } => Some(key.clone()),
-                StorageModification::Delete => Some(key.clone()),
-                StorageModification::InitAccount { .. } => Some(key.clone()),
-                // Skip temporary storage changes - they are never committed
-                StorageModification::Temp { .. } => None,
-            })
+            .map(|(key, _modification)| key.clone())
             .collect()
     }
 
@@ -570,30 +485,29 @@ impl WriteLog {
 
     /// Commit the current transaction's write log and precommit log to the
     /// block when it's accepted by all the triggered validity predicates.
-    /// Starts a new transaction write log.
+    /// Starts a new transaction write log a clears the temp write log.
     pub fn commit_tx(&mut self) {
         // First precommit everything
         self.precommit_tx();
 
         // Then commit to block
-        self.tx_precommit_write_log.retain(|_, v| {
-            !matches!(v, StorageModification::Temp { value: _ })
-        });
         let tx_precommit_write_log = std::mem::replace(
             &mut self.tx_precommit_write_log,
             HashMap::with_capacity(100),
         );
 
         self.block_write_log.extend(tx_precommit_write_log);
+        self.tx_temp_log.clear();
         self.take_ibc_events();
     }
 
     /// Drop the current transaction's write log and IBC events and precommit
     /// when it's declined by any of the triggered validity predicates.
-    /// Starts a new transaction write log.
+    /// Starts a new transaction write log a clears the temp write log.
     pub fn drop_tx(&mut self) {
         self.tx_precommit_write_log.clear();
         self.tx_write_log.clear();
+        self.tx_temp_log.clear();
         self.ibc_events.clear();
     }
 
@@ -1219,8 +1133,6 @@ pub mod testing {
                         vp_code_hash: Hash(hash),
                     }
                 }),
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Temp { value }),
             ]
             .boxed()
         } else {
@@ -1228,8 +1140,6 @@ pub mod testing {
                 any::<Vec<u8>>()
                     .prop_map(|value| StorageModification::Write { value }),
                 Just(StorageModification::Delete),
-                any::<Vec<u8>>()
-                    .prop_map(|value| StorageModification::Temp { value }),
             ]
             .boxed()
         }
