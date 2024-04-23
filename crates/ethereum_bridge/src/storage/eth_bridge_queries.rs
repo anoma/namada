@@ -218,14 +218,10 @@ where
     /// Get the latest nonce for the Ethereum bridge
     /// pool.
     pub fn get_bridge_pool_nonce(self) -> Uint {
-        Uint::try_from_slice(
-            &self
-                .state
-                .read_bytes(&bridge_pool::get_nonce_key())
-                .expect("Reading Bridge pool nonce shouldn't fail.")
-                .expect("Bridge pool nonce must be present."),
-        )
-        .expect("Deserializing the nonce from storage should not fail.")
+        self.state
+            .read(&bridge_pool::get_nonce_key())
+            .expect("Reading Bridge pool nonce shouldn't fail.")
+            .expect("Bridge pool nonce must be present.")
     }
 
     /// Get the nonce at a particular block height.
@@ -269,14 +265,8 @@ where
         self,
     ) -> Option<(BridgePoolRootProof, BlockHeight)> {
         self.state
-            .read_bytes(&bridge_pool::get_signed_root_key())
+            .read(&bridge_pool::get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.")
-            .map(|bytes| {
-                BorshDeserialize::try_from_slice(&bytes).expect(
-                    "Deserializing the signed bridge pool root from storage \
-                     should not fail.",
-                )
-            })
     }
 
     /// Get the root of the Ethereum bridge

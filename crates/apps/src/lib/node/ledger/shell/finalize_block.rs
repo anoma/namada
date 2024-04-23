@@ -783,6 +783,7 @@ mod test_finalize_block {
     use namada::tx::data::Fee;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
+    use namada_sdk::eth_bridge::storage::vote_tallies::BridgePoolRoot;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
@@ -1109,7 +1110,7 @@ mod test_finalize_block {
         };
         let root = shell
             .state
-            .read_bytes(&get_signed_root_key())
+            .read::<(BridgePoolRoot, BlockHeight)>(&get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.");
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");

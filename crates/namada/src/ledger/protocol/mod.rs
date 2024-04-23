@@ -1007,7 +1007,6 @@ fn merge_vp_results(
 
 #[cfg(test)]
 mod tests {
-    use borsh::BorshDeserialize;
     use eyre::Result;
     use namada_core::collections::HashMap;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
@@ -1081,12 +1080,8 @@ mod tests {
         apply_eth_tx(tx, &mut state)?;
 
         let eth_msg_keys = vote_tallies::Keys::from(&event);
-        let seen_by_bytes = state.read_bytes(&eth_msg_keys.seen_by())?;
-        let seen_by_bytes = seen_by_bytes.unwrap();
-        assert_eq!(
-            Votes::try_from_slice(&seen_by_bytes)?,
-            Votes::from([(validator_a, BlockHeight(100))])
-        );
+        let seen_by: Votes = state.read(&eth_msg_keys.seen_by())?.unwrap();
+        assert_eq!(seen_by, Votes::from([(validator_a, BlockHeight(100))]));
 
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
@@ -1144,9 +1139,9 @@ mod tests {
             &vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
             100.into(),
         ));
-        let root_seen_by_bytes = state.read_bytes(&bp_root_keys.seen_by())?;
+        let root_seen_by: Votes = state.read(&bp_root_keys.seen_by())?.unwrap();
         assert_eq!(
-            Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
+            root_seen_by,
             Votes::from([(validator_a, BlockHeight(100))])
         );
         // the vote should have only be applied once

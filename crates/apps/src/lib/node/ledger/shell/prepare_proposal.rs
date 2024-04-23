@@ -736,7 +736,7 @@ mod test_prepare_proposal {
         let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
         shell
             .state
-            .write_bytes(&hash_key, vec![])
+            .write(&hash_key, Vec::<u8>::new())
             .expect("Test failed");
 
         let req = RequestPrepareProposal {
@@ -817,7 +817,7 @@ mod test_prepare_proposal {
         let hash_key = replay_protection::last_key(&inner_unsigned_hash);
         shell
             .state
-            .write_bytes(&hash_key, vec![])
+            .write(&hash_key, Vec::<u8>::new())
             .expect("Test failed");
 
         let req = RequestPrepareProposal {

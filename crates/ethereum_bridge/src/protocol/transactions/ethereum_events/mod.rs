@@ -417,20 +417,17 @@ mod tests {
             changed_keys
         );
 
-        let body_bytes = state.read_bytes(&eth_msg_keys.body())?;
-        let body_bytes = body_bytes.unwrap();
-        assert_eq!(EthereumEvent::try_from_slice(&body_bytes)?, body);
+        let stored_body: EthereumEvent =
+            state.read(&eth_msg_keys.body())?.expect("Test failed");
+        assert_eq!(stored_body, body);
 
-        let seen_bytes = state.read_bytes(&eth_msg_keys.seen())?;
-        let seen_bytes = seen_bytes.unwrap();
-        assert!(bool::try_from_slice(&seen_bytes)?);
+        let seen: bool =
+            state.read(&eth_msg_keys.seen())?.expect("Test failed");
+        assert!(seen);
 
-        let seen_by_bytes = state.read_bytes(&eth_msg_keys.seen_by())?;
-        let seen_by_bytes = seen_by_bytes.unwrap();
-        assert_eq!(
-            Votes::try_from_slice(&seen_by_bytes)?,
-            Votes::from([(sole_validator, BlockHeight(100))])
-        );
+        let seen_by: Votes =
+            state.read(&eth_msg_keys.seen_by())?.expect("Test failed");
+        assert_eq!(seen_by, Votes::from([(sole_validator, BlockHeight(100))]));
 
         let voting_power = state
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
@@ -438,26 +435,20 @@ mod tests {
             .fractional_stake(&state);
         assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
-        let epoch_bytes =
-            state.read_bytes(&eth_msg_keys.voting_started_epoch())?;
-        let epoch_bytes = epoch_bytes.unwrap();
-        assert_eq!(Epoch::try_from_slice(&epoch_bytes)?, Epoch(0));
+        let epoch: Epoch = state
+            .read(&eth_msg_keys.voting_started_epoch())?
+            .expect("Test failed");
+        assert_eq!(epoch, Epoch(0));
 
-        let wrapped_erc20_balance_bytes =
-            state.read_bytes(&balance_key(&wrapped_erc20_token, &receiver))?;
-        let wrapped_erc20_balance_bytes = wrapped_erc20_balance_bytes.unwrap();
-        assert_eq!(
-            Amount::try_from_slice(&wrapped_erc20_balance_bytes)?,
-            amount
-        );
+        let wrapped_erc20_balance: Amount = state
+            .read(&balance_key(&wrapped_erc20_token, &receiver))?
+            .expect("Test failed");
+        assert_eq!(wrapped_erc20_balance, amount);
 
-        let wrapped_erc20_supply_bytes =
-            state.read_bytes(&minted_balance_key(&wrapped_erc20_token))?;
-        let wrapped_erc20_supply_bytes = wrapped_erc20_supply_bytes.unwrap();
-        assert_eq!(
-            Amount::try_from_slice(&wrapped_erc20_supply_bytes)?,
-            amount
-        );
+        let wrapped_erc20_supply: Amount = state
+            .read(&minted_balance_key(&wrapped_erc20_token))?
+            .expect("Test failed");
+        assert_eq!(wrapped_erc20_supply, amount);
 
         Ok(())
     }
@@ -633,12 +624,9 @@ mod tests {
             "One vote for the Ethereum event should have been recorded",
         );
 
-        let seen_by_bytes = state.read_bytes(&eth_msg_keys.seen_by())?;
-        let seen_by_bytes = seen_by_bytes.unwrap();
-        assert_eq!(
-            Votes::try_from_slice(&seen_by_bytes)?,
-            Votes::from([(validator_a, BlockHeight(100))])
-        );
+        let seen_by: Votes =
+            state.read(&eth_msg_keys.seen_by())?.expect("Test failed");
+        assert_eq!(seen_by, Votes::from([(validator_a, BlockHeight(100))]));
 
         let voting_power = state
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
@@ -788,8 +776,18 @@ mod tests {
             "New event should be inserted and the previous one should be \
              deleted",
         );
-        assert!(state.read_bytes(&prev_keys.body()).unwrap().is_none());
-        assert!(state.read_bytes(&new_keys.body()).unwrap().is_some());
+        assert!(
+            state
+                .read::<EthereumEvent>(&prev_keys.body())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            state
+                .read::<EthereumEvent>(&new_keys.body())
+                .unwrap()
+                .is_some()
+        );
     }
 
     /// Helper fn to [`test_timeout_events_before_state_upds`].
