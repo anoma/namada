@@ -9,7 +9,9 @@ use masp_primitives::transaction::Transaction;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
-use namada_events::extend::{ComposeEvent, Height as HeightAttr};
+use namada_events::extend::{
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
+};
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
@@ -274,16 +276,19 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
+    let wrapper_tx_hash = tx.header_hash();
+
     // Write wrapper tx hash to storage
     shell_params
         .state
         .write_log_mut()
-        .write_tx_hash(tx.header_hash())
+        .write_tx_hash(wrapper_tx_hash)
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
     charge_fee(
         wrapper,
+        wrapper_tx_hash,
         fee_unshield_transaction,
         &mut shell_params,
         &mut changed_keys,
@@ -327,6 +332,7 @@ pub fn get_fee_unshielding_transaction(
 /// - The accumulated fee amount to be credited to the block proposer overflows
 fn charge_fee<S, D, H, CA>(
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
@@ -353,7 +359,12 @@ where
         Some(WrapperArgs {
             block_proposer,
             is_committed_fee_unshield: _,
-        }) => transfer_fee(shell_params.state, block_proposer, wrapper)?,
+        }) => transfer_fee(
+            shell_params.state,
+            block_proposer,
+            wrapper,
+            wrapper_tx_hash,
+        )?,
         None => check_fees(shell_params.state, wrapper)?,
     }
 
@@ -484,6 +495,7 @@ pub fn transfer_fee<S>(
     state: &mut S,
     block_proposer: &Address,
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
 ) -> Result<()>
 where
     S: State + StorageRead + StorageWrite,
@@ -525,7 +537,8 @@ where
                         post_balance: post_bal.into(),
                         diff: fees.change().negate(),
                     }
-                    .with(HeightAttr(current_block_height)),
+                    .with(HeightAttr(current_block_height))
+                    .with(TxHashAttr(wrapper_tx_hash)),
                 );
 
                 Ok(())
@@ -557,7 +570,8 @@ where
                         post_balance: namada_core::uint::ZERO,
                         diff: balance.change().negate(),
                     }
-                    .with(HeightAttr(current_block_height)),
+                    .with(HeightAttr(current_block_height))
+                    .with(TxHashAttr(wrapper_tx_hash)),
                 );
 
                 Err(Error::FeeError(
