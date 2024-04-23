@@ -111,17 +111,6 @@ impl<'wl> TryFrom<&'wl StorageModification>
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// A replay protection storage modification
-pub(crate) enum ReProtStorageModification {
-    /// Write an entry
-    Write,
-    /// Delete an entry
-    Delete,
-    /// Finalize an entry
-    Finalize,
-}
-
 /// The write log storage
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
@@ -146,7 +135,7 @@ pub struct WriteLog {
     pub(crate) ibc_events: BTreeSet<IbcEvent>,
     /// Storage modifications for the replay protection storage, always
     /// committed regardless of the result of the transaction
-    pub(crate) replay_protection: HashMap<Hash, ReProtStorageModification>,
+    pub(crate) replay_protection: HashSet<Hash>,
 }
 
 /// Write log prefix iterator
@@ -173,7 +162,7 @@ impl Default for WriteLog {
             tx_write_log: HashMap::with_capacity(100),
             tx_precommit_write_log: HashMap::with_capacity(100),
             ibc_events: BTreeSet::new(),
-            replay_protection: HashMap::with_capacity(1_000),
+            replay_protection: HashSet::with_capacity(1_000),
         }
     }
 }
@@ -674,53 +663,32 @@ impl WriteLog {
         PrefixIter { iter }
     }
 
-    /// Check if the given tx hash has already been processed. Returns `None` if
-    /// the key is not known.
-    pub fn has_replay_protection_entry(&self, hash: &Hash) -> Option<bool> {
-        self.replay_protection
-            .get(hash)
-            .map(|action| !matches!(action, ReProtStorageModification::Delete))
+    /// Check if the given tx hash has already been processed
+    pub fn has_replay_protection_entry(&self, hash: &Hash) -> bool {
+        self.replay_protection.contains(hash)
     }
 
     /// Write the transaction hash
     pub fn write_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Write)
-            .is_some()
-        {
-            // Cannot write an hash if other requests have already been
-            // committed for the same hash
+        if !self.replay_protection.insert(hash) {
+            // Cannot write an hash if it's already present in the set
             return Err(Error::ReplayProtection(format!(
-                "Requested a write on hash {hash} over a previous request"
+                "Requested a write of hash {hash} which has already been \
+                 processed"
             )));
         }
 
         Ok(())
     }
 
-    /// Remove the transaction hash
-    pub(crate) fn delete_tx_hash(&mut self, hash: Hash) {
-        self.replay_protection
-            .insert(hash, ReProtStorageModification::Delete);
-    }
-
-    /// Move the transaction hash of the previous block to the list of all
-    /// blocks. This functions should be called at the beginning of the block
-    /// processing, before any other replay protection operation is done
-    pub fn finalize_tx_hash(&mut self, hash: Hash) -> Result<()> {
-        if self
-            .replay_protection
-            .insert(hash, ReProtStorageModification::Finalize)
-            .is_some()
-        {
-            // Cannot finalize an hash if other requests have already been
-            // committed for the same hash
+    /// Remove the transaction hash because redundant
+    pub(crate) fn redundant_tx_hash(&mut self, hash: &Hash) -> Result<()> {
+        if !self.replay_protection.swap_remove(hash) {
             return Err(Error::ReplayProtection(format!(
-                "Requested a finalize on hash {hash} over a previous request"
+                "Requested a redundant modification on hash {hash} which is \
+                 unknown"
             )));
         }
-
         Ok(())
     }
 }
@@ -992,22 +960,17 @@ mod tests {
                 .write_tx_hash(Hash::sha256("tx6".as_bytes()))
                 .unwrap();
 
-            // delete previous hash
-            write_log.delete_tx_hash(Hash::sha256("tx1".as_bytes()));
-
-            // finalize previous hashes
-            for tx in ["tx2", "tx3"] {
-                write_log
-                    .finalize_tx_hash(Hash::sha256(tx.as_bytes()))
-                    .unwrap();
-            }
+            // Mark one hash as redundant
+            write_log
+                .redundant_tx_hash(&Hash::sha256("tx4".as_bytes()))
+                .unwrap();
         }
 
         // commit a block
         state.commit_block().expect("commit failed");
 
         assert!(state.write_log.replay_protection.is_empty());
-        for tx in ["tx2", "tx3", "tx4", "tx5", "tx6"] {
+        for tx in ["tx1", "tx2", "tx3", "tx5", "tx6"] {
             assert!(
                 state
                     .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
@@ -1016,24 +979,28 @@ mod tests {
         }
         assert!(
             !state
-                .has_replay_protection_entry(&Hash::sha256("tx1".as_bytes()))
+                .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
                 .expect("read failed")
         );
+        {
+            let write_log = state.write_log_mut();
+            write_log
+                .write_tx_hash(Hash::sha256("tx7".as_bytes()))
+                .unwrap();
 
-        // try to delete finalized hash which shouldn't work
-        state
-            .write_log
-            .delete_tx_hash(Hash::sha256("tx2".as_bytes()));
+            // mark as redundant a missing hash and check that it fails
+            assert!(
+                state
+                    .write_log
+                    .redundant_tx_hash(&Hash::sha256("tx8".as_bytes()))
+                    .is_err()
+            );
 
-        // commit a block
-        state.commit_block().expect("commit failed");
-
-        assert!(state.write_log.replay_protection.is_empty());
-        assert!(
-            state
-                .has_replay_protection_entry(&Hash::sha256("tx2".as_bytes()))
-                .expect("read failed")
-        );
+            // Do not assert the state of replay protection because this
+            // error will actually trigger a shut down of the node. Also, since
+            // we write the values before validating them, the state would be
+            // wrong
+        }
     }
 
     // Test that writing a value on top of a temporary write is not allowed
