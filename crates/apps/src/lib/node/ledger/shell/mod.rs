@@ -2293,7 +2293,7 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2332,7 +2332,7 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();

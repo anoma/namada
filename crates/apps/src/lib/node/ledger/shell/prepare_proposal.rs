@@ -443,7 +443,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -719,7 +719,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -800,7 +800,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -897,7 +897,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
