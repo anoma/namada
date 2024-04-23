@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
-use namada_core::collections::{HashMap, HashSet};
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
@@ -15,10 +15,11 @@ use namada_storage::StorageRead;
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
 use crate::storage::{
     bond_handle, delegation_targets_handle, read_pos_params, unbond_handle,
+    validator_state_handle,
 };
 use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
-    DelegationEpochs, Slash, UnbondDetails,
+    DelegationEpochs, Slash, UnbondDetails, ValidatorState,
 };
 use crate::{raw_bond_amount, storage_key, PosParams};
 
@@ -28,16 +29,16 @@ pub fn find_delegation_validators<S>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> namada_storage::Result<HashSet<Address>>
+) -> namada_storage::Result<HashMap<Address, ValidatorState>>
 where
     S: StorageRead,
 {
     let validators = delegation_targets_handle(owner);
     if validators.is_empty(storage)? {
-        return Ok(HashSet::new());
+        return Ok(HashMap::new());
     }
 
-    let mut delegation_targets = HashSet::<Address>::new();
+    let mut delegation_targets = HashMap::new();
 
     for validator in validators.iter(storage)? {
         let (
@@ -53,18 +54,27 @@ where
             // the `last_range` will tell us if there was a bond
             if let Some(end) = last_end {
                 if *epoch < end {
-                    delegation_targets.insert(val);
+                    let validator_state =
+                        validator_state(storage, &val, epoch)?
+                            .expect("Delegation target must be a validator.");
+                    delegation_targets.insert(val, validator_state);
                 }
             } else {
                 // this is bond is currently held
-                delegation_targets.insert(val);
+                let validator_state = validator_state(storage, &val, epoch)?
+                    .expect("Delegation target must be a validator.");
+                delegation_targets.insert(val, validator_state);
             }
         } else {
             // need to search through the `prev_ranges` now
             for (start, end) in prev_ranges.iter().rev() {
                 if *epoch >= *start {
                     if *epoch < *end {
-                        delegation_targets.insert(val);
+                        let validator_state = validator_state(
+                            storage, &val, epoch,
+                        )?
+                        .expect("Delegation target must be a validator.");
+                        delegation_targets.insert(val, validator_state);
                     }
                     break;
                 }
@@ -73,6 +83,19 @@ where
     }
 
     Ok(delegation_targets)
+}
+
+/// Get the validator state
+pub fn validator_state<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: &Epoch,
+) -> namada_storage::Result<Option<ValidatorState>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_state_handle(validator).get(storage, *epoch, &params)
 }
 
 /// Find all validators to which a given bond `owner` (or source) has a

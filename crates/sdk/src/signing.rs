@@ -1260,19 +1260,12 @@ pub async fn to_ledger_vector(
             format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
             format!("Voter : {}", vote_proposal.voter),
         ]);
-        for delegation in &vote_proposal.delegation_validators {
-            tv.output.push(format!("Delegation : {}", delegation));
-        }
 
         tv.output_expert.extend(vec![
             format!("ID : {}", vote_proposal.id),
             format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
             format!("Voter : {}", vote_proposal.voter),
         ]);
-        for delegation in vote_proposal.delegation_validators {
-            tv.output_expert
-                .push(format!("Delegation : {}", delegation));
-        }
     } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
         let public_key = common::PublicKey::try_from_slice(
             &tx.data()

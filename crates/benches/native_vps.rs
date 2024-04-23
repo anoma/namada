@@ -89,9 +89,6 @@ fn governance(c: &mut Criterion) {
                         id: 0,
                         vote: ProposalVote::Yay,
                         voter: defaults::albert_address(),
-                        delegation_validators: vec![
-                            defaults::validator_address(),
-                        ],
                     },
                     None,
                     None,
@@ -107,7 +104,6 @@ fn governance(c: &mut Criterion) {
                         id: 0,
                         vote: ProposalVote::Nay,
                         voter: defaults::validator_address(),
-                        delegation_validators: vec![],
                     },
                     None,
                     None,

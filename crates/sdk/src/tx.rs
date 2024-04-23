@@ -2179,7 +2179,7 @@ pub async fn build_vote_proposal(
         }
     }
 
-    let delegations = if is_validator {
+    if is_validator {
         let stake =
             get_validator_stake(context.client(), current_epoch, voter_address)
                 .await?;
@@ -2187,9 +2187,8 @@ pub async fn build_vote_proposal(
         if stake.is_zero() {
             edisplay_line!(
                 context.io(),
-                "Voter address {} is a validator but has no stake, so it has \
-                 no votes.",
-                voter_address
+                "Voter address {voter_address} is a validator but has no \
+                 stake, so it has no votes.",
             );
             if !tx.force {
                 return Err(Error::Other(
@@ -2206,18 +2205,15 @@ pub async fn build_vote_proposal(
         .0
         .expect("Expected to find the state of the validator");
 
-        if !matches!(
+        if matches!(
             val_state,
             ValidatorState::Jailed | ValidatorState::Inactive
         ) {
-            vec![voter_address.clone()]
-        } else {
             edisplay_line!(
                 context.io(),
-                "Voter address {} is a validator that is either jailed or \
-                 inactive, and so it may not vote in governance at this \
-                 moment.",
-                voter_address
+                "Voter address {voter_address} is a validator that is either \
+                 jailed or inactive, and so it may not vote in governance at \
+                 this moment.",
             );
             if !tx.force {
                 return Err(Error::from(
@@ -2227,12 +2223,11 @@ pub async fn build_vote_proposal(
                     ),
                 ));
             }
-            vec![]
         }
     } else {
         // Get active valid validators with whom the voter has delegations
         // (bonds)
-        let delegation_vals = rpc::get_delegations_of_delegator_at(
+        let delegation_vals = rpc::get_delegation_validators(
             context.client(),
             voter_address,
             proposal.voting_start_epoch,
@@ -2240,10 +2235,10 @@ pub async fn build_vote_proposal(
         .await?;
 
         let mut delegation_validators = Vec::<Address>::new();
-        for validator in delegation_vals.keys() {
+        for validator in delegation_vals {
             let val_state = rpc::get_validator_state(
                 context.client(),
-                validator,
+                &validator,
                 Some(current_epoch),
             )
             .await?
@@ -2263,8 +2258,7 @@ pub async fn build_vote_proposal(
         if delegation_validators.is_empty() {
             edisplay_line!(
                 context.io(),
-                "Voter address {} does not have any delegations.",
-                voter_address
+                "Voter address {voter_address} does not have any delegations.",
             );
             if !tx.force {
                 return Err(Error::from(TxSubmitError::NoDelegationsFound(
@@ -2273,14 +2267,12 @@ pub async fn build_vote_proposal(
                 )));
             }
         }
-        delegation_validators
     };
 
     let data = VoteProposalData {
         id: *proposal_id,
         vote: proposal_vote,
         voter: voter_address.clone(),
-        delegation_validators: delegations,
     };
 
     build(

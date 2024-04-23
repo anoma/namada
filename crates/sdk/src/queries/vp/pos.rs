@@ -24,7 +24,7 @@ use namada_proof_of_stake::storage::{
     read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
     read_validator_stake, read_validator_website, unbond_handle,
     validator_commission_rate_handle, validator_incoming_redelegations_handle,
-    validator_slashes_handle, validator_state_handle,
+    validator_slashes_handle,
 };
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
@@ -306,9 +306,9 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
-    let state =
-        validator_state_handle(&validator).get(ctx.state, epoch, &params)?;
+    let state = namada_proof_of_stake::queries::validator_state(
+        ctx.state, &validator, &epoch,
+    )?;
     Ok((state, epoch))
 }
 
@@ -573,7 +573,10 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    find_delegation_validators(ctx.state, &owner, &epoch)
+    Ok(find_delegation_validators(ctx.state, &owner, &epoch)?
+        .keys()
+        .cloned()
+        .collect())
 }
 
 /// Find all the validator addresses to whom the given `owner` address has
