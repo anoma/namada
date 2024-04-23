@@ -15,7 +15,7 @@ use namada_events::extend::{
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
-use namada_token::event::TokenEvent;
+use namada_token::event::{BalanceChangeTarget, TokenEvent};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
@@ -533,7 +533,9 @@ where
                     TokenEvent::BalanceChange {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         token: wrapper.fee.token.clone(),
-                        account: Some(wrapper.fee_payer()),
+                        target: BalanceChangeTarget::Internal(
+                            wrapper.fee_payer(),
+                        ),
                         post_balance: post_bal.into(),
                         diff: fees.change().negate(),
                     }
@@ -566,7 +568,9 @@ where
                     TokenEvent::BalanceChange {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         token: wrapper.fee.token.clone(),
-                        account: Some(wrapper.fee_payer()),
+                        target: BalanceChangeTarget::Internal(
+                            wrapper.fee_payer(),
+                        ),
                         post_balance: namada_core::uint::ZERO,
                         diff: balance.change().negate(),
                     }
