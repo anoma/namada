@@ -29,5 +29,5 @@ jobs:
           tenant: heliax
           username: ${{ secrets.ANTITHESIS_USER_NAME }}
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
-          github_token: ${{ secrets.GH_PAT }}
-          images: namada-config:${{ github.event.inputs.namada_docker_tag }},build-genesis:${{ github.event.inputs.namada_docker_tag }},build-namada:${{ github.event.inputs.namada_docker_tag }},build-namada-inst:${{ github.event.inputs.namada_docker_tag }},namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
