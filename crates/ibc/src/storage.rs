@@ -16,7 +16,10 @@ use namada_core::ibc::core::host::types::path::{
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
-use namada_state::{StorageRead, StorageResult};
+use namada_events::{EmitEvents, EventLevel};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
+use namada_token as token;
+use namada_token::event::{BalanceChangeTarget, TokenEvent};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -49,6 +52,38 @@ pub enum Error {
 
 /// IBC storage functions result
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Mint tokens, and emit an IBC token mint event.
+pub fn mint_tokens<S>(
+    state: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite + EmitEvents,
+{
+    token::mint_tokens(
+        state,
+        &Address::Internal(InternalAddress::Ibc),
+        token,
+        target,
+        amount,
+    )?;
+
+    let post_balance = token::read_balance(state, token, target)?;
+
+    state.emit(TokenEvent::BalanceChange {
+        level: EventLevel::Tx,
+        descriptor: "mint-ibc-tokens".into(),
+        token: token.clone(),
+        target: BalanceChangeTarget::Internal(target.clone()),
+        post_balance: Some(post_balance.into()),
+        diff: amount.change(),
+    });
+
+    Ok(())
+}
 
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {

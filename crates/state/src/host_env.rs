@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
-use namada_gas::{GasMetering, TxGasMeter, VpGasMeter};
 use namada_events::{EmitEvents, EventToEmit};
+use namada_gas::{GasMetering, TxGasMeter, VpGasMeter};
 use namada_tx::data::TxSentinel;
 
 use crate::in_memory::InMemory;

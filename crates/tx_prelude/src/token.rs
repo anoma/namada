@@ -48,16 +48,6 @@ pub fn transfer(
     Ok(())
 }
 
-/// Mint that can be used in a transaction.
-pub fn mint(
-    ctx: &mut Ctx,
-    target: &Address,
-    token: &Address,
-    amount: Amount,
-) -> TxResult {
-    credit_tokens(ctx, token, target, amount)
-}
-
 /// Burn that can be used in a transaction.
 pub fn burn(
     ctx: &mut Ctx,
