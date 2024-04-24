@@ -99,7 +99,7 @@ pub async fn build_bridge_pool_tx(
         .clone()
         .ok_or_else(|| Error::Other("No chain id available".into()))?;
 
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let mut tx = Tx::new(chain_id, (&tx_args.expiration).into());
     if let Some(memo) = &tx_args.memo {
         tx.add_memo(memo);
     }

@@ -3195,6 +3195,7 @@ pub mod args {
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
     pub const NUT: ArgFlag = flag("nut");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
@@ -6294,12 +6295,28 @@ pub mod args {
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(EXPIRATION_OPT.def().help(
-                "The expiration datetime of the transaction, after which the \
-                 tx won't be accepted anymore. All of these examples are \
-                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
-                 12:12:12Z\n2012-  12-12T12:  12:12Z",
-            ))
+            .arg(
+                EXPIRATION_OPT
+                    .def()
+                    .help(
+                        "The expiration datetime of the transaction, after \
+                         which the tx won't be accepted anymore. If not \
+                         provided, a default will be set. All of these \
+                         examples are \
+                         equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                         12:12:12Z\n2012-  12-12T12:  12:12Z",
+                    )
+                    .conflicts_with_all([NO_EXPIRATION.name]),
+            )
+            .arg(
+                NO_EXPIRATION
+                    .def()
+                    .help(
+                        "Force the construction of the transaction without an \
+                         expiration (higly discouraged).",
+                    )
+                    .conflicts_with_all([EXPIRATION_OPT.name]),
+            )
             .arg(
                 DISPOSABLE_SIGNING_KEY
                     .def()
@@ -6382,6 +6399,15 @@ pub mod args {
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
+            let no_expiration = NO_EXPIRATION.parse(matches);
+            let expiration = if no_expiration {
+                TxExpiration::NoExpiration
+            } else {
+                match expiration {
+                    Some(exp) => TxExpiration::Custom(exp),
+                    None => TxExpiration::Default,
+                }
+            };
             Self {
                 dry_run,
                 dry_run_wrapper,

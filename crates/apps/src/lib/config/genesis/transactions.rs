@@ -87,7 +87,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         fee_token: genesis_fee_token_address(),
         fee_unshield: None,
         gas_limit: Default::default(),
-        expiration: None,
+        expiration: Default::default(),
         disposable_signing_key: false,
         chain_id: None,
         signing_keys: vec![],
