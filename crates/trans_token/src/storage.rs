@@ -152,6 +152,21 @@ where
     }
 }
 
+/// Mint `amount` of `token` as `minter` to `dest`.
+pub fn mint_tokens<S>(
+    storage: &mut S,
+    minter: &Address,
+    token: &Address,
+    dest: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    credit_tokens(storage, token, dest, amount)?;
+    storage.write(&minter_key(token), minter.clone())
+}
+
 /// Credit tokens to an account, to be used only by protocol. In transactions,
 /// this would get rejected by the default `vp_token`.
 pub fn credit_tokens<S>(
