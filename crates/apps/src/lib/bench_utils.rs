@@ -15,6 +15,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
+use namada::address::MASP;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::chain::ChainId;
 use namada::core::hash::Hash;
@@ -1079,7 +1080,13 @@ impl BenchShieldedCtx {
                 source: source.effective_address(),
                 target: target.effective_address(),
                 token: address::testing::nam(),
-                amount: DenominatedAmount::native(amount),
+                amount: if source.effective_address().eq(&MASP)
+                    && target.effective_address().eq(&MASP)
+                {
+                    DenominatedAmount::native(0.into())
+                } else {
+                    DenominatedAmount::native(amount)
+                },
                 key: None,
                 shielded: shielded_section_hash,
             },
