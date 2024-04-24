@@ -2480,6 +2480,37 @@ mod test_finalize_block {
         );
     }
 
+    /// Test that masp anchor keys are added to the merkle tree
+    #[test]
+    fn test_masp_anchors_merklized() {
+        let (mut shell, _, _, _) = setup();
+
+        for key in &[
+            namada::token::storage_key::masp_convert_anchor_key(),
+            namada::token::storage_key::masp_commitment_anchor_key(0),
+        ] {
+            // merkle tree root before finalize_block
+            let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+            // Manually change the conversion anchor
+            shell
+                .state
+                .write_log_mut()
+                .protocol_write(key, "random_data".serialize_to_vec())
+                .unwrap();
+            shell
+                .finalize_block(FinalizeBlock {
+                    txs: vec![],
+                    ..Default::default()
+                })
+                .expect("Test failed");
+
+            // the merkle tree root should change after finalize_block
+            let root_post = shell.shell.state.in_mem().block.tree.root();
+            assert_ne!(root_pre.0, root_post.0);
+        }
+    }
+
     /// Test that a tx that has already been applied in the same block
     /// doesn't get reapplied
     #[test]
