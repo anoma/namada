@@ -112,6 +112,15 @@ pub fn is_masp_nullifier_key(key: &storage::Key) -> bool {
         ] if *addr == address::MASP && prefix == MASP_NULLIFIERS_KEY)
 }
 
+/// Check if the given key is a masp commitment anchor
+pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+            ..
+        ] if *addr == address::MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
+}
+
 /// Get a key for a masp pin
 pub fn masp_pin_tx_key(key: &str) -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())

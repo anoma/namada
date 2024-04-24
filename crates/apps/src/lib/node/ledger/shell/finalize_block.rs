@@ -2458,7 +2458,8 @@ mod test_finalize_block {
                 .write_log()
                 .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
         );
-        // Check that the hash is present in the merkle tree
+        // Check that the hash is not present in the merkle tree
+        shell.state.commit_block().unwrap();
         assert!(
             !shell
                 .shell
@@ -2467,6 +2468,63 @@ mod test_finalize_block {
                 .block
                 .tree
                 .has_key(&wrapper_hash_key)
+                .unwrap()
+        );
+    }
+
+    /// Test that masp anchor keys are added to the merkle tree
+    #[test]
+    fn test_masp_anchors_merklized() {
+        let (mut shell, _, _, _) = setup();
+
+        let convert_key = namada::token::storage_key::masp_convert_anchor_key();
+        let commitment_key =
+            namada::token::storage_key::masp_commitment_anchor_key(0);
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+        // Manually change the anchors
+        shell
+            .state
+            .write_log_mut()
+            .protocol_write(&convert_key, "random_data".serialize_to_vec())
+            .unwrap();
+        shell
+            .state
+            .write_log_mut()
+            .protocol_write(&commitment_key, "random_data".serialize_to_vec())
+            .unwrap();
+        shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // the merkle tree root should change after finalize_block
+        let root_post = shell.shell.state.in_mem().block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+        // Check that the hashes are present in the merkle tree
+        shell.state.commit_block().unwrap();
+        assert!(
+            shell
+                .shell
+                .state
+                .in_mem()
+                .block
+                .tree
+                .has_key(&convert_key)
+                .unwrap()
+        );
+        assert!(
+            shell
+                .shell
+                .state
+                .in_mem()
+                .block
+                .tree
+                .has_key(&commitment_key)
                 .unwrap()
         );
     }
