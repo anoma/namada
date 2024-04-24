@@ -86,7 +86,6 @@ pub mod wrapper_tx {
     /// This struct only stores the multiple of GAS_LIMIT_RESOLUTION,
     /// not the raw amount
     #[derive(
-        Default,
         Debug,
         Clone,
         Copy,

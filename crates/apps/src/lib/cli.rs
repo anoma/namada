@@ -3029,6 +3029,7 @@ pub mod args {
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
     };
+    use namada_sdk::DEFAULT_GAS_LIMIT;
 
     use super::context::*;
     use super::utils::*;
@@ -3141,8 +3142,10 @@ pub mod args {
     pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
     pub const FILE_PATH: Arg<String> = arg("file");
     pub const FORCE: ArgFlag = flag("force");
-    pub const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
+    pub const GAS_LIMIT: ArgDefault<GasLimit> = arg_default(
+        "gas-limit",
+        DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
+    );
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
