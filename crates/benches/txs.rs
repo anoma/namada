@@ -649,7 +649,7 @@ fn become_validator(c: &mut Criterion) {
                         &namada::core::storage::Key::validity_predicate(
                             &address,
                         ),
-                        Vec::<()>::new(),
+                        Vec::<u8>::new(),
                     )
                     .unwrap();
                 shell

@@ -1,5 +1,7 @@
 //! A tx to create a governance proposal.
 
+use std::collections::BTreeMap;
+
 use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::*;
 
@@ -33,6 +35,8 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
             ctx.set_commitment_sentinel();
             err
         })?;
+    let content = BTreeMap::<String, String>::try_from_slice(&content[..])
+        .wrap_err("Failed to decode the content data")?;
 
     // Get the code from the referred to section
     let code = tx_data

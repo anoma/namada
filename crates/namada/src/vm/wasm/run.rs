@@ -1250,10 +1250,7 @@ mod tests {
             .write_log_mut()
             .write(&key, tx_no_op.serialize_to_vec())
             .unwrap();
-        state
-            .write_log_mut()
-            .write(&len_key, code_len.serialize_to_vec())
-            .unwrap();
+        state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -1890,7 +1887,7 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // store the vp code
         let code_hash = Hash::sha256(&vp_code);
-        let code_len = (vp_code.len() as u64).serialize_to_vec();
+        let code_len = vp_code.len() as u64;
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         state.write(&key, vp_code).unwrap();

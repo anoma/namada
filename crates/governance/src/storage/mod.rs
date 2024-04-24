@@ -28,7 +28,7 @@ use crate::ADDRESS as governance_address;
 pub fn init_proposal<S>(
     storage: &mut S,
     data: InitProposalData,
-    content: Vec<u8>,
+    content: BTreeMap<String, String>,
     code: Option<Vec<u8>>,
 ) -> Result<()>
 where

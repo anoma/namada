@@ -1278,7 +1278,7 @@ mod test_finalize_block {
             namada::governance::init_proposal(
                 &mut shell.state,
                 proposal,
-                vec![],
+                BTreeMap::new(),
                 None,
             )
             .unwrap();
