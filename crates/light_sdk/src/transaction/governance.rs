@@ -66,10 +66,9 @@ impl InitProposal {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign
@@ -145,10 +144,9 @@ impl VoteProposal {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign

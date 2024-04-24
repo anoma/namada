@@ -6,7 +6,6 @@ use namada_sdk::address::Address;
 use namada_sdk::chain::ChainId;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::{Fee, GasLimit};
@@ -80,7 +79,6 @@ pub(in crate::transaction) fn attach_fee(
     fee: DenominatedAmount,
     token: Address,
     fee_payer: common::PublicKey,
-    _epoch: Epoch,
     gas_limit: GasLimit,
 ) -> Tx {
     tx.add_wrapper(
