@@ -28,7 +28,7 @@ use crate::ADDRESS as governance_address;
 pub fn init_proposal<S>(
     storage: &mut S,
     data: InitProposalData,
-    content: BTreeMap<String, String>,
+    content: Vec<u8>,
     code: Option<Vec<u8>>,
 ) -> Result<()>
 where
@@ -41,7 +41,8 @@ where
     );
 
     let content_key = governance_keys::get_content_key(proposal_id);
-    storage.write(&content_key, content)?;
+    // The content should have been already encoded with borsh
+    storage.write_bytes(&content_key, content)?;
 
     let author_key = governance_keys::get_author_key(proposal_id);
     storage.write(&author_key, data.author.clone())?;
