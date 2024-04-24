@@ -2012,9 +2012,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // we set for the transaction. This should be small enough to not cause
         // any issue, in case refactor this function to request the precise
         // datetime to the caller
-        let expiration_height: u32 = match Option::<DateTimeUtc>::from(
-            &context.tx_builder().expiration,
-        ) {
+        let expiration_height: u32 = match context
+            .tx_builder()
+            .expiration
+            .to_datetime()
+        {
             Some(expiration) => {
                 // Try to match a DateTime expiration with a plausible
                 // corresponding block height

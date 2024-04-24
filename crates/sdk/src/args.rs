@@ -1966,9 +1966,10 @@ pub enum TxExpiration {
     Custom(DateTimeUtc),
 }
 
-impl From<&TxExpiration> for Option<DateTimeUtc> {
-    fn from(value: &TxExpiration) -> Self {
-        match value {
+impl TxExpiration {
+    /// Converts the expiration argument into an optional [`DateTimeUtc`]
+    pub fn to_datetime(&self) -> Option<DateTimeUtc> {
+        match self {
             TxExpiration::NoExpiration => None,
             // Default to 1 hour
             TxExpiration::Default =>
