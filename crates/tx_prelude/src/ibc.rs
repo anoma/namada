@@ -8,14 +8,16 @@ use namada_core::address::Address;
 use namada_core::token::Amount;
 use namada_events::EventTypeBuilder;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
-pub use namada_ibc::storage::{ibc_token, is_ibc_key, mint_tokens};
+pub use namada_ibc::storage::{
+    burn_tokens, ibc_token, is_ibc_key, mint_tokens,
+};
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
 use namada_tx_env::TxEnv;
 
-use crate::token::{burn, transfer};
+use crate::token::transfer;
 use crate::{Ctx, Error};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
@@ -90,7 +92,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        burn(self, target, token, amount)
+        burn_tokens(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {

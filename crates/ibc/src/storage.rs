@@ -85,6 +85,32 @@ where
     Ok(())
 }
 
+/// Burn tokens, and emit an IBC token burn event.
+pub fn burn_tokens<S>(
+    state: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite + EmitEvents,
+{
+    token::burn_tokens(state, token, target, amount)?;
+
+    let post_balance = token::read_balance(state, token, target)?;
+
+    state.emit(TokenEvent::BalanceChange {
+        level: EventLevel::Tx,
+        descriptor: "burn-ibc-tokens".into(),
+        token: token.clone(),
+        target: BalanceChangeTarget::Internal(target.clone()),
+        post_balance: Some(post_balance.into()),
+        diff: amount.change().negate(),
+    });
+
+    Ok(())
+}
+
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
     let path = Key::parse(path).map_err(Error::StorageKey)?;

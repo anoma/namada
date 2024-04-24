@@ -155,8 +155,8 @@ where
         shielded: &masp_primitives::transaction::Transaction,
         pin_key: Option<&str>,
     ) -> Result<(), StorageError> {
-        namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
-        namada_token::utils::update_note_commitment_tree(self, shielded)
+        token::utils::handle_masp_tx(self, shielded, pin_key)?;
+        token::utils::update_note_commitment_tree(self, shielded)
     }
 
     fn mint_token(
@@ -174,7 +174,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self, token, target, amount)
+        ibc_storage::burn_tokens(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -252,7 +252,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self.state, token, target, amount)
+        ibc_storage::burn_tokens(self.state, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
