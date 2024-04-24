@@ -12,6 +12,8 @@ pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
+use namada_storage::StorageWrite;
+use namada_token::storage_key::minter_key;
 use namada_tx_env::TxEnv;
 
 use crate::token::{burn, mint, transfer};
@@ -73,13 +75,10 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        mint(
-            self,
-            &Address::Internal(InternalAddress::Ibc),
-            target,
-            token,
-            amount,
-        )
+        mint(self, target, token, amount)?;
+
+        let minter_key = minter_key(token);
+        self.write(&minter_key, &Address::Internal(InternalAddress::Ibc))
     }
 
     fn burn_token(
