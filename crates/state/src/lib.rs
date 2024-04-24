@@ -78,7 +78,7 @@ pub trait StateRead: StorageRead + Debug {
 
     /// Returns a value from the specified subspace and the gas cost
     fn db_read(&self, key: &storage::Key) -> Result<(Option<Vec<u8>>, u64)> {
-        tracing::debug!("storage read key {}", key);
+        tracing::trace!("storage read key {}", key);
 
         match self.db().read_subspace_val(key)? {
             Some(v) => {
