@@ -34,7 +34,7 @@ pub fn transfer(
         .ok_or_else(|| StorageError::new_const("the source has no balance"))?;
 
     if !src_bal.can_spend(&amount) {
-        return Err(StorageError::new_const("the source has no enough balance"))
+        return Err(StorageError::new_const("the source has no enough balance"));
     }
 
     src_bal.spend(&amount).into_storage_result()?;
@@ -63,5 +63,5 @@ pub fn burn(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
-    burn_tokens(ctx, &token, &target, amount)
+    burn_tokens(ctx, token, target, amount)
 }
