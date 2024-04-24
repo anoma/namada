@@ -665,6 +665,12 @@ jobs:
           curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
           unzip hermes.zip
           mv hermes /usr/local/bin
+      - name: Download Gaia
+        run: |
+          GAIA_VERSION=$(cat .github/workflows/scripts/gaia.txt)
+          echo "Using gaiad version: ${GAIA_VERSION}"
+          curl -o gaiad -LO https://github.com/cosmos/gaia/releases/download/v${GAIA_VERSION}/gaiad-v${GAIA_VERSION}-linux-amd64
+          mv gaiad /usr/local/bin
       - name: Change permissions
         run: |
           chmod +x target/release/namada
@@ -674,6 +680,7 @@ jobs:
           chmod +x target/release/namadar
           chmod +x /usr/local/bin/cometbft
           chmod +x /usr/local/bin/hermes
+          chmod +x /usr/local/bin/gaiad
       - name: Run e2e test
         run: python3 .github/workflows/scripts/schedule-e2e.py
         env:
