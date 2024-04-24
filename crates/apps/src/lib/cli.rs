@@ -246,7 +246,6 @@ pub mod cmds {
                 .subcommand(QueryNextEpochInfo::def().display_order(5))
                 .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
-                .subcommand(QueryTransfers::def().display_order(5))
                 .subcommand(QueryConversions::def().display_order(5))
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
@@ -318,7 +317,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryNextEpochInfo);
             let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
-            let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
             let query_masp_reward_tokens =
@@ -382,7 +380,6 @@ pub mod cmds {
                 .or(query_epoch)
                 .or(query_next_epoch_info)
                 .or(query_status)
-                .or(query_transfers)
                 .or(query_conversions)
                 .or(query_masp_reward_tokens)
                 .or(query_block)
@@ -473,7 +470,6 @@ pub mod cmds {
         QueryNextEpochInfo(QueryNextEpochInfo),
         QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
-        QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
@@ -1816,25 +1812,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Query the state of a PoS validator.")
                 .add_args::<args::QueryValidatorState<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct QueryTransfers(pub args::QueryTransfers<args::CliTypes>);
-
-    impl SubCmd for QueryTransfers {
-        const CMD: &'static str = "show-transfers";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryTransfers(args::QueryTransfers::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Query the accepted transfers to date.")
-                .add_args::<args::QueryTransfers<args::CliTypes>>()
         }
     }
 
@@ -5396,41 +5373,6 @@ pub mod args {
                         .def()
                         .help("The account address whose token to query."),
                 )
-        }
-    }
-
-    impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
-            let query = self.query.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            QueryTransfers::<SdkTypes> {
-                query,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
-                token: self.token.map(|x| chain_ctx.get(&x)),
-            }
-        }
-    }
-
-    impl Args for QueryTransfers<CliTypes> {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let owner = BALANCE_OWNER.parse(matches);
-            let token = TOKEN_OPT.parse(matches);
-            Self {
-                query,
-                owner,
-                token,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
-                .arg(BALANCE_OWNER.def().help(
-                    "The account address that queried transfers must involve.",
-                ))
-                .arg(TOKEN_OPT.def().help(
-                    "The token address that queried transfers must involve.",
-                ))
         }
     }
 
