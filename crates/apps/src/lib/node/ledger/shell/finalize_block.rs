@@ -443,7 +443,7 @@ where
                         for _ in 0..commitments_len {
                             stats.increment_rejected_txs();
                         }
-                        self.state.drop_tx();
+                        self.state.write_log_mut().drop_batch();
                         tx_event.extend(Code(ResultCode::InvalidTx));
                     } else {
                         for (cmt_hash, batched_result) in
@@ -476,9 +476,6 @@ where
                                         );
                                         stats.increment_successful_txs();
                                         commit_batch_hash = true;
-                                        // FIXME: need to commit only the
-                                        // precommit of this specific inner tx
-                                        self.state.commit_tx();
                                         self.state
                                             .in_mem_mut()
                                             .block
@@ -488,6 +485,8 @@ where
                                         response.events.extend(
                                             // ibc events
                                             result
+                                                // FIXME: am I populating this
+                                                // thing? I think so
                                                 .ibc_events
                                                 .iter()
                                                 .cloned()
@@ -532,7 +531,6 @@ where
                                         }
 
                                         stats.increment_rejected_txs();
-                                        self.state.drop_tx();
                                     }
                                 }
                                 Err(e) => {
@@ -559,7 +557,6 @@ where
                                         }
                                     }
                                     stats.increment_rejected_txs();
-                                    self.state.drop_tx();
                                 }
                             }
                         }
@@ -568,6 +565,7 @@ where
                         tx_event.extend(Code(ResultCode::Ok));
                     }
 
+                    self.state.write_log_mut().commit_batch();
                     if commit_batch_hash {
                         // If at least one of the inner txs of the batch
                         // requires its hash to be committed than commit the
@@ -605,6 +603,9 @@ where
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
                         .extend(Code(ResultCode::InvalidTx));
+                    // FIXME: should drop the write log here?
+                    // FIXME: should make sure that I clean the write log before
+                    // analyzing the next tx.
                 }
                 Err(msg) => {
                     // This branch represents an error that affects the entire
@@ -622,8 +623,13 @@ where
                     // need to always produce the event with the batch
                     // attribute. But this is probably the only solution
 
+                    // FIXME: because of this I think I have onesolutions:
+                    //    I modify the writeLog and keep precommitting in
+                    // dispatch_tx, but in here I'd need to know which
+                    // transaction should be committed and which one should not.
+                    // Commit everything in the batch and discard the last one
+
                     // If user transaction
-                    // FIXME: this could be wrong
                     // didn't fail because of out of gas nor
                     // invalid section commitment, commit
                     // its hash to prevent replays
@@ -651,14 +657,37 @@ where
                         }
                     }
 
-                    // FIXME: how to manage this? It depends how many txs of the
-                    // non-atomic batch have been succesfully committed
-                    stats.increment_errored_txs();
-                    self.state.drop_tx();
+                    // if is_atomic_batch {
+                    // FIXME: should we commit the valid txs of the batch if it
+                    // is non-atomic?
+                    for _ in 0..commitments_len {
+                        stats.increment_rejected_txs();
+                    }
+                    self.state.write_log_mut().drop_batch();
+                    // } else {
+                    //     //FIXME: also, I don't have TxResult here so I cannot
+                    // log anything! -> I need it     //FIXME:
+                    // options:     //    - I don't return
+                    // an error in case of out of gas, but just Ok and I abort
+                    // the execution so that I have the TxResult -> But I'd
+                    // still need to tell that there was a gas error
+                    //     //    - I create the TxResult before and pass it as
+                    // an argument to dispatch_Tx so that I can update it anyway. Also, after the out of gas error I populate all the missing tx results with out of gas error
+
+                    //     //FIXME: I need the amount of entries in the batch
+                    // log to compute the difference     for
+                    // _ in 0..(commitments_len - self.state) {
+                    //         stats.increment_errored_txs();
+                    //     }
+                    //     // Commit the transaction that were accepted before
+                    // the failure     self.state.
+                    // write_log_mut().commit_batch(); }
 
                     tx_event
                         .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
+                        // FIXME: correct to mark it as invalid even if some txs
+                        // might have been committed?
                         .extend(Code(ResultCode::InvalidTx));
                 }
             }
@@ -2625,25 +2654,21 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(
-            shell
-                .shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
+            .unwrap_or_default());
         // Check that the hash is present in the merkle tree
-        assert!(
-            !shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&wrapper_hash_key)
-                .unwrap()
-        );
+        assert!(!shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&wrapper_hash_key)
+            .unwrap());
     }
 
     /// Test that a tx that has already been applied in the same block
@@ -2725,20 +2750,16 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap_or_default()
-            );
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap_or_default()
-            );
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+                .unwrap_or_default());
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.header_hash())
+                .unwrap_or_default());
         }
     }
 
@@ -2892,37 +2913,27 @@ mod test_finalize_block {
             unsigned_wrapper,
             wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(
-                        &valid_wrapper.raw_header_hash()
-                    )
-                    .unwrap_or_default()
-            );
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap_or_default()
-            );
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash())
+                .unwrap_or_default());
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.header_hash())
+                .unwrap_or_default());
         }
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .expect("test failed")
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
+            .expect("test failed"));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.header_hash())
+            .unwrap_or_default());
     }
 
     #[test]
@@ -2988,20 +2999,16 @@ mod test_finalize_block {
             .as_str();
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
 
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_hash)
-                .unwrap_or_default()
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.raw_header_hash())
-                .unwrap_or_default()
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_hash)
+            .unwrap_or_default());
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper.raw_header_hash())
+            .unwrap_or_default());
     }
 
     // Test that the fees are paid even if the inner transaction fails and its
@@ -3394,11 +3401,9 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(
-            enqueued_slashes_handle()
-                .at(&Epoch::default())
-                .is_empty(&shell.state)?
-        );
+        assert!(enqueued_slashes_handle()
+            .at(&Epoch::default())
+            .is_empty(&shell.state)?);
         assert_eq!(
             get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
@@ -3417,21 +3422,17 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(
-                enqueued_slashes_handle()
-                    .at(&epoch)
-                    .is_empty(&shell.state)?
-            );
+            assert!(enqueued_slashes_handle()
+                .at(&epoch)
+                .is_empty(&shell.state)?);
             assert_eq!(
                 get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(
-            !enqueued_slashes_handle()
-                .at(&processing_epoch)
-                .is_empty(&shell.state)?
-        );
+        assert!(!enqueued_slashes_handle()
+            .at(&processing_epoch)
+            .is_empty(&shell.state)?);
 
         // Advance to the processing epoch
         loop {
@@ -3454,11 +3455,9 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(
-                    enqueued_slashes_handle()
-                        .at(&shell.state.in_mem().block.epoch)
-                        .is_empty(&shell.state)?
-                );
+                assert!(enqueued_slashes_handle()
+                    .at(&shell.state.in_mem().block.epoch)
+                    .is_empty(&shell.state)?);
                 let stake1 = read_validator_stake(
                     &shell.state,
                     &params,
@@ -3945,13 +3944,11 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         tracing::debug!("Advancing to epoch 7");
 
@@ -4016,22 +4013,18 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(
-            namada_proof_of_stake::is_validator_frozen(
-                &shell.state,
-                &val1.address,
-                current_epoch,
-                &params
-            )
-            .unwrap()
-        );
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::is_validator_frozen(
+            &shell.state,
+            &val1.address,
+            current_epoch,
+            &params
+        )
+        .unwrap());
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(
@@ -4912,11 +4905,9 @@ mod test_finalize_block {
             shell.vp_wasm_cache.clone(),
         );
         let parameters = ParametersVp { ctx };
-        assert!(
-            parameters
-                .validate_tx(&batched_tx, &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(parameters
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .is_ok());
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();

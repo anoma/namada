@@ -250,29 +250,52 @@ where
                         tx_wasm_cache,
                     },
                 ) {
-                    Err(e @ Error::GasError(_)) => {
-                        // Gas error aborts the exeuction of the entire batch
-                        // FIXME: maybe implement a method on Error called
-                        // recoverable() and check that here?
-                        state.write_log_mut().drop_tx_keep_precommit();
-                        return Err(e);
-                    }
-                    res @ Err(_) => {
-                        // Need to drop to prevent next txs in the batch from
-                        // reading invalid states FIXME:
-                        // this means that the precommit field in the write log
-                        // cannot be a vector cause the indexes don't
-                        // necessarely match
-                        state.write_log_mut().drop_tx_keep_precommit();
-                        tx_result.batch_results.insert(cmt.get_hash(), res);
-                    }
+                    // Err(e @ Error::GasError(_)) => {
+                    //     // Gas error aborts the execution of the entire batch
+                    //     // FIXME: maybe implement a method on Error called
+                    //     // recoverable() and check that here?
+                    //     state.write_log_mut().drop_tx();
+                    //     return Err(e);
+                    // }
+                    // res @ Err(_) => {
+                    //     // Need to drop to prevent next txs in the batch from
+                    //     // reading invalid states
+                    //     state.write_log_mut().drop_tx();
+                    //     tx_result.batch_results.insert(cmt.get_hash(), res);
+                    // }
+                    // // FIXME: we keep going even for atomic batches which
+                    // could // instead be aborted, should
+                    // we do that? res @ Ok(_) => {
+                    //     // FIXME: wait what about the events? I should be
+                    // able     // to precommit those too!!!
+                    //     //FIXME: if the transaction was rejected I MUST NOT
+                    // commit it to the batch!!! But I still must update the
+                    // tx_result     match
+                    //     state.write_log_mut().commit_tx_to_batch(cmt);
+                    //     tx_result.batch_results.insert(cmt.get_hash(), res);
+                    // }
+                    // FIXME: improve
                     // FIXME: we keep going even for atomic batches which could
                     // instead be aborted, should we do that?
-                    res @ Ok(_) => {
-                        // FIXME: wait what about the events? I should be able
-                        // to precommit those too!!!
-                        state.write_log_mut().precommit_tx();
+                    Err(e @ Error::GasError(_)) => {
+                        // Gas error aborts the execution of the entire batch
+                        state.write_log_mut().drop_tx();
+                        // FIXME: should push something to the batch results in
+                        // this case?
+                        return Err(e);
+                    }
+                    res => {
+                        // FIXME: improve
+                        let is_accepted = match &res {
+                            Ok(result) if result.is_accepted() => true,
+                            _ => false,
+                        };
                         tx_result.batch_results.insert(cmt.get_hash(), res);
+                        if is_accepted {
+                            state.write_log_mut().commit_tx_to_batch(cmt);
+                        } else {
+                            state.write_log_mut().drop_tx();
+                        }
                     }
                 };
             }
@@ -692,6 +715,11 @@ where
 
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
+    // FIXME: if I return early the ibc events could still be populated and it
+    // remaing the write log until I commit or drop, meaning that I post in the
+    // events the same ibc events multiple times FIXME: I could fix this by
+    // committing for the non-atomic batch, but what about the atomic ones? I'd
+    // still have the duplicated entries!
     let ibc_events = state.write_log_mut().take_ibc_events();
 
     Ok(BatchedTxResult {
