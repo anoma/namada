@@ -6313,7 +6313,7 @@ pub mod args {
                     .def()
                     .help(
                         "Force the construction of the transaction without an \
-                         expiration (higly discouraged).",
+                         expiration (highly discouraged).",
                     )
                     .conflicts_with_all([EXPIRATION_OPT.name]),
             )
