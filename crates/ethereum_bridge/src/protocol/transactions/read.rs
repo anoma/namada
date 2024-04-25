@@ -41,13 +41,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let maybe_val = state.read_bytes(key)?;
-    let bytes = match maybe_val {
-        Some(bytes) => bytes,
-        None => return Ok(None),
-    };
-    let deserialized = T::try_from_slice(&bytes[..])?;
-    Ok(Some(deserialized))
+    Ok(state.read(key)?)
 }
 
 #[cfg(test)]

@@ -246,7 +246,6 @@ mod test_apply_bp_roots_to_storage {
     use std::collections::BTreeSet;
 
     use assert_matches::assert_matches;
-    use borsh::BorshDeserialize;
     use namada_core::address;
     use namada_core::ethereum_events::Uint;
     use namada_core::keccak::KeccakHash;
@@ -536,14 +535,10 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
 
-        let seen: bool = BorshDeserialize::try_from_slice(
-            state
-                .read_bytes(&bp_root_key.seen())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
+        let seen: bool = state
+            .read(&bp_root_key.seen())
+            .expect("Test failed")
+            .expect("Test failed");
         assert!(!seen);
 
         let hot_key = &keys[&validators[1]].eth_bridge;
@@ -555,14 +550,10 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[1]].protocol);
         _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
 
-        let seen: bool = BorshDeserialize::try_from_slice(
-            state
-                .read_bytes(&bp_root_key.seen())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
+        let seen: bool = state
+            .read(&bp_root_key.seen())
+            .expect("Test failed")
+            .expect("Test failed");
         assert!(seen);
     }
 
@@ -594,14 +585,10 @@ mod test_apply_bp_roots_to_storage {
         _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
 
         let expected = Votes::from([(validators[0].clone(), 100.into())]);
-        let seen_by: Votes = BorshDeserialize::try_from_slice(
-            state
-                .read_bytes(&bp_root_key.seen_by())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
+        let seen_by: Votes = state
+            .read(&bp_root_key.seen_by())
+            .expect("Test failed")
+            .expect("Test failed");
         assert_eq!(seen_by, expected);
 
         let hot_key = &keys[&validators[1]].eth_bridge;
@@ -617,14 +604,10 @@ mod test_apply_bp_roots_to_storage {
             (validators[0].clone(), 100.into()),
             (validators[1].clone(), 100.into()),
         ]);
-        let seen_by: Votes = BorshDeserialize::try_from_slice(
-            state
-                .read_bytes(&bp_root_key.seen_by())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
+        let seen_by: Votes = state
+            .read(&bp_root_key.seen_by())
+            .expect("Test failed")
+            .expect("Test failed");
         assert_eq!(seen_by, expected);
     }
 
@@ -662,14 +645,10 @@ mod test_apply_bp_roots_to_storage {
         let vext = vext.sign(&keys[&validators[0]].protocol);
         _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
 
-        let proof: BridgePoolRootProof = BorshDeserialize::try_from_slice(
-            state
-                .read_bytes(&bp_root_key.body())
-                .expect("Test failed")
-                .expect("Test failed")
-                .as_slice(),
-        )
-        .expect("Test failed");
+        let proof: BridgePoolRootProof = state
+            .read(&bp_root_key.body())
+            .expect("Test failed")
+            .expect("Test failed");
         assert_eq!(proof.data, expected.0.data);
         assert_eq!(proof.signatures, expected.0.signatures);
     }
@@ -689,7 +668,7 @@ mod test_apply_bp_roots_to_storage {
 
         assert!(
             state
-                .read_bytes(&get_signed_root_key())
+                .read::<(BridgePoolRoot, BlockHeight)>(&get_signed_root_key())
                 .expect("Test failed")
                 .is_none()
         );
@@ -728,14 +707,9 @@ mod test_apply_bp_roots_to_storage {
             .collect();
 
         _ = apply_derived_tx(&mut state, vexts).expect("Test failed");
-        let (proof, _): (BridgePoolRootProof, BlockHeight) =
-            BorshDeserialize::try_from_slice(
-                state
-                    .read_bytes(&get_signed_root_key())
-                    .expect("Test failed")
-                    .expect("Test failed")
-                    .as_slice(),
-            )
+        let (proof, _): (BridgePoolRootProof, BlockHeight) = state
+            .read(&get_signed_root_key())
+            .expect("Test failed")
             .expect("Test failed");
         let mut expected = BridgePoolRootProof::new((root, nonce));
         expected.attach_signature_batch(sigs);

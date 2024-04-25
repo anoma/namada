@@ -230,7 +230,7 @@ mod tests {
         tx_host_env::with(|env| {
             // store wasm code
             let key = Key::wasm_code(&code_hash);
-            env.state.write_bytes(&key, &code).unwrap();
+            env.state.write(&key, &code).unwrap();
         });
         tx::ctx().init_account(code_hash, &None, &[]).unwrap();
     }
@@ -300,7 +300,7 @@ mod tests {
 
         // Writing the VP to storage directly should fail
         let vp_key = Key::validity_predicate(&vp_owner);
-        tx::ctx().write_bytes(&vp_key, vp_hash).unwrap();
+        tx::ctx().write(&vp_key, vp_hash).unwrap();
     }
 
     /// Test that a tx initializing a new account with validity predicate that
@@ -654,13 +654,13 @@ mod tests {
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).serialize_to_vec();
+        let code_len = code.len() as u64;
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
             let len_key = Key::wasm_code_len(&code_hash);
-            env.state.write_bytes(&key, &code).unwrap();
-            env.state.write_bytes(&len_key, &code_len).unwrap();
+            env.state.write(&key, &code).unwrap();
+            env.state.write(&len_key, code_len).unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash, None)
@@ -674,13 +674,13 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).serialize_to_vec();
+        let code_len = code.len() as u64;
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
             let len_key = Key::wasm_code_len(&code_hash);
             env.state.write(&key, &code).unwrap();
-            env.state.write(&len_key, &code_len).unwrap();
+            env.state.write(&len_key, code_len).unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash, None)

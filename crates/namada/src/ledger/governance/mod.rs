@@ -407,14 +407,15 @@ where
 
         let max_content_length: usize =
             self.force_read(&max_content_length_parameter_key, ReadType::Pre)?;
-        let post_content =
+        // Check the byte length
+        let post_content_bytes =
             self.ctx.read_bytes_post(&content_key)?.unwrap_or_default();
 
-        let is_valid = post_content.len() <= max_content_length;
+        let is_valid = post_content_bytes.len() <= max_content_length;
         if !is_valid {
             let error = native_vp::Error::new_alloc(format!(
                 "Max content length {max_content_length}, got {}.",
-                post_content.len()
+                post_content_bytes.len()
             ))
             .into();
             tracing::info!("{error}");
@@ -621,7 +622,7 @@ where
         let max_proposal_length: usize =
             self.force_read(&max_code_size_parameter_key, ReadType::Pre)?;
         let post_code: Vec<u8> =
-            self.ctx.read_bytes_post(&code_key)?.unwrap_or_default();
+            self.ctx.read_post(&code_key)?.unwrap_or_default();
 
         let wasm_code_below_max_len = post_code.len() <= max_proposal_length;
 

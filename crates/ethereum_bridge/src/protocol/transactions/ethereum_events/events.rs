@@ -422,10 +422,7 @@ where
     let mut changed_keys = BTreeSet::default();
     let mut tx_events = BTreeSet::default();
 
-    let transfer = match state.read_bytes(&key)? {
-        Some(v) => PendingTransfer::try_from_slice(&v[..])?,
-        None => unreachable!(),
-    };
+    let transfer = state.read(&key)?.expect("No PendingTransfer");
     changed_keys.append(&mut refund_transfer_fees(state, &transfer)?);
     changed_keys.append(&mut refund_transferred_assets(state, &transfer)?);
 
@@ -478,14 +475,9 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
-    let native_erc20_addr = match state
-        .read_bytes(&bridge_storage::native_erc20_key())?
-    {
-        Some(v) => EthAddress::try_from_slice(&v[..])?,
-        None => {
-            return Err(eyre::eyre!("Could not read wNam key from storage"));
-        }
-    };
+    let native_erc20_addr = state
+        .read(&bridge_storage::native_erc20_key())?
+        .ok_or_else(|| eyre::eyre!("Could not read wNam key from storage"))?;
     let (source, target) = if transfer.transfer.asset == native_erc20_addr {
         let escrow_balance_key =
             balance_key(&state.in_mem().native_token, &BRIDGE_ADDRESS);
@@ -1007,20 +999,14 @@ mod tests {
             &wrapped_erc20s::token(&erc20_gas_addr),
             &BRIDGE_POOL_ADDRESS,
         );
-        let mut bp_nam_balance_pre = Amount::try_from_slice(
-            &state
-                .read_bytes(&pool_nam_balance_key)
-                .expect("Test failed")
-                .expect("Test failed"),
-        )
-        .expect("Test failed");
-        let mut bp_erc_balance_pre = Amount::try_from_slice(
-            &state
-                .read_bytes(&pool_erc_balance_key)
-                .expect("Test failed")
-                .expect("Test failed"),
-        )
-        .expect("Test failed");
+        let mut bp_nam_balance_pre: Amount = state
+            .read(&pool_nam_balance_key)
+            .expect("Test failed")
+            .expect("Test failed");
+        let mut bp_erc_balance_pre: Amount = state
+            .read(&pool_erc_balance_key)
+            .expect("Test failed")
+            .expect("Test failed");
         let (mut changed_keys, _) = act_on(&mut state, event).unwrap();
 
         for erc20 in [
@@ -1055,37 +1041,25 @@ mod tests {
             // NOTE: we should have one write -- the bridge pool nonce update
             1
         );
-        let relayer_nam_balance = Amount::try_from_slice(
-            &state
-                .read_bytes(&payer_nam_balance_key)
-                .expect("Test failed: read error")
-                .expect("Test failed: no value in storage"),
-        )
-        .expect("Test failed");
+        let relayer_nam_balance: Amount = state
+            .read(&payer_nam_balance_key)
+            .expect("Test failed: read error")
+            .expect("Test failed: no value in storage");
         assert_eq!(relayer_nam_balance, Amount::from(3));
-        let relayer_erc_balance = Amount::try_from_slice(
-            &state
-                .read_bytes(&payer_erc_balance_key)
-                .expect("Test failed: read error")
-                .expect("Test failed: no value in storage"),
-        )
-        .expect("Test failed");
+        let relayer_erc_balance: Amount = state
+            .read(&payer_erc_balance_key)
+            .expect("Test failed: read error")
+            .expect("Test failed: no value in storage");
         assert_eq!(relayer_erc_balance, Amount::from(2));
 
-        let bp_nam_balance_post = Amount::try_from_slice(
-            &state
-                .read_bytes(&pool_nam_balance_key)
-                .expect("Test failed: read error")
-                .expect("Test failed: no value in storage"),
-        )
-        .expect("Test failed");
-        let bp_erc_balance_post = Amount::try_from_slice(
-            &state
-                .read_bytes(&pool_erc_balance_key)
-                .expect("Test failed: read error")
-                .expect("Test failed: no value in storage"),
-        )
-        .expect("Test failed");
+        let bp_nam_balance_post = state
+            .read(&pool_nam_balance_key)
+            .expect("Test failed: read error")
+            .expect("Test failed: no value in storage");
+        let bp_erc_balance_post = state
+            .read(&pool_erc_balance_key)
+            .expect("Test failed: read error")
+            .expect("Test failed: no value in storage");
 
         bp_nam_balance_pre.spend(&bp_nam_balance_post).unwrap();
         assert_eq!(bp_nam_balance_pre, Amount::from(3));
@@ -1153,14 +1127,15 @@ mod tests {
             .fold(Amount::from(0), |acc, t| acc + t.gas_fee.amount);
         let payer = address::testing::established_address_2();
         let payer_key = balance_key(&nam(), &payer);
-        let value = state.read_bytes(&payer_key).expect("Test failed");
-        let payer_balance =
-            Amount::try_from_slice(&value.expect("Test failed"))
-                .expect("Test failed");
+        let payer_balance: Amount = state
+            .read(&payer_key)
+            .expect("Test failed")
+            .expect("Test failed");
         assert_eq!(payer_balance, expected);
         let pool_key = balance_key(&nam(), &BRIDGE_POOL_ADDRESS);
-        let value = state.read_bytes(&pool_key).expect("Test failed");
-        let pool_balance = Amount::try_from_slice(&value.expect("Test failed"))
+        let pool_balance: Amount = state
+            .read(&pool_key)
+            .expect("Test failed")
             .expect("Test failed");
         assert_eq!(pool_balance, Amount::from(0));
 
@@ -1168,30 +1143,30 @@ mod tests {
         for transfer in pending_transfers {
             if transfer.transfer.asset == wnam() {
                 let sender_key = balance_key(&nam(), &transfer.transfer.sender);
-                let value = state.read_bytes(&sender_key).expect("Test failed");
-                let sender_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
-                        .expect("Test failed");
+                let sender_balance: Amount = state
+                    .read(&sender_key)
+                    .expect("Test failed")
+                    .expect("Test failed");
                 assert_eq!(sender_balance, transfer.transfer.amount);
                 let escrow_key = balance_key(&nam(), &BRIDGE_ADDRESS);
-                let value = state.read_bytes(&escrow_key).expect("Test failed");
-                let escrow_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
-                        .expect("Test failed");
+                let escrow_balance: Amount = state
+                    .read(&escrow_key)
+                    .expect("Test failed")
+                    .expect("Test failed");
                 assert_eq!(escrow_balance, Amount::from(0));
             } else {
                 let token = transfer.token_address();
                 let sender_key = balance_key(&token, &transfer.transfer.sender);
-                let value = state.read_bytes(&sender_key).expect("Test failed");
-                let sender_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
-                        .expect("Test failed");
+                let sender_balance: Amount = state
+                    .read(&sender_key)
+                    .expect("Test failed")
+                    .expect("Test failed");
                 assert_eq!(sender_balance, transfer.transfer.amount);
                 let escrow_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
-                let value = state.read_bytes(&escrow_key).expect("Test failed");
-                let escrow_balance =
-                    Amount::try_from_slice(&value.expect("Test failed"))
-                        .expect("Test failed");
+                let escrow_balance: Amount = state
+                    .read(&escrow_key)
+                    .expect("Test failed")
+                    .expect("Test failed");
                 assert_eq!(escrow_balance, Amount::from(0));
             }
         }
@@ -1211,7 +1186,7 @@ mod tests {
         );
         assert!(
             state
-                .read_bytes(&receiver_wnam_balance_key)
+                .read::<Amount>(&receiver_wnam_balance_key)
                 .unwrap()
                 .is_none()
         );
@@ -1268,7 +1243,7 @@ mod tests {
         // wNAM is never minted, it's converted back to NAM
         assert!(
             state
-                .read_bytes(&receiver_wnam_balance_key)
+                .read::<Amount>(&receiver_wnam_balance_key)
                 .unwrap()
                 .is_none()
         );
@@ -1454,13 +1429,13 @@ mod tests {
             // check pre supply
             assert!(
                 state
-                    .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
+                    .read::<Amount>(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
             assert!(
                 state
-                    .read_bytes(&minted_balance_key(&wnam))
+                    .read::<Amount>(&minted_balance_key(&wnam))
                     .expect("Test failed")
                     .is_none()
             );
@@ -1477,7 +1452,7 @@ mod tests {
             // by the transferred amount
             assert!(
                 state
-                    .read_bytes(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
+                    .read::<Amount>(&balance_key(&wnam, &BRIDGE_POOL_ADDRESS))
                     .expect("Test failed")
                     .is_none()
             );
