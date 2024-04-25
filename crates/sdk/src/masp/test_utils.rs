@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
 use masp_primitives::merkle_tree::CommitmentTree;
@@ -10,7 +11,8 @@ use crate::error::Error;
 use crate::io::Io;
 use crate::masp::types::IndexedNoteEntry;
 use crate::masp::utils::{
-    CommitmentTreeUpdates, FetchQueueSender, MaspClient, ProgressLogger,
+    CommitmentTreeUpdates, FetchQueueSender, MaspClient, PeekableIter,
+    ProgressLogger,
 };
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::queries::testing::TestClient;
@@ -24,6 +26,9 @@ pub struct TestingClient {
     /// the fetch algorithm. The option is to mock connection
     /// failures.
     next_masp_txs: flume::Receiver<Option<IndexedNoteEntry>>,
+    /// We sometimes want to iterate over values in the above
+    /// channel more than once. Thus we need to resend them.
+    send_masp_txs: flume::Sender<Option<IndexedNoteEntry>>,
 }
 
 impl Deref for TestingClient {
@@ -80,24 +85,23 @@ pub fn test_client(
         TestingClient {
             inner: client,
             next_masp_txs: recv,
+            send_masp_txs: sender.clone(),
         },
         sender,
     )
 }
 
-#[derive(Debug, Clone)]
-pub struct TestingMaspClient {
-    next_masp_txs: flume::Receiver<Option<IndexedNoteEntry>>,
+#[derive(Clone)]
+pub struct TestingMaspClient<'a> {
+    client: &'a TestingClient,
 }
 
-impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient {
+impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
     fn new(client: &'a TestingClient) -> Self
     where
         Self: 'a,
     {
-        Self {
-            next_masp_txs: client.next_masp_txs.clone(),
-        }
+        Self { client }
     }
 
     async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
@@ -107,10 +111,26 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient {
         _: IndexedTx,
         _: BlockHeight,
     ) -> Result<CommitmentTreeUpdates, Error> {
+        let mut note_map_delta: BTreeMap<IndexedTx, usize> = Default::default();
+        let mut channel_temp = vec![];
+        let mut note_pos = 0;
+        for msg in self.client.next_masp_txs.drain() {
+            if let Some((ix, _)) = msg.as_ref() {
+                note_map_delta.insert(*ix, note_pos);
+                note_pos += 1;
+            }
+            channel_temp.push(msg);
+        }
+        for msg in channel_temp.drain(..) {
+            self.client
+                .send_masp_txs
+                .send(msg)
+                .map_err(|e| Error::Other(e.to_string()))?;
+        }
         Ok(CommitmentTreeUpdates {
             commitment_tree: CommitmentTree::<Node>::empty(),
             witness_map: Default::default(),
-            note_map_delta: Default::default(),
+            note_map_delta,
         })
     }
 
@@ -122,16 +142,21 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient {
         to: u64,
     ) -> Result<(), Error> {
         // N.B. this assumes one masp tx per block
-        for _ in logger.fetch(from..=to) {
-            let next_tx =
-                self.next_masp_txs.recv().expect("Test failed").ok_or_else(
-                    || {
-                        Error::Other(
-                            "Connection to fetch MASP txs failed".to_string(),
-                        )
-                    },
-                )?;
+        let mut fetch_iter = logger.fetch(from..=to);
+
+        while fetch_iter.peek().is_some() {
+            let next_tx = self
+                .client
+                .next_masp_txs
+                .recv()
+                .expect("Test failed")
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Connection to fetch MASP txs failed".to_string(),
+                    )
+                })?;
             tx_sender.send(next_tx);
+            fetch_iter.next();
         }
         Ok(())
     }

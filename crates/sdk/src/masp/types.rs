@@ -262,7 +262,7 @@ impl DecryptedDataCache {
 /// all transactions from a given height, or none.
 #[derive(Debug, Default, Clone)]
 pub struct Unscanned {
-    txs: Arc<Mutex<IndexedNoteData>>,
+    pub(super) txs: Arc<Mutex<IndexedNoteData>>,
 }
 
 impl BorshSerialize for Unscanned {

@@ -7,7 +7,7 @@ use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::types::IndexedNoteEntry;
 use namada_sdk::masp::utils::{
-    LedgerMaspClient, ProgressLogger, ProgressType, RetryStrategy,
+    LedgerMaspClient, PeekableIter, ProgressLogger, ProgressType, RetryStrategy,
 };
 use namada_sdk::masp::{ShieldedContext, ShieldedUtils};
 use namada_sdk::queries::Client;
@@ -192,6 +192,7 @@ where
     items: I,
     drawer: Arc<Mutex<StdoutDrawer<'io, IO>>>,
     r#type: ProgressType,
+    peeked: Option<T>,
 }
 
 impl<'io, T, I, IO> CliLogging<'io, T, I, IO>
@@ -221,6 +222,7 @@ where
             items,
             drawer,
             r#type,
+            peeked: None,
         }
     }
 
@@ -243,6 +245,28 @@ where
     }
 }
 
+impl<'io, T, I, IO> PeekableIter<T> for CliLogging<'io, T, I, IO>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+    IO: Io,
+{
+    fn peek(&mut self) -> Option<&T> {
+        if self.peeked.is_none() {
+            self.peeked = self.items.next();
+        }
+        self.peeked.as_ref()
+    }
+
+    fn next(&mut self) -> Option<T> {
+        self.peek();
+        let next_item = self.peeked.take()?;
+        self.advance_index();
+        self.draw();
+        Some(next_item)
+    }
+}
+
 impl<'io, T, I, IO> Iterator for CliLogging<'io, T, I, IO>
 where
     T: Debug,
@@ -252,10 +276,7 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let next_item = self.items.next()?;
-        self.advance_index();
-        self.draw();
-        Some(next_item)
+        <Self as PeekableIter<T>>::next(self)
     }
 }
 
@@ -286,7 +307,7 @@ impl<'io, IO: Io + Send + Sync> ProgressLogger<IO> for CliLogger<'io, IO> {
         io
     }
 
-    fn fetch<I>(&self, items: I) -> impl Iterator<Item = u64>
+    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
     where
         I: Iterator<Item = u64>,
     {
