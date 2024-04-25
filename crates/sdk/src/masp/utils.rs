@@ -1,13 +1,15 @@
 use core::str::FromStr;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::ff::PrimeField;
+use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::keys::FullViewingKey;
-use masp_primitives::sapling::{Diversifier, ViewingKey};
+use masp_primitives::sapling::{Diversifier, Node, ViewingKey};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
@@ -24,12 +26,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::shielded_ctx::ShieldedContext;
-use crate::masp::types::{
-    ContextSyncStatus, IndexedNoteEntry, PVKs, ScannedData, TransactionDelta,
-    Unscanned,
-};
+use crate::masp::types::{ContextSyncStatus, ExtractedMaspTx, IndexedNoteEntry, PVKs, ScannedData, TransactionDelta, Unscanned};
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
 use crate::queries::Client;
+use crate::rpc::query_epoch_at_height;
 use crate::{MaybeSend, MaybeSync};
 
 /// Make sure the MASP params are present and load verifying keys into memory
@@ -425,6 +425,213 @@ fn get_tx_result(
         })
 }
 
+pub(super) struct CommitmentTreeUpdates {
+    pub commitment_tree: CommitmentTree<Node>,
+    pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
+    pub note_map_delta: BTreeMap<IndexedTx, usize>,
+}
+
+pub trait MaspClient<'a, C: Client> {
+    fn new(client: &'a C) -> Self
+    where
+        Self: 'a;
+
+    async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
+        &self,
+        ctx: &ShieldedContext<U>,
+        io: &IO,
+        last_witnessed_tx: IndexedTx,
+        last_query_height: BlockHeight,
+    ) -> Result<CommitmentTreeUpdates, Error>;
+    async fn update_commitment_tree<U: ShieldedUtils, IO: Io>(
+        &self,
+        ctx: &mut ShieldedContext<U>,
+        io: &IO,
+        last_witnessed_tx: IndexedTx,
+        last_query_height: BlockHeight,
+    ) -> Result<(), Error> {
+        let CommitmentTreeUpdates {
+            commitment_tree,
+            witness_map,
+            mut note_map_delta,
+        } = self
+            .witness_map_updates(ctx, io, last_witnessed_tx, last_query_height)
+            .await?;
+        ctx.tree = commitment_tree;
+        ctx.witness_map = witness_map;
+        ctx.tx_note_map.append(&mut note_map_delta);
+        Ok(())
+    }
+    async fn fetch_shielded_transfer<IO: Io>(
+        &self,
+        logger: &impl ProgressLogger<IO>,
+        tx_sender: FetchQueueSender,
+        from: u64,
+        to: u64,
+    ) -> Result<(), Error>;
+}
+
+/// An inefficient MASP client which simply uses a
+/// client to the blockchain to query it directly.
+pub(super) struct LedgerMaspClient<'a, C: Client> {
+    client: &'a C,
+}
+
+impl<'a, C: Client + Sync> MaspClient<'a, C> for LedgerMaspClient<'a, C>
+where
+    LedgerMaspClient<'a, C>: 'a,
+{
+    fn new(client: &'a C) -> Self
+    where
+        Self: 'a,
+    {
+        Self { client }
+    }
+
+    async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
+        &self,
+        ctx: &ShieldedContext<U>,
+        io: &IO,
+        last_witnessed_tx: IndexedTx,
+        last_query_height: BlockHeight,
+    ) -> Result<CommitmentTreeUpdates, Error> {
+        let (tx_sender, tx_receiver) = fetch_channel::new(Default::default());
+        let logger = DefaultLogger::new(io);
+        let (res, updates) = tokio::join!(
+            self.fetch_shielded_transfer(
+                &logger,
+                tx_sender,
+                last_witnessed_tx.height.0,
+                last_query_height.0,
+            ),
+            async {
+                let mut updates = CommitmentTreeUpdates {
+                    commitment_tree: ctx.tree.clone(),
+                    witness_map: ctx.witness_map.clone(),
+                    note_map_delta: Default::default(),
+                };
+                for (indexed_tx, (_, _, ref shielded)) in tx_receiver {
+                    let mut note_pos = updates.commitment_tree.size();
+                    updates.note_map_delta.insert(indexed_tx, note_pos);
+                    for so in shielded
+                        .sapling_bundle()
+                        .map_or(&vec![], |x| &x.shielded_outputs)
+                    {
+                        // Create merkle tree leaf node from note commitment
+                        let node = Node::new(so.cmu.to_repr());
+                        // Update each merkle tree in the witness map with the
+                        // latest addition
+                        for (_, witness) in updates.witness_map.iter_mut() {
+                            witness.append(node).map_err(|()| {
+                                Error::Other(
+                                    "note commitment tree is full".to_string(),
+                                )
+                            })?;
+                        }
+                        updates.commitment_tree.append(node).map_err(|()| {
+                            Error::Other(
+                                "note commitment tree is full".to_string(),
+                            )
+                        })?;
+                        // Finally, make it easier to construct merkle paths to
+                        // this new note
+                        let witness = IncrementalWitness::<Node>::from_tree(
+                            &updates.commitment_tree,
+                        );
+                        updates.witness_map.insert(note_pos, witness);
+                        note_pos += 1;
+                    }
+                }
+                Ok(updates)
+            }
+        );
+        res?;
+        updates
+    }
+
+    async fn fetch_shielded_transfer<IO: Io>(
+        &self,
+        logger: &impl ProgressLogger<IO>,
+        mut tx_sender: FetchQueueSender,
+        from: u64,
+        to: u64,
+    ) -> Result<(), Error> {
+        // Fetch all the transactions we do not have yet
+        for height in logger.fetch(from..=to) {
+            if tx_sender.contains_height(height) {
+                continue;
+            }
+            // Get the valid masp transactions at the specified height
+            let epoch = query_epoch_at_height(self.client, height.into())
+                .await?
+                .ok_or_else(|| {
+                    Error::from(QueryError::General(
+                        "Queried height is greater than the last committed \
+                         block height"
+                            .to_string(),
+                    ))
+                })?;
+            let txs_results = match get_indexed_masp_events_at_height(
+                &self.client,
+                height.into(),
+                None,
+            )
+                .await?
+            {
+                Some(events) => events,
+                None => continue,
+            };
+
+            // Query the actual block to get the txs bytes. If we only need one
+            // tx it might be slightly better to query the /tx endpoint to
+            // reduce the amount of data sent over the network, but this is a
+            // minimal improvement and it's even hard to tell how many times
+            // we'd need a single masp tx to make this worth it
+            let block = self.client
+                .block(height as u32)
+                .await
+                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
+                .block
+                .data;
+
+            for (idx, tx_event) in txs_results {
+                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                let ExtractedMaspTx {
+                    fee_unshielding,
+                    inner_tx,
+                } = extract_masp_tx::<C>(
+                    &tx,
+                    ExtractShieldedActionArg::Event(&tx_event),
+                    true,
+                )
+                    .await?;
+                fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
+                    tx_sender.send((
+                        IndexedTx {
+                            height: height.into(),
+                            index: idx,
+                            is_wrapper: true,
+                        },
+                        (epoch, changed_keys, masp_transaction),
+                    ));
+                });
+                inner_tx.and_then(|(changed_keys, masp_transaction)| {
+                    tx_sender.send((
+                        IndexedTx {
+                            height: height.into(),
+                            index: idx,
+                            is_wrapper: false,
+                        },
+                        (epoch, changed_keys, masp_transaction),
+                    ));
+                })
+            }
+        }
+        Ok(())
+    }
+}
+
 /// A channel-like struct for "sending" newly fetched blocks
 /// to the scanning algorithm.
 ///
@@ -433,7 +640,7 @@ fn get_tx_result(
 /// 1. The process in possession of the channel is still alive
 /// 2. Quickly updating the latest block height scanned.
 #[derive(Clone)]
-pub(super) struct FetchQueueSender {
+pub struct FetchQueueSender {
     cache: Unscanned,
     last_fetched: flume::Sender<BlockHeight>,
 }
@@ -557,7 +764,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
             TaskManager {
                 action: action_recv,
                 latest_idx: Default::default(),
-                ctx:  Arc::new(futures_locks::Mutex::new(ctx)),
+                ctx: Arc::new(futures_locks::Mutex::new(ctx)),
             },
         )
     }
@@ -572,7 +779,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                 Action::Complete { with_error } => {
                     if !with_error {
                         let mut locked = self.ctx.lock().await;
-                        // update each key to be synced to the latest scanned height.
+                        // update each key to be synced to the latest scanned
+                        // height.
                         for (_, h) in locked.vk_heights.iter_mut() {
                             *h = Some(self.latest_idx);
                         }
@@ -580,6 +788,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                         locked.nullify_spent_notes(native_token)?;
                         _ = locked.save().await;
                     }
+                    return Ok(())
                 }
                 Action::Data(scanned, idx) => {
                     // track the latest scanned height
@@ -638,6 +847,32 @@ impl<U: ShieldedUtils> TaskScheduler<U> {
     }
 }
 
+/// When retrying to fetch all nodes in a
+/// loop, this dictates the strategy for
+/// how many attempts should be made.
+pub enum RetryStrategy {
+    Forever,
+    Times(u64),
+}
+
+impl Iterator for RetryStrategy {
+    type Item = ();
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Forever => Some(()),
+            Self::Times(ref mut count) => {
+                if *count == 0 {
+                    None
+                } else {
+                    *count -= 1;
+                    Some(())
+                }
+            }
+        }
+    }
+}
+
 /// An enum to indicate how to log sync progress depending on
 /// whether sync is currently fetch or scanning blocks.
 #[derive(Debug, Copy, Clone)]
@@ -653,7 +888,10 @@ pub trait ProgressLogger<IO: Io> {
     where
         I: Iterator<Item = u64>;
 
-    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
+    fn scan<I>(
+        &self,
+        items: I,
+    ) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
         I: Iterator<Item = IndexedNoteEntry> + Send;
 
