@@ -567,8 +567,12 @@ where
         to: u64,
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
-        for height in logger.fetch(from..=to) {
+        let mut fetch_iter = logger.fetch(from..=to);
+
+        while let Some(height) = fetch_iter.peek() {
+            let height = *height;
             if tx_sender.contains_height(height) {
+                fetch_iter.next();
                 continue;
             }
             // Get the valid masp transactions at the specified height
@@ -589,7 +593,10 @@ where
             .await?
             {
                 Some(events) => events,
-                None => continue,
+                None => {
+                    fetch_iter.next();
+                    continue;
+                }
             };
 
             // Query the actual block to get the txs bytes. If we only need one
@@ -639,7 +646,9 @@ where
                     ));
                 }
             }
+            fetch_iter.next();
         }
+
         Ok(())
     }
 }
@@ -822,17 +831,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
 impl<U: ShieldedUtils> TaskScheduler<U> {
     /// Signal the [`TaskManager`] that the scanning thread has completed
     pub(super) fn complete(&self, with_error: bool) {
-        self.action
-            .blocking_send(Action::Complete { with_error })
-            .unwrap()
+        _ = self.action.blocking_send(Action::Complete { with_error });
     }
 
     /// Schedule the [`TaskManager`] to save the latest context
     /// state changes.
     pub(super) fn save(&self, data: ScannedData, latest_idx: IndexedTx) {
-        self.action
-            .blocking_send(Action::Data(data, latest_idx))
-            .unwrap();
+        _ = self.action.blocking_send(Action::Data(data, latest_idx));
     }
 
     /// Calls the `scan_tx` method of the shielded context
@@ -893,10 +898,28 @@ pub enum ProgressType {
     Scan,
 }
 
+pub trait PeekableIter<I> {
+    fn peek(&mut self) -> Option<&I>;
+    fn next(&mut self) -> Option<I>;
+}
+
+impl<I, J> PeekableIter<J> for std::iter::Peekable<I>
+where
+    I: Iterator<Item = J>,
+{
+    fn peek(&mut self) -> Option<&J> {
+        self.peek()
+    }
+
+    fn next(&mut self) -> Option<J> {
+        <Self as Iterator>::next(self)
+    }
+}
+
 pub trait ProgressLogger<IO: Io> {
     fn io(&self) -> &IO;
 
-    fn fetch<I>(&self, items: I) -> impl Iterator<Item = u64>
+    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
     where
         I: Iterator<Item = u64>;
 
@@ -938,13 +961,23 @@ where
 {
     inner: I,
     progress: Arc<Mutex<IterProgress>>,
+    peeked: Option<u64>,
 }
 
-impl<I: Iterator<Item = u64>> Iterator for DefaultFetchIterator<I> {
-    type Item = u64;
+impl<I> PeekableIter<u64> for DefaultFetchIterator<I>
+where
+    I: Iterator<Item = u64>,
+{
+    fn peek(&mut self) -> Option<&u64> {
+        if self.peeked.is_none() {
+            self.peeked = self.inner.next();
+        }
+        self.peeked.as_ref()
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.inner.next()?;
+    fn next(&mut self) -> Option<u64> {
+        self.peek();
+        let item = self.peeked.take()?;
         let mut locked = self.progress.lock().unwrap();
         locked.index += 1;
         Some(item)
@@ -956,7 +989,7 @@ impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
         self.io
     }
 
-    fn fetch<I>(&self, items: I) -> impl Iterator<Item = u64>
+    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
     where
         I: Iterator<Item = u64>,
     {
@@ -967,6 +1000,7 @@ impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
         DefaultFetchIterator {
             inner: items,
             progress: self.progress.clone(),
+            peeked: None,
         }
     }
 
@@ -981,5 +1015,20 @@ impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
     fn left_to_fetch(&self) -> usize {
         let locked = self.progress.lock().unwrap();
         locked.length - locked.index
+    }
+}
+
+#[cfg(test)]
+mod util_tests {
+    use crate::masp::utils::RetryStrategy;
+
+    #[test]
+    fn test_retry_strategy() {
+        let strategy = RetryStrategy::Times(3);
+        let mut counter = 0;
+        for _ in strategy {
+            counter += 1;
+        }
+        assert_eq!(counter, 3);
     }
 }
