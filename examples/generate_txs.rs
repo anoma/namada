@@ -14,6 +14,7 @@ async fn main() -> Result<(), Reason> {
     let wallet = FsWalletUtils::new(PathBuf::from("wallet.toml"));
     let mut debug_vectors = vec![];
     let mut test_vectors = vec![];
+    let mut serialized_txs = vec![];
     for i in 0..1000 {
         let (tx, tx_data) = arb_signed_tx().new_tree(&mut runner)?.current();
         let mut ledger_vector = to_ledger_vector(&wallet, &tx)
@@ -27,10 +28,11 @@ async fn main() -> Result<(), Reason> {
         sechash_map.insert(0xff, HEXLOWER.encode(&tx.raw_header_hash().0));
         ledger_vector.name = format!("{}_{}", i, ledger_vector.name);
         test_vectors.push(ledger_vector.clone());
-        debug_vectors.push((ledger_vector, tx, tx_data, sechash_map));
+        debug_vectors.push((ledger_vector, tx.clone(), tx_data, sechash_map));
+        serialized_txs.push(HEXLOWER.encode(tx.to_bytes().as_ref()));
     }
     let args: Vec<_> = std::env::args().collect();
-    if args.len() < 3 {
+    if args.len() < 4 {
         eprintln!("Usage: generate-txs <vectors.json> <debugs.txt>");
         return Result::Err(Reason::from("Incorrect command line arguments."));
     }
@@ -38,6 +40,8 @@ async fn main() -> Result<(), Reason> {
         .expect("unable to serialize test vectors");
     std::fs::write(&args[1], json).expect("unable to save test vectors");
     std::fs::write(&args[2], format!("{:#?}", debug_vectors))
+        .expect("unable to save test vectors");
+    std::fs::write(&args[3], format!("{:#?}", serialized_txs))
         .expect("unable to save test vectors");
     Ok(())
 }
