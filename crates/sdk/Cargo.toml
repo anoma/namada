@@ -173,3 +173,4 @@ jubjub.workspace = true
 masp_primitives = { workspace = true, features = ["test-dependencies"] }
 proptest.workspace = true
 tempfile.workspace = true
+tokio-test.workspace = true

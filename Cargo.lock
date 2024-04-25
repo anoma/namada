@@ -5307,6 +5307,7 @@ dependencies = [
  "tiny-bip39",
  "tiny-hderive",
  "tokio",
+ "tokio-test",
  "toml 0.5.11",
  "tracing",
  "wasmtimer",

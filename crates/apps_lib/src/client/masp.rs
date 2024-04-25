@@ -6,7 +6,7 @@ use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::types::IndexedNoteEntry;
-use namada_sdk::masp::utils::{ProgressLogger, ProgressType};
+use namada_sdk::masp::utils::{ProgressLogger, ProgressType, RetryStrategy};
 use namada_sdk::masp::{ShieldedContext, ShieldedUtils};
 use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
@@ -40,6 +40,7 @@ pub async fn syncing<
             .fetch(
                 client,
                 &logger,
+                RetryStrategy::Forever,
                 start_query_height,
                 last_query_height,
                 batch_size,

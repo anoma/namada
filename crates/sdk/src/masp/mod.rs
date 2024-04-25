@@ -3,6 +3,7 @@
 pub mod shielded_ctx;
 pub mod types;
 pub mod utils;
+mod test_utils;
 
 use std::collections::HashMap;
 use std::env;
