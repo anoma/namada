@@ -435,6 +435,41 @@ impl<U: WalletStorage> Wallet<U> {
         self.utils.clone().load_in_mem(self)
     }
 
+    fn into_store(self) -> Result<Store, LoadStoreError> {
+        if let Some(store) = self.store_in_mem {
+            // return in-memory wallet store
+            Ok(store)
+        } else {
+            // read wallet storage
+            self.utils.load_store_read_only()
+        }
+    }
+
+    fn get_store(&self) -> Result<Store, LoadStoreError> {
+        if let Some(ref store) = self.store_in_mem {
+            // return in-memory wallet store
+            Ok(store.clone())
+        } else {
+            // read wallet storage
+            self.utils.load_store_read_only()
+        }
+    }
+
+    fn update_store(
+        &mut self,
+        update: impl FnOnce(&mut Store),
+    ) -> Result<(), LoadStoreError> {
+        if let Some(store) = &mut self.store_in_mem {
+            // update in-memory wallet store (e.g., for dry-run tx
+            // executions)
+            update(store);
+            Ok(())
+        } else {
+            // update wallet storage
+            self.utils.update_store(update)
+        }
+    }
+
     /// Add validator data to the store
     pub fn add_validator_data_atomic(
         &mut self,
