@@ -152,7 +152,7 @@ pub mod shim {
     pub mod request {
 
         use namada::core::hash::Hash;
-        use namada::core::storage::{BlockHash, Header};
+        use namada::core::storage::Header;
         use namada::core::time::DateTimeUtc;
 
         use super::VoteInfo;
@@ -172,7 +172,6 @@ pub mod shim {
 
         #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
-            pub hash: BlockHash,
             pub header: Header,
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
@@ -184,7 +183,6 @@ pub mod shim {
             fn from(req: tm_request::BeginBlock) -> FinalizeBlock {
                 let header = req.header;
                 FinalizeBlock {
-                    hash: BlockHash::default(),
                     header: Header {
                         hash: Hash::try_from(header.app_hash.as_bytes())
                             .unwrap_or_default(),

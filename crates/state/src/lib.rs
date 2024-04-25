@@ -280,14 +280,6 @@ macro_rules! impl_storage_read {
                 Ok(header)
             }
 
-            fn get_block_hash(
-                &self,
-            ) -> std::result::Result<storage::BlockHash, namada_storage::Error> {
-                let (hash, gas) = self.in_mem().get_block_hash();
-                self.charge_gas(gas).into_storage_result()?;
-                Ok(hash)
-            }
-
             fn get_block_epoch(
                 &self,
             ) -> std::result::Result<storage::Epoch, namada_storage::Error> {
@@ -607,7 +599,6 @@ pub mod testing {
             let tree = MerkleTree::default();
             let block = BlockStorage {
                 tree,
-                hash: BlockHash::default(),
                 height: BlockHeight::default(),
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),

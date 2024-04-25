@@ -3,7 +3,7 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
+use namada::core::storage::{BlockResults, Epoch, Header};
 use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
@@ -62,7 +62,7 @@ where
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
-        let (height, new_epoch) = self.update_state(req.header, req.hash);
+        let (height, new_epoch) = self.update_state(req.header);
 
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let update_for_tendermint = matches!(
@@ -550,21 +550,16 @@ where
         Ok(response)
     }
 
-    /// Sets the metadata necessary for a new block, including
-    /// the hash, height, validator changes, and evidence of
-    /// byzantine behavior. Applies slashes if necessary.
-    /// Returns a bool indicating if a new epoch began and
-    /// the height of the new block.
-    fn update_state(
-        &mut self,
-        header: Header,
-        hash: BlockHash,
-    ) -> (BlockHeight, bool) {
+    /// Sets the metadata necessary for a new block, including the height,
+    /// validator changes, and evidence of byzantine behavior. Applies slashes
+    /// if necessary. Returns a bool indicating if a new epoch began and the
+    /// height of the new block.
+    fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
         let height = self.state.in_mem().get_last_block_height() + 1;
 
         self.state
             .in_mem_mut()
-            .begin_block(hash, height)
+            .begin_block(height)
             .expect("Beginning a block shouldn't fail");
 
         let header_time = header.time;

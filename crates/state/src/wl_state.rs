@@ -478,7 +478,6 @@ where
     fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
             merkle_tree_stores,
-            hash,
             height,
             time,
             epoch,
@@ -500,12 +499,11 @@ where
         {
             {
                 let in_mem = &mut self.0.in_mem;
-                in_mem.block.hash = hash.clone();
                 in_mem.block.height = height;
                 in_mem.block.epoch = epoch;
                 in_mem.block.results = results;
                 in_mem.block.pred_epochs = pred_epochs;
-                in_mem.last_block = Some(LastBlock { height, hash, time });
+                in_mem.last_block = Some(LastBlock { height, time });
                 in_mem.last_epoch = epoch;
                 in_mem.next_epoch_min_start_height =
                     next_epoch_min_start_height;
@@ -570,7 +568,6 @@ where
         let state = BlockStateWrite {
             merkle_tree_stores: self.in_mem.block.tree.stores(),
             header: self.in_mem.header.as_ref(),
-            hash: &self.in_mem.block.hash,
             height: self.in_mem.block.height,
             time: self
                 .in_mem
@@ -601,7 +598,6 @@ where
             .expect("Must have a block header on commit");
         self.in_mem.last_block = Some(LastBlock {
             height: self.in_mem.block.height,
-            hash: header.hash.into(),
             time: header.time,
         });
         self.in_mem.last_epoch = self.in_mem.block.epoch;

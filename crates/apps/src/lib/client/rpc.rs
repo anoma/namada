@@ -133,8 +133,7 @@ pub async fn query_block(context: &impl Namada) {
         Some(block) => {
             display_line!(
                 context.io(),
-                "Last committed block ID: {}, height: {}, time: {}",
-                block.hash,
+                "Last committed block height: {}, time: {}",
                 block.height,
                 block.time
             );

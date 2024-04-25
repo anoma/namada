@@ -1416,7 +1416,7 @@ mod test_utils {
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
-    use namada::core::storage::{BlockHash, Epoch, Header};
+    use namada::core::storage::{Epoch, Header};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
@@ -1866,7 +1866,6 @@ mod test_utils {
     impl Default for FinalizeBlock {
         fn default() -> Self {
             FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
                 header: Header {
                     hash: Hash([0; 32]),
                     #[allow(clippy::disallowed_methods)]

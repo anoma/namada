@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, DbColFam, Epoch, Epochs,
-    EthEventsQueue, Header, Key,
+    BlockHeight, BlockResults, DbColFam, Epoch, Epochs, EthEventsQueue, Header,
+    Key,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{ethereum_events, ethereum_structs};
@@ -48,8 +48,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct BlockStateRead {
     /// Merkle tree stores
     pub merkle_tree_stores: MerkleTreeStoresRead,
-    /// Hash of the block
-    pub hash: BlockHash,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block
@@ -85,8 +83,6 @@ pub struct BlockStateWrite<'a> {
     pub merkle_tree_stores: MerkleTreeStoresWrite<'a>,
     /// Header of the block
     pub header: Option<&'a Header>,
-    /// Hash of the block
-    pub hash: &'a BlockHash,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block

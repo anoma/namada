@@ -17,7 +17,6 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::chain::ChainId;
-use namada::core::hash::Hash;
 use namada::core::key::common::SecretKey;
 use namada::core::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
@@ -570,7 +569,7 @@ impl BenchShell {
         self.inner
             .state
             .in_mem_mut()
-            .begin_block(Hash::default().into(), last_height + 1)
+            .begin_block(last_height + 1)
             .unwrap();
 
         self.inner.commit();

@@ -121,7 +121,6 @@ impl DB for MockDB {
         let prefix = format!("{}/", height.raw());
         let upper_prefix = format!("{}/", height.next_height().raw());
         let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        let mut hash = None;
         let mut time = None;
         let mut epoch: Option<Epoch> = None;
         let mut pred_epochs = None;
@@ -153,9 +152,6 @@ impl DB for MockDB {
                     },
                     "header" => {
                         // the block header doesn't have to be restored
-                    }
-                    "hash" => {
-                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
                     }
                     "time" => {
                         time = Some(decode(bytes).map_err(Error::CodingError)?)
@@ -196,30 +192,25 @@ impl DB for MockDB {
                 }
             }
         }
-        match (hash, time, epoch, pred_epochs, address_gen) {
-            (
-                Some(hash),
-                Some(time),
-                Some(epoch),
-                Some(pred_epochs),
-                Some(address_gen),
-            ) => Ok(Some(BlockStateRead {
-                merkle_tree_stores,
-                hash,
-                height,
-                time,
-                epoch,
-                pred_epochs,
-                next_epoch_min_start_height,
-                next_epoch_min_start_time,
-                update_epoch_blocks_delay,
-                address_gen,
-                results,
-                conversion_state,
-                ethereum_height,
-                eth_events_queue,
-                commit_only_data,
-            })),
+        match (time, epoch, pred_epochs, address_gen) {
+            (Some(time), Some(epoch), Some(pred_epochs), Some(address_gen)) => {
+                Ok(Some(BlockStateRead {
+                    merkle_tree_stores,
+                    height,
+                    time,
+                    epoch,
+                    pred_epochs,
+                    next_epoch_min_start_height,
+                    next_epoch_min_start_time,
+                    update_epoch_blocks_delay,
+                    address_gen,
+                    results,
+                    conversion_state,
+                    ethereum_height,
+                    eth_events_queue,
+                    commit_only_data,
+                }))
+            }
             _ => Err(Error::Temporary {
                 error: "Essential data couldn't be read from the DB"
                     .to_string(),
@@ -236,7 +227,6 @@ impl DB for MockDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             time,
             height,
             epoch,
@@ -317,13 +307,6 @@ impl DB for MockDB {
                     .borrow_mut()
                     .insert(key.to_string(), h.serialize_to_vec());
             }
-        }
-        // Block hash
-        {
-            let key = prefix_key
-                .push(&"hash".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0.borrow_mut().insert(key.to_string(), encode(&hash));
         }
         // Block time
         {

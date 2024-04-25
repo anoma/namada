@@ -104,9 +104,6 @@ pub mod tx {
         // Get the current block header
         pub fn namada_tx_get_block_header(height: u64) -> i64;
 
-        // Get the current block hash
-        pub fn namada_tx_get_block_hash(result_ptr: u64);
-
         // Get the current block epoch
         pub fn namada_tx_get_block_epoch() -> u64;
 
@@ -218,9 +215,6 @@ pub mod vp {
 
         // Get the current block header
         pub fn namada_vp_get_block_header(height: u64) -> i64;
-
-        // Get the current block hash
-        pub fn namada_vp_get_block_hash(result_ptr: u64);
 
         // Get the current tx hash
         pub fn namada_vp_get_tx_code_hash(result_ptr: u64);

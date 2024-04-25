@@ -1266,8 +1266,8 @@ mod test {
     use namada_state::mockdb::MockDB;
     use namada_state::testing::TestState;
     use namada_state::{
-        BlockHash, BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher,
-        State, StorageRead, TxIndex,
+        BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher, State,
+        StorageRead, TxIndex,
     };
     use namada_token::storage_key::balance_key;
     use namada_tx::action::{Action, GovAction, Write};
@@ -1298,10 +1298,7 @@ mod test {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
 
         state
     }

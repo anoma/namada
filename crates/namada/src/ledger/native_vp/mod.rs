@@ -26,7 +26,7 @@ use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
 use crate::state;
 use crate::state::{ResultExt, StorageRead};
-use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
+use crate::storage::{BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::vm::prefix_iter::PrefixIterators;
 use crate::vm::WasmCacheAccess;
 
@@ -215,10 +215,6 @@ where
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        self.ctx.get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         self.ctx.get_block_epoch()
     }
@@ -296,10 +292,6 @@ where
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        self.ctx.get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
         self.ctx.get_block_epoch()
     }
@@ -366,11 +358,6 @@ where
         height: BlockHeight,
     ) -> Result<Option<Header>, state::StorageError> {
         vp_host_fns::get_block_header(self.gas_meter, self.state, height)
-            .into_storage_result()
-    }
-
-    fn get_block_hash(&self) -> Result<BlockHash, state::StorageError> {
-        vp_host_fns::get_block_hash(self.gas_meter, self.state)
             .into_storage_result()
     }
 
