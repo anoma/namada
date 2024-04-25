@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryInto;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -28,6 +28,7 @@ use masp_primitives::transaction::{
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use namada_core::address::{Address, MASP};
+use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
@@ -54,7 +55,12 @@ use crate::masp::types::{
     MaspAmount, MaspChange, ScannedData, ShieldedTransfer, TransactionDelta,
     TransferDelta, TransferErr, Unscanned, WalletMap,
 };
-use crate::masp::utils::{cloned_pair, extract_masp_tx, extract_payload, fetch_channel, is_amount_required, to_viewing_key, DefaultLogger, ExtractShieldedActionArg, FetchQueueSender, MaspClient, ProgressLogger, RetryStrategy, ShieldedUtils, TaskManager, LedgerMaspClient};
+use crate::masp::utils::{
+    cloned_pair, extract_masp_tx, extract_payload, fetch_channel,
+    is_amount_required, to_viewing_key, DefaultLogger,
+    ExtractShieldedActionArg, FetchQueueSender, LedgerMaspClient, MaspClient,
+    ProgressLogger, RetryStrategy, ShieldedUtils, TaskManager,
+};
 use crate::masp::NETWORK;
 use crate::queries::Client;
 use crate::rpc::{
@@ -994,7 +1000,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         .inner_tx
         .ok_or_else(|| {
             Error::Other("Missing shielded inner portion of pinned tx".into())
-        })?;;
+        })?;
 
         // Accumulate the combined output note value into this Amount
         let mut val_acc = I128Sum::zero();
@@ -1202,18 +1208,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Try to get a seed from env var, if any.
         let rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
-        let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
+        let rng = if let Ok(seed) = std::env::var(super::ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
-                let exp_str =
-                    format!("Env var {ENV_VAR_MASP_TEST_SEED} must be a u64.");
-                let parsed_seed: u64 = FromStr::from_str(&seed)
+                let exp_str = format!(
+                    "Env var {} must be a u64.",
+                    super::ENV_VAR_MASP_TEST_SEED
+                );
+                let parsed_seed: u64 = std::str::FromStr::from_str(&seed)
                     .map_err(|_| Error::Other(exp_str))?;
                 Ok(parsed_seed)
             }) {
             tracing::warn!(
-                "UNSAFE: Using a seed from {ENV_VAR_MASP_TEST_SEED} env var \
-                 to build proofs."
+                "UNSAFE: Using a seed from {} env var to build proofs.",
+                super::ENV_VAR_MASP_TEST_SEED,
             );
             StdRng::seed_from_u64(seed)
         } else {
@@ -1524,7 +1532,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         #[cfg(not(feature = "testing"))]
         let prover = context.shielded().await.utils.local_tx_prover();
         #[cfg(feature = "testing")]
-        let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
+        let prover = super::testing::MockTxProver(std::sync::Mutex::new(OsRng));
         let (masp_tx, metadata) =
             builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
 
@@ -1841,11 +1849,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                         tokio::runtime::Handle::current().block_on(async {
                             tokio::join!(
                                 task_manager.run(&native_token),
-                                Self::fetch_shielded_transfers::<
-                                    _,
-                                    _,
-                                    M,
-                                >(
+                                Self::fetch_shielded_transfers::<_, _, M>(
                                     fetch_send,
                                     client,
                                     logger,
@@ -1876,7 +1880,9 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                 }
             }
             if logger.left_to_fetch() != 0 {
-                Err(Error::Other("After retrying, could not fetch all MASP txs.".to_string()))
+                Err(Error::Other(
+                    "After retrying, could not fetch all MASP txs.".to_string(),
+                ))
             } else {
                 Ok(())
             }
@@ -2030,70 +2036,73 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
 #[cfg(test)]
 mod shielded_ctx_tests {
     use core::str::FromStr;
-    use std::collections::BTreeSet;
-    use masp_primitives::transaction::{Transaction, TransactionData};
+
     use masp_primitives::zip32::ExtendedFullViewingKey;
-    use rand::seq::index::BTreeSet;
-    use tempfile::tempdir;
     use namada_core::masp::ExtendedViewingKey;
-    use namada_core::storage::{Epoch, IndexedTx};
+    use tempfile::tempdir;
+
     use crate::error::Error;
     use crate::io::StdIo;
-
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{test_client, TestingMaspClient};
-    use crate::masp::types::IndexedNoteEntry;
     use crate::masp::utils::{DefaultLogger, RetryStrategy};
 
     // A viewing key derived from A_SPENDING_KEY
     pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
 
-
     /// Test that if fetching fails before finishing,
     /// we re-establish the fetching process
-    #[tokio::test(flavor = "multi_thread", worker_threads=2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_retry_fetch() {
         let temp_dir = tempdir().unwrap();
         let mut shielded_ctx =
-        FsShieldedUtils::new(temp_dir.path().to_path_buf());
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
         let (client, masp_tx_sender) = test_client(2.into());
-        let io = StdIo::default();
+        let io = StdIo;
         let logger = DefaultLogger::new(&io);
-        let vk =  ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed")
+        let vk = ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
         )
         .fvk
         .vk;
-        let unscanned = shielded_ctx.unscanned.clone();
+        let _unscanned = shielded_ctx.unscanned.clone();
         masp_tx_sender.send(None).expect("Test failed");
 
         // we first test that with no retries, a fetching failure
         // stops process
-        let result = shielded_ctx.fetch::<_, _, _, TestingMaspClient>(
-            &client,
-            &logger,
-            RetryStrategy::Times(1),
-            None,
-            None,
-            0,
-            &[],
-            &[vk],
-        ).await.unwrap_err();
+        let result = shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &logger,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
         match result {
-            Error::Other(msg) => assert_eq!(msg.as_str(), "After retrying, could not fetch all MASP txs."),
+            Error::Other(msg) => assert_eq!(
+                msg.as_str(),
+                "After retrying, could not fetch all MASP txs."
+            ),
             other => panic!("{:?} does not match Error::Other(_)", other),
         }
 
-        let result = shielded_ctx.fetch::<_, _, _, TestingMaspClient>(
-            &client,
-            &logger,
-            RetryStrategy::Times(2),
-            None,
-            None,
-            0,
-            &[],
-            &[vk],
-        ).await.unwrap_err();
-
+        let _result = shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &logger,
+                RetryStrategy::Times(2),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
     }
 }

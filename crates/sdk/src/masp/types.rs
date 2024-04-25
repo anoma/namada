@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -21,6 +21,7 @@ use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch, IndexedTx};
 use namada_core::uint::Uint;
@@ -104,8 +105,10 @@ pub struct MaspTokenRewardData {
 
 #[derive(Debug, Clone)]
 pub(super) struct ExtractedMaspTx {
-    fee_unshielding: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
-    inner_tx: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
+    pub(crate) fee_unshielding:
+        Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
+    pub(crate) inner_tx:
+        Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
 }
 
 /// MASP verifying keys
@@ -154,50 +157,50 @@ impl ScannedData {
         mut self,
         ctx: &mut ShieldedContext<U>,
     ) {
-        for (k, v) in self.note_map.drain() {
+        for (k, v) in self.note_map.drain(..) {
             ctx.note_map.insert(k, v);
         }
-        for (k, v) in self.nf_map.drain() {
+        for (k, v) in self.nf_map.drain(..) {
             ctx.nf_map.insert(k, v);
         }
-        for (k, v) in self.pos_map.drain() {
+        for (k, v) in self.pos_map.drain(..) {
             let map = ctx.pos_map.entry(k).or_default();
             for ix in v {
                 map.insert(ix);
             }
         }
-        for (k, v) in self.div_map.drain() {
+        for (k, v) in self.div_map.drain(..) {
             ctx.div_map.insert(k, v);
         }
-        for (k, v) in self.vk_map.drain() {
+        for (k, v) in self.vk_map.drain(..) {
             ctx.vk_map.insert(k, v);
         }
-        for (k, v) in self.memo_map.drain() {
+        for (k, v) in self.memo_map.drain(..) {
             ctx.memo_map.insert(k, v);
         }
         ctx.decrypted_note_cache.merge(self.decrypted_note_cache);
     }
 
     pub(super) fn merge(&mut self, mut other: Self) {
-        for (k, v) in other.note_map.drain() {
+        for (k, v) in other.note_map.drain(..) {
             self.note_map.insert(k, v);
         }
-        for (k, v) in other.nf_map.drain() {
+        for (k, v) in other.nf_map.drain(..) {
             self.nf_map.insert(k, v);
         }
-        for (k, v) in other.pos_map.drain() {
+        for (k, v) in other.pos_map.drain(..) {
             let map = self.pos_map.entry(k).or_default();
             for ix in v {
                 map.insert(ix);
             }
         }
-        for (k, v) in other.div_map.drain() {
+        for (k, v) in other.div_map.drain(..) {
             self.div_map.insert(k, v);
         }
-        for (k, v) in other.vk_map.drain() {
+        for (k, v) in other.vk_map.drain(..) {
             self.vk_map.insert(k, v);
         }
-        for (k, v) in other.memo_map.drain() {
+        for (k, v) in other.memo_map.drain(..) {
             self.memo_map.insert(k, v);
         }
         for (k, v) in other.decrypted_note_cache.inner {
@@ -233,7 +236,7 @@ impl DecryptedDataCache {
     }
 
     pub fn merge(&mut self, mut other: Self) {
-        for (k, v) in other.inner.drain() {
+        for (k, v) in other.inner.drain(..) {
             self.insert(k, v);
         }
     }
@@ -247,12 +250,9 @@ impl DecryptedDataCache {
 
     pub fn drain(
         &mut self,
-    ) -> std::collections::hash_map::Drain<
-        '_,
-        (IndexedTx, ViewingKey),
-        DecryptedData,
-    > {
-        self.inner.drain()
+    ) -> impl Iterator<Item = ((IndexedTx, ViewingKey), DecryptedData)> + '_
+    {
+        self.inner.drain(..)
     }
 }
 

@@ -1,11 +1,11 @@
 //! MASP verification wrappers.
 
 pub mod shielded_ctx;
+#[cfg(test)]
+mod test_utils;
 pub mod types;
 pub mod utils;
-mod test_utils;
 
-use std::collections::HashMap;
 use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -13,31 +13,21 @@ use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use lazy_static::lazy_static;
-use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork;
 #[cfg(not(feature = "mainnet"))]
 use masp_primitives::consensus::TestNetwork;
-use masp_primitives::convert::AllowedConversion;
-use masp_primitives::ff::PrimeField;
 use masp_primitives::group::GroupEncoding;
-use masp_primitives::memo::MemoBytes;
-use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::note_encryption::*;
 use masp_primitives::sapling::redjubjub::PublicKey;
-use masp_primitives::sapling::{Diversifier, Node, Note};
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
     ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
-    U64Sum,
 };
-use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
 use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::{
-    Authorization, Authorized, Transaction, TransactionData, TransparentAddress,
+    Authorization, Authorized, Transaction, TransactionData,
 };
-use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::bellman::groth16::PreparedVerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
@@ -47,11 +37,14 @@ pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
-use namada_token::MaspDigitPos;
+use namada_state::StorageError;
 pub use shielded_ctx::ShieldedContext;
-pub use utils::ShieldedUtils;
+pub use types::PVKs;
+pub use utils::{
+    find_valid_diversifier, preload_verifying_keys, ShieldedUtils,
+};
 
-use crate::masp::types::{PVKs, PartialAuthorized};
+use crate::masp::types::PartialAuthorized;
 use crate::masp::utils::{get_params_dir, load_pvks};
 use crate::{MaybeSend, MaybeSync};
 
@@ -223,8 +216,8 @@ pub fn verify_shielded_tx<F>(
     transaction: &Transaction,
     mut consume_verify_gas: F,
 ) -> Result<(), StorageError>
-    where
-        F: FnMut(u64) -> std::result::Result<(), StorageError>,
+where
+    F: FnMut(u64) -> std::result::Result<(), StorageError>,
 {
     tracing::info!("entered verify_shielded_tx()");
 
@@ -261,9 +254,9 @@ pub fn verify_shielded_tx<F>(
     } = load_pvks();
 
     #[cfg(not(feature = "testing"))]
-        let mut ctx = SaplingVerificationContext::new(true);
+    let mut ctx = SaplingVerificationContext::new(true);
     #[cfg(feature = "testing")]
-        let mut ctx = testing::MockSaplingVerificationContext::new(true);
+    let mut ctx = testing::MockSaplingVerificationContext::new(true);
     for spend in &sapling_bundle.shielded_spends {
         consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
         if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
@@ -425,15 +418,29 @@ pub mod testing {
     use std::sync::Mutex;
 
     use bls12_381::{G1Affine, G2Affine};
+    use masp_primitives::asset_type::AssetType;
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
-    use masp_primitives::ff::Field;
+    use masp_primitives::convert::AllowedConversion;
+    use masp_primitives::ff::{Field, PrimeField};
+    use masp_primitives::memo::MemoBytes;
+    use masp_primitives::merkle_tree::MerklePath;
+    use masp_primitives::sapling::note_encryption::{
+        try_sapling_note_decryption, PreparedIncomingViewingKey,
+    };
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::Signature;
-    use masp_primitives::sapling::{ProofGenerationKey, Rseed};
+    use masp_primitives::sapling::{
+        Diversifier, Node, Note, ProofGenerationKey, Rseed,
+    };
     use masp_primitives::transaction::builder::Builder;
-    use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
+    use masp_primitives::transaction::components::{U64Sum, GROTH_PROOF_SIZE};
+    use masp_primitives::transaction::fees::fixed::FeeRule;
+    use masp_primitives::transaction::TransparentAddress;
+    use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
     use masp_proofs::bellman::groth16::Proof;
+    use namada_core::collections::HashMap;
+    use namada_core::token::MaspDigitPos;
     use proptest::prelude::*;
     use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
