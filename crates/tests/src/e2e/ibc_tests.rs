@@ -84,17 +84,18 @@ use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
+use sha2::{Digest, Sha256};
 use tendermint_light_client::components::io::{Io, ProdIo as TmLightClientIo};
 
-use super::setup::set_ethereum_bridge_mode;
 use crate::e2e::helpers::{
-    epochs_per_year_from_min_duration, find_address, get_actor_rpc, get_epoch,
-    get_established_addr_from_pregenesis, get_validator_pk,
-    wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, find_address, find_gaia_address,
+    get_actor_rpc, get_epoch, get_established_addr_from_pregenesis,
+    get_validator_pk, wait_for_wasm_pre_compile,
 };
 use crate::e2e::ledger_tests::{prepare_proposal_data, write_json_file};
 use crate::e2e::setup::{
-    self, run_hermes_cmd, setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
+    self, run_gaia_cmd, run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia,
+    setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
     LEDGER_STARTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
@@ -220,7 +221,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -248,7 +249,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        "50000",
+        50000.0,
         BERTHA_KEY,
         &port_id_b,
         &channel_id_b,
@@ -268,7 +269,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -297,7 +298,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         BTC,
-        "10",
+        10.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -314,7 +315,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         A_SPENDING_KEY,
         "invalid_receiver",
         BTC,
-        "10",
+        10.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -336,7 +337,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         BTC,
-        "10",
+        10.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -354,6 +355,165 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     // The balance should not be changed
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    Ok(())
+}
+
+#[test]
+fn ibc_namada_gaia() -> Result<()> {
+    // epoch per 100 seconds
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger = ledger.background();
+    // chain B isn't used
+    ledger_b.interrupt()?;
+
+    // gaia
+    let test_gaia = setup_gaia()?;
+    let gaia = run_gaia(&test_gaia)?;
+    sleep(5);
+    let _bg_gaia = gaia.background();
+
+    setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = "transfer".parse().unwrap();
+    let port_id_gaia = "transfer".parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) =
+        create_channel_with_hermes(&test, &test_gaia)?;
+
+    // Start relaying
+    let hermes = run_hermes(&test)?;
+    let _bg_hermes = hermes.background();
+
+    // Transfer from Namada to Gaia
+    let receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
+    transfer(
+        &test,
+        ALBERT,
+        receiver,
+        APFEL,
+        200.0,
+        ALBERT_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+
+    // Check the received token on Gaia
+    let token_addr = find_address(&test, APFEL)?;
+    let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+
+    // Transfer back from Gaia to Namada
+    let receiver = find_address(&test, ALBERT)?.to_string();
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        receiver,
+        get_gaia_denom_hash(ibc_denom),
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, ALBERT, APFEL, 999900)?;
+
+    // Transfer a token from Gaia to Namada
+    let receiver = find_address(&test, ALBERT)?.to_string();
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        receiver,
+        GAIA_COIN,
+        200,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
+    check_balance(&test, ALBERT, &ibc_denom, 200)?;
+
+    // Transfer back from Namada to Gaia
+    let receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
+    transfer(
+        &test,
+        ALBERT,
+        &receiver,
+        ibc_denom,
+        100.0,
+        ALBERT_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the received token on Gaia
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
+
+    // Shielding transfer from Gaia to Namada
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+
+    // Check the token on Namada
+    let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 100)?;
+
+    // Shielded transfer on Namada
+    transfer_on_chain(
+        &test,
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        &ibc_denom,
+        50,
+        ALBERT_KEY,
+    )?;
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 50)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 50)?;
+
+    // Unshielding transfer from Namada to Gaia
+    transfer(
+        &test,
+        B_SPENDING_KEY,
+        &receiver,
+        &ibc_denom,
+        10.0,
+        BERTHA_KEY,
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     Ok(())
 }
@@ -499,7 +659,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         ALBERT,
         AB_PAYMENT_ADDRESS,
         APFEL,
-        "1",
+        1.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -566,7 +726,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "1",
+        1.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -581,7 +741,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "1",
+        1.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -605,7 +765,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "1",
+        1.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -629,7 +789,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         receiver.to_string(),
         NAM,
-        "1",
+        1.0,
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
@@ -820,6 +980,18 @@ fn run_hermes(test: &Test) -> Result<NamadaCmd> {
     let mut hermes = run_hermes_cmd(test, args, Some(40))?;
     hermes.exp_string("Hermes has started")?;
     Ok(hermes)
+}
+
+fn run_gaia(test: &Test) -> Result<NamadaCmd> {
+    let args = [
+        "start",
+        "--pruning",
+        "nothing",
+        "--grpc.address",
+        "0.0.0.0:9090",
+    ];
+    let gaia = run_gaia_cmd(test, args, Some(40))?;
+    Ok(gaia)
 }
 
 fn wait_for_packet_relay(
@@ -1378,7 +1550,7 @@ fn transfer_token(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
@@ -1457,7 +1629,7 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10.1",
+        10.1,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
@@ -1473,7 +1645,7 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10",
+        10.0,
         ALBERT_KEY,
         &"port".parse().unwrap(),
         channel_id_a,
@@ -1489,7 +1661,7 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "10",
+        10.0,
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
@@ -1553,7 +1725,7 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        "50000",
+        50000.0,
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
@@ -1626,7 +1798,7 @@ fn transfer_timeout(
         ALBERT,
         receiver.to_string(),
         NAM,
-        "100000",
+        100000.0,
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
@@ -1760,7 +1932,7 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
-    amount: impl AsRef<str>,
+    amount: f64,
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
@@ -1773,6 +1945,7 @@ fn transfer(
 
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
+    let amount = amount.to_string();
     let mut tx_args = vec![
         "ibc-transfer",
         "--source",
@@ -1784,7 +1957,7 @@ fn transfer(
         "--token",
         token.as_ref(),
         "--amount",
-        amount.as_ref(),
+        &amount,
         "--channel-id",
         &channel_id,
         "--port-id",
@@ -1977,6 +2150,46 @@ fn submit_votes(test: &Test) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn transfer_from_gaia(
+    test: &Test,
+    sender: impl AsRef<str>,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<()> {
+    let port_id = port_id.to_string();
+    let channel_id = channel_id.to_string();
+    let amount = format!("{}{}", amount, token.as_ref());
+    let rpc = format!("tcp://{GAIA_RPC}");
+    let args = vec![
+        "tx",
+        "ibc-transfer",
+        "transfer",
+        &port_id,
+        &channel_id,
+        receiver.as_ref(),
+        &amount,
+        "--from",
+        sender.as_ref(),
+        "--gas-prices",
+        "0.001stake",
+        "--node",
+        &rpc,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        GAIA_CHAIN_ID,
+        "--yes",
+    ];
+
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    gaia.assert_success();
+    Ok(())
+}
+
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
     // Expecting e.g. "height 1337."
@@ -2112,6 +2325,36 @@ fn convert_proof(tm_proof: TmProof) -> Result<CommitmentProofBytes> {
     })
 }
 
+fn check_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    token: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    if owner.as_ref().starts_with("zvk") {
+        shielded_sync(test, owner.as_ref())?;
+    }
+
+    let query_args = vec![
+        "balance",
+        "--owner",
+        owner.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
 /// Check balances after IBC transfer
 fn check_balances(
     dest_port_id: &PortId,
@@ -2120,35 +2363,48 @@ fn check_balances(
     test_b: &Test,
 ) -> Result<()> {
     // Check the balances on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    // Check the escrowed balance
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
-    let query_args = vec![
-        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("nam: 100000")?;
+    check_balance(test_a, escrow, NAM, 100000)?;
     // Check the source balance
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 1900000".to_string();
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_a, ALBERT, NAM, 1900000)?;
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
+    check_balance(test_b, BERTHA, ibc_denom, 100000)?;
+
+    Ok(())
+}
+
+fn get_gaia_denom_hash(denom: impl AsRef<str>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(denom.as_ref());
+    let hash = hasher.finalize();
+    format!("ibc/{hash:X}")
+}
+
+fn check_gaia_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    denom: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    let addr = find_gaia_address(test, owner)?;
+    let args = [
+        "query",
+        "bank",
+        "balances",
+        &addr,
+        "--node",
+        &format!("tcp://{GAIA_RPC}"),
     ];
-    let expected = format!("{ibc_denom}: 100000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    gaia.exp_string(&format!("amount: \"{expected_amount}\""))?;
+    let expected_denom = if denom.as_ref().contains('/') {
+        get_gaia_denom_hash(denom)
+    } else {
+        denom.as_ref().to_string()
+    };
+    gaia.exp_string(&format!("denom: {expected_denom}"))?;
     Ok(())
 }
 
@@ -2158,27 +2414,12 @@ fn check_balances_after_non_ibc(
     channel_id: &ChannelId,
     test_b: &Test,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    // Check the balance on Chain B
+    // Check the source on Chain B
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    // Check the source
-    let rpc = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc,
-    ];
-    let expected = format!("{ibc_denom}: 50000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, BERTHA, &ibc_denom, 50000)?;
 
-    // Check the traget
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", &ibc_denom, "--node", &rpc,
-    ];
-    let expected = format!("{ibc_denom}: 50000");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    // Check the traget on Chain B
+    check_balance(test_b, ALBERT, &ibc_denom, 50000)?;
 
     Ok(())
 }
@@ -2190,36 +2431,16 @@ fn check_balances_after_back(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balances on Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    // Check the escrowed balance
+    // Check the escrowed balance on Chain A
     let escrow = Address::Internal(InternalAddress::Ibc).to_string();
-    let query_args = vec![
-        "balance", "--owner", &escrow, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("nam: 50000")?;
-    // Check the source balance
-    let query_args = vec![
-        "balance", "--owner", ALBERT, "--token", NAM, "--node", &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    let expected = "nam: 1950000".to_string();
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_a, escrow, NAM, 50000)?;
+    // Check the source balance on Chain A
+    check_balance(test_a, ALBERT, NAM, 1950000)?;
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 0");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, BERTHA, ibc_denom, 0)?;
+
     Ok(())
 }
 
@@ -2230,42 +2451,13 @@ fn check_shielded_balances(
     test_a: &Test,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balance on Chain A
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    shielded_sync(test_a, AA_VIEWING_KEY)?;
-    let query_args = vec![
-        "balance",
-        "--owner",
-        AA_VIEWING_KEY,
-        "--token",
-        BTC,
-        "--no-conversions",
-        "--node",
-        &rpc_a,
-    ];
-    let mut client = run!(test_a, Bin::Client, query_args, Some(40))?;
-    client.exp_string("btc: 90")?;
-    client.assert_success();
+    // Check the shielded balance on Chain A
+    check_balance(test_a, AA_VIEWING_KEY, BTC, 90)?;
 
-    // Check the balance on Chain B
-    // PA(B) on Chain B has received BTC on chain A
-    shielded_sync(test_b, AB_VIEWING_KEY)?;
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
+    // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    let query_args = vec![
-        "balance",
-        "--owner",
-        AB_VIEWING_KEY,
-        "--token",
-        &ibc_denom,
-        "--no-conversions",
-        "--node",
-        &rpc_b,
-    ];
-    let expected = format!("{ibc_denom}: 10");
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    client.exp_string(&expected)?;
-    client.assert_success();
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+
     Ok(())
 }
 
@@ -2274,8 +2466,8 @@ fn check_funded_balances(
     dest_channel_id: &ChannelId,
     test_b: &Test,
 ) -> Result<()> {
-    // Check the balance on Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    // Check the balances on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
     let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
     let query_args = vec![
