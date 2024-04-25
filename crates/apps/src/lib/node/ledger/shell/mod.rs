@@ -475,7 +475,7 @@ where
                         };
 
                     wallet
-                        .take_validator_data_atomic()
+                        .into_validator_data_atomic()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,

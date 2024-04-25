@@ -232,9 +232,7 @@ where
                 .find_key_by_pkh_atomic(&pkh, None)
                 .expect("Failed to read from the wallet storage.")
                 .ok()
-                .or_else(|| {
-                    wallet.take_validator_data_atomic().map(extract_key)
-                })
+                .or_else(|| wallet.get_validator_data_atomic().map(extract_key))
                 .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
         })
         .transpose()

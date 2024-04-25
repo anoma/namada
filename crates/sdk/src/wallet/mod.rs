@@ -481,22 +481,14 @@ impl<U: WalletStorage> Wallet<U> {
             .update_store(|store| store.add_validator_data(address, keys))
     }
 
-    /// XXX does not make sense in the current context -- REMOVE?
     /// Returns the validator data, if it exists.
-    pub fn take_validator_data_atomic(&self) -> Option<ValidatorData> {
-        self.utils
-            .clone()
-            .load_store_read_only()
-            .ok()
-            .and_then(Store::into_validator_data)
+    pub fn get_validator_data_atomic(&self) -> Option<ValidatorData> {
+        self.get_store().ok().and_then(Store::into_validator_data)
     }
 
+    /// Returns the validator data, if it exists.
     pub fn into_validator_data_atomic(self) -> Option<ValidatorData> {
-        self.utils
-            .clone()
-            .load_store_read_only()
-            .ok()
-            .and_then(Store::into_validator_data)
+        self.into_store().ok().and_then(Store::into_validator_data)
     }
 
     /// Extend the wallet from pre-genesis validator wallet.
