@@ -134,7 +134,6 @@ mod tests {
     use std::collections::BTreeMap;
 
     use assert_matches::assert_matches;
-    use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::EthereumEvent;
 
     use super::*;
@@ -202,19 +201,16 @@ mod tests {
         let result = write(&mut state, &keys, &event, &tally, false);
 
         assert!(result.is_ok());
-        let body = state.read_bytes(&keys.body()).unwrap();
-        assert_eq!(body, Some(event.serialize_to_vec()));
-        let seen = state.read_bytes(&keys.seen()).unwrap();
-        assert_eq!(seen, Some(tally.seen.serialize_to_vec()));
-        let seen_by = state.read_bytes(&keys.seen_by()).unwrap();
-        assert_eq!(seen_by, Some(tally.seen_by.serialize_to_vec()));
-        let voting_power = state.read_bytes(&keys.voting_power()).unwrap();
-        assert_eq!(voting_power, Some(tally.voting_power.serialize_to_vec()));
-        let epoch = state.read_bytes(&keys.voting_started_epoch()).unwrap();
-        assert_eq!(
-            epoch,
-            Some(state.in_mem().get_current_epoch().0.serialize_to_vec())
-        );
+        let body = state.read(&keys.body()).unwrap();
+        assert_eq!(body, Some(event));
+        let seen = state.read(&keys.seen()).unwrap();
+        assert_eq!(seen, Some(tally.seen));
+        let seen_by = state.read(&keys.seen_by()).unwrap();
+        assert_eq!(seen_by, Some(tally.seen_by));
+        let voting_power = state.read(&keys.voting_power()).unwrap();
+        assert_eq!(voting_power, Some(tally.voting_power));
+        let epoch = state.read(&keys.voting_started_epoch()).unwrap();
+        assert_eq!(epoch, Some(state.in_mem().get_current_epoch().0));
     }
 
     #[test]

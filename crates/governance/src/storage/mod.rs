@@ -41,6 +41,7 @@ where
     );
 
     let content_key = governance_keys::get_content_key(proposal_id);
+    // The content should have been already encoded with borsh
     storage.write_bytes(&content_key, content)?;
 
     let author_key = governance_keys::get_author_key(proposal_id);
@@ -55,7 +56,7 @@ where
 
             let proposal_code =
                 code.ok_or(Error::new_const("Missing proposal code"))?;
-            storage.write_bytes(&proposal_code_key, proposal_code)?;
+            storage.write(&proposal_code_key, proposal_code)?;
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
     }
@@ -224,7 +225,7 @@ where
     S: StorageRead,
 {
     let proposal_code_key = governance_keys::get_proposal_code_key(proposal_id);
-    storage.read_bytes(&proposal_code_key)
+    storage.read(&proposal_code_key)
 }
 
 /// Get the code associated with a proposal

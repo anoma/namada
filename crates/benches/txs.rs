@@ -645,11 +645,11 @@ fn become_validator(c: &mut Criterion) {
                 // Initialize the account to be able to use it
                 shell
                     .state
-                    .write_bytes(
+                    .write(
                         &namada::core::storage::Key::validity_predicate(
                             &address,
                         ),
-                        vec![],
+                        Vec::<u8>::new(),
                     )
                     .unwrap();
                 shell

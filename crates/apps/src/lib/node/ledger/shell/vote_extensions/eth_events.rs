@@ -136,7 +136,6 @@ where
 
 #[cfg(test)]
 mod test_vote_extensions {
-    use borsh_ext::BorshSerializeExt;
     use namada::core::address::testing::gen_established_address;
     use namada::core::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
@@ -171,10 +170,7 @@ mod test_vote_extensions {
         // write bp nonce to storage
         shell
             .state
-            .write_bytes(
-                &bridge_pool::get_nonce_key(),
-                nonce.serialize_to_vec(),
-            )
+            .write(&bridge_pool::get_nonce_key(), nonce)
             .expect("Test failed");
 
         // write nam nonce to the eth events queue
