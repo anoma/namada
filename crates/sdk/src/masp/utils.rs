@@ -1,5 +1,5 @@
 use core::str::FromStr;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
+use namada_core::collections::HashMap;
 use namada_core::storage::{BlockHeight, IndexedTx, TxIndex};
 use namada_core::token::Transfer;
 use namada_ibc::IbcMessage;
@@ -26,7 +27,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::shielded_ctx::ShieldedContext;
-use crate::masp::types::{ContextSyncStatus, ExtractedMaspTx, IndexedNoteEntry, PVKs, ScannedData, TransactionDelta, Unscanned};
+use crate::masp::types::{
+    ContextSyncStatus, ExtractedMaspTx, IndexedNoteEntry, PVKs, ScannedData,
+    TransactionDelta, Unscanned,
+};
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
 use crate::queries::Client;
 use crate::rpc::query_epoch_at_height;
@@ -256,27 +260,27 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
                 .ok()
         }
     }
-        .map(|(changed_keys, transfer)| {
-            if let Some(hash) = transfer.shielded {
-                let masp_tx = tx
-                    .get_section(&hash)
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing masp section in transaction".to_string(),
-                        )
-                    })?
-                    .masp_tx()
-                    .ok_or_else(|| {
-                        Error::Other("Missing masp transaction".to_string())
-                    })?;
+    .map(|(changed_keys, transfer)| {
+        if let Some(hash) = transfer.shielded {
+            let masp_tx = tx
+                .get_section(&hash)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing masp section in transaction".to_string(),
+                    )
+                })?
+                .masp_tx()
+                .ok_or_else(|| {
+                    Error::Other("Missing masp transaction".to_string())
+                })?;
 
-                Ok::<_, Error>(Some((changed_keys, masp_tx)))
-            } else {
-                Ok(None)
-            }
-        })
-        .transpose()?
-        .flatten();
+            Ok::<_, Error>(Some((changed_keys, masp_tx)))
+        } else {
+            Ok(None)
+        }
+    })
+    .transpose()?
+    .flatten();
 
     Ok(ExtractedMaspTx {
         fee_unshielding: maybe_fee_unshield,
@@ -287,10 +291,10 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
 // Extract the changed keys and Transaction hash from a MASP over ibc message
 pub(super) async fn extract_payload_from_shielded_action<
     'args,
-    C: Client + Sync
+    C: Client + Sync,
 >(
     tx_data: &[u8],
-    mut args: ExtractShieldedActionArg<'args, C>,
+    args: ExtractShieldedActionArg<'args, C>,
 ) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
@@ -425,17 +429,19 @@ fn get_tx_result(
         })
 }
 
-pub(super) struct CommitmentTreeUpdates {
+pub struct CommitmentTreeUpdates {
     pub commitment_tree: CommitmentTree<Node>,
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
     pub note_map_delta: BTreeMap<IndexedTx, usize>,
 }
 
+/// TODO: Used the sealed pattern?
 pub trait MaspClient<'a, C: Client> {
     fn new(client: &'a C) -> Self
     where
         Self: 'a;
 
+    #[allow(async_fn_in_trait)]
     async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
         &self,
         ctx: &ShieldedContext<U>,
@@ -443,6 +449,8 @@ pub trait MaspClient<'a, C: Client> {
         last_witnessed_tx: IndexedTx,
         last_query_height: BlockHeight,
     ) -> Result<CommitmentTreeUpdates, Error>;
+
+    #[allow(async_fn_in_trait)]
     async fn update_commitment_tree<U: ShieldedUtils, IO: Io>(
         &self,
         ctx: &mut ShieldedContext<U>,
@@ -462,6 +470,8 @@ pub trait MaspClient<'a, C: Client> {
         ctx.tx_note_map.append(&mut note_map_delta);
         Ok(())
     }
+
+    #[allow(async_fn_in_trait)]
     async fn fetch_shielded_transfer<IO: Io>(
         &self,
         logger: &impl ProgressLogger<IO>,
@@ -473,7 +483,7 @@ pub trait MaspClient<'a, C: Client> {
 
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
-pub(super) struct LedgerMaspClient<'a, C: Client> {
+pub struct LedgerMaspClient<'a, C: Client> {
     client: &'a C,
 }
 
@@ -571,12 +581,12 @@ where
                             .to_string(),
                     ))
                 })?;
-            let txs_results = match get_indexed_masp_events_at_height(
-                &self.client,
+            let txs_results = match get_indexed_masp_events_at_height::<C>(
+                self.client,
                 height.into(),
                 None,
             )
-                .await?
+            .await?
             {
                 Some(events) => events,
                 None => continue,
@@ -587,7 +597,8 @@ where
             // reduce the amount of data sent over the network, but this is a
             // minimal improvement and it's even hard to tell how many times
             // we'd need a single masp tx to make this worth it
-            let block = self.client
+            let block = self
+                .client
                 .block(height as u32)
                 .await
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
@@ -605,8 +616,9 @@ where
                     ExtractShieldedActionArg::Event(&tx_event),
                     true,
                 )
-                    .await?;
-                fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
+                .await?;
+                if let Some((changed_keys, masp_transaction)) = fee_unshielding
+                {
                     tx_sender.send((
                         IndexedTx {
                             height: height.into(),
@@ -615,8 +627,8 @@ where
                         },
                         (epoch, changed_keys, masp_transaction),
                     ));
-                });
-                inner_tx.and_then(|(changed_keys, masp_transaction)| {
+                }
+                if let Some((changed_keys, masp_transaction)) = inner_tx {
                     tx_sender.send((
                         IndexedTx {
                             height: height.into(),
@@ -625,7 +637,7 @@ where
                         },
                         (epoch, changed_keys, masp_transaction),
                     ));
-                })
+                }
             }
         }
         Ok(())
@@ -788,7 +800,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                         locked.nullify_spent_notes(native_token)?;
                         _ = locked.save().await;
                     }
-                    return Ok(())
+                    return Ok(());
                 }
                 Action::Data(scanned, idx) => {
                     // track the latest scanned height
