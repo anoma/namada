@@ -910,30 +910,6 @@ impl<'a> Display for LedgerProposalVote<'a> {
     }
 }
 
-/// A ProposalType wrapper that prints the hash of the contained WASM code if it
-/// is present.
-struct LedgerProposalType<'a>(&'a ProposalType, &'a Tx);
-
-impl<'a> Display for LedgerProposalType<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.0 {
-            ProposalType::Default => write!(f, "Default"),
-            ProposalType::DefaultWithWasm(hash) => {
-                let extra = self
-                    .1
-                    .get_section(hash)
-                    .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .expect("unable to load vp code")
-                    .code
-                    .hash();
-                write!(f, "{}", HEXLOWER.encode(&extra.0))
-            }
-            ProposalType::PGFSteward(_) => write!(f, "PGF Steward"),
-            ProposalType::PGFPayment(_) => write!(f, "PGF Payment"),
-        }
-    }
-}
-
 fn proposal_type_to_ledger_vector(
     proposal_type: &ProposalType,
     tx: &Tx,
@@ -1787,17 +1763,14 @@ pub async fn to_ledger_vector(
             format!("Type : Update Steward Commission"),
             format!("Steward : {}", update.steward),
         ]);
-        let mut commission = update.commission.iter().collect::<Vec<_>>();
-        // Print the test vectors in the same order as the serializations
-        commission.sort_by(|(a, _), (b, _)| a.cmp(b));
-        for (address, dec) in &commission {
+        for (address, dec) in update.commission.iter() {
             tv.output.push(format!("Validator : {}", address));
             tv.output.push(format!("Commission Rate : {}", dec));
         }
 
         tv.output_expert
             .push(format!("Steward : {}", update.steward));
-        for (address, dec) in &commission {
+        for (address, dec) in update.commission.iter() {
             tv.output_expert.push(format!("Validator : {}", address));
             tv.output_expert.push(format!("Commission Rate : {}", dec));
         }
