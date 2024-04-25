@@ -223,7 +223,9 @@ where
             min_num_of_blocks,
             min_duration,
         } = parameters.epoch_duration;
-        self.next_epoch_min_start_height = initial_height + min_num_of_blocks;
+        self.next_epoch_min_start_height = initial_height
+            .checked_add(min_num_of_blocks)
+            .expect("Next epoch min block height shouldn't overflow");
         self.next_epoch_min_start_time = genesis_time + min_duration;
         self.block.pred_epochs = Epochs {
             first_block_heights: vec![initial_height],
