@@ -1,8 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
-use std::env;
-use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -56,15 +54,8 @@ use crate::masp::types::{
     MaspAmount, MaspChange, ScannedData, ShieldedTransfer, TransactionDelta,
     TransferDelta, TransferErr, Unscanned, WalletMap,
 };
-use crate::masp::utils::{
-    cloned_pair, extract_masp_tx, extract_payload, fetch_channel,
-    get_indexed_masp_events_at_height, is_amount_required, to_viewing_key,
-    DefaultLogger, ExtractShieldedActionArg, FetchQueueSender, ProgressLogger,
-    ShieldedUtils, TaskManager,
-};
+use crate::masp::utils::{cloned_pair, extract_masp_tx, extract_payload, fetch_channel, is_amount_required, to_viewing_key, DefaultLogger, ExtractShieldedActionArg, FetchQueueSender, MaspClient, ProgressLogger, RetryStrategy, ShieldedUtils, TaskManager, LedgerMaspClient};
 use crate::masp::NETWORK;
-#[cfg(any(test, feature = "testing"))]
-use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
 use crate::queries::Client;
 use crate::rpc::{
     query_block, query_conversion, query_denom, query_epoch_at_height,
@@ -168,121 +159,55 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Update the merkle tree of witnesses the first time we
     /// scan a new MASP transaction.
-    pub(crate) fn update_witness_map(&mut self) -> Result<(), Error> {
-        // let mut note_pos = self.tree.size();
-        // self.tx_note_map.insert(indexed_tx, note_pos);
-        // for so in shielded
-        // .sapling_bundle()
-        // .map_or(&vec![], |x| &x.shielded_outputs)
-        // {
-        // Create merkle tree leaf node from note commitment
-        // let node = Node::new(so.cmu.to_repr());
-        // Update each merkle tree in the witness map with the latest
-        // addition
-        // for (_, witness) in self.witness_map.iter_mut() {
-        // witness.append(node).map_err(|()| {
-        // Error::Other("note commitment tree is full".to_string())
-        // })?;
-        // }
-        // self.tree.append(node).map_err(|()| {
-        // Error::Other("note commitment tree is full".to_string())
-        // })?;
-        // Finally, make it easier to construct merkle paths to this new
-        // note
-        // let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
-        // self.witness_map.insert(note_pos, witness);
-        // note_pos += 1;
-        // }
-        // Ok(())
-        todo!();
+    pub(crate) async fn update_witness_map<
+        'a,
+        C: Client,
+        IO: Io,
+        F: MaspClient<'a, C> + 'a,
+    >(
+        &mut self,
+        client: &'a C,
+        io: &IO,
+        last_witnessed_tx: IndexedTx,
+        last_query_height: BlockHeight,
+    ) -> Result<(), Error> {
+        let client = F::new(client);
+        client
+            .update_commitment_tree(
+                self,
+                io,
+                last_witnessed_tx,
+                last_query_height,
+            )
+            .await
     }
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    async fn fetch_shielded_transfers<C: Client + Sync, IO: Io>(
-        mut block_sender: FetchQueueSender,
-        client: &C,
+    async fn fetch_shielded_transfers<
+        'a,
+        C: Client + Sync,
+        IO: Io,
+        F: MaspClient<'a, C> + 'a,
+    >(
+        block_sender: FetchQueueSender,
+        client: &'a C,
         logger: &impl ProgressLogger<IO>,
         last_indexed_tx: Option<BlockHeight>,
         last_query_height: BlockHeight,
     ) -> Result<(), Error> {
+        let client = F::new(client);
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
             last_indexed_tx.map_or_else(|| 1, |last| last.0);
-        for height in logger.fetch(first_height_to_query..=last_query_height.0)
-        {
-            if block_sender.contains_height(height) {
-                continue;
-            }
-            // Get the valid masp transactions at the specified height
-            let epoch = query_epoch_at_height(client, height.into())
-                .await?
-                .ok_or_else(|| {
-                    Error::from(QueryError::General(
-                        "Queried height is greater than the last committed \
-                         block height"
-                            .to_string(),
-                    ))
-                })?;
-
-            let txs_results = match get_indexed_masp_events_at_height(
-                client,
-                height.into(),
-                None,
+        client
+            .fetch_shielded_transfer(
+                logger,
+                block_sender,
+                first_height_to_query,
+                last_query_height.0,
             )
-            .await?
-            {
-                Some(events) => events,
-                None => continue,
-            };
-
-            // Query the actual block to get the txs bytes. If we only need one
-            // tx it might be slightly better to query the /tx endpoint to
-            // reduce the amount of data sent over the network, but this is a
-            // minimal improvement and it's even hard to tell how many times
-            // we'd need a single masp tx to make this worth it
-            let block = client
-                .block(height as u32)
-                .await
-                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-                .block
-                .data;
-
-            for (idx, tx_event) in txs_results {
-                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
-                    .map_err(|e| Error::Other(e.to_string()))?;
-                let ExtractedMaspTx {
-                    fee_unshielding,
-                    inner_tx,
-                } = extract_masp_tx::<C>(
-                    &tx,
-                    ExtractShieldedActionArg::Event(&tx_event),
-                    true,
-                )
-                .await?;
-                fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
-                    block_sender.send((
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            is_wrapper: true,
-                        },
-                        (epoch, changed_keys, masp_transaction),
-                    ));
-                });
-                inner_tx.and_then(|(changed_keys, masp_transaction)| {
-                    block_sender.send((
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            is_wrapper: false,
-                        },
-                        (epoch, changed_keys, masp_transaction),
-                    ));
-                })
-            }
-        }
-        Ok(())
+            .await
     }
 
     /// Attempts to decrypt the note in each transaction. Successfully
@@ -1681,14 +1606,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 &vk,
             )?;
             scanned_data.merge(scanned);
-            scanned_data.decrypted_note_cache.insert((indexed_tx, vk), DecryptedData {
-                tx: masp_tx.clone(),
-                keys: changed_balance_keys.clone(),
-                delta: tx_delta,
-                epoch,
-            });
+            scanned_data.decrypted_note_cache.insert(
+                (indexed_tx, vk),
+                DecryptedData {
+                    tx: masp_tx.clone(),
+                    keys: changed_balance_keys.clone(),
+                    delta: tx_delta,
+                    epoch,
+                },
+            );
         }
-        let mut  temp_cache = DecryptedDataCache::default();
+        let mut temp_cache = DecryptedDataCache::default();
         std::mem::swap(&mut temp_cache, &mut self.decrypted_note_cache);
         scanned_data.apply_to(self);
         self.nullify_spent_notes(&native_token)?;
@@ -1765,13 +1693,16 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<
+        'a,
         C: Client + Sync,
         IO: Io + Send + Sync,
         L: ProgressLogger<IO> + Sync,
+        M: MaspClient<'a, C> + 'a,
     >(
         &mut self,
-        client: &C,
+        client: &'a C,
         logger: &L,
+        retry: RetryStrategy,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         _batch_size: u64,
@@ -1822,7 +1753,13 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         let last_query_height = last_query_height.unwrap_or(last_block_height);
         let last_query_height =
             std::cmp::min(last_query_height, last_block_height);
-        self.update_witness_map()?;
+        self.update_witness_map::<_, _, M>(
+            client,
+            logger.io(),
+            last_witnessed_tx.unwrap_or_default(),
+            last_query_height,
+        )
+        .await?;
         let vk_heights = self.vk_heights.clone();
 
         // the task scheduler allows the thread performing trial decryptions to
@@ -1834,15 +1771,12 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
 
         // The main loop that performs
         // * fetching and caching MASP txs in sequence
-        // * trial decryption of each note to determine if it
-        //   is owned by a viewing key in this context and caching
-        //   the result.
-        // * Nullifying spent notes and updating balances for each
-        //   viewing key
-        // * Regular saving of the context to disk in case of process
-        //   interrupts
+        // * trial decryption of each note to determine if it is owned by a
+        //   viewing key in this context and caching the result.
+        // * Nullifying spent notes and updating balances for each viewing key
+        // * Regular saving of the context to disk in case of process interrupts
         std::thread::scope(|s| {
-            loop {
+            for _ in retry {
                 // a stateful channel that communicates notes fetched to the
                 // trial decryption process
                 let (fetch_send, fetch_recv) =
@@ -1861,10 +1795,14 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                                 .filter(|(_vk, h)| **h < Some(indexed_tx))
                             {
                                 // if this note is in the cache, skip it.
-                                if scanned_data.decrypted_note_cache.contains(&indexed_tx, vk) {
+                                if scanned_data
+                                    .decrypted_note_cache
+                                    .contains(&indexed_tx, vk)
+                                {
                                     continue;
                                 }
-                                // attempt to decrypt the note and get the state changes
+                                // attempt to decrypt the note and get the state
+                                // changes
                                 let (scanned, tx_delta) = task_scheduler
                                     .scan_tx(
                                         self.sync_status,
@@ -1903,7 +1841,11 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                         tokio::runtime::Handle::current().block_on(async {
                             tokio::join!(
                                 task_manager.run(&native_token),
-                                Self::fetch_shielded_transfers(
+                                Self::fetch_shielded_transfers::<
+                                    _,
+                                    _,
+                                    M,
+                                >(
                                     fetch_send,
                                     client,
                                     logger,
@@ -1913,7 +1855,8 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                             )
                         })
                     });
-                // if the scanning process errored, return that error here and exit.
+                // if the scanning process errored, return that error here and
+                // exit.
                 decrypt_res?;
                 // shut down the scanning thread.
                 decryption_handle.join().unwrap()?;
@@ -1929,8 +1872,13 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                 // if fetching failed for before completing, we restart
                 // the fetch process. Otherwise, we can break the loop.
                 if logger.left_to_fetch() == 0 {
-                    break Ok(());
+                    break;
                 }
+            }
+            if logger.left_to_fetch() != 0 {
+                Err(Error::Other("After retrying, could not fetch all MASP txs.".to_string()))
+            } else {
+                Ok(())
             }
         })
     }
@@ -1961,8 +1909,17 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         // Required for filtering out rejected transactions from Tendermint
         // responses
         let block_results = rpc::query_results(client).await?;
-        self.fetch(client, &DefaultLogger::new(io), None, None, 1, &[], &fvks)
-            .await?;
+        self.fetch::<_, _, _, LedgerMaspClient<C>>(
+            client,
+            &DefaultLogger::new(io),
+            RetryStrategy::Forever,
+            None,
+            None,
+            1,
+            &[],
+            &fvks,
+        )
+        .await?;
         // Save the update state so that future fetches can be short-circuited
         let _ = self.save().await;
 
@@ -2067,5 +2024,76 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
             }
         }
         Ok(transfers)
+    }
+}
+
+#[cfg(test)]
+mod shielded_ctx_tests {
+    use core::str::FromStr;
+    use std::collections::BTreeSet;
+    use masp_primitives::transaction::{Transaction, TransactionData};
+    use masp_primitives::zip32::ExtendedFullViewingKey;
+    use rand::seq::index::BTreeSet;
+    use tempfile::tempdir;
+    use namada_core::masp::ExtendedViewingKey;
+    use namada_core::storage::{Epoch, IndexedTx};
+    use crate::error::Error;
+    use crate::io::StdIo;
+
+    use crate::masp::fs::FsShieldedUtils;
+    use crate::masp::test_utils::{test_client, TestingMaspClient};
+    use crate::masp::types::IndexedNoteEntry;
+    use crate::masp::utils::{DefaultLogger, RetryStrategy};
+
+    // A viewing key derived from A_SPENDING_KEY
+    pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
+
+
+    /// Test that if fetching fails before finishing,
+    /// we re-establish the fetching process
+    #[tokio::test(flavor = "multi_thread", worker_threads=2)]
+    async fn test_retry_fetch() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+        FsShieldedUtils::new(temp_dir.path().to_path_buf());
+        let (client, masp_tx_sender) = test_client(2.into());
+        let io = StdIo::default();
+        let logger = DefaultLogger::new(&io);
+        let vk =  ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed")
+        )
+        .fvk
+        .vk;
+        let unscanned = shielded_ctx.unscanned.clone();
+        masp_tx_sender.send(None).expect("Test failed");
+
+        // we first test that with no retries, a fetching failure
+        // stops process
+        let result = shielded_ctx.fetch::<_, _, _, TestingMaspClient>(
+            &client,
+            &logger,
+            RetryStrategy::Times(1),
+            None,
+            None,
+            0,
+            &[],
+            &[vk],
+        ).await.unwrap_err();
+        match result {
+            Error::Other(msg) => assert_eq!(msg.as_str(), "After retrying, could not fetch all MASP txs."),
+            other => panic!("{:?} does not match Error::Other(_)", other),
+        }
+
+        let result = shielded_ctx.fetch::<_, _, _, TestingMaspClient>(
+            &client,
+            &logger,
+            RetryStrategy::Times(2),
+            None,
+            None,
+            0,
+            &[],
+            &[vk],
+        ).await.unwrap_err();
+
     }
 }

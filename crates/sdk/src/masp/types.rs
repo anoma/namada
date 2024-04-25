@@ -103,7 +103,7 @@ pub struct MaspTokenRewardData {
 }
 
 #[derive(Debug, Clone)]
-struct ExtractedMaspTx {
+pub(super) struct ExtractedMaspTx {
     fee_unshielding: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
     inner_tx: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
 }
@@ -241,12 +241,17 @@ impl DecryptedDataCache {
     pub fn contains(&self, ix: &IndexedTx, vk: &ViewingKey) -> bool {
         self.inner
             .keys()
-            .find_map(|(i, v)| (i==ix && v==vk).then_some(()))
+            .find_map(|(i, v)| (i == ix && v == vk).then_some(()))
             .is_some()
-
     }
 
-    pub fn drain(&mut self) -> std::collections::hash_map::Drain<'_, (IndexedTx, ViewingKey), DecryptedData>{
+    pub fn drain(
+        &mut self,
+    ) -> std::collections::hash_map::Drain<
+        '_,
+        (IndexedTx, ViewingKey),
+        DecryptedData,
+    > {
         self.inner.drain()
     }
 }
