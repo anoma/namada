@@ -45,10 +45,10 @@ use crate::types::{
 };
 use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
-    read_pos_params, redelegate_tokens, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle, BondsForRemovalRes,
-    EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, ModifiedRedelegation,
-    RedelegationError, ResultSlashing,
+    is_validator_frozen, read_pos_params, redelegate_tokens,
+    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
+    BondsForRemovalRes, EagerRedelegatedUnbonds, FoldRedelegatedBondsResult,
+    ModifiedRedelegation, RedelegationError, ResultSlashing,
 };
 
 prop_state_machine! {
@@ -131,7 +131,11 @@ struct AbstractPosState {
     below_capacity_set:
         BTreeMap<Epoch, BTreeMap<ReverseOrdTokenAmount, VecDeque<Address>>>,
     /// Below-threshold validator set. Pipelined.
-    below_threshold_set: BTreeMap<Epoch, HashSet<Address>>,
+    below_threshold_set: BTreeMap<Epoch, BTreeSet<Address>>,
+    /// Jailed validators per epoch
+    jailed_validators: BTreeMap<Epoch, BTreeSet<Address>>,
+    /// Inactive validators per epoch
+    inactive_validators: BTreeMap<Epoch, BTreeSet<Address>>,
     /// Validator states. Pipelined.
     validator_states: BTreeMap<Epoch, BTreeMap<Address, ValidatorState>>,
     /// Unbonded bonds. The outer key for Epoch is pipeline + unbonding +
@@ -206,6 +210,12 @@ enum Transition {
         height: u64,
     },
     UnjailValidator {
+        address: Address,
+    },
+    DeactivateValidator {
+        address: Address,
+    },
+    ReactivateValidator {
         address: Address,
     },
 }
@@ -757,6 +767,42 @@ impl StateMachineTest for ConcretePosState {
                 let params = read_pos_params(&state.s).unwrap();
                 state.check_unjail_validator_post_conditions(&params, &address);
             }
+            Transition::DeactivateValidator { address } => {
+                tracing::debug!("\nCONCRETE DeactivateValidator");
+                let current_epoch = state.current_epoch();
+
+                // Deactivate the validator
+                crate::deactivate_validator(
+                    &mut state.s,
+                    &address,
+                    current_epoch,
+                )
+                .unwrap();
+
+                // Post-conditions
+                let params = read_pos_params(&state.s).unwrap();
+                state.check_deactivate_validator_post_conditions(
+                    &params, &address,
+                );
+            }
+            Transition::ReactivateValidator { address } => {
+                tracing::debug!("\nCONCRETE ReactivateValidator");
+                let current_epoch = state.current_epoch();
+
+                // Reactivate the validator
+                crate::reactivate_validator(
+                    &mut state.s,
+                    &address,
+                    current_epoch,
+                )
+                .unwrap();
+
+                // Post-conditions
+                let params = read_pos_params(&state.s).unwrap();
+                state.check_reactivate_validator_post_conditions(
+                    &params, &address,
+                );
+            }
         }
         state
     }
@@ -1175,6 +1221,11 @@ impl ConcretePosState {
             .get(&self.s, pipeline, params)
             .unwrap()
             == Some(ValidatorState::Jailed);
+        let validator_is_inactive =
+            crate::validator_state_handle(&id.validator)
+                .get(&self.s, pipeline, params)
+                .unwrap()
+                == Some(ValidatorState::Inactive);
 
         // Post-condition: There must only be one instance of this validator in
         // the consensus + below-cap sets with some stake across all
@@ -1182,7 +1233,8 @@ impl ConcretePosState {
         // jailed
         assert!(
             num_occurrences == 1
-                || (num_occurrences == 0 && validator_is_jailed)
+                || (num_occurrences == 0
+                    && (validator_is_jailed || validator_is_inactive))
         );
 
         let consensus_set = read_consensus_validator_set_addresses_with_stake(
@@ -1208,6 +1260,13 @@ impl ConcretePosState {
         // Post-condition: The validator should be updated in exactly once in
         // the validator sets
         let jailed_condition = validator_is_jailed
+            && !validator_is_inactive
+            && consensus_val.is_none()
+            && below_cap_val.is_none()
+            && below_thresh_val.is_none();
+
+        let inactive_condition = validator_is_inactive
+            && !validator_is_jailed
             && consensus_val.is_none()
             && below_cap_val.is_none()
             && below_thresh_val.is_none();
@@ -1216,7 +1275,7 @@ impl ConcretePosState {
         num_sets += i32::from(below_cap_val.is_some());
         num_sets += i32::from(below_thresh_val.is_some());
 
-        assert!(num_sets == 1 || jailed_condition);
+        assert!(num_sets == 1 || jailed_condition || inactive_condition);
 
         // Post-condition: The stake of the validators in the consensus set is
         // greater than or equal to below-capacity validators
@@ -1514,6 +1573,137 @@ impl ConcretePosState {
                 || val_state == Some(ValidatorState::BelowCapacity)
                 || val_state == Some(ValidatorState::BelowThreshold)
         );
+    }
+
+    fn check_deactivate_validator_post_conditions(
+        &self,
+        params: &PosParams,
+        validator: &Address,
+    ) {
+        let current_epoch = self.s.in_mem().block.epoch;
+
+        // Make sure the validator is inactive at the pipeline epoch
+        let pipeline_epoch = current_epoch + params.pipeline_len;
+        let val_state = validator_state_handle(validator)
+            .get(&self.s, pipeline_epoch, params)
+            .unwrap();
+        assert!(val_state == Some(ValidatorState::Inactive));
+
+        // Make sure the validator is not in any validator set at the pipeline
+        let num_in_consensus = consensus_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bc = below_capacity_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .map(|res| res.unwrap())
+            .filter(|(_keys, addr)| addr == validator)
+            .count();
+
+        let num_in_bt = read_below_threshold_validator_set_addresses(
+            &self.s,
+            pipeline_epoch,
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|addr| addr == validator)
+        .count();
+
+        let num_occurrences = num_in_consensus + num_in_bc + num_in_bt;
+        assert_eq!(num_occurrences, 0);
+    }
+
+    fn check_reactivate_validator_post_conditions(
+        &self,
+        params: &PosParams,
+        validator: &Address,
+    ) {
+        let current_epoch = self.s.in_mem().block.epoch;
+
+        // Make sure validator is inactive at every epoch until the pipeline
+        // epoch
+        for epoch in current_epoch.iter_range(params.pipeline_len) {
+            let in_consensus = consensus_validator_set_handle()
+                .at(&epoch)
+                .iter(&self.s)
+                .unwrap()
+                .any(|res| {
+                    let (_, val_address) = res.unwrap();
+                    val_address == validator.clone()
+                });
+
+            let in_bc = below_capacity_validator_set_handle()
+                .at(&epoch)
+                .iter(&self.s)
+                .unwrap()
+                .any(|res| {
+                    let (_, val_address) = res.unwrap();
+                    val_address == validator.clone()
+                });
+            assert!(!in_consensus && !in_bc);
+
+            let val_state = validator_state_handle(validator)
+                .get(&self.s, epoch, params)
+                .unwrap();
+            assert_eq!(val_state, Some(ValidatorState::Inactive));
+        }
+
+        // Check that validator state at pipeline is consistent with existence
+        // in a validator set or a recent slash
+        let pipeline_epoch = current_epoch + params.pipeline_len;
+        let val_state = validator_state_handle(validator)
+            .get(&self.s, pipeline_epoch, params)
+            .unwrap()
+            .unwrap();
+        let in_consensus = consensus_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .any(|res| {
+                let (_, val_address) = res.unwrap();
+                val_address == validator.clone()
+            });
+        let in_bc = below_capacity_validator_set_handle()
+            .at(&pipeline_epoch)
+            .iter(&self.s)
+            .unwrap()
+            .any(|res| {
+                let (_, val_address) = res.unwrap();
+                val_address == validator.clone()
+            });
+        match val_state {
+            ValidatorState::Consensus => {
+                assert!(in_consensus && !in_bc)
+            }
+            ValidatorState::BelowCapacity => {
+                assert!(in_bc && !in_consensus)
+            }
+            ValidatorState::BelowThreshold => {
+                assert!(!in_bc && !in_consensus)
+            }
+            ValidatorState::Inactive => {
+                panic!(
+                    "Validator should not be inactive at pipeline epoch after \
+                     a reactivation!"
+                )
+            }
+            ValidatorState::Jailed => {
+                let is_frozen = is_validator_frozen(
+                    &self.s,
+                    validator,
+                    current_epoch,
+                    params,
+                )
+                .unwrap();
+                assert!(is_frozen);
+            }
+        }
     }
 
     fn check_multistate_redelegation_post_conditions(
@@ -2011,6 +2201,8 @@ impl ReferenceStateMachine for AbstractPosState {
                     consensus_set: Default::default(),
                     below_capacity_set: Default::default(),
                     below_threshold_set: Default::default(),
+                    jailed_validators: Default::default(),
+                    inactive_validators: Default::default(),
                     validator_states: Default::default(),
                     validator_slashes: Default::default(),
                     enqueued_slashes: Default::default(),
@@ -2102,8 +2294,11 @@ impl ReferenceStateMachine for AbstractPosState {
                 }
                 // Ensure that below-capacity and below-threshold sets are
                 // initialized even if empty
+                // Same for jailed and inactive validators
                 state.below_capacity_set.entry(epoch).or_default();
                 state.below_threshold_set.entry(epoch).or_default();
+                state.jailed_validators.entry(epoch).or_default();
+                state.inactive_validators.entry(epoch).or_default();
 
                 // Copy validator sets up to pipeline epoch
                 for epoch in epoch.next().iter_range(state.params.pipeline_len)
@@ -2141,28 +2336,52 @@ impl ReferenceStateMachine for AbstractPosState {
         let withdrawable =
             state.withdrawable_unbonds().into_iter().collect::<Vec<_>>();
 
-        let eligible_for_unjail = state
-            .validator_states
-            .get(&state.pipeline())
-            .unwrap()
-            .iter()
-            .filter_map(|(addr, &val_state)| {
-                let last_slash_epoch =
-                    state.validator_last_slash_epochs.get(addr);
+        let mut eligible_for_unjail = Vec::<Address>::new();
+        let mut eligible_for_deactivation = Vec::<Address>::new();
+        let mut eligible_for_reactivation = Vec::<Address>::new();
 
+        for (validator, val_state) in
+            state.validator_states.get(&state.pipeline()).unwrap()
+        {
+            if matches!(
+                val_state,
+                ValidatorState::Consensus
+                    | ValidatorState::BelowCapacity
+                    | ValidatorState::BelowThreshold
+            ) {
+                eligible_for_deactivation.push(validator.clone());
+            } else if val_state == &ValidatorState::Jailed {
+                let last_slash_epoch =
+                    state.validator_last_slash_epochs.get(validator);
                 if let Some(last_slash_epoch) = last_slash_epoch {
-                    if val_state == ValidatorState::Jailed
-                        // `last_slash_epoch` must be unbonding_len + window_width or more epochs
-                        // before the current
-                        && state.epoch.0 - last_slash_epoch.0
-                            > state.params.unbonding_len + state.params.cubic_slashing_window_length
+                    // `last_slash_epoch` must be unbonding_len + window_width
+                    // or more epochs before the current
+                    if state.epoch.0 - last_slash_epoch.0
+                        > state.params.unbonding_len
+                            + state.params.cubic_slashing_window_length
                     {
-                        return Some(addr.clone());
+                        eligible_for_unjail.push(validator.clone());
                     }
                 }
-                None
-            })
-            .collect::<Vec<_>>();
+            } else if val_state == &ValidatorState::Inactive {
+                // If the validator is also inactive at every epoch until the
+                // pipeline, it can be reactivated
+                let eligible = state
+                    .epoch
+                    .iter_range(state.params.pipeline_len)
+                    .all(|epoch| {
+                        state
+                            .validator_states
+                            .get(&epoch)
+                            .unwrap()
+                            .get(validator)
+                            == Some(&ValidatorState::Inactive)
+                    });
+                if eligible {
+                    eligible_for_reactivation.push(validator.clone());
+                }
+            }
+        }
 
         // Transitions that can be applied if there are no bonds and unbonds
         let basic = prop_oneof![
@@ -2212,6 +2431,32 @@ impl ReferenceStateMachine for AbstractPosState {
                 prop::sample::select(eligible_for_unjail).prop_map(|address| {
                     Transition::UnjailValidator { address }
                 })
+            ]
+            .boxed()
+        };
+
+        // Add deactivation, if any eligible
+        let transitions = if eligible_for_deactivation.is_empty() {
+            transitions
+        } else {
+            prop_oneof![
+                9 => transitions,
+                1 => prop::sample::select(eligible_for_deactivation).prop_map(
+                    |address| Transition::DeactivateValidator { address }
+                )
+            ]
+            .boxed()
+        };
+
+        // Add reactivation, if any eligible
+        let transitions = if eligible_for_reactivation.is_empty() {
+            transitions
+        } else {
+            prop_oneof![
+                transitions,
+                prop::sample::select(eligible_for_reactivation).prop_map(
+                    |address| Transition::ReactivateValidator { address }
+                )
             ]
             .boxed()
         };
@@ -2326,7 +2571,7 @@ impl ReferenceStateMachine for AbstractPosState {
                 state.process_enqueued_slashes();
 
                 // print-out the state
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::InitValidator {
                 address,
@@ -2364,7 +2609,7 @@ impl ReferenceStateMachine for AbstractPosState {
                     .or_default()
                     .insert(address.clone(), ValidatorState::BelowThreshold);
 
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::Bond { id, amount } => {
                 tracing::debug!(
@@ -2382,7 +2627,9 @@ impl ReferenceStateMachine for AbstractPosState {
                         .unwrap();
 
                     // Validator sets need to be updated first!!
-                    if *pipeline_state != ValidatorState::Jailed {
+                    if *pipeline_state != ValidatorState::Jailed
+                        && *pipeline_state != ValidatorState::Inactive
+                    {
                         state.update_validator_sets(
                             state.pipeline(),
                             &id.validator,
@@ -2395,7 +2642,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         amount.change(),
                     );
                 }
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::Unbond { id, amount } => {
                 tracing::debug!(
@@ -2419,7 +2666,7 @@ impl ReferenceStateMachine for AbstractPosState {
                 if !amount.is_zero() && *amount <= sum_bonded {
                     state.update_state_with_unbond(id, *amount);
                 }
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::Withdraw { id } => {
                 tracing::debug!("\nABSTRACT Withdraw, id = {}", id);
@@ -2470,7 +2717,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         *amount,
                     );
                 }
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::Misbehavior {
                 address,
@@ -2607,10 +2854,14 @@ impl ReferenceStateMachine for AbstractPosState {
                             .below_threshold_set
                             .entry(current_epoch + offset)
                             .or_default()
-                            .swap_remove(address);
+                            .remove(address);
                         debug_assert!(removed);
-                    } else {
-                        // Just make sure the validator is already jailed
+                    } else if state
+                        .jailed_validators
+                        .get(&(current_epoch + offset))
+                        .unwrap()
+                        .contains(address)
+                    {
                         debug_assert_eq!(
                             state
                                 .validator_states
@@ -2621,6 +2872,33 @@ impl ReferenceStateMachine for AbstractPosState {
                                 .unwrap(),
                             ValidatorState::Jailed
                         );
+                    } else {
+                        // This should be inactive now, but need to remove from
+                        // inactive validators
+                        assert!(
+                            state
+                                .inactive_validators
+                                .get(&(current_epoch + offset))
+                                .unwrap()
+                                .contains(address)
+                        );
+                        debug_assert_eq!(
+                            state
+                                .validator_states
+                                .get(&(current_epoch + offset))
+                                .unwrap()
+                                .get(address)
+                                .cloned()
+                                .unwrap(),
+                            ValidatorState::Inactive
+                        );
+
+                        // Remove
+                        state
+                            .inactive_validators
+                            .entry(current_epoch + offset)
+                            .or_default()
+                            .remove(address);
                     }
 
                     state
@@ -2628,6 +2906,12 @@ impl ReferenceStateMachine for AbstractPosState {
                         .entry(current_epoch + offset)
                         .or_default()
                         .insert(address.clone(), ValidatorState::Jailed);
+
+                    state
+                        .jailed_validators
+                        .entry(current_epoch + offset)
+                        .or_default()
+                        .insert(address.clone());
                 }
 
                 // Update the most recent infraction epoch for the validator
@@ -2645,7 +2929,7 @@ impl ReferenceStateMachine for AbstractPosState {
                         .insert(address.clone(), *infraction_epoch);
                 }
 
-                state.debug_validators();
+                state.debug_abstract_validators();
             }
             Transition::UnjailValidator { address } => {
                 let pipeline_epoch = state.pipeline();
@@ -2655,6 +2939,13 @@ impl ReferenceStateMachine for AbstractPosState {
                     address.clone(),
                     pipeline_epoch
                 );
+
+                // Remove from the jailed validators list at pipeline
+                state
+                    .jailed_validators
+                    .entry(pipeline_epoch)
+                    .or_default()
+                    .remove(address);
 
                 let consensus_set_pipeline =
                     state.consensus_set.entry(pipeline_epoch).or_default();
@@ -2748,7 +3039,253 @@ impl ReferenceStateMachine for AbstractPosState {
                 } else {
                     panic!("Should not reach here I don't think")
                 }
-                state.debug_validators();
+                state.debug_abstract_validators();
+            }
+            Transition::DeactivateValidator { address } => {
+                let current_epoch = state.epoch;
+                tracing::debug!(
+                    "\nABSTRACT Deactivate validator {} in epoch {}",
+                    address,
+                    current_epoch
+                );
+                let pipeline_epoch = state.pipeline();
+
+                // Add to inactive validators at pipeline epoch
+                state
+                    .inactive_validators
+                    .entry(pipeline_epoch)
+                    .or_default()
+                    .insert(address.clone());
+
+                state
+                    .validator_states
+                    .entry(pipeline_epoch)
+                    .or_default()
+                    .insert(address.clone(), ValidatorState::Inactive);
+
+                // Remove from the validator set at the pipeline epoch
+                let real_stake = state
+                    .validator_stakes
+                    .get(&pipeline_epoch)
+                    .unwrap()
+                    .get(address)
+                    .cloned()
+                    .unwrap_or_default();
+
+                if let Some((index, stake)) =
+                    state.is_in_consensus_w_info(address, pipeline_epoch)
+                {
+                    debug_assert_eq!(stake, real_stake);
+
+                    let vals = state
+                        .consensus_set
+                        .entry(pipeline_epoch)
+                        .or_default()
+                        .entry(stake)
+                        .or_default();
+                    let removed = vals.remove(index);
+                    debug_assert_eq!(removed, Some(address.clone()));
+                    if vals.is_empty() {
+                        state
+                            .consensus_set
+                            .entry(pipeline_epoch)
+                            .or_default()
+                            .remove(&stake);
+                    }
+
+                    let below_cap_pipeline = state
+                        .below_capacity_set
+                        .entry(pipeline_epoch)
+                        .or_default();
+
+                    if let Some(mut max_below_cap) =
+                        below_cap_pipeline.last_entry()
+                    {
+                        let max_bc_stake = *max_below_cap.key();
+                        let vals = max_below_cap.get_mut();
+                        let first_val = vals.pop_front().unwrap();
+                        if vals.is_empty() {
+                            below_cap_pipeline.remove(&max_bc_stake);
+                        }
+                        state
+                            .consensus_set
+                            .entry(pipeline_epoch)
+                            .or_default()
+                            .entry(max_bc_stake.into())
+                            .or_default()
+                            .push_back(first_val.clone());
+                        state
+                            .validator_states
+                            .entry(pipeline_epoch)
+                            .or_default()
+                            .insert(first_val, ValidatorState::Consensus);
+                    }
+                } else if let Some((index, stake)) =
+                    state.is_in_below_capacity_w_info(address, pipeline_epoch)
+                {
+                    debug_assert_eq!(stake, real_stake);
+
+                    let vals = state
+                        .below_capacity_set
+                        .entry(pipeline_epoch)
+                        .or_default()
+                        .entry(stake.into())
+                        .or_default();
+
+                    let removed = vals.remove(index);
+                    debug_assert_eq!(removed, Some(address.clone()));
+                    if vals.is_empty() {
+                        state
+                            .below_capacity_set
+                            .entry(pipeline_epoch)
+                            .or_default()
+                            .remove(&stake.into());
+                    }
+                } else if state.is_in_below_threshold(address, pipeline_epoch) {
+                    let removed = state
+                        .below_threshold_set
+                        .entry(pipeline_epoch)
+                        .or_default()
+                        .remove(address);
+                    debug_assert!(removed);
+                } else {
+                    panic!("SHOULD NOT REACH HERE!");
+                }
+                state.debug_abstract_validators();
+            }
+            Transition::ReactivateValidator { address } => {
+                let pipeline_epoch = state.pipeline();
+                tracing::debug!(
+                    "\nABSTRACT Reactivate validator {} starting in epoch {}",
+                    address,
+                    pipeline_epoch
+                );
+
+                // Remove from inactive validators at pipeline epoch
+                state
+                    .inactive_validators
+                    .entry(pipeline_epoch)
+                    .or_default()
+                    .remove(address);
+
+                let is_frozen = if let Some(last_epoch) =
+                    state.validator_last_slash_epochs.get(address)
+                {
+                    *last_epoch
+                        + state.params.unbonding_len
+                        + 1u64
+                        + state.params.cubic_slashing_window_length
+                        > state.epoch
+                } else {
+                    false
+                };
+
+                let validator_states_pipeline =
+                    state.validator_states.entry(pipeline_epoch).or_default();
+
+                if is_frozen {
+                    validator_states_pipeline
+                        .insert(address.clone(), ValidatorState::Jailed);
+
+                    state
+                        .jailed_validators
+                        .entry(pipeline_epoch)
+                        .or_default()
+                        .insert(address.clone());
+                    return state;
+                }
+
+                let consensus_set_pipeline =
+                    state.consensus_set.entry(pipeline_epoch).or_default();
+                let pipeline_stake = state
+                    .validator_stakes
+                    .get(&pipeline_epoch)
+                    .unwrap()
+                    .get(address)
+                    .cloned()
+                    .unwrap_or_default();
+
+                // Insert the validator back into the appropriate validator set
+                // and update its state
+                let num_consensus = consensus_set_pipeline
+                    .iter()
+                    .fold(0, |sum, (_, validators)| {
+                        sum + validators.len() as u64
+                    });
+
+                if pipeline_stake < state.params.validator_stake_threshold {
+                    // Place into the below-threshold set
+                    let below_threshold_set_pipeline = state
+                        .below_threshold_set
+                        .entry(pipeline_epoch)
+                        .or_default();
+                    below_threshold_set_pipeline.insert(address.clone());
+                    validator_states_pipeline.insert(
+                        address.clone(),
+                        ValidatorState::BelowThreshold,
+                    );
+                } else if num_consensus < state.params.max_validator_slots {
+                    // Place directly into the consensus set
+                    debug_assert!(
+                        state
+                            .below_capacity_set
+                            .get(&pipeline_epoch)
+                            .unwrap()
+                            .is_empty()
+                    );
+                    consensus_set_pipeline
+                        .entry(pipeline_stake)
+                        .or_default()
+                        .push_back(address.clone());
+                    validator_states_pipeline
+                        .insert(address.clone(), ValidatorState::Consensus);
+                } else if let Some(mut min_consensus) =
+                    consensus_set_pipeline.first_entry()
+                {
+                    let below_capacity_set_pipeline = state
+                        .below_capacity_set
+                        .entry(pipeline_epoch)
+                        .or_default();
+
+                    let min_consensus_stake = *min_consensus.key();
+                    if pipeline_stake > min_consensus_stake {
+                        // Place into the consensus set and demote the last
+                        // min_consensus validator
+                        let min_validators = min_consensus.get_mut();
+                        let last_val = min_validators.pop_back().unwrap();
+                        // Remove the key if there's nothing left
+                        if min_validators.is_empty() {
+                            consensus_set_pipeline.remove(&min_consensus_stake);
+                        }
+                        // Do the swap
+                        below_capacity_set_pipeline
+                            .entry(min_consensus_stake.into())
+                            .or_default()
+                            .push_back(last_val.clone());
+                        validator_states_pipeline
+                            .insert(last_val, ValidatorState::BelowCapacity);
+
+                        consensus_set_pipeline
+                            .entry(pipeline_stake)
+                            .or_default()
+                            .push_back(address.clone());
+                        validator_states_pipeline
+                            .insert(address.clone(), ValidatorState::Consensus);
+                    } else {
+                        // Just place into the below-capacity set
+                        below_capacity_set_pipeline
+                            .entry(pipeline_stake.into())
+                            .or_default()
+                            .push_back(address.clone());
+                        validator_states_pipeline.insert(
+                            address.clone(),
+                            ValidatorState::BelowCapacity,
+                        );
+                    }
+                } else {
+                    panic!("Should not reach here I don't think")
+                }
+                state.debug_abstract_validators();
             }
         }
         state
@@ -3028,6 +3565,37 @@ impl ReferenceStateMachine for AbstractPosState {
                 true
                 // TODO: any others?
             }
+            Transition::DeactivateValidator { address } => {
+                // Validator must not be inactive or jailed at the pipeline
+                let pipeline_epoch = state.pipeline();
+                let pipeline_state = state
+                    .validator_states
+                    .get(&pipeline_epoch)
+                    .unwrap()
+                    .get(address)
+                    .unwrap();
+                pipeline_state != &ValidatorState::Inactive
+                    && pipeline_state != &ValidatorState::Jailed
+            }
+            Transition::ReactivateValidator { address } => {
+                // Validator must be inactive through the pipeline
+                for epoch in
+                    Epoch::iter_bounds_inclusive(state.epoch, state.pipeline())
+                {
+                    if state
+                        .validator_states
+                        .get(&epoch)
+                        .unwrap()
+                        .get(address)
+                        .cloned()
+                        .unwrap()
+                        != ValidatorState::Inactive
+                    {
+                        return false;
+                    }
+                }
+                true
+            }
         }
     }
 }
@@ -3050,6 +3618,20 @@ impl AbstractPosState {
             epoch,
             self.below_threshold_set.get(&prev_epoch).unwrap().clone(),
         );
+        self.jailed_validators.insert(
+            epoch,
+            self.jailed_validators
+                .get(&prev_epoch)
+                .cloned()
+                .unwrap_or_default(),
+        );
+        self.inactive_validators.insert(
+            epoch,
+            self.inactive_validators
+                .get(&prev_epoch)
+                .cloned()
+                .unwrap_or_default(),
+        );
         self.validator_states.insert(
             epoch,
             self.validator_states.get(&prev_epoch).unwrap().clone(),
@@ -3058,6 +3640,8 @@ impl AbstractPosState {
             epoch,
             self.validator_stakes.get(&prev_epoch).unwrap().clone(),
         );
+
+        // TODO: remove old data here too!!
     }
 
     /// Update a bond with bonded or unbonded change at the pipeline epoch
@@ -3383,7 +3967,9 @@ impl AbstractPosState {
             .get(&id.validator)
             .unwrap();
 
-        if *pipeline_state != ValidatorState::Jailed {
+        if *pipeline_state != ValidatorState::Jailed
+            && *pipeline_state != ValidatorState::Inactive
+        {
             self.update_validator_sets(
                 self.pipeline(),
                 &id.validator,
@@ -3533,7 +4119,9 @@ impl AbstractPosState {
             .unwrap();
 
         if !amount_after_slashing.is_zero() {
-            if *pipeline_state != ValidatorState::Jailed {
+            if *pipeline_state != ValidatorState::Jailed
+                && *pipeline_state != ValidatorState::Inactive
+            {
                 self.update_validator_sets(
                     self.pipeline(),
                     new_validator,
@@ -3571,7 +4159,8 @@ impl AbstractPosState {
         change: token::Change,
     ) {
         tracing::debug!(
-            "\nUpdating set for validator {} in epoch {} with amount {}\n",
+            "\nUpdating set for validator {} in epoch {} with token change \
+             {}\n",
             validator,
             epoch,
             change
@@ -3758,7 +4347,7 @@ impl AbstractPosState {
             ValidatorState::BelowThreshold => {
                 // We know that this validator will be promoted into one of the
                 // higher sets, so first remove from the below-threshold set.
-                below_thresh_set.swap_remove(validator);
+                below_thresh_set.remove(validator);
 
                 let num_consensus =
                     consensus_set.iter().fold(0, |sum, (_, validators)| {
@@ -3816,7 +4405,7 @@ impl AbstractPosState {
                 }
             }
             ValidatorState::Inactive => {
-                panic!("unexpected state")
+                panic!("unexpected state (inactive)")
             }
             ValidatorState::Jailed => {
                 panic!("unexpected state (jailed)")
@@ -3879,7 +4468,9 @@ impl AbstractPosState {
                     .unwrap()
                     .get(&validator)
                     .unwrap();
-                if *state != ValidatorState::Jailed {
+                if *state != ValidatorState::Jailed
+                    && *state != ValidatorState::Inactive
+                {
                     self.update_validator_sets(
                         update_epoch,
                         &validator,
@@ -4619,13 +5210,16 @@ impl AbstractPosState {
         )
     }
 
-    fn debug_validators(&self) {
-        tracing::debug!("DEBUG ABSTRACT VALIDATOR");
+    fn debug_abstract_validators(&self) {
+        tracing::debug!("DEBUG ABSTRACT VALIDATORS");
         let current_epoch = self.epoch;
         for epoch in
             Epoch::iter_bounds_inclusive(current_epoch, self.pipeline())
         {
             tracing::debug!("Epoch {}", epoch);
+            let mut total_vals = 0_usize;
+
+            // Consensus
             let mut min_consensus = token::Amount::from(u64::MAX);
             let consensus = self.consensus_set.get(&epoch).unwrap();
             for (amount, vals) in consensus {
@@ -4652,10 +5246,13 @@ impl AbstractPosState {
                         deltas_stake.to_string_native(),
                         val_state
                     );
-                    debug_assert_eq!(*amount, *deltas_stake);
-                    debug_assert_eq!(*val_state, ValidatorState::Consensus);
+                    assert_eq!(*amount, *deltas_stake);
+                    assert_eq!(*val_state, ValidatorState::Consensus);
+                    total_vals += 1;
                 }
             }
+
+            // Below-capacity
             let mut max_bc = token::Amount::zero();
             let bc = self.below_capacity_set.get(&epoch).unwrap();
             for (amount, vals) in bc {
@@ -4683,11 +5280,9 @@ impl AbstractPosState {
                         deltas_stake.to_string_native(),
                         val_state
                     );
-                    debug_assert_eq!(
-                        token::Amount::from(*amount),
-                        deltas_stake
-                    );
-                    debug_assert_eq!(*val_state, ValidatorState::BelowCapacity);
+                    assert_eq!(token::Amount::from(*amount), deltas_stake);
+                    assert_eq!(*val_state, ValidatorState::BelowCapacity);
+                    total_vals += 1;
                 }
             }
             if max_bc > min_consensus {
@@ -4699,6 +5294,7 @@ impl AbstractPosState {
             }
             assert!(min_consensus >= max_bc);
 
+            // Below-threshold
             for addr in self.below_threshold_set.get(&epoch).unwrap() {
                 let state = self
                     .validator_states
@@ -4722,43 +5318,66 @@ impl AbstractPosState {
                 );
 
                 assert_eq!(*state, ValidatorState::BelowThreshold);
+                total_vals += 1;
             }
 
-            for addr in self
-                .validator_states
-                .get(&epoch)
-                .unwrap()
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-            {
-                if let (None, None, false) = (
-                    self.is_in_consensus_w_info(&addr, epoch),
-                    self.is_in_below_capacity_w_info(&addr, epoch),
-                    self.is_in_below_threshold(&addr, epoch),
-                ) {
-                    assert_eq!(
-                        self.validator_states
-                            .get(&epoch)
-                            .unwrap()
-                            .get(&addr)
-                            .cloned(),
-                        Some(ValidatorState::Jailed)
-                    );
-                    let stake = self
-                        .validator_stakes
-                        .get(&epoch)
-                        .unwrap()
-                        .get(&addr)
-                        .cloned()
-                        .unwrap_or_default();
-                    tracing::debug!(
-                        "Jailed val {}, stake {}",
-                        &addr,
-                        &stake.to_string_native()
-                    );
-                }
+            // Jailed
+            for addr in self.jailed_validators.get(&epoch).unwrap() {
+                let state = self
+                    .validator_states
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .unwrap();
+
+                let stake = self
+                    .validator_stakes
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .cloned()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Jailed val {}, stake {} - ({:?})",
+                    addr,
+                    stake.to_string_native(),
+                    state
+                );
+
+                assert_eq!(*state, ValidatorState::Jailed);
+                total_vals += 1;
             }
+
+            // Inactive
+            for addr in self.inactive_validators.get(&epoch).unwrap() {
+                let state = self
+                    .validator_states
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .unwrap();
+
+                let stake = self
+                    .validator_stakes
+                    .get(&epoch)
+                    .unwrap()
+                    .get(addr)
+                    .cloned()
+                    .unwrap_or_default();
+                tracing::debug!(
+                    "Inactive val {}, stake {} - ({:?})",
+                    addr,
+                    stake.to_string_native(),
+                    state
+                );
+
+                assert_eq!(*state, ValidatorState::Inactive);
+                total_vals += 1;
+            }
+
+            let total_vals_from_state =
+                self.validator_states.get(&epoch).unwrap().iter().count();
+            assert_eq!(total_vals, total_vals_from_state);
         }
     }
 
