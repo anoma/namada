@@ -36,17 +36,14 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
                         let dry_run =
                             args.tx.dry_run || args.tx.dry_run_wrapper;
+                        if dry_run {
+                            ctx.set_dry_run()
+                        }
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_custom(&namada, args).await?;
-                        if !dry_run {
-                            namada
-                                .wallet()
-                                .await
-                                .save()
-                                .unwrap_or_else(|err| eprintln!("{}", err));
-                        } else {
+                        if dry_run {
                             namada.io().println(
                                 "Transaction dry run. No addresses have been \
                                  saved.",
@@ -98,17 +95,14 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
                         let dry_run =
                             args.tx.dry_run || args.tx.dry_run_wrapper;
+                        if dry_run {
+                            ctx.set_dry_run();
+                        }
+                        let namada = ctx.to_sdk(client, io);
                         tx::submit_init_account(&namada, args).await?;
-                        if !dry_run {
-                            namada
-                                .wallet()
-                                .await
-                                .save()
-                                .unwrap_or_else(|err| eprintln!("{}", err));
-                        } else {
+                        if dry_run {
                             namada.io().println(
                                 "Transaction dry run. No addresses have been \
                                  saved.",
