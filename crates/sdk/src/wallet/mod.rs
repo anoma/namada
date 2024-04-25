@@ -108,6 +108,12 @@ pub trait WalletStorage: Sized + Clone {
     /// Load a wallet from the store file.
     fn load<U>(&self, wallet: &mut Wallet<U>) -> Result<(), LoadStoreError>;
 
+    /// Load store into memory
+    fn load_in_mem<U>(
+        &self,
+        wallet: &mut Wallet<U>,
+    ) -> Result<(), LoadStoreError>;
+
     /// Atomically update the wallet store
     fn update_store(
         &self,
@@ -195,6 +201,14 @@ pub mod fs {
             })?;
             wallet.store =
                 Store::decode(store).map_err(LoadStoreError::Decode)?;
+            Ok(())
+        }
+
+        fn load_in_mem<U>(
+            &self,
+            wallet: &mut Wallet<U>,
+        ) -> Result<(), LoadStoreError> {
+            wallet.store_in_mem = Some(self.load_store_read_only()?);
             Ok(())
         }
 
