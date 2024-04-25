@@ -90,11 +90,6 @@ where
                 )?;
                 Ok(None)
             }
-            Some(StorageModification::Temp { .. }) => {
-                Err(StorageError::new_const(
-                    "Temp shouldn't be inserted in an IBC transaction",
-                ))
-            }
             Some(StorageModification::InitAccount { .. }) => Err(
                 StorageError::new_const("InitAccount shouldn't be inserted"),
             ),

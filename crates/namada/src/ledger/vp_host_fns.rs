@@ -86,9 +86,8 @@ where
             // Read the VP of a new account
             Ok(Some(vp_code_hash.to_vec()))
         }
-        Some(&write_log::StorageModification::Temp { .. }) | None => {
-            // When not found in write log or only found a temporary value, try
-            // to read from the storage
+        None => {
+            // When not found in write log, try to read from the storage
             let (value, gas) =
                 state.db_read(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
@@ -108,19 +107,17 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read_persistent(key);
+    let (log_val, gas) = state.write_log().read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(write_log::PersistentStorageModification::Write { value }) => {
+        Some(write_log::StorageModification::Write { value }) => {
             Ok(Some(value.clone()))
         }
-        Some(write_log::PersistentStorageModification::Delete) => {
+        Some(write_log::StorageModification::Delete) => {
             // Given key has been deleted
             Ok(None)
         }
-        Some(write_log::PersistentStorageModification::InitAccount {
-            vp_code_hash,
-        }) => {
+        Some(write_log::StorageModification::InitAccount { vp_code_hash }) => {
             // Read the VP code hash of a new account
             Ok(Some(vp_code_hash.to_vec()))
         }
@@ -145,14 +142,9 @@ pub fn read_temp<S>(
 where
     S: StateRead + Debug,
 {
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read_temp(key);
     add_gas(gas_meter, gas)?;
-    match log_val {
-        Some(write_log::StorageModification::Temp { ref value }) => {
-            Ok(Some(value.clone()))
-        }
-        _ => Ok(None),
-    }
+    Ok(log_val.cloned())
 }
 
 /// Storage `has_key` in prior state (before tx execution). It will try to read
@@ -175,9 +167,8 @@ where
             Ok(false)
         }
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
-        Some(&write_log::StorageModification::Temp { .. }) | None => {
-            // When not found in write log or only found a temporary value, try
-            // to check the storage
+        None => {
+            // When not found in write log, try to check the storage
             let (present, gas) =
                 state.db_has_key(key).map_err(RuntimeError::StorageError)?;
             add_gas(gas_meter, gas)?;
@@ -197,19 +188,15 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read_persistent(key);
+    let (log_val, gas) = state.write_log().read(key);
     add_gas(gas_meter, gas)?;
     match log_val {
-        Some(write_log::PersistentStorageModification::Write { .. }) => {
-            Ok(true)
-        }
-        Some(write_log::PersistentStorageModification::Delete) => {
+        Some(write_log::StorageModification::Write { .. }) => Ok(true),
+        Some(write_log::StorageModification::Delete) => {
             // The given key has been deleted
             Ok(false)
         }
-        Some(write_log::PersistentStorageModification::InitAccount {
-            ..
-        }) => Ok(true),
+        Some(write_log::StorageModification::InitAccount { .. }) => Ok(true),
         None => {
             // When not found in write log, try
             // to check the storage
