@@ -23,6 +23,7 @@ struct Keys {
     min_period: &'static str,
     max_period: &'static str,
     max_content: &'static str,
+    max_latency: &'static str,
     min_grace_epochs: &'static str,
     counter: &'static str,
     pending: &'static str,
@@ -324,6 +325,13 @@ pub fn get_max_proposal_period_key() -> Key {
 pub fn get_max_proposal_content_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&Keys::VALUES.max_content.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get maximum proposal latency key
+pub fn get_max_proposal_latency_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.max_latency.to_owned())
         .expect("Cannot obtain a storage key")
 }
 
