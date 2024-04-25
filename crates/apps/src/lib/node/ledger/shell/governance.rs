@@ -113,7 +113,8 @@ where
             votes,
             total_active_voting_power,
             tally_type,
-        );
+        )
+        .expect("Proposal result calculation must not over/underflow");
         gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {

@@ -1016,6 +1016,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                 total_staked_token,
                 tally_type,
             )
+            .expect("Proposal result calculation must not over/underflow");
         }
     };
     Ok(Some(proposal_result))

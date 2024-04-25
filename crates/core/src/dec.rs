@@ -132,6 +132,16 @@ impl Dec {
             .expect("Cannot overflow")
     }
 
+    /// The representation of 1 / 3
+    pub fn one_third() -> Self {
+        Self::one().checked_div(3).expect("Cannot fail")
+    }
+
+    /// The representation of 2 / 3
+    pub fn two_thirds() -> Self {
+        Self::two().checked_div(3).expect("Cannot fail")
+    }
+
     /// Create a new [`Dec`] using a mantissa and a scale.
     pub fn new(mantissa: i128, scale: u8) -> Option<Self> {
         if scale > POS_DECIMAL_PRECISION {
@@ -665,7 +675,6 @@ mod test_dec {
                 / Dec::two(),
             Dec::zero(),
         );
-
         // Test Dec * Dec multiplication
         assert!(Dec::new(32353, POS_DECIMAL_PRECISION + 1u8).is_none());
         let dec1 = Dec::new(12345654321, 12).expect("Test failed");
@@ -674,6 +683,9 @@ mod test_dec {
         let exp_quot = Dec::new(1249966393025101, 12).expect("Test failed");
         assert_eq!(dec1 * dec2, exp_prod);
         assert_eq!(dec1 / dec2, exp_quot);
+
+        Dec::one_third(); // must not panic
+        Dec::two_thirds(); // must not panic
     }
 
     /// Test the `Dec` and `token::Amount` interplay

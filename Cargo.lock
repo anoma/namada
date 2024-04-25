@@ -4659,6 +4659,7 @@ dependencies = [
  "proptest",
  "serde 1.0.193",
  "serde_json",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
