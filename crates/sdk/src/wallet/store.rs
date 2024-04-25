@@ -57,7 +57,7 @@ pub struct ValidatorData {
 }
 
 /// A Storage area for keys and addresses
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
     view_keys: BTreeMap<Alias, ExtendedViewingKey>,
