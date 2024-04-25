@@ -431,6 +431,10 @@ impl<U: WalletStorage> Wallet<U> {
         self.utils.save(self)
     }
 
+    pub fn set_dry_run(&mut self) -> Result<(), LoadStoreError> {
+        self.utils.clone().load_in_mem(self)
+    }
+
     /// Add validator data to the store
     pub fn add_validator_data_atomic(
         &mut self,

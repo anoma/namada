@@ -206,6 +206,19 @@ impl Context {
             .unwrap_or_else(|| safe_exit_on_missing_chain_context())
     }
 
+    /// Switch the wallet into dry run mode
+    pub fn set_dry_run(&mut self) -> () {
+        self.chain
+            .as_mut()
+            .unwrap_or_else(|| safe_exit_on_missing_chain_context())
+            .wallet
+            .set_dry_run()
+            .unwrap_or_else(|err| {
+                eprintln!("Failed to load wallet store: {}", err);
+                utils::safe_exit(1)
+            })
+    }
+
     /// Make an implementation of Namada from this object and parameters.
     pub fn to_sdk<C, IO>(self, client: C, io: IO) -> impl Namada
     where
