@@ -1604,6 +1604,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Tx encoding must not change
     fn test_txs_fixture_decoding() {
         let file = fs::File::open("../tests/fixtures/txs.json")
             .expect("file should open read only");

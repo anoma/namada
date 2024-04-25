@@ -32,8 +32,11 @@ async fn main() -> Result<(), Reason> {
         serialized_txs.push(HEXLOWER.encode(tx.to_bytes().as_ref()));
     }
     let args: Vec<_> = std::env::args().collect();
-    if args.len() < 4 {
-        eprintln!("Usage: generate-txs <vectors.json> <debugs.txt>");
+    if args.len() < 3 {
+        eprintln!(
+            "Usage: generate-txs <vectors.json> <debugs.txt> <txs.json \
+             (optional)>"
+        );
         return Result::Err(Reason::from("Incorrect command line arguments."));
     }
     let json = serde_json::to_string(&test_vectors)
@@ -41,7 +44,12 @@ async fn main() -> Result<(), Reason> {
     std::fs::write(&args[1], json).expect("unable to save test vectors");
     std::fs::write(&args[2], format!("{:#?}", debug_vectors))
         .expect("unable to save test vectors");
-    std::fs::write(&args[3], format!("{:#?}", serialized_txs))
+    if args.len() > 3 {
+        std::fs::write(
+            &args[3],
+            serde_json::to_string(&serialized_txs).unwrap(),
+        )
         .expect("unable to save test vectors");
+    }
     Ok(())
 }
