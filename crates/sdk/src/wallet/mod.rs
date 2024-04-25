@@ -346,6 +346,7 @@ pub struct Wallet<U> {
     /// Location where this shielded context is saved
     utils: U,
     store: Store,
+    store_in_mem: Option<Store>,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
     decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
 }
@@ -363,6 +364,8 @@ impl<U> Wallet<U> {
         Self {
             utils,
             store,
+            // XXX comment
+            store_in_mem: Option::default(),
             decrypted_key_cache: HashMap::default(),
             decrypted_spendkey_cache: HashMap::default(),
         }
