@@ -476,9 +476,7 @@ impl<U: WalletStorage> Wallet<U> {
         address: Address,
         keys: ValidatorKeys,
     ) -> Result<(), LoadStoreError> {
-        self.utils
-            .clone()
-            .update_store(|store| store.add_validator_data(address, keys))
+        self.update_store(|store| store.add_validator_data(address, keys))
     }
 
     /// Returns the validator data, if it exists.
@@ -493,12 +491,12 @@ impl<U: WalletStorage> Wallet<U> {
 
     /// Extend the wallet from pre-genesis validator wallet.
     pub fn extend_from_pre_genesis_validator_atomic(
-        &self,
+        &mut self,
         validator_address: Address,
         validator_alias: Alias,
         other: pre_genesis::ValidatorWallet,
     ) -> Result<(), LoadStoreError> {
-        self.utils.clone().update_store(|store| {
+        self.update_store(|store| {
             store.extend_from_pre_genesis_validator(
                 validator_address,
                 validator_alias,
@@ -512,10 +510,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
         vp_type: AddressVpType,
     ) -> Result<HashSet<Address>, LoadStoreError> {
-        Ok(self
-            .utils
-            .load_store_read_only()?
-            .get_addresses_with_vp_type(vp_type))
+        Ok(self.get_store()?.get_addresses_with_vp_type(vp_type))
     }
 
     /// Add a vp_type to a given address
@@ -524,7 +519,7 @@ impl<U: WalletStorage> Wallet<U> {
         vp_type: AddressVpType,
         address: Address,
     ) -> Result<(), LoadStoreError> {
-        self.utils.clone().update_store(|store| {
+        self.update_store(|store| {
             store.add_vp_type_to_address(vp_type, address)
         })
     }
@@ -557,8 +552,7 @@ impl<U: WalletStorage> Wallet<U> {
         Alias::is_reserved(alias.as_ref())
             .map(Ok)
             .or_else(|| {
-                self.utils
-                    .load_store_read_only()
+                self.get_store()
                     .map(move |store| store.find_address(alias).cloned())
                     .transpose()
             })
@@ -570,11 +564,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
         address: &Address,
     ) -> Result<Option<Alias>, LoadStoreError> {
-        Ok(self
-            .utils
-            .load_store_read_only()?
-            .find_alias(address)
-            .cloned())
+        Ok(self.get_store()?.find_alias(address).cloned())
     }
 
     /// Try to find an alias for a given address from the wallet. If not found,
@@ -627,8 +617,7 @@ impl<U: WalletStorage> Wallet<U> {
         alias: impl AsRef<str>,
     ) -> Result<Result<ExtendedViewingKey, FindKeyError>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_viewing_key(alias.as_ref())
             .cloned()
             .ok_or_else(|| {
@@ -642,11 +631,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
         alias: impl AsRef<str>,
     ) -> Result<Option<PaymentAddress>, LoadStoreError> {
-        Ok(self
-            .utils
-            .load_store_read_only()?
-            .find_payment_addr(alias.as_ref())
-            .cloned())
+        Ok(self.get_store()?.find_payment_addr(alias.as_ref()).cloned())
     }
 
     /// Find an alias by the payment address if it's in the wallet.
@@ -655,8 +640,7 @@ impl<U: WalletStorage> Wallet<U> {
         payment_address: &PaymentAddress,
     ) -> Result<Option<Alias>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_alias_by_payment_addr(payment_address)
             .cloned())
     }
@@ -673,8 +657,7 @@ impl<U: WalletStorage> Wallet<U> {
         LoadStoreError,
     > {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_secret_keys()
             .into_iter()
             .map(|(alias, (kp, pkh))| {
@@ -688,8 +671,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
     ) -> Result<HashMap<String, common::PublicKey>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_public_keys()
             .iter()
             .map(|(alias, value)| (alias.into(), value.clone()))
@@ -701,8 +683,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
     ) -> Result<HashMap<String, Address>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_addresses()
             .iter()
             .map(|(alias, value)| (alias.into(), value.clone()))
@@ -714,8 +695,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
     ) -> Result<HashMap<String, PaymentAddress>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_payment_addrs()
             .iter()
             .map(|(alias, value)| (alias.into(), *value))
@@ -727,8 +707,7 @@ impl<U: WalletStorage> Wallet<U> {
         &self,
     ) -> Result<HashMap<String, ExtendedViewingKey>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_viewing_keys()
             .iter()
             .map(|(alias, value)| (alias.into(), *value))
@@ -743,8 +722,7 @@ impl<U: WalletStorage> Wallet<U> {
         LoadStoreError,
     > {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .get_spending_keys()
             .iter()
             .map(|(alias, value)| (alias.into(), value.clone()))
@@ -757,8 +735,7 @@ impl<U: WalletStorage> Wallet<U> {
         alias: impl AsRef<str>,
     ) -> Result<Option<bool>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_secret_key(alias)
             .map(|stored_keypair| stored_keypair.is_encrypted()))
     }
@@ -781,8 +758,7 @@ impl<U: WalletStorage> Wallet<U> {
         pkh: &PublicKeyHash,
     ) -> Result<Result<DerivationPath, FindKeyError>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_path_by_pkh(pkh)
             .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string())))
     }
@@ -796,8 +772,7 @@ impl<U: WalletStorage> Wallet<U> {
         pkh: &PublicKeyHash,
     ) -> Result<Result<common::PublicKey, FindKeyError>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_public_key_by_pkh(pkh)
             .cloned()
             .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string())))
@@ -809,8 +784,7 @@ impl<U: WalletStorage> Wallet<U> {
         alias_or_pkh: impl AsRef<str>,
     ) -> Result<Result<common::PublicKey, FindKeyError>, LoadStoreError> {
         Ok(self
-            .utils
-            .load_store_read_only()?
+            .get_store()?
             .find_public_key(alias_or_pkh.as_ref())
             .cloned()
             .ok_or_else(|| {
@@ -824,8 +798,8 @@ impl<U: WalletStorage> Wallet<U> {
         &mut self,
         wallet: Self,
     ) -> Result<(), LoadStoreError> {
-        let other_store = wallet.utils.load_store_read_only()?;
-        self.utils.update_store(|store| store.extend(other_store))
+        let other_store = wallet.into_store()?;
+        self.update_store(|store| store.extend(other_store))
     }
 
     /// Remove keys and addresses associated with the given alias
@@ -833,8 +807,7 @@ impl<U: WalletStorage> Wallet<U> {
         &mut self,
         alias: String,
     ) -> Result<(), LoadStoreError> {
-        self.utils
-            .update_store(|store| store.remove_alias(&alias.into()))
+        self.update_store(|store| store.remove_alias(&alias.into()))
     }
 }
 
@@ -944,7 +917,7 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
         pkh: &PublicKeyHash,
         password: Option<Zeroizing<String>>,
     ) -> Result<Result<common::SecretKey, FindKeyError>, LoadStoreError> {
-        let store = self.utils.load_store_read_only()?;
+        let store = self.get_store()?;
         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = store
             .find_alias_by_pkh(pkh)
@@ -984,10 +957,8 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             return Ok(Ok(cached_key.clone()));
         }
         // If not cached, look-up in store
-        let res = if let Some(stored_key) = self
-            .utils
-            .load_store_read_only()?
-            .find_secret_key(alias_pkh_or_pk.as_ref())
+        let res = if let Some(stored_key) =
+            self.get_store()?.find_secret_key(alias_pkh_or_pk.as_ref())
         {
             Self::decrypt_stored_key::<_>(
                 &mut self.decrypted_key_cache,
@@ -1019,10 +990,8 @@ impl<U: WalletIo + WalletStorage> Wallet<U> {
             return Ok(Ok(*cached_key));
         }
         // If not cached, look-up in store
-        let res = if let Some(stored_spendkey) = self
-            .utils
-            .load_store_read_only()?
-            .find_spending_key(alias.as_ref())
+        let res = if let Some(stored_spendkey) =
+            self.get_store()?.find_spending_key(alias.as_ref())
         {
             Self::decrypt_stored_key::<_>(
                 &mut self.decrypted_spendkey_cache,
