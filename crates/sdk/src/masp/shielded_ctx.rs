@@ -57,9 +57,9 @@ use crate::masp::types::{
 };
 use crate::masp::utils::{
     cloned_pair, extract_masp_tx, extract_payload, fetch_channel,
-    is_amount_required, to_viewing_key, DefaultLogger,
+    is_amount_required, to_viewing_key, DefaultTracker,
     ExtractShieldedActionArg, FetchQueueSender, LedgerMaspClient, MaspClient,
-    ProgressLogger, RetryStrategy, ShieldedUtils, TaskManager,
+    ProgressTracker, RetryStrategy, ShieldedUtils, TaskManager,
 };
 use crate::masp::NETWORK;
 use crate::queries::Client;
@@ -198,7 +198,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     >(
         block_sender: FetchQueueSender,
         client: &'a C,
-        logger: &impl ProgressLogger<IO>,
+        progress: &impl ProgressTracker<IO>,
         last_indexed_tx: Option<BlockHeight>,
         last_query_height: BlockHeight,
     ) -> Result<(), Error> {
@@ -208,7 +208,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             last_indexed_tx.map_or_else(|| 1, |last| last.0);
         client
             .fetch_shielded_transfer(
-                logger,
+                progress,
                 block_sender,
                 first_height_to_query,
                 last_query_height.0,
@@ -1709,12 +1709,12 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         'a,
         C: Client + Sync,
         IO: Io + Send + Sync,
-        L: ProgressLogger<IO> + Sync,
+        T: ProgressTracker<IO> + Sync,
         M: MaspClient<'a, C> + 'a,
     >(
         &mut self,
         client: &'a C,
-        logger: &L,
+        progress: &T,
         retry: RetryStrategy,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
@@ -1768,7 +1768,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
             std::cmp::min(last_query_height, last_block_height);
         self.update_witness_map::<_, _, M>(
             client,
-            logger.io(),
+            progress.io(),
             last_witnessed_tx.unwrap_or_default(),
             last_query_height,
         )
@@ -1801,7 +1801,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                 let decryption_handle = s.spawn(|| {
                     // N.B. DON'T GO PANICKING IN HERE. DON'T DO IT. SERIOUSLY.
                     // YOU COULD ACCIDENTALLY FREEZE EVERYTHING
-                    let txs = logger.scan(fetch_recv);
+                    let txs = progress.scan(fetch_recv);
                     txs.par_bridge().try_for_each(
                         |(indexed_tx, (epoch, tx, stx))| {
                             let mut scanned_data = ScannedData::default();
@@ -1859,7 +1859,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                                 Self::fetch_shielded_transfers::<_, _, M>(
                                     fetch_send,
                                     client,
-                                    logger,
+                                    progress,
                                     start_height,
                                     last_query_height,
                                 )
@@ -1875,7 +1875,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
                 // if fetching errored, log it. But this is recoverable.
                 if let Err(e) = fetch_res {
                     display_line!(
-                        logger.io(),
+                        progress.io(),
                         "Error encountered while fetching: {}",
                         e.to_string()
                     );
@@ -1883,11 +1883,11 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
 
                 // if fetching failed for before completing, we restart
                 // the fetch process. Otherwise, we can break the loop.
-                if logger.left_to_fetch() == 0 {
+                if progress.left_to_fetch() == 0 {
                     break;
                 }
             }
-            if logger.left_to_fetch() != 0 {
+            if progress.left_to_fetch() != 0 {
                 Err(Error::Other(
                     "After retrying, could not fetch all MASP txs.".to_string(),
                 ))
@@ -1925,7 +1925,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         let block_results = rpc::query_results(client).await?;
         self.fetch::<_, _, _, LedgerMaspClient<C>>(
             client,
-            &DefaultLogger::new(io),
+            &DefaultTracker::new(io),
             RetryStrategy::Forever,
             None,
             None,
@@ -2055,8 +2055,10 @@ mod shielded_ctx_tests {
     use crate::error::Error;
     use crate::io::StdIo;
     use crate::masp::fs::FsShieldedUtils;
-    use crate::masp::test_utils::{test_client, TestingMaspClient};
-    use crate::masp::utils::{DefaultLogger, RetryStrategy};
+    use crate::masp::test_utils::{
+        test_client, TestUnscannedTracker, TestingMaspClient,
+    };
+    use crate::masp::utils::{DefaultTracker, RetryStrategy};
 
     // A viewing key derived from A_SPENDING_KEY
     pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
@@ -2166,7 +2168,7 @@ mod shielded_ctx_tests {
     }
 
     /// Test that if fetching fails before finishing,
-    /// we re-establish the fetching process
+    /// we re-establish the fetching process.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_retry_fetch() {
         let temp_dir = tempdir().unwrap();
@@ -2174,7 +2176,7 @@ mod shielded_ctx_tests {
             FsShieldedUtils::new(temp_dir.path().to_path_buf());
         let (client, masp_tx_sender) = test_client(2.into());
         let io = StdIo;
-        let logger = DefaultLogger::new(&io);
+        let progress = DefaultTracker::new(&io);
         let vk = ExtendedFullViewingKey::from(
             ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
         )
@@ -2187,7 +2189,7 @@ mod shielded_ctx_tests {
         let result = shielded_ctx
             .fetch::<_, _, _, TestingMaspClient>(
                 &client,
-                &logger,
+                &progress,
                 RetryStrategy::Times(1),
                 None,
                 None,
@@ -2234,7 +2236,7 @@ mod shielded_ctx_tests {
         shielded_ctx
             .fetch::<_, _, _, TestingMaspClient>(
                 &client,
-                &logger,
+                &progress,
                 RetryStrategy::Times(2),
                 None,
                 None,
@@ -2274,5 +2276,213 @@ mod shielded_ctx_tests {
             }
         );
         assert_eq!(shielded_ctx.note_map.len(), 2);
+    }
+
+    /// Test that the progress tracker correctly keeps
+    /// track of how many blocks there are left to fetch
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_left_to_fetch() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+        let (client, masp_tx_sender) = test_client(2.into());
+        let io = StdIo;
+        let progress = DefaultTracker::new(&io);
+        let vk = ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
+        )
+        .fvk
+        .vk;
+        let (masp_tx, changed_keys) = arbitrary_masp_tx();
+
+        // first fetch no blocks
+        masp_tx_sender.send(None).expect("Test failed");
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(progress.left_to_fetch(), 2);
+
+        // fetch one of the two blocks
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 1.into(),
+                    index: Default::default(),
+                    is_wrapper: false,
+                },
+                (Default::default(), changed_keys.clone(), masp_tx.clone()),
+            )))
+            .expect("Test failed");
+        masp_tx_sender.send(None).expect("Test failed");
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(progress.left_to_fetch(), 1);
+
+        // fetch no blocks
+        masp_tx_sender.send(None).expect("Test failed");
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(progress.left_to_fetch(), 1);
+
+        // fetch no blocks, but increase the latest block height
+        // thus the amount left to fetch should increase
+        let (client, masp_tx_sender) = test_client(3.into());
+        masp_tx_sender.send(None).expect("Test failed");
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(progress.left_to_fetch(), 2);
+
+        // fetch remaining block
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 2.into(),
+                    index: Default::default(),
+                    is_wrapper: false,
+                },
+                (Default::default(), changed_keys.clone(), masp_tx.clone()),
+            )))
+            .expect("Test failed");
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 3.into(),
+                    index: Default::default(),
+                    is_wrapper: false,
+                },
+                (Default::default(), changed_keys.clone(), masp_tx.clone()),
+            )))
+            .expect("Test failed");
+        // this should not produce an error since we have fetched
+        // all expected blocks
+        masp_tx_sender.send(None).expect("Test failed");
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .expect("Test failed");
+        assert_eq!(progress.left_to_fetch(), 0);
+    }
+
+    /// Test that if we don't scan all fetched notes, they
+    /// are persisted in a cached
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_unscanned_cache() {
+        let (client, masp_tx_sender) = test_client(2.into());
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+
+        let io = StdIo;
+        let progress = TestUnscannedTracker::new(&io);
+        let vk = ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
+        )
+        .fvk
+        .vk;
+
+        // the fetched txs
+        let (masp_tx, changed_keys) = arbitrary_masp_tx();
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 1.into(),
+                    index: TxIndex(1),
+                    is_wrapper: false,
+                },
+                (Default::default(), changed_keys.clone(), masp_tx.clone()),
+            )))
+            .expect("Test failed");
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 1.into(),
+                    index: TxIndex(2),
+                    is_wrapper: false,
+                },
+                (Default::default(), changed_keys.clone(), masp_tx.clone()),
+            )))
+            .expect("Test failed");
+
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(2),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .expect("Test failed");
+
+        shielded_ctx.load_confirmed().await.expect("Test failed");
+        let keys = shielded_ctx
+            .unscanned
+            .txs
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let expected = vec![IndexedTx {
+            height: 1.into(),
+            index: TxIndex(2),
+            is_wrapper: false,
+        }];
+        assert_eq!(keys, expected);
     }
 }

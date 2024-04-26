@@ -474,7 +474,7 @@ pub trait MaspClient<'a, C: Client> {
     #[allow(async_fn_in_trait)]
     async fn fetch_shielded_transfer<IO: Io>(
         &self,
-        logger: &impl ProgressLogger<IO>,
+        progress: &impl ProgressTracker<IO>,
         tx_sender: FetchQueueSender,
         from: u64,
         to: u64,
@@ -506,10 +506,10 @@ where
         last_query_height: BlockHeight,
     ) -> Result<CommitmentTreeUpdates, Error> {
         let (tx_sender, tx_receiver) = fetch_channel::new(Default::default());
-        let logger = DefaultLogger::new(io);
+        let progress = DefaultTracker::new(io);
         let (res, updates) = tokio::join!(
             self.fetch_shielded_transfer(
-                &logger,
+                &progress,
                 tx_sender,
                 last_witnessed_tx.height.0,
                 last_query_height.0,
@@ -561,13 +561,13 @@ where
 
     async fn fetch_shielded_transfer<IO: Io>(
         &self,
-        logger: &impl ProgressLogger<IO>,
+        progress: &impl ProgressTracker<IO>,
         mut tx_sender: FetchQueueSender,
         from: u64,
         to: u64,
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
-        let mut fetch_iter = logger.fetch(from..=to);
+        let mut fetch_iter = progress.fetch(from..=to);
 
         while let Some(height) = fetch_iter.peek() {
             let height = *height;
@@ -803,7 +803,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                         // update each key to be synced to the latest scanned
                         // height.
                         for (_, h) in locked.vk_heights.iter_mut() {
-                            *h = Some(self.latest_idx);
+                            // Due to a failure to fetch new blocks, we
+                            // may not have made scanning progress. Hence
+                            // the max computation.
+                            *h = std::cmp::max(*h, Some(self.latest_idx));
                         }
                         // updated the spent notes and balances
                         locked.nullify_spent_notes(native_token)?;
@@ -916,7 +919,15 @@ where
     }
 }
 
-pub trait ProgressLogger<IO: Io> {
+/// This trait keeps track of how much progress the
+/// shielded sync algorithm has made relative to the inputs.
+///
+/// It should track how much has been fetched and scanned and
+/// whether the fetching has been finished.
+///
+/// Additionally, it has access to IO in case the struct implementing
+/// this trait wishes to log this progress.
+pub trait ProgressTracker<IO: Io> {
     fn io(&self) -> &IO;
 
     fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
@@ -935,12 +946,12 @@ pub trait ProgressLogger<IO: Io> {
 
 /// The default type for logging sync progress.
 #[derive(Debug, Clone)]
-pub struct DefaultLogger<'io, IO: Io> {
+pub struct DefaultTracker<'io, IO: Io> {
     io: &'io IO,
     progress: Arc<Mutex<IterProgress>>,
 }
 
-impl<'io, IO: Io> DefaultLogger<'io, IO> {
+impl<'io, IO: Io> DefaultTracker<'io, IO> {
     pub fn new(io: &'io IO) -> Self {
         Self {
             io,
@@ -950,18 +961,18 @@ impl<'io, IO: Io> DefaultLogger<'io, IO> {
 }
 
 #[derive(Default, Copy, Clone, Debug)]
-struct IterProgress {
-    index: usize,
-    length: usize,
+pub(super) struct IterProgress {
+    pub index: usize,
+    pub length: usize,
 }
 
-struct DefaultFetchIterator<I>
+pub(super) struct DefaultFetchIterator<I>
 where
     I: Iterator<Item = u64>,
 {
-    inner: I,
-    progress: Arc<Mutex<IterProgress>>,
-    peeked: Option<u64>,
+    pub inner: I,
+    pub progress: Arc<Mutex<IterProgress>>,
+    pub peeked: Option<u64>,
 }
 
 impl<I> PeekableIter<u64> for DefaultFetchIterator<I>
@@ -984,7 +995,7 @@ where
     }
 }
 
-impl<'io, IO: Io> ProgressLogger<IO> for DefaultLogger<'io, IO> {
+impl<'io, IO: Io> ProgressTracker<IO> for DefaultTracker<'io, IO> {
     fn io(&self) -> &IO {
         self.io
     }
