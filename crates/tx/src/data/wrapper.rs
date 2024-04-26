@@ -28,9 +28,6 @@ pub mod wrapper_tx {
     use crate::data::TxType;
     use crate::{Code, Data, Section, Tx};
 
-    /// TODO: Determine a sane number for this
-    const GAS_LIMIT_RESOLUTION: u64 = 1;
-
     /// Errors relating to decrypting a wrapper tx and its
     /// encrypted payload from a Tx type
     #[allow(missing_docs)]
@@ -78,13 +75,7 @@ pub mod wrapper_tx {
         pub token: Address,
     }
 
-    /// Gas limits must be multiples of GAS_LIMIT_RESOLUTION
-    /// This is done to minimize the amount of information leak from
-    /// a wrapper tx. The larger the GAS_LIMIT_RESOLUTION, the
-    /// less info leaked.
-    ///
-    /// This struct only stores the multiple of GAS_LIMIT_RESOLUTION,
-    /// not the raw amount
+    /// Gas limit of a transaction
     #[derive(
         Debug,
         Clone,
@@ -98,50 +89,20 @@ pub mod wrapper_tx {
         Deserialize,
         Eq,
     )]
-    pub struct GasLimit {
-        multiplier: u64,
-    }
-
-    impl GasLimit {
-        /// We refund unused gas up to GAS_LIMIT_RESOLUTION
-        pub fn refund_amount(self, used_gas: u64) -> Amount {
-            Amount::from_uint(
-                if used_gas < (u64::from(self) - GAS_LIMIT_RESOLUTION) {
-                    // we refund only up to GAS_LIMIT_RESOLUTION
-                    Uint::from(GAS_LIMIT_RESOLUTION)
-                } else if used_gas >= u64::from(self) {
-                    // Gas limit was under estimated, no refund
-                    Uint::zero()
-                } else {
-                    // compute refund
-                    Uint::from(u64::from(self)) - used_gas
-                },
-                0,
-            )
-            .unwrap()
-        }
-    }
+    pub struct GasLimit(u64);
 
     /// Round the input number up to the next highest multiple
     /// of GAS_LIMIT_RESOLUTION
     impl From<u64> for GasLimit {
         fn from(amount: u64) -> GasLimit {
-            if GAS_LIMIT_RESOLUTION * (amount / GAS_LIMIT_RESOLUTION) < amount {
-                GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION) + 1,
-                }
-            } else {
-                GasLimit {
-                    multiplier: (amount / GAS_LIMIT_RESOLUTION),
-                }
-            }
+            Self(amount)
         }
     }
 
     /// Get back the gas limit as a raw number
     impl From<GasLimit> for u64 {
         fn from(limit: GasLimit) -> u64 {
-            limit.multiplier * GAS_LIMIT_RESOLUTION
+            limit.0
         }
     }
 
@@ -155,18 +116,14 @@ pub mod wrapper_tx {
         type Err = ParseIntError;
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
-            // Expect input to be the multiplier
-            Ok(Self {
-                multiplier: s.parse()?,
-            })
+            Ok(Self(s.parse()?))
         }
     }
 
     /// Get back the gas limit as a raw number, viewed as an Amount
     impl From<GasLimit> for Amount {
         fn from(limit: GasLimit) -> Amount {
-            Amount::from_uint(limit.multiplier * GAS_LIMIT_RESOLUTION, 0)
-                .unwrap()
+            Amount::from_uint(limit.0, 0).unwrap()
         }
     }
 
@@ -294,18 +251,12 @@ pub mod wrapper_tx {
         /// Test that serializing converts GasLimit to u64 correctly
         #[test]
         fn test_gas_limit_roundtrip() {
-            let limit = GasLimit { multiplier: 1 };
+            let limit = GasLimit(1);
             // Test serde roundtrip
             let js = serde_json::to_string(&1).expect("Test failed");
-            assert_eq!(js, format!(r#"{}"#, GAS_LIMIT_RESOLUTION));
             let new_limit: u64 =
                 serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(
-                GasLimit {
-                    multiplier: new_limit
-                },
-                limit
-            );
+            assert_eq!(GasLimit(new_limit), limit);
 
             // Test borsh roundtrip
             let borsh = limit.serialize_to_vec();
@@ -314,47 +265,6 @@ pub mod wrapper_tx {
                 BorshDeserialize::deserialize(&mut borsh.as_ref())
                     .expect("Test failed")
             );
-        }
-
-        /// Test that when we deserialize a u64 that is not a multiple of
-        /// GAS_LIMIT_RESOLUTION to a GasLimit, it rounds up to the next
-        /// multiple
-        #[test]
-        fn test_deserialize_not_multiple_of_resolution() {
-            let js = format!(r#"{}"#, &(GAS_LIMIT_RESOLUTION + 1));
-            let limit: u64 = serde_json::from_str(&js).expect("Test failed");
-            assert_eq!(
-                GasLimit { multiplier: limit },
-                GasLimit { multiplier: 2 }
-            );
-        }
-
-        /// Test that refund is calculated correctly
-        #[test]
-        fn test_gas_limit_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(refund, Amount::from_uint(1, 0).expect("Test failed"));
-        }
-
-        /// Test that we don't refund more than GAS_LIMIT_RESOLUTION
-        #[test]
-        fn test_gas_limit_too_high_no_refund() {
-            let limit = GasLimit { multiplier: 2 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION - 1);
-            assert_eq!(
-                refund,
-                Amount::from_uint(GAS_LIMIT_RESOLUTION, 0)
-                    .expect("Test failed")
-            );
-        }
-
-        /// Test that if gas usage was underestimated, we issue no refund
-        #[test]
-        fn test_gas_limit_too_low_no_refund() {
-            let limit = GasLimit { multiplier: 1 };
-            let refund = limit.refund_amount(GAS_LIMIT_RESOLUTION + 1);
-            assert_eq!(refund, Amount::default());
         }
     }
 }
