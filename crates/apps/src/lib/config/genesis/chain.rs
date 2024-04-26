@@ -403,6 +403,7 @@ impl Finalized {
             max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
+            max_proposal_latency,
         } = self.parameters.gov_params.clone();
         namada::governance::parameters::GovernanceParameters {
             min_proposal_fund: Amount::native_whole(min_proposal_fund),
@@ -411,6 +412,7 @@ impl Finalized {
             max_proposal_content_size,
             min_proposal_grace_epochs,
             min_proposal_voting_period,
+            max_proposal_latency,
         }
     }
 
