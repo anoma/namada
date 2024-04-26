@@ -17,7 +17,7 @@ use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
 use namada::core::hash::Hash;
 use namada::core::key::tm_consensus_key_raw_hash;
-use namada::core::storage::{BlockHash, BlockHeight, Epoch, Header};
+use namada::core::storage::{BlockHeight, Epoch, Header};
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::oracle::config::Config as OracleConfig;
 use namada::ledger::dry_run_tx;
@@ -442,7 +442,6 @@ impl MockNode {
         };
         // build finalize block abci request
         let req = FinalizeBlock {
-            hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
@@ -560,7 +559,6 @@ impl MockNode {
 
         // process proposal succeeded, now run finalize block
         let req = FinalizeBlock {
-            hash: BlockHash([0u8; 32]),
             header: Header {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
@@ -757,16 +755,7 @@ impl<'a> Client for &'a MockNode {
                 .map(|b| b.height.0 as u32)
                 .unwrap_or_default()
                 .into(),
-            last_block_app_hash: locked
-                .state
-                .in_mem()
-                .last_block
-                .as_ref()
-                .map(|b| b.hash.0)
-                .unwrap_or_default()
-                .to_vec()
-                .try_into()
-                .unwrap(),
+            last_block_app_hash: tendermint::AppHash::default(),
         })
     }
 

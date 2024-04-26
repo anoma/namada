@@ -1632,28 +1632,6 @@ where
     Ok(tx_idx.0)
 }
 
-/// Getting the block hash function exposed to the wasm VM Tx environment. The
-/// hash is that of the block to which the current transaction is being applied.
-pub fn tx_get_block_hash<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
-    result_ptr: u64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let state = env.state();
-    let (hash, gas) = state.in_mem().get_block_hash();
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let gas = env
-        .memory
-        .write_bytes(result_ptr, hash.0)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)
-}
-
 /// Getting the block epoch function exposed to the wasm VM Tx
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
@@ -1828,29 +1806,6 @@ where
         }
         None => HostEnvResult::Fail.to_i64(),
     })
-}
-
-/// Getting the block hash function exposed to the wasm VM VP environment. The
-/// hash is that of the block to which the current transaction is being applied.
-pub fn vp_get_block_hash<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
-    result_ptr: u64,
-) -> vp_host_fns::EnvResult<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let gas_meter = env.ctx.gas_meter();
-    let state = env.state();
-    let hash = vp_host_fns::get_block_hash(gas_meter, &state)?;
-    let gas = env
-        .memory
-        .write_bytes(result_ptr, hash.0)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)
 }
 
 /// Getting the transaction hash function exposed to the wasm VM VP environment.

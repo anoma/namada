@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 use namada::core::hash::Hash;
 use namada::core::key::tm_raw_hash_to_string;
-use namada::core::storage::{BlockHash, BlockHeight};
+use namada::core::storage::BlockHeight;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
@@ -146,8 +146,6 @@ impl AbcippShim {
                     }
                     let mut end_block_request: FinalizeBlock =
                         begin_block_request.into();
-                    let hash = self.get_hash();
-                    end_block_request.hash = BlockHash::from(hash);
                     end_block_request.txs = txs;
                     self.service
                         .call(Request::FinalizeBlock(end_block_request))

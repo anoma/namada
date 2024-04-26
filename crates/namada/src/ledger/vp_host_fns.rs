@@ -7,8 +7,7 @@ use std::num::TryFromIntError;
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
-    TX_INDEX_LENGTH,
+    BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
 };
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
@@ -248,20 +247,6 @@ where
         .map_err(RuntimeError::StorageError)?;
     add_gas(gas_meter, gas)?;
     Ok(header)
-}
-
-/// Getting the block hash. The height is that of the block to which the
-/// current transaction is being applied.
-pub fn get_block_hash<S>(
-    gas_meter: &RefCell<VpGasMeter>,
-    state: &S,
-) -> EnvResult<BlockHash>
-where
-    S: StateRead + Debug,
-{
-    let (hash, gas) = state.in_mem().get_block_hash();
-    add_gas(gas_meter, gas)?;
-    Ok(hash)
 }
 
 /// Getting the block hash. The height is that of the block to which the

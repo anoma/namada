@@ -38,7 +38,6 @@ const RESULTS_KEY_PREFIX: &str = "results";
 const MERKLE_TREE_ROOT_KEY_SEGMENT: &str = "root";
 const MERKLE_TREE_STORE_KEY_SEGMENT: &str = "store";
 const BLOCK_HEADER_KEY_SEGMENT: &str = "header";
-const BLOCK_HASH_KEY_SEGMENT: &str = "hash";
 const BLOCK_TIME_KEY_SEGMENT: &str = "time";
 const EPOCH_KEY_SEGMENT: &str = "epoch";
 const PRED_EPOCHS_KEY_SEGMENT: &str = "pred_epochs";
@@ -151,12 +150,6 @@ impl DB for MockDB {
 
         let prefix = height.raw();
 
-        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
-        let hash = match self.read_value(hash_key)? {
-            Some(h) => h,
-            None => return Ok(None),
-        };
-
         let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
         let time = match self.read_value(time_key)? {
             Some(t) => t,
@@ -182,7 +175,6 @@ impl DB for MockDB {
         };
 
         Ok(Some(BlockStateRead {
-            hash,
             height,
             time,
             epoch,
@@ -208,7 +200,6 @@ impl DB for MockDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             time,
             height,
             epoch,
@@ -270,9 +261,6 @@ impl DB for MockDB {
             let header_key = format!("{prefix}/{BLOCK_HEADER_KEY_SEGMENT}");
             self.write_value(header_key, &h);
         }
-        // Block hash
-        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
-        self.write_value(hash_key, &hash);
         // Block time
         let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
         self.write_value(time_key, &time);
