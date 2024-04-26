@@ -11,8 +11,6 @@ use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;
 use thiserror::Error;
 
-use crate::error::Error::Pinned;
-
 /// The standard Result type that most code ought to return
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -22,9 +20,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// possible errors that one may face.
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Errors that are caused by trying to retrieve a pinned transaction
-    #[error("Error in retrieving pinned balance: {0}")]
-    Pinned(#[from] PinnedBalanceError),
     /// Key Retrieval Errors
     #[error("Key Error: {0}")]
     KeyRetrival(#[from] storage::Error),
@@ -46,19 +41,6 @@ pub enum Error {
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
-}
-
-/// Errors that can occur when trying to retrieve pinned transaction
-#[derive(PartialEq, Eq, Copy, Clone, Debug, Error)]
-pub enum PinnedBalanceError {
-    /// No transaction has yet been pinned to the given payment address
-    #[error("No transaction has yet been pinned to the given payment address")]
-    NoTransactionPinned,
-    /// The supplied viewing key does not recognize payments to given address
-    #[error(
-        "The supplied viewing key does not recognize payments to given address"
-    )]
-    InvalidViewingKey,
 }
 
 /// Errors that deal with querying some kind of data
@@ -382,9 +364,4 @@ pub enum EthereumBridgeError {
     /// Transfer already in pool error.
     #[error("An identical transfer is already present in the Bridge pool")]
     TransferAlreadyInPool,
-}
-
-/// Checks if the given error is an invalid viewing key
-pub fn is_pinned_error<T>(err: &Result<T>) -> bool {
-    matches!(err, Err(Pinned(PinnedBalanceError::InvalidViewingKey)))
 }
