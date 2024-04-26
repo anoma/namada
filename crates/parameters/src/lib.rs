@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::chain::ProposalBytes;
-use namada_core::hash::Hash;
 pub use namada_core::parameters::*;
 use namada_core::storage::Key;
 use namada_core::time::DurationSecs;
@@ -121,10 +120,8 @@ where
     let implicit_vp_key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp code hash doesn't
     // need to be encoded, it's bytes already.
-    storage.write_bytes(
-        &implicit_vp_key,
-        implicit_vp_code_hash.unwrap_or_default(),
-    )?;
+    storage
+        .write(&implicit_vp_key, implicit_vp_code_hash.unwrap_or_default())?;
 
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     storage.write(&epochs_per_year_key, epochs_per_year)?;
@@ -246,7 +243,7 @@ where
     let key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp doesn't need to be
     // encoded, it's bytes already.
-    storage.write_bytes(&key, implicit_vp)
+    storage.write(&key, implicit_vp)
 }
 
 /// Update the max signatures per transaction storage parameter
@@ -341,12 +338,10 @@ where
         .into_storage_result()?;
 
     let implicit_vp_key = storage::get_implicit_vp_key();
-    let value = storage
-        .read_bytes(&implicit_vp_key)?
+    let implicit_vp_code_hash = storage
+        .read(&implicit_vp_key)?
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
-    let implicit_vp_code_hash =
-        Hash::try_from(&value[..]).into_storage_result()?;
 
     // read fee unshielding gas limit
     let fee_unshielding_gas_limit_key =

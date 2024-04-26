@@ -430,13 +430,13 @@ where
                 let hash_key = Key::wasm_hash(name);
                 let code_name_key = Key::wasm_code_name(name.to_owned());
 
-                self.state.write_bytes(&code_key, code).unwrap();
+                self.state.write(&code_key, code).unwrap();
                 self.state.write(&code_len_key, code_len).unwrap();
-                self.state.write_bytes(&hash_key, code_hash).unwrap();
+                self.state.write(&hash_key, code_hash).unwrap();
                 if &Some(code_hash) == implicit_vp_code_hash {
                     is_implicit_vp_stored = true;
                 }
-                self.state.write_bytes(&code_name_key, code_hash).unwrap();
+                self.state.write(&code_name_key, code_hash).unwrap();
             } else {
                 tracing::warn!("The wasm {name} isn't allowed.");
                 self.warn(Warning::DisallowedWasm(name.to_string()));
@@ -572,7 +572,7 @@ where
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
                 self.state
-                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .write(&Key::validity_predicate(address), code_hash)
                     .unwrap();
 
                 let public_keys: Vec<_> =
@@ -629,7 +629,7 @@ where
                 let vp_code = self.lookup_vp(vp, genesis, vp_cache)?;
                 let code_hash = CodeHash::sha256(&vp_code);
                 self.state
-                    .write_bytes(&Key::validity_predicate(address), code_hash)
+                    .write(&Key::validity_predicate(address), code_hash)
                     .expect("Unable to write user VP");
 
                 self.state

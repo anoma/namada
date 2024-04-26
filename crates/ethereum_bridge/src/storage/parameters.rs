@@ -450,7 +450,7 @@ mod tests {
         config.init_storage(&mut state);
         let min_confirmations_key = bridge_storage::min_confirmations_key();
         state
-            .write_bytes(&min_confirmations_key, vec![42, 1, 2, 3, 4])
+            .write(&min_confirmations_key, vec![42, 1, 2, 3, 4])
             .unwrap();
 
         // This should panic because the min_confirmations value is not valid
