@@ -279,6 +279,11 @@ impl CliApi {
                         });
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
+                        let dry_run =
+                            args.tx.dry_run || args.tx.dry_run_wrapper;
+                        if dry_run {
+                            ctx.set_dry_run()
+                        }
                         let namada = ctx.to_sdk(client, io);
                         tx::submit_change_consensus_key(&namada, args).await?;
                     }
