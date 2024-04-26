@@ -7,7 +7,8 @@ use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::types::IndexedNoteEntry;
 use namada_sdk::masp::utils::{
-    LedgerMaspClient, PeekableIter, ProgressLogger, ProgressType, RetryStrategy,
+    LedgerMaspClient, PeekableIter, ProgressTracker, ProgressType,
+    RetryStrategy,
 };
 use namada_sdk::masp::{ShieldedContext, ShieldedUtils};
 use namada_sdk::queries::Client;
@@ -36,7 +37,7 @@ pub async fn syncing<
     };
 
     display_line!(io, "\n\n");
-    let logger = CliLogger::new(io);
+    let logger = CliProgressTracker::new(io);
     let sync = async move {
         shielded
             .fetch::<_, _, _, LedgerMaspClient<C>>(
@@ -183,7 +184,7 @@ impl<'io, IO: Io> Drop for StdoutDrawer<'io, IO> {
     }
 }
 
-pub struct CliLogging<'io, T, I, IO>
+pub struct LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
     I: Iterator<Item = T>,
@@ -195,7 +196,8 @@ where
     peeked: Option<T>,
 }
 
-impl<'io, T, I, IO> CliLogging<'io, T, I, IO>
+/// An iterator that logs to screen the progress it tracks
+impl<'io, T, I, IO> LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
     I: Iterator<Item = T>,
@@ -245,7 +247,7 @@ where
     }
 }
 
-impl<'io, T, I, IO> PeekableIter<T> for CliLogging<'io, T, I, IO>
+impl<'io, T, I, IO> PeekableIter<T> for LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
     I: Iterator<Item = T>,
@@ -267,7 +269,7 @@ where
     }
 }
 
-impl<'io, T, I, IO> Iterator for CliLogging<'io, T, I, IO>
+impl<'io, T, I, IO> Iterator for LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
     I: Iterator<Item = T>,
@@ -280,13 +282,13 @@ where
     }
 }
 
-/// A progress logger for the CLI
+/// A progress tracker for the CLI
 #[derive(Clone)]
-pub struct CliLogger<'io, IO: Io> {
+pub struct CliProgressTracker<'io, IO: Io> {
     drawer: Arc<Mutex<StdoutDrawer<'io, IO>>>,
 }
 
-impl<'io, IO: Io> CliLogger<'io, IO> {
+impl<'io, IO: Io> CliProgressTracker<'io, IO> {
     pub fn new(io: &'io IO) -> Self {
         Self {
             drawer: Arc::new(Mutex::new(StdoutDrawer {
@@ -298,7 +300,9 @@ impl<'io, IO: Io> CliLogger<'io, IO> {
     }
 }
 
-impl<'io, IO: Io + Send + Sync> ProgressLogger<IO> for CliLogger<'io, IO> {
+impl<'io, IO: Io + Send + Sync> ProgressTracker<IO>
+    for CliProgressTracker<'io, IO>
+{
     fn io(&self) -> &IO {
         let io = {
             let locked = self.drawer.lock().unwrap();
@@ -311,14 +315,14 @@ impl<'io, IO: Io + Send + Sync> ProgressLogger<IO> for CliLogger<'io, IO> {
     where
         I: Iterator<Item = u64>,
     {
-        CliLogging::new(items, ProgressType::Fetch, self.drawer.clone())
+        LoggingIterator::new(items, ProgressType::Fetch, self.drawer.clone())
     }
 
     fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
         I: Iterator<Item = IndexedNoteEntry> + Send,
     {
-        CliLogging::new(items, ProgressType::Scan, self.drawer.clone())
+        LoggingIterator::new(items, ProgressType::Scan, self.drawer.clone())
     }
 
     fn left_to_fetch(&self) -> usize {
