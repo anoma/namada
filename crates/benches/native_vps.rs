@@ -223,13 +223,15 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(governance
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        governance.ctx.keys_changed,
-                        governance.ctx.verifiers,
-                    )
-                    .is_ok())
+                assert!(
+                    governance
+                        .validate_tx(
+                            &signed_tx.to_ref(),
+                            governance.ctx.keys_changed,
+                            governance.ctx.verifiers,
+                        )
+                        .is_ok()
+                )
             })
         });
     }
@@ -443,13 +445,14 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(ibc
-                    .validate_tx(
+                assert!(
+                    ibc.validate_tx(
                         &signed_tx.to_ref(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }
@@ -509,13 +512,15 @@ fn vp_multitoken(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(multitoken
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        multitoken.ctx.keys_changed,
-                        multitoken.ctx.verifiers,
-                    )
-                    .is_ok())
+                assert!(
+                    multitoken
+                        .validate_tx(
+                            &signed_tx.to_ref(),
+                            multitoken.ctx.keys_changed,
+                            multitoken.ctx.verifiers,
+                        )
+                        .is_ok()
+                )
             })
         });
     }
@@ -619,13 +624,14 @@ fn masp(c: &mut Criterion) {
             };
 
             b.iter(|| {
-                assert!(masp
-                    .validate_tx(
+                assert!(
+                    masp.validate_tx(
                         &signed_tx.to_ref(),
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
-                    .is_ok());
+                    .is_ok()
+                );
             })
         });
     }
@@ -796,14 +802,18 @@ fn masp_final_check(c: &mut Criterion) {
     assert!(sapling_bundle.shielded_spends.iter().all(|spend| {
         check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk)
     }));
-    assert!(sapling_bundle
-        .shielded_converts
-        .iter()
-        .all(|convert| check_convert(convert, &mut ctx, convert_vk)));
-    assert!(sapling_bundle
-        .shielded_outputs
-        .iter()
-        .all(|output| check_output(output, &mut ctx, output_vk)));
+    assert!(
+        sapling_bundle
+            .shielded_converts
+            .iter()
+            .all(|convert| check_convert(convert, &mut ctx, convert_vk))
+    );
+    assert!(
+        sapling_bundle
+            .shielded_outputs
+            .iter()
+            .all(|output| check_output(output, &mut ctx, output_vk))
+    );
 
     c.bench_function("vp_masp_final_check", |b| {
         b.iter(|| {
@@ -890,13 +900,14 @@ fn pgf(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(pgf
-                    .validate_tx(
+                assert!(
+                    pgf.validate_tx(
                         &signed_tx.to_ref(),
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }
@@ -966,13 +977,14 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
-            assert!(nut
-                .validate_tx(
+            assert!(
+                nut.validate_tx(
                     &signed_tx.to_ref(),
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .is_ok())
+                .is_ok()
+            )
         })
     });
 }
@@ -1038,13 +1050,15 @@ fn eth_bridge(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
-            assert!(eth_bridge
-                .validate_tx(
-                    &signed_tx.to_ref(),
-                    eth_bridge.ctx.keys_changed,
-                    eth_bridge.ctx.verifiers,
-                )
-                .is_ok())
+            assert!(
+                eth_bridge
+                    .validate_tx(
+                        &signed_tx.to_ref(),
+                        eth_bridge.ctx.keys_changed,
+                        eth_bridge.ctx.verifiers,
+                    )
+                    .is_ok()
+            )
         })
     });
 }
@@ -1135,13 +1149,15 @@ fn eth_bridge_pool(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
-            assert!(bridge_pool
-                .validate_tx(
-                    &signed_tx.to_ref(),
-                    bridge_pool.ctx.keys_changed,
-                    bridge_pool.ctx.verifiers,
-                )
-                .is_ok())
+            assert!(
+                bridge_pool
+                    .validate_tx(
+                        &signed_tx.to_ref(),
+                        bridge_pool.ctx.keys_changed,
+                        bridge_pool.ctx.verifiers,
+                    )
+                    .is_ok()
+            )
         })
     });
 }
@@ -1172,7 +1188,7 @@ fn parameters(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.commitments().get(0).unwrap().clone();
+                let cmt = tx.commitments().first().unwrap().clone();
                 let batched_tx = tx.owned_batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }
@@ -1204,13 +1220,15 @@ fn parameters(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(parameters
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        parameters.ctx.keys_changed,
-                        parameters.ctx.verifiers,
-                    )
-                    .is_ok())
+                assert!(
+                    parameters
+                        .validate_tx(
+                            &signed_tx.to_ref(),
+                            parameters.ctx.keys_changed,
+                            parameters.ctx.verifiers,
+                        )
+                        .is_ok()
+                )
             })
         });
     }
@@ -1244,7 +1262,7 @@ fn pos(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.commitments().get(0).unwrap().clone();
+                let cmt = tx.commitments().first().unwrap().clone();
                 let batched_tx = tx.owned_batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }
@@ -1276,13 +1294,14 @@ fn pos(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(pos
-                    .validate_tx(
+                assert!(
+                    pos.validate_tx(
                         &signed_tx.to_ref(),
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }

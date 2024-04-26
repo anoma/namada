@@ -8,7 +8,7 @@ use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
-use namada_tx::data::{BatchedTxResult, TxResult};
+use namada_tx::data::BatchedTxResult;
 use namada_tx::Signed;
 use namada_vote_ext::bridge_pool_roots::{self, MultiSignedVext, SignedVext};
 

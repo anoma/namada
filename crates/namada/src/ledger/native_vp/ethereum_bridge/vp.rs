@@ -8,7 +8,7 @@ use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::state::StateRead;
@@ -179,7 +179,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::Commitments;
+    use namada_tx::{Commitments, Tx};
     use rand::Rng;
 
     use super::*;

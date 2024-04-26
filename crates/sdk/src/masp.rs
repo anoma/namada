@@ -934,14 +934,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .map_err(|e| Error::Other(e.to_string()))?;
                 let mut changed_keys_vec = BTreeMap::default();
                 for (cmt_hash, cmt_result) in result.batch_results {
-                    if tx_event
-                        .attributes
-                        .iter()
-                        .find(|attr| {
-                            attr.key == format!("{cmt_hash}/is_valid_masp_tx")
-                        })
-                        .is_some()
-                    {
+                    if tx_event.attributes.iter().any(|attr| {
+                        attr.key == format!("{cmt_hash}/is_valid_masp_tx")
+                    }) {
                         let cmt_result = cmt_result.map_err(|msg| {
                             Error::Other(format!(
                                 "Tx flagged as valid masp but resolved in an \
@@ -975,9 +970,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let is_valid_fee_unshield = tx_event
                     .attributes
                     .iter()
-                    .find(|attr| attr.key == "is_valid_masp_tx")
-                    .is_some();
-
+                    .any(|attr| attr.key == "is_valid_masp_tx");
                 if is_valid_fee_unshield {
                     let masp_transaction = tx
                         .get_section(&hash)
@@ -2780,7 +2773,6 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
 
 fn get_sending_result<C: Client + Sync>(
     args: &ExtractShieldedActionArg<'_, C>,
-    // FIXME: should embed this arg in ExtractShieldedActionArg?
     cmt_hash: &Hash,
 ) -> Result<BatchedTxResult, Error> {
     let tx_event = match args {
@@ -2799,11 +2791,11 @@ async fn get_receiving_result<C: Client + Sync>(
     args: &ExtractShieldedActionArg<'_, C>,
     cmt_hash: &Hash,
 ) -> Result<BatchedTxResult, Error> {
-    let tx_event = match args {
-        &ExtractShieldedActionArg::Event(event) => {
+    let tx_event = match *args {
+        ExtractShieldedActionArg::Event(event) => {
             std::borrow::Cow::Borrowed(event)
         }
-        &ExtractShieldedActionArg::Request((client, height, index)) => {
+        ExtractShieldedActionArg::Request((client, height, index)) => {
             std::borrow::Cow::Owned(
                 get_indexed_masp_events_at_height(client, height, index)
                     .await?

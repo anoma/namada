@@ -14,9 +14,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
-use namada_tx::{
-    Authorization, BatchedTxRef, Commitments, Signed, Tx, TxError,
-};
+use namada_tx::{Authorization, BatchedTxRef, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.

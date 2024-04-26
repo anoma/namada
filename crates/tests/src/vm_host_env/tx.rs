@@ -70,7 +70,7 @@ impl Default for TestTxEnv {
             wasm::compilation_cache::common::testing::cache();
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
-        let cmt = tx.commitments().get(0).unwrap().to_owned();
+        let cmt = tx.commitments().first().unwrap().to_owned();
         tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {
             state,

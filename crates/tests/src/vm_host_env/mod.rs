@@ -139,11 +139,13 @@ mod tests {
 
         // Trying to delete a validity predicate should fail
         let key = storage::Key::validity_predicate(&test_account);
-        assert!(panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("CannotDeleteVp"));
+        assert!(
+            panic::catch_unwind(|| { tx::ctx().delete(&key).unwrap() })
+                .err()
+                .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+                .unwrap()
+                .contains("CannotDeleteVp")
+        );
     }
 
     #[test]
@@ -574,28 +576,34 @@ mod tests {
                     .as_ref(),
                 Some(data)
             );
-            assert!(signed_tx_data
-                .verify_signatures(
-                    &[signed_tx_data.header_hash(),],
-                    pks_map,
-                    &None,
-                    1,
-                    None,
-                    || Ok(())
-                )
-                .is_ok());
+            assert!(
+                signed_tx_data
+                    .verify_signatures(
+                        &[signed_tx_data.header_hash(),],
+                        pks_map,
+                        &None,
+                        1,
+                        None,
+                        || Ok(())
+                    )
+                    .is_ok()
+            );
 
             let other_keypair = key::testing::keypair_2();
-            assert!(signed_tx_data
-                .verify_signatures(
-                    &[signed_tx_data.header_hash(),],
-                    AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
-                    &None,
-                    1,
-                    None,
-                    || Ok(())
-                )
-                .is_err());
+            assert!(
+                signed_tx_data
+                    .verify_signatures(
+                        &[signed_tx_data.header_hash(),],
+                        AccountPublicKeysMap::from_iter([
+                            other_keypair.ref_to()
+                        ]),
+                        &None,
+                        1,
+                        None,
+                        || Ok(())
+                    )
+                    .is_err()
+            );
         }
     }
 

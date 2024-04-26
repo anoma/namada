@@ -98,35 +98,6 @@ pub struct Event {
     /// transaction.
     pub level: EventLevel,
     /// Key-value attributes of the event.
-    // FIXME: maybe could use a dict here so that I can use a single entry of
-    // Event for a batch? How should I index the single tx in the batch? With a
-    // u64 or the Hash of the modified header (single Commitments)? Since I
-    // iterate on the commitments I should probably use those,
-    // FIXME: it would be slightly better thoug to have the hash of the wrapper
-    // at the hihg level and the hash of just the comitments at a lower one so
-    // that I can use only the Commitments one, otherwise I'd have to mock the
-    // hash of the header with a single commitment? Probably I need to do both
-    // of them anyway FIXME: also, there are some info that don't need to
-    // be nested in the second hashmap, how to handle this? FIXME: should I
-    // use an event for every inner tx? We are currently not doing this and I'd
-    // like to avoid it FIXME: how to handle protocol txs in this case?
-    // FIXME: comet does not suport nested dictionaries, so I need an event fro
-    // every tx of the bundle, but how do I handle events for atomic batches?
-    // Say the first tx succeed but the second one fail and I have to dump
-    // everything, what should I log? FIXME: I think I have two ways:
-    //    - I produce one event for every tx of the batch but also one event
-    //      for the batch itself with the final result or something?
-    //    - I produce a single event fo the entire batch and I put everything
-    //      together -> but this is a problem because I cannot distinguish
-    //      betwee ntxs which might be needed for some cases (e.g. masp client)
-    // FIXME: let's do second case
-    // FIXME: but what should I use as a hash to distinguish between them? I
-    // could use the hash of the wrapper + a discriminant? Or the raw hash of
-    // the header containing only the specified Commitment. No better wrapper
-    // hash + discriminant -> What should this discriminant be? The entire
-    // commitments section is too long, I just want a string, so either the
-    // index or the hash of the Comittments section. Probably better the hash
-    // cause I'm not using the indexes anywhere else
     pub attributes: HashMap<String, String>,
 }
 

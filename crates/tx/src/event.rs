@@ -7,7 +7,7 @@ use namada_core::event::Event;
 
 use super::Tx;
 use crate::data::{ResultCode, TxResult};
-use crate::{Commitments, TxType};
+use crate::TxType;
 
 /// Creates a new event with the hash and height of the transaction
 /// already filled in
@@ -16,8 +16,6 @@ pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
         TxType::Wrapper(_) | TxType::Protocol(_) => {
             Event::applied_tx().with(TxHash(tx.header_hash()))
         }
-        // FIXME: seesm like we don't log events for raw transactions
-        // (governance)
         _ => unreachable!(),
     };
     base_event

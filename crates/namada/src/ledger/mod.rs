@@ -42,7 +42,7 @@ mod dry_run_tx {
         CA: 'static + WasmCacheAccess + Sync,
     {
         use borsh_ext::BorshSerializeExt;
-        use namada_gas::{Gas, GasMetering, TxGasMeter};
+        use namada_gas::{GasMetering, TxGasMeter};
         use namada_tx::data::TxType;
         use namada_tx::Tx;
 
@@ -93,7 +93,7 @@ mod dry_run_tx {
         let tx_gas_meter = RefCell::new(tx_gas_meter);
         for cmt in tx.commitments() {
             let batched_tx = tx.batch_tx(cmt);
-            let mut batched_tx_result = protocol::apply_wasm_tx(
+            let batched_tx_result = protocol::apply_wasm_tx(
                 batched_tx,
                 &TxIndex(0),
                 ShellParams::new(

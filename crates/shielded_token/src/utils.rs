@@ -61,7 +61,6 @@ pub fn update_note_commitment_tree(
 pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
     shielded: &Transaction,
-    // FIXME: maybe rename this arg
     pin_key: Option<(&str, Commitments)>,
 ) -> Result<()> {
     // TODO: temporarily disabled because of the node aggregation issue in WASM.

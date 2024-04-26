@@ -514,8 +514,6 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    // FIXME: here log the result of the batch if it is atomic (need the
-    // attribute in the event). Actually even if it is non-atomic
     let result_str = format!("Transaction consumed {} gas.", result.gas_used);
     let mut cmt_result_str = String::new();
     for (cmt_hash, cmt_result) in &result.batch_results {
@@ -628,8 +626,6 @@ impl TryFrom<Event> for TxResponse {
                 .ok_or_else(|| missing_field_err("height"))?,
         )
         .map_err(|e| e.to_string())?;
-        // FIXME: I need to populate this in finalize block with the code for
-        // the enitre batch
         let code = ResultCode::from_str(
             event.get("code").ok_or_else(|| missing_field_err("code"))?,
         )

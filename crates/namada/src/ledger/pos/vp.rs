@@ -14,7 +14,7 @@ use namada_state::StateRead;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
 };
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::address::Address;

@@ -302,9 +302,6 @@ pub mod wrapper_tx {
             transfer_code_hash: Hash,
             transfer_code_tag: Option<String>,
             unshield: Transaction,
-            // FIXME: should this return an owned version of BatchedTx? Maybe
-            // not, I don't need ownership of the commitments, just of tx but I
-            // cannot do self-referencing struct
         ) -> Result<Tx, WrapperTxErr> {
             let mut tx = Tx::from_type(TxType::Raw);
             let masp_section = tx.add_section(Section::MaspTx(unshield));

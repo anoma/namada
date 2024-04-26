@@ -81,7 +81,7 @@ use namada::proof_of_stake::OwnedPosParams;
 use namada::state::testing::TestState;
 use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
-use namada::tx::{BatchedTxRef, Tx};
+use namada::tx::BatchedTxRef;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
 use namada_sdk::state::StateRead;

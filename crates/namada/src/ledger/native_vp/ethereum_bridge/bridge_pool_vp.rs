@@ -28,7 +28,7 @@ use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
 use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_state::{ResultExt, StateRead};
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 
 use crate::address::{Address, InternalAddress};
 use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};

@@ -10,7 +10,7 @@ use namada_governance::pgf::storage::keys as pgf_storage;
 use namada_governance::{is_proposal_accepted, pgf};
 use namada_state::StateRead;
 use namada_tx::action::{Action, PgfAction, Read};
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};

@@ -969,7 +969,7 @@ where
                         response,
                         // FIXME: manage unwrap
                         ethereum_tx_data_variants::EthEventsVext::try_from(
-                            tx.batch_tx(tx.commitments().get(0).unwrap())
+                            tx.batch_tx(tx.commitments().first().unwrap())
                         ),
                     );
                     if let Err(err) = validate_eth_events_vext(
@@ -992,7 +992,7 @@ where
                         response,
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
                             // FIXME: manage unwrap
-                            tx.batch_tx(tx.commitments().get(0).unwrap())
+                            tx.batch_tx(tx.commitments().first().unwrap())
                         ),
                     );
                     if let Err(err) = validate_bp_roots_vext(
@@ -1015,7 +1015,7 @@ where
                         response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
                             // FIXME: manage unwrap
-                            tx.batch_tx(tx.commitments().get(0).unwrap())
+                            tx.batch_tx(tx.commitments().first().unwrap())
                         ),
                     );
                     if let Err(err) = validate_valset_upd_vext(
@@ -1103,7 +1103,7 @@ where
 
                 // Validate the inner txs after. Even if the batch is non-atomic
                 // we still reject it even if just one of the inner txs is
-                // invalid FIXME: move this before fee check?
+                // invalid
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =
@@ -1394,7 +1394,7 @@ where
 
     let result = apply_wasm_tx(
         // FIXME: manage unwrap
-        unshield.batch_tx(unshield.commitments().get(0).unwrap()),
+        unshield.batch_tx(unshield.commitments().first().unwrap()),
         &TxIndex::default(),
         ShellParams::new(
             &RefCell::new(TxGasMeter::new(fee_unshielding_gas_limit)),

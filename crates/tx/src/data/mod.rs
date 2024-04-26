@@ -13,8 +13,7 @@ pub mod protocol;
 /// wrapper txs with encrypted payloads
 pub mod wrapper;
 
-use std::collections::{BTreeSet, HashMap};
-use std::error::Error;
+use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -24,6 +23,7 @@ use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
+use namada_core::collections::HashMap;
 use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
@@ -175,32 +175,6 @@ pub struct TxResult<T> {
     pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// The results of the batch, indexed by the hash of the specific
     /// [`Commitments`]
-    // FIXME: let's do like this, For the tx in its entirety I always publish
-    // the exitcode as an attribute (even if the batch is non-atomic). If the
-    // batch is non-atomic this exit code is the one fo the wrapper tx, if it
-    // atomic it's the result of the atomic batch. Then I publish the results
-    // in this field and I don't publish any more attributes in the events
-    // FIXME: I don't quite like this idea though, would rather decompose into
-    // the events -> I could do like I do currently, if transaction didn't
-    // raise an error set the code and then the BatchTxResult, if it did error
-    // log just the code and the error message. For the entire TxResult
-    // instead, just extract the gas used and the wrapper_changed_keys and log
-    // them separately without publishing the entire Txresult in the log => Ok
-    // but do this after, first implement the other option
-    // FIXME: here it would be nice to have the actual error but I don't have
-    // that type in here. Maybe I can create a new error here. The only thing I
-    // need is to know if I need to remove the hash or not. A bit of an
-    // overkille honestly to create a new type just for that. Other options:
-    //    - I move this TxResult type to the namada crate
-    //    - In dispatch tx I also return another associated data that carries
-    //      that information (don't like this too much)
-    //    - I move the Error type that I need here -> This is probablhy the
-    //      better -> Not feasible, too many dependencies for other crates
-    //    - I keep this struct but dispatch_tx reutrn something slithly
-    //      different and when I have to log it I convert it to this type
-    // FIXME: wait! I can just use a different Result type. Yeah but
-    // dispatch_tx returns the TxResult FIXME: should i make this result
-    // generic?
     pub batch_results: HashMap<Hash, Result<BatchedTxResult, T>>,
 }
 
@@ -236,7 +210,6 @@ impl<T: Display> TxResult<T> {
     }
 }
 
-// FIXME: also need to implement for the Error? Maybe not
 #[cfg(feature = "migrations")]
 namada_macros::derive_borshdeserializer!(TxResult::<String>);
 
@@ -339,19 +312,7 @@ pub struct VpsResult {
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if f.alternate() {
-            write!(
-                f,
-                "Transaction is valid. Gas used: {}",
-                // FIXME: I definetely need something for the atomic bundle
-                // result but maybe not here. Probably I should just append to
-                // the event? I believe so yeah FIXME: also
-                // print all the inner results. Yes but maybe not here? No way?
-                // Do that here! Ah no but I need an identifier for each
-                // commitments and I believe I don't have them here, so I just
-                // need to write this struct in the event under the specific
-                // commit of this tx
-                self.gas_used,
-            )
+            write!(f, "Transaction is valid. Gas used: {}", self.gas_used,)
         } else {
             write!(f, "{}", serde_json::to_string(self).unwrap())
         }

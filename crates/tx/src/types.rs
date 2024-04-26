@@ -939,12 +939,6 @@ impl Commitments {
     }
 }
 
-// FIXME: for safet yreasons it would be better to not expose a function that
-// allows computing the Hash of the header over a single tx of the bundle
-// because in this case it could be possible for the caller to sign only a
-// single tx that could then be replayed. The fields are public so this could be
-// done anyway
-
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
 #[derive(
@@ -965,39 +959,11 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     // FIXME: this could be empty, is this a problem?
-    // FIXME: rename this to bundle?
     // FIXME: this should be the safe version of an HashSet to avoid duplicated
     // txs
     /// The commitments to the transaction's sections
     // FIXME: rename the field to bundle
     pub commitments: Vec<Commitments>,
-    // FIXME: how does a signature work on this thing? The inner txs can have
-    // different sources so I need multiple signatures but they sign the same
-    // exact header, including the different commits! (this shouldn't be a
-    // problem) FIXME: I'm ok with everything, just woul like the signature
-    // to be limited to its own commitment. It is also true thoug, that if the
-    // signer is the same for all transactions (might be the case) than I just
-    // need a single signautre, savign space FIXME: actually what happens
-    // if the tx carries more signatures than needed? Do we reject it? Probably
-    // not and also this is hard to tell because we evaluate sigs only in wasm
-    // when we can't reject them anymore FIXME: is there any problem with
-    // multisig? I guess it's goin to be hard to batch them cause we'd need to
-    // send the entire header with also the commitments to other txs. But given
-    // what we said I'd expect batched multisig txs to be txs coming from the
-    // same multisig accounts, so I can just send the other members the batched
-    // transactions and request a single singature FIXME: maybe we can find
-    // a way to only sign the header + your spefici Commtiemnt, instead of all?
-    // But again this would lead to a signature per transaction avoiding the
-    // possibility to optimize it down to a single one FIXME: is it a
-    // problem if I sign a header containing other transactions to be signed by
-    // another account? Not really, just maybe a bit strange. Oh actually this
-    // might be exploited to get a signature from someone else without him
-    // nopticing??? This would be bad. Yes but a user is always supposed to
-    // look at what they are signing, also the only use case here is the
-    // multisig accounts, for the rest an inner tx (or batch of them) is always
-    // creted by a single user FIXME: let's go for the "signe the entire
-    // header hash" solution, which is also the one requireing less code (it's
-    // exactly like we are doing thing right now)
     /// Whether the inner txs should be executed atomically
     pub atomic: bool,
     /// The type of this transaction
@@ -1210,7 +1176,7 @@ impl Tx {
     /// Get the memo designated by the memo hash in the header for the specified
     /// commitment
     pub fn memo(&self, cmt: &Commitments) -> Option<Vec<u8>> {
-        if &cmt.memo_hash == &namada_core::hash::Hash::default() {
+        if cmt.memo_hash == namada_core::hash::Hash::default() {
             return None;
         }
 
@@ -1704,13 +1670,13 @@ impl<'tx> Tx {
     pub fn batch_ref_first_tx(&'tx self) -> BatchedTxRef<'tx> {
         BatchedTxRef {
             tx: self,
-            cmt: self.commitments().get(0).unwrap(),
+            cmt: self.commitments().first().unwrap(),
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn batch_first_tx(self) -> BatchedTx {
-        let cmt = self.commitments().get(0).unwrap().to_owned();
+        let cmt = self.commitments().first().unwrap().to_owned();
         BatchedTx { tx: self, cmt }
     }
 }
@@ -1774,13 +1740,13 @@ pub struct BatchedTxRef<'tx> {
     pub cmt: &'tx Commitments,
 }
 
-//FIXME: also need to implement deserialize?
+// FIXME: also need to implement deserialize?
 impl BorshSerialize for BatchedTxRef<'_> {
     fn serialize<W: std::io::prelude::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        //FIXME: remove if not needed
+        // FIXME: remove if not needed
         BorshSerialize::serialize(self.tx, writer)?;
         BorshSerialize::serialize(self.cmt, writer)
     }
@@ -1802,13 +1768,13 @@ impl BatchedTx {
     }
 }
 
-//FIXME: remove if not needed
+// FIXME: remove if not needed
 impl BorshSerialize for BatchedTx {
     fn serialize<W: std::io::prelude::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        //FIXME: remove if not needed
+        // FIXME: remove if not needed
         BorshSerialize::serialize(&self.tx, writer)?;
         BorshSerialize::serialize(&self.cmt, writer)
     }

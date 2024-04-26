@@ -9,7 +9,7 @@ const CHANNEL_ID: &str = "channel-0";
 const BASE_TOKEN: &str = "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy";
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {
     let ibc_denom = format!("transfer/{CHANNEL_ID}/{BASE_TOKEN}");
     let ibc_token = ibc::ibc_token(&ibc_denom);
 

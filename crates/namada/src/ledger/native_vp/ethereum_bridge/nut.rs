@@ -6,7 +6,7 @@ use namada_core::address::{Address, InternalAddress};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -138,6 +138,7 @@ mod test_nuts {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
+    use namada_tx::Tx;
     use proptest::prelude::*;
 
     use super::*;

@@ -126,7 +126,7 @@ pub(crate) enum ReProtStorageModification {
 /// The write log for a transaction. This allows managing the result of a single
 /// inner transaction inside a batch
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TxWriteLog {
+pub(crate) struct TxWriteLog {
     // The generator of established addresses
     address_gen: Option<EstablishedAddressGen>,
     // The storage modifications for the current transaction
@@ -159,21 +159,17 @@ impl Default for TxWriteLog {
 /// result of a single inner transaction inside a batch
 #[derive(Debug, Clone, PartialEq, Eq)]
 // FIXME: rename?
-struct BatchedTxWriteLog {
+pub(crate) struct BatchedTxWriteLog {
     // The generator of established addresses
     address_gen: Option<EstablishedAddressGen>,
     // The storage modifications for the transaction
     write_log: HashMap<storage::Key, StorageModification>,
 }
 
-// FIXME: problem is. how would I read from this. If I read the write log I
-// still need to go through these but in order since the same key could have
-// been modified in multiple entries of this struct
 /// The write log storage
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
     /// The generator of established addresses
-    // FIXME: writes should not happen on this one!
     pub(crate) block_address_gen: Option<EstablishedAddressGen>,
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
@@ -184,9 +180,6 @@ pub struct WriteLog {
     // order
     pub(crate) batch_write_log: HashMap<Hash, BatchedTxWriteLog>,
     // The write log of the current active transaction
-    // FIXME: when I use this for the wrapper I should directly commit to
-    // block_write_log instead of the batch one since I don't have an hash ->
-    // This is dangerous
     pub(crate) tx_write_log: TxWriteLog,
     /// Storage modifications for the replay protection storage, cannot be
     /// managed in the normal write log because we need to commit them
@@ -240,14 +233,11 @@ impl WriteLog {
             })
             .or_else(|| {
                 // If not found, then try to read from batch write log,
-                // following the insertion order FIXME: improve
-                for (_, log) in self.batch_write_log.iter().rev() {
-                    if let Some(value) = log.write_log.get(key) {
-                        return Some(value);
-                    }
-                }
-
-                None
+                // following the insertion order
+                self.batch_write_log
+                    .iter()
+                    .rev()
+                    .find_map(|(_, log)| log.write_log.get(key))
             })
             .or_else(|| {
                 // if not found, then try to read from block write log
@@ -279,7 +269,6 @@ impl WriteLog {
         &self,
         key: &storage::Key,
     ) -> (Option<PersistentStorageModification>, u64) {
-        // FIXME: need a function to retrieve these buckets?
         let mut buckets = vec![
             &self.tx_write_log.write_log,
             &self.tx_write_log.precommit_write_log,
@@ -320,7 +309,6 @@ impl WriteLog {
         &self,
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
-        // FIXME: need a function to retrieve these buckets?
         let mut buckets = vec![];
         for (_, tx_log) in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
@@ -635,8 +623,6 @@ impl WriteLog {
 
     /// Take the IBC event of the current transaction
     pub fn take_ibc_events(&mut self) -> BTreeSet<IbcEvent> {
-        // FIXME: If I only need this function to oeprate on the current Tx then
-        // I don't need to propagate the events to the BatchedTxLog
         std::mem::take(&mut self.tx_write_log.ibc_events)
     }
 
@@ -760,7 +746,6 @@ impl WriteLog {
     pub fn iter_prefix_pre(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        // FIXME: function to get the buckets?
         let mut buckets = vec![&self.block_write_log];
         for (_, tx_log) in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
@@ -783,7 +768,6 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        // FIXME: function to get the buckets?
         let mut buckets = vec![&self.block_write_log];
         for (_, tx_log) in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);

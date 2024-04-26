@@ -18,7 +18,7 @@ use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::tx_queue::ExpiredTx;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_tx::data::{BatchedTxResult, TxResult};
+use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
 
 use super::ChangedKeys;

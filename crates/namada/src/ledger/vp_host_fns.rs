@@ -13,7 +13,7 @@ use namada_core::storage::{
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
-use namada_tx::{BatchedTxRef, Section, Tx};
+use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
 
 use crate::ibc::IbcEvent;

@@ -7,7 +7,7 @@ use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::Amount;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_tx::data::{BatchedTxResult, TxResult};
+use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::validator_set_update;
 
 use super::ChangedKeys;

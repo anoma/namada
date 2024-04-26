@@ -133,7 +133,7 @@ where
             };
             // FIXME: manage unwrap
             match tx
-                .batch_tx(tx.commitments().get(0).unwrap())
+                .batch_tx(tx.commitments().first().unwrap())
                 .try_into()
                 .ok()
             {

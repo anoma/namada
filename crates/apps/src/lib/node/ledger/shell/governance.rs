@@ -348,7 +348,7 @@ where
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));
         // FIXME: manage unwrap
-        let cmt = tx.commitments().get(0).unwrap().to_owned();
+        let cmt = tx.commitments().first().unwrap().to_owned();
 
         let tx_result = protocol::dispatch_tx(
             tx,

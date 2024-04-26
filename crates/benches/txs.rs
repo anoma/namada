@@ -87,7 +87,7 @@ fn transfer(c: &mut Criterion) {
                             TransferSource::Address(defaults::albert_address()),
                             TransferTarget::PaymentAddress(albert_payment_addr),
                         );
-                    shielded_ctx.shell.execute_tx(&&shield_tx.to_ref());
+                    shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
                     shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
                     shielded_ctx.shell.commit_block();
 

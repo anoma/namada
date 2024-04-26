@@ -118,9 +118,7 @@ impl ExtendEvent for ValidMaspTx {
     fn extend_event(self, event: &mut Event) {
         let Self((masp_tx_index, cmt_hash)) = self;
         let attribute = if let Some(hash) = cmt_hash {
-            // FIXME: need another leading part here? Starting with the hash
-            // could be hard to understand
-            format!("{hash}/is_valid_masp_tx")
+            format!("cmt/{hash}/is_valid_masp_tx")
         } else {
             "is_valid_masp_tx".to_string()
         };

@@ -16,7 +16,7 @@ use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
-use namada_tx::{BatchedTxRef, Commitments, Tx};
+use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 

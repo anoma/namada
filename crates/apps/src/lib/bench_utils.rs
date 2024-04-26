@@ -327,7 +327,7 @@ impl BenchShell {
             )));
         }
 
-        let cmt = tx.commitments().get(0).unwrap().clone();
+        let cmt = tx.commitments().first().unwrap().clone();
         tx.owned_batch_tx(cmt)
     }
 
@@ -348,7 +348,7 @@ impl BenchShell {
 
         tx.set_data(Data::new(data));
         // NOTE: the Ibc VP doesn't actually check the signature
-        let cmt = tx.commitments().get(0).unwrap().clone();
+        let cmt = tx.commitments().first().unwrap().clone();
         tx.owned_batch_tx(cmt)
     }
 
@@ -633,7 +633,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
         None,
     )));
 
-    let cmt = tx.commitments().get(0).unwrap().clone();
+    let cmt = tx.commitments().first().unwrap().clone();
     tx.owned_batch_tx(cmt)
 }
 

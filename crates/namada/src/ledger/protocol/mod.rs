@@ -1,23 +1,24 @@
 //! The ledger's protocol
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::booleans::BoolResultUnitExt;
+use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::{BlockHeight, FullAccessState, StorageWrite};
+use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_tx::{new_tx_event, BatchedTxRef, Section, Tx};
+use namada_tx::{BatchedTxRef, Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -250,31 +251,6 @@ where
                         tx_wasm_cache,
                     },
                 ) {
-                    // Err(e @ Error::GasError(_)) => {
-                    //     // Gas error aborts the execution of the entire batch
-                    //     // FIXME: maybe implement a method on Error called
-                    //     // recoverable() and check that here?
-                    //     state.write_log_mut().drop_tx();
-                    //     return Err(e);
-                    // }
-                    // res @ Err(_) => {
-                    //     // Need to drop to prevent next txs in the batch from
-                    //     // reading invalid states
-                    //     state.write_log_mut().drop_tx();
-                    //     tx_result.batch_results.insert(cmt.get_hash(), res);
-                    // }
-                    // // FIXME: we keep going even for atomic batches which
-                    // could // instead be aborted, should
-                    // we do that? res @ Ok(_) => {
-                    //     // FIXME: wait what about the events? I should be
-                    // able     // to precommit those too!!!
-                    //     //FIXME: if the transaction was rejected I MUST NOT
-                    // commit it to the batch!!! But I still must update the
-                    // tx_result     match
-                    //     state.write_log_mut().commit_tx_to_batch(cmt);
-                    //     tx_result.batch_results.insert(cmt.get_hash(), res);
-                    // }
-                    // FIXME: improve
                     // FIXME: we keep going even for atomic batches which could
                     // instead be aborted, should we do that?
                     Err(e @ Error::GasError(_)) => {
@@ -285,11 +261,9 @@ where
                         return Err(e);
                     }
                     res => {
-                        // FIXME: improve
-                        let is_accepted = match &res {
-                            Ok(result) if result.is_accepted() => true,
-                            _ => false,
-                        };
+                        let is_accepted =
+                            matches!(&res, Ok(result) if result.is_accepted());
+
                         tx_result.batch_results.insert(cmt.get_hash(), res);
                         if is_accepted {
                             state.write_log_mut().commit_tx_to_batch(cmt);

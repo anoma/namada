@@ -6,7 +6,7 @@ use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
