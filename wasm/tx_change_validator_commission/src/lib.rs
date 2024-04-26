@@ -242,8 +242,8 @@ mod tests {
             })
     }
 
-    fn arb_commission_info(
-    ) -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
+    fn arb_commission_info()
+    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
     {
         let min = Dec::zero();
         let max = Dec::one();

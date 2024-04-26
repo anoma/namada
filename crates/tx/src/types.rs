@@ -1752,14 +1752,13 @@ impl BorshSerialize for BatchedTxRef<'_> {
     }
 }
 
-#[derive(Deserialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize)]
 pub struct BatchedTx {
     pub tx: Tx,
     pub cmt: Commitments,
 }
 
 impl BatchedTx {
-    // FIXME: check if only used for benchmarks and conditionally compile
     pub fn to_ref(&self) -> BatchedTxRef {
         BatchedTxRef {
             tx: &self.tx,

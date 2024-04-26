@@ -23,7 +23,7 @@ use namada_state::{
 };
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
-use namada_tx::{Commitments, Tx};
+use namada_tx::{BatchedTx, BatchedTxRef, Commitments, Tx};
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -385,7 +385,7 @@ pub trait VpEvaluator {
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef,
     ) -> HostEnvResult;
 }
 
@@ -2386,7 +2386,7 @@ where
             .read_bytes(input_data_ptr, input_data_len as _)
             .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
         vp_host_fns::add_gas(gas_meter, gas)?;
-        let tx: Tx = BorshDeserialize::try_from_slice(&input_data)
+        let tx: BatchedTx = BorshDeserialize::try_from_slice(&input_data)
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
         tx
     };
@@ -2398,7 +2398,13 @@ where
             format!("Not a valid hash: {:?}", e),
         ))
     })?);
-    Ok(eval_runner.eval(env.ctx.clone(), vp_code_hash, tx).to_i64())
+    let batch_ref = BatchedTxRef {
+        tx: &tx.tx,
+        cmt: &tx.cmt,
+    };
+    Ok(eval_runner
+        .eval(env.ctx.clone(), vp_code_hash, batch_ref)
+        .to_i64())
 }
 
 /// Get the native token's address

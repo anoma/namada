@@ -153,8 +153,7 @@ fn vp_implicit(c: &mut Criterion) {
                 assert!(
                     run::vp(
                         vp_code_hash,
-                        &tx.tx,
-                        &tx.cmt,
+                        &tx.to_ref(),
                         &TxIndex(0),
                         &Address::from(&implicit_account.to_public()),
                         &shell.state,
@@ -308,8 +307,7 @@ fn vp_user(c: &mut Criterion) {
                 assert!(
                     run::vp(
                         vp_code_hash,
-                        &signed_tx.tx,
-                        &signed_tx.cmt,
+                        &signed_tx.to_ref(),
                         &TxIndex(0),
                         &defaults::validator_address(),
                         &shell.state,

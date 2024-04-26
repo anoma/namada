@@ -653,7 +653,7 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(empty_code, tx);
+        let result = vp::CTX.eval(empty_code, tx.batch_ref_first_tx());
         assert!(result.is_err());
 
         // evaluating the VP template which always returns `true` should pass
@@ -672,7 +672,7 @@ mod tests {
             .add_serialized_data(input_data.clone())
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
-        let result = vp::CTX.eval(code_hash, tx);
+        let result = vp::CTX.eval(code_hash, tx.batch_ref_first_tx());
         assert!(result.is_ok());
 
         // evaluating the VP template which always returns `false` shouldn't
@@ -692,7 +692,7 @@ mod tests {
             .add_serialized_data(input_data)
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
-        let result = vp::CTX.eval(code_hash, tx);
+        let result = vp::CTX.eval(code_hash, tx.batch_ref_first_tx());
         assert!(result.is_err());
     }
 

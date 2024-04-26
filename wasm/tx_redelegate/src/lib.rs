@@ -331,16 +331,14 @@ mod tests {
         );
 
         // Check that no unbonds exist
-        assert!(unbond_handle(
-            &redelegation.owner,
-            &redelegation.src_validator
-        )
-        .is_empty(ctx())?);
-        assert!(unbond_handle(
-            &redelegation.owner,
-            &redelegation.dest_validator
-        )
-        .is_empty(ctx())?);
+        assert!(
+            unbond_handle(&redelegation.owner, &redelegation.src_validator)
+                .is_empty(ctx())?
+        );
+        assert!(
+            unbond_handle(&redelegation.owner, &redelegation.dest_validator)
+                .is_empty(ctx())?
+        );
 
         // Check bonds
         for epoch in 0..pos_params.withdrawable_epoch_offset() {
@@ -386,8 +384,8 @@ mod tests {
 
     /// Generates an initial validator stake and a redelegation, while making
     /// sure that the `initial_stake >= redelegation.amount`.
-    fn arb_initial_stake_and_redelegation(
-    ) -> impl Strategy<Value = (token::Amount, transaction::pos::Redelegation)>
+    fn arb_initial_stake_and_redelegation()
+    -> impl Strategy<Value = (token::Amount, transaction::pos::Redelegation)>
     {
         // Generate initial stake
         token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(

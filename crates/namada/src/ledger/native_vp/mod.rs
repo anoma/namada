@@ -422,7 +422,7 @@ where
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<(), state::StorageError> {
         #[cfg(feature = "wasm-runtime")]
         {

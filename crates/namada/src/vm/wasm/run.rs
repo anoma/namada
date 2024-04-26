@@ -285,8 +285,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn vp<S, CA>(
     vp_code_hash: Hash,
-    tx: &Tx,
-    cmt: &Commitments,
+    batched_tx: &BatchedTxRef,
     tx_index: &TxIndex,
     address: &Address,
     state: &S,
@@ -317,6 +316,7 @@ where
             hasher: PhantomData,
             cache_access: PhantomData,
         };
+    let BatchedTxRef { tx, cmt } = batched_tx;
     let env = VpVmEnv::new(
         WasmMemory::default(),
         address,
@@ -345,7 +345,7 @@ where
         module,
         imports,
         &vp_code_hash,
-        tx,
+        batched_tx,
         address,
         keys_changed,
         verifiers,
@@ -358,7 +358,7 @@ fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
     vp_code_hash: &Hash,
-    input_data: &Tx,
+    input_data: &BatchedTxRef,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
@@ -489,7 +489,7 @@ where
         &self,
         ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> HostEnvResult {
         self.eval_native_result(ctx, vp_code_hash, input_data)
             .map_or_else(
@@ -513,7 +513,7 @@ where
         &self,
         ctx: VpCtx<'static, D, H, Self, CA>,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<()> {
         let address = unsafe { ctx.address.get() };
         let keys_changed = unsafe { ctx.keys_changed.get() };
@@ -1116,7 +1116,7 @@ mod tests {
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
-            input: tx,
+            input: tx.batch_first_tx(),
         };
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1128,8 +1128,7 @@ mod tests {
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
+                &outer_tx.batch_ref_first_tx(),
                 &tx_index,
                 &addr,
                 &state,
@@ -1149,7 +1148,7 @@ mod tests {
 
         let eval_vp = EvalVp {
             vp_code_hash: limit_code_hash,
-            input: tx,
+            input: tx.batch_first_tx(),
         };
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1161,8 +1160,7 @@ mod tests {
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
+                &outer_tx.batch_ref_first_tx(),
                 &tx_index,
                 &addr,
                 &state,
@@ -1211,8 +1209,7 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1231,8 +1228,7 @@ mod tests {
         outer_tx.set_data(Data::new(tx_data));
         let error = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1342,8 +1338,7 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let result = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1470,8 +1465,7 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         let error = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1537,7 +1531,7 @@ mod tests {
 
         let eval_vp = EvalVp {
             vp_code_hash: read_code_hash,
-            input: tx,
+            input: tx.batch_first_tx(),
         };
 
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
@@ -1547,8 +1541,7 @@ mod tests {
         assert!(
             vp(
                 code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
+                &outer_tx.batch_ref_first_tx(),
                 &tx_index,
                 &addr,
                 &state,
@@ -1738,8 +1731,7 @@ mod tests {
         outer_tx.set_data(Data::new(vec![]));
         let result = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1782,8 +1774,7 @@ mod tests {
         outer_tx.set_data(Data::new(vec![]));
         let result = vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,
@@ -1915,8 +1906,7 @@ mod tests {
 
         vp(
             code_hash,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            &outer_tx.batch_ref_first_tx(),
             &tx_index,
             &addr,
             &state,

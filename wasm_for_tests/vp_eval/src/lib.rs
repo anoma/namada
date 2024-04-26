@@ -19,5 +19,5 @@ fn validate_tx(
     }: EvalVp =
         EvalVp::try_from_slice(&tx_data.data(cmt).as_ref().unwrap()[..])
             .unwrap();
-    ctx.eval(vp_code_hash, input).into_vp_error()
+    ctx.eval(vp_code_hash, input.to_ref()).into_vp_error()
 }

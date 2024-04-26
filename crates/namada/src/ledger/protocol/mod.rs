@@ -895,8 +895,7 @@ where
 
                     wasm::run::vp(
                         vp_code_hash,
-                        batched_tx.tx,
-                        batched_tx.cmt,
+                        batched_tx,
                         tx_index,
                         addr,
                         state,

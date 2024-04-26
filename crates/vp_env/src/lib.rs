@@ -14,7 +14,7 @@ use namada_core::storage::{
 use namada_core::token::Transfer;
 use namada_ibc::{decode_message, IbcEvent, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::BatchedTxRef;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -105,7 +105,7 @@ where
     fn eval(
         &self,
         vp_code: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef,
     ) -> Result<(), namada_storage::Error>;
 
     /// Get a tx hash
