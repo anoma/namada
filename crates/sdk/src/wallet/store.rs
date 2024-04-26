@@ -625,6 +625,7 @@ impl Store {
             alias::validator_consensus_key(&validator_alias);
         let tendermint_node_key_alias =
             alias::validator_tendermint_node_key(&validator_alias);
+        let address_alias = alias::validator_address(&validator_alias);
 
         let keys = [
             (consensus_key_alias.clone(), other.store.consensus_key),
@@ -653,6 +654,14 @@ impl Store {
             ((&tendermint_node_pk).into(), tendermint_node_key_alias),
         ];
         self.pkhs.extend(pkhs);
+
+        self.addresses
+            .insert(address_alias.clone(), validator_address.clone());
+
+        println!(
+            "\nAdded the validator address {} to the wallet with alias \"{}\".",
+            &validator_address, address_alias
+        );
 
         self.validator_data = Some(ValidatorData {
             address: validator_address,
