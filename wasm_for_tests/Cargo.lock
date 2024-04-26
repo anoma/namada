@@ -3790,6 +3790,7 @@ dependencies = [
  "borsh 1.2.1",
  "data-encoding",
  "derivative",
+ "konst",
  "namada_account",
  "namada_controller",
  "namada_core",

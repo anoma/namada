@@ -3836,6 +3836,7 @@ dependencies = [
  "borsh 1.4.0",
  "data-encoding",
  "derivative",
+ "konst",
  "linkme",
  "namada_account",
  "namada_controller",

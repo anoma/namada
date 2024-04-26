@@ -7,6 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod epoched;
+pub mod event;
 pub mod parameters;
 pub mod pos_queries;
 pub mod queries;

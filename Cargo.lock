@@ -4816,6 +4816,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "itertools 0.10.5",
+ "konst",
  "linkme",
  "namada_account",
  "namada_controller",
