@@ -2693,7 +2693,7 @@ pub async fn build_ibc_transfer(
     };
 
     let chain_id = args.tx.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, args.tx.expiration);
+    let mut tx = Tx::new(chain_id, args.tx.expiration.to_datetime());
     if let Some(memo) = &args.tx.memo {
         tx.add_memo(memo);
     }
@@ -2855,7 +2855,7 @@ where
 {
     let chain_id = tx_args.chain_id.clone().unwrap();
 
-    let mut tx_builder = Tx::new(chain_id, tx_args.expiration);
+    let mut tx_builder = Tx::new(chain_id, tx_args.expiration.to_datetime());
     if let Some(memo) = &tx_args.memo {
         tx_builder.add_memo(memo);
     }
@@ -3239,7 +3239,7 @@ pub async fn build_update_account(
     };
 
     let chain_id = tx_args.chain_id.clone().unwrap();
-    let mut tx = Tx::new(chain_id, tx_args.expiration);
+    let mut tx = Tx::new(chain_id, tx_args.expiration.to_datetime());
     if let Some(memo) = &tx_args.memo {
         tx.add_memo(memo);
     }
@@ -3321,7 +3321,7 @@ pub async fn build_custom(
             .ok_or(Error::Other("No code path supplied".to_string()))?;
         let tx_code_hash = query_wasm_code_hash_buf(context, code_path).await?;
         let chain_id = tx_args.chain_id.clone().unwrap();
-        let mut tx = Tx::new(chain_id, tx_args.expiration);
+        let mut tx = Tx::new(chain_id, tx_args.expiration.to_datetime());
         if let Some(memo) = &tx_args.memo {
             tx.add_memo(memo);
         }

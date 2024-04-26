@@ -2007,7 +2007,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         };
 
         // Now we build up the transaction within this object
-        let expiration_height: u32 = match context.tx_builder().expiration {
+        // TODO: if the user requested the default expiration, there might be a
+        // small discrepancy between the datetime we calculate here and the one
+        // we set for the transaction. This should be small enough to not cause
+        // any issue, in case refactor this function to request the precise
+        // datetime to the caller
+        let expiration_height: u32 = match context
+            .tx_builder()
+            .expiration
+            .to_datetime()
+        {
             Some(expiration) => {
                 // Try to match a DateTime expiration with a plausible
                 // corresponding block height
