@@ -591,7 +591,6 @@ impl BenchShell {
                 token: self.state.in_mem().native_token.clone(),
             },
             defaults::albert_keypair().ref_to(),
-            self.state.in_mem().last_epoch,
             0.into(),
             None,
         );
