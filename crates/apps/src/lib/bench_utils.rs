@@ -993,7 +993,7 @@ impl Default for BenchShieldedCtx {
                 .wallet
                 .insert_payment_addr(
                     alias,
-                    PaymentAddress::from(payment_addr).pinned(false),
+                    PaymentAddress::from(payment_addr),
                     true,
                 )
                 .unwrap();
