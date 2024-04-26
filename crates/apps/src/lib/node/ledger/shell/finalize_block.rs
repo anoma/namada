@@ -89,16 +89,6 @@ where
             self.state.in_mem().update_epoch_blocks_delay
         );
 
-        // Finalize the transactions' hashes from the previous block. Also cache
-        // "last" hashes from the previous block in case of a rollback
-        let (write_log, _in_mem, db) = self.state.split_borrow();
-        for (raw_key, _, _) in db.iter_replay_protection() {
-            let hash = raw_key.parse().expect("Failed hash conversion");
-            write_log
-                .finalize_tx_hash(hash)
-                .expect("Failed tx hashes finalization")
-        }
-
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
         let votes = pos_votes_from_abci(&self.state, &req.votes);
@@ -470,14 +460,17 @@ where
                             protocol::Error::ReplayAttempt(_),
                         ) = msg
                         {
-                            // Remove the wrapper hash but keep the inner tx
+                            // Mark the wrapper hash as redundant but keep the
+                            // inner tx
                             // hash. A replay of the wrapper is impossible since
                             // the inner tx hash is committed to storage and
                             // we validate the wrapper against that hash too
                             let header_hash = replay_protection_hashes
                                 .expect("This cannot fail")
                                 .header_hash;
-                            self.state.delete_tx_hash(header_hash);
+                            self.state.redundant_tx_hash(&header_hash).expect(
+                                "Error while marking tx hash as redundant",
+                            );
                         }
                     }
 
@@ -645,8 +638,8 @@ where
         Ok(())
     }
 
-    // Write the inner tx hash to storage and remove the corresponding wrapper
-    // hash since it's redundant (we check the inner tx hash too when validating
+    // Write the inner tx hash to storage and mark the corresponding wrapper
+    // hash as redundant (we check the inner tx hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
     fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
@@ -659,7 +652,9 @@ where
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
-            self.state.delete_tx_hash(header_hash)
+            self.state
+                .redundant_tx_hash(&header_hash)
+                .expect("Error while marking tx hash as redundant");
         }
     }
 }
@@ -2436,7 +2431,7 @@ mod test_finalize_block {
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
 
         let wrapper_hash_key =
-            replay_protection::last_key(&wrapper_tx.header_hash());
+            replay_protection::current_key(&wrapper_tx.header_hash());
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
@@ -2462,7 +2457,6 @@ mod test_finalize_block {
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-                .unwrap_or_default()
         );
         // Check that the hash is present in the merkle tree
         assert!(
@@ -2481,7 +2475,7 @@ mod test_finalize_block {
     /// doesn't get reapplied
     #[test]
     fn test_duplicated_tx_same_block() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::albert_keypair();
         let keypair_2 = crate::wallet::defaults::bertha_keypair();
 
@@ -2561,16 +2555,134 @@ mod test_finalize_block {
                     .state
                     .write_log()
                     .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap_or_default()
             );
             assert!(
                 !shell
                     .state
                     .write_log()
                     .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap_or_default()
             );
         }
+        // Commit to check the hashes from storage
+        shell.commit();
+        for wrapper in [&wrapper, &new_wrapper] {
+            assert!(
+                shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.raw_header_hash())
+                    .unwrap()
+            );
+            assert!(
+                !shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.header_hash())
+                    .unwrap()
+            );
+        }
+    }
+
+    // Test two identical txs in the same block. The first one fails but doesn't
+    // write the hash (because of invalid signature). The second one must be
+    // able to execute and pass
+    #[test]
+    fn test_duplicated_tx_same_block_with_failure() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = crate::wallet::defaults::albert_keypair();
+        let keypair_2 = crate::wallet::defaults::bertha_keypair();
+
+        let tx_code = TestWasms::TxWriteStorageKey.read_bytes();
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                WRAPPER_GAS_LIMIT.into(),
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new(tx_code, None));
+        let key = Key::from(Address::from(&keypair_2.ref_to()).to_db_key())
+            .push(&"test".to_string())
+            .unwrap();
+        wrapper.set_data(Data::new(
+            TxWriteData {
+                key,
+                value: "test".as_bytes().to_vec(),
+            }
+            .serialize_to_vec(),
+        ));
+
+        let mut new_wrapper = wrapper.clone();
+        new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            keypair_2.ref_to(),
+            Epoch(0),
+            WRAPPER_GAS_LIMIT.into(),
+            None,
+        ))));
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
+            vec![new_wrapper.raw_header_hash()],
+            [(0, keypair_2.clone())].into_iter().collect(),
+            None,
+        )));
+        // This is a signature coming from the wrong signer which will be
+        // rejected by the vp
+        wrapper.add_section(Section::Authorization(Authorization::new(
+            vec![wrapper.raw_header_hash()],
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
+        )));
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
+            new_wrapper.sechashes(),
+            [(0, keypair_2)].into_iter().collect(),
+            None,
+        )));
+        wrapper.add_section(Section::Authorization(Authorization::new(
+            wrapper.sechashes(),
+            [(0, keypair)].into_iter().collect(),
+            None,
+        )));
+
+        let mut processed_txs: Vec<ProcessedTx> = vec![];
+        for tx in [&wrapper, &new_wrapper] {
+            processed_txs.push(ProcessedTx {
+                tx: tx.to_bytes().into(),
+                result: TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "".into(),
+                },
+            })
+        }
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.state.in_mem().block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        let code = event[1].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+
+        // This hash must be present as succesfully added by the second
+        // transaction
     }
 
     /// Test that if a transaction fails because of out-of-gas,
@@ -2579,7 +2691,7 @@ mod test_finalize_block {
     /// reason has its hash written to storage.
     #[test]
     fn test_tx_hash_handling() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::bertha_keypair();
         let mut out_of_gas_wrapper = {
             let tx_code = TestWasms::TxNoOp.read_bytes();
@@ -2719,6 +2831,37 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
 
         for valid_wrapper in [
+            &out_of_gas_wrapper,
+            &unsigned_wrapper,
+            &wrong_commitment_wrapper,
+        ] {
+            assert!(
+                !shell.state.write_log().has_replay_protection_entry(
+                    &valid_wrapper.raw_header_hash()
+                )
+            );
+            assert!(
+                shell
+                    .state
+                    .write_log()
+                    .has_replay_protection_entry(&valid_wrapper.header_hash())
+            );
+        }
+        assert!(
+            shell.state.write_log().has_replay_protection_entry(
+                &failing_wrapper.raw_header_hash()
+            )
+        );
+        assert!(
+            !shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&failing_wrapper.header_hash())
+        );
+
+        // Commit to check the hashes from storage
+        shell.commit();
+        for valid_wrapper in [
             out_of_gas_wrapper,
             unsigned_wrapper,
             wrong_commitment_wrapper,
@@ -2726,33 +2869,29 @@ mod test_finalize_block {
             assert!(
                 !shell
                     .state
-                    .write_log()
                     .has_replay_protection_entry(
                         &valid_wrapper.raw_header_hash()
                     )
-                    .unwrap_or_default()
+                    .unwrap()
             );
             assert!(
                 shell
                     .state
-                    .write_log()
                     .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap_or_default()
+                    .unwrap()
             );
         }
         assert!(
             shell
                 .state
-                .write_log()
                 .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .expect("test failed")
+                .unwrap()
         );
         assert!(
             !shell
                 .state
-                .write_log()
                 .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap_or_default()
+                .unwrap()
         );
     }
 
@@ -2824,14 +2963,12 @@ mod test_finalize_block {
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper_hash)
-                .unwrap_or_default()
         );
         assert!(
             !shell
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper.raw_header_hash())
-                .unwrap_or_default()
         );
     }
 

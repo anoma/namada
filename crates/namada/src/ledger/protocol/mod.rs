@@ -646,8 +646,7 @@ where
     } = shell_params;
 
     let tx_hash = tx.raw_header_hash();
-    if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
-    {
+    if state.write_log().has_replay_protection_entry(&tx_hash) {
         // If the same transaction has already been applied in this block, skip
         // execution and return
         return Err(Error::ReplayAttempt(tx_hash));

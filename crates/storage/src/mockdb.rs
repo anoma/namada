@@ -7,7 +7,9 @@ use std::path::Path;
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::Hash;
-use namada_core::storage::{BlockHeight, DbColFam, Epoch, Header, Key, KeySeg};
+use namada_core::storage::{
+    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
+};
 use namada_core::{decode, encode, ethereum_events};
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
@@ -338,14 +340,13 @@ impl DB for MockDB {
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
         let prefix_key =
             Key::parse("replay_protection").map_err(Error::KeyError)?;
-        for subkey in [
-            replay_protection::last_key(hash),
-            replay_protection::all_key(hash),
-        ] {
-            let key = prefix_key.join(&subkey);
-            if self.0.borrow().contains_key(&key.to_string()) {
-                return Ok(true);
-            }
+        let key = prefix_key.join(&replay_protection::key(hash));
+        let current_key =
+            prefix_key.join(&replay_protection::current_key(hash));
+        if self.0.borrow().contains_key(&key.to_string())
+            || self.0.borrow().contains_key(&current_key.to_string())
+        {
+            return Ok(true);
         }
 
         Ok(false)
@@ -581,31 +582,38 @@ impl DB for MockDB {
         }
     }
 
-    fn delete_replay_protection_entry(
-        &mut self,
-        _batch: &mut Self::WriteBatch,
-        key: &Key,
-    ) -> Result<()> {
-        let key = Key::parse("replay_protection")
-            .map_err(Error::KeyError)?
-            .join(key);
-
-        self.0.borrow_mut().remove(&key.to_string());
-
-        Ok(())
-    }
-
-    fn prune_replay_protection_buffer(
+    fn move_current_replay_protection_entries(
         &mut self,
         _batch: &mut Self::WriteBatch,
     ) -> Result<()> {
-        let buffer_key = Key::parse("replay_protection")
+        let current_key_prefix = Key::parse("replay_protection")
             .map_err(Error::KeyError)?
-            .push(&"buffer".to_string())
+            .push(&"current".to_string())
             .map_err(Error::KeyError)?;
-        self.0
-            .borrow_mut()
-            .retain(|key, _| !key.starts_with(&buffer_key.to_string()));
+        let mut target_hashes = vec![];
+
+        for (key, _) in self.0.borrow().iter() {
+            if key.starts_with(&current_key_prefix.to_string()) {
+                let hash = key
+                    .rsplit(KEY_SEGMENT_SEPARATOR)
+                    .last()
+                    .unwrap()
+                    .to_string();
+                target_hashes.push(hash);
+            }
+        }
+
+        for hash in target_hashes {
+            let current_key =
+                current_key_prefix.push(&hash).map_err(Error::KeyError)?;
+            let key = Key::parse("replay_protection")
+                .map_err(Error::KeyError)?
+                .push(&hash)
+                .map_err(Error::KeyError)?;
+
+            self.0.borrow_mut().remove(&current_key.to_string());
+            self.0.borrow_mut().insert(key.to_string(), vec![]);
+        }
 
         Ok(())
     }
@@ -719,18 +727,10 @@ impl<'iter> DBIter<'iter> for MockDB {
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
-    fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
-        let stripped_prefix =
-            format!("replay_protection/{}/", replay_protection::last_prefix());
-        let prefix = stripped_prefix.clone();
-        let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
-    }
-
-    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+    fn iter_current_replay_protection(&'iter self) -> Self::PrefixIter {
         let stripped_prefix = format!(
             "replay_protection/{}/",
-            replay_protection::buffer_prefix()
+            replay_protection::current_prefix()
         );
         let prefix = stripped_prefix.clone();
         let iter = self.0.borrow().clone().into_iter();
