@@ -1847,13 +1847,13 @@ fn propose_funding(
 
     let pgf_funding = PgfFunding {
         continuous: vec![PGFTarget::Ibc(PGFIbcTarget {
-            amount: Amount::from_u64(10),
+            amount: Amount::native_whole(10),
             target: bertha.to_string(),
             port_id: src_port_id.clone(),
             channel_id: src_channel_id.clone(),
         })],
         retro: vec![PGFTarget::Ibc(PGFIbcTarget {
-            amount: Amount::from_u64(5),
+            amount: Amount::native_whole(5),
             target: christel.to_string(),
             port_id: src_port_id.clone(),
             channel_id: src_channel_id.clone(),
