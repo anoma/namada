@@ -30,6 +30,9 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
+/// Describes a token event within IBC.
+pub const TOKEN_EVENT_DESCRIPTOR: &str = IbcEvent::DOMAIN;
+
 pub mod types {
     //! IBC event types.
 

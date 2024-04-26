@@ -16,7 +16,7 @@ use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
-use namada_token::event::{BalanceChangeTarget, TokenEvent};
+use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
@@ -530,16 +530,30 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
+                let target_post_balance = Some(
+                    namada_token::read_balance(
+                        state,
+                        &wrapper.fee.token,
+                        block_proposer,
+                    )
+                    .map_err(Error::StorageError)?
+                    .into(),
+                );
+
                 state.write_log_mut().emit_event(
-                    TokenEvent::BalanceChange {
-                        level: EventLevel::Tx,
+                    TokenEvent {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        level: EventLevel::Tx,
                         token: wrapper.fee.token.clone(),
-                        target: BalanceChangeTarget::Internal(
-                            wrapper.fee_payer(),
-                        ),
-                        post_balance: Some(post_bal.into()),
-                        diff: fees.change().negate(),
+                        operation: TokenOperation::Transfer {
+                            amount: fees.into(),
+                            source: UserAccount::Internal(wrapper.fee_payer()),
+                            target: UserAccount::Internal(
+                                block_proposer.clone(),
+                            ),
+                            source_post_balance: post_bal.into(),
+                            target_post_balance,
+                        },
                     }
                     .with(HeightAttr(current_block_height))
                     .with(TxHashAttr(wrapper_tx_hash)),
@@ -566,16 +580,30 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
+                let target_post_balance = Some(
+                    namada_token::read_balance(
+                        state,
+                        &wrapper.fee.token,
+                        block_proposer,
+                    )
+                    .map_err(Error::StorageError)?
+                    .into(),
+                );
+
                 state.write_log_mut().emit_event(
-                    TokenEvent::BalanceChange {
-                        level: EventLevel::Tx,
+                    TokenEvent {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        level: EventLevel::Tx,
                         token: wrapper.fee.token.clone(),
-                        target: BalanceChangeTarget::Internal(
-                            wrapper.fee_payer(),
-                        ),
-                        post_balance: Some(namada_core::uint::ZERO),
-                        diff: balance.change().negate(),
+                        operation: TokenOperation::Transfer {
+                            amount: balance.into(),
+                            source: UserAccount::Internal(wrapper.fee_payer()),
+                            target: UserAccount::Internal(
+                                block_proposer.clone(),
+                            ),
+                            source_post_balance: namada_core::uint::ZERO,
+                            target_post_balance,
+                        },
                     }
                     .with(HeightAttr(current_block_height))
                     .with(TxHashAttr(wrapper_tx_hash)),

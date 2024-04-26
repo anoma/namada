@@ -25,7 +25,7 @@ use namada::proof_of_stake::storage::{
 use namada::proof_of_stake::types::{BondId, ValidatorState};
 use namada::sdk::events::{EmitEvents, EventLevel};
 use namada::state::StorageWrite;
-use namada::token::event::{BalanceChangeTarget, TokenEvent};
+use namada::token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada::token::read_balance;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
@@ -242,29 +242,21 @@ where
             const DESCRIPTOR: &str = "governance-locked-funds-refund";
 
             let final_gov_balance =
-                read_balance(&shell.state, &native_token, &gov_address)
-                    .ok()
-                    .map(|balance| balance.into());
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
             let final_target_balance =
-                read_balance(&shell.state, &native_token, &address)
-                    .ok()
-                    .map(|balance| balance.into());
+                read_balance(&shell.state, &native_token, &address)?.into();
 
-            events.emit(TokenEvent::BalanceChange {
-                level: EventLevel::Block,
+            events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
-                token: native_token.clone(),
-                target: BalanceChangeTarget::Internal(gov_address),
-                post_balance: final_gov_balance,
-                diff: funds.change().negate(),
-            });
-            events.emit(TokenEvent::BalanceChange {
                 level: EventLevel::Block,
-                descriptor: DESCRIPTOR.into(),
                 token: native_token.clone(),
-                target: BalanceChangeTarget::Internal(address),
-                post_balance: final_target_balance,
-                diff: funds.change(),
+                operation: TokenOperation::Transfer {
+                    amount: funds.into(),
+                    source: UserAccount::Internal(gov_address),
+                    target: UserAccount::Internal(address),
+                    source_post_balance: final_gov_balance,
+                    target_post_balance: Some(final_target_balance),
+                },
             });
         } else {
             token::burn_tokens(
@@ -277,17 +269,17 @@ where
             const DESCRIPTOR: &str = "governance-locked-funds-burn";
 
             let final_gov_balance =
-                read_balance(&shell.state, &native_token, &gov_address)
-                    .ok()
-                    .map(|balance| balance.into());
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
 
-            events.emit(TokenEvent::BalanceChange {
-                level: EventLevel::Block,
+            events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
+                level: EventLevel::Block,
                 token: native_token.clone(),
-                target: BalanceChangeTarget::Internal(gov_address),
-                post_balance: final_gov_balance,
-                diff: funds.change().negate(),
+                operation: TokenOperation::Burn {
+                    amount: funds.into(),
+                    target_account: UserAccount::Internal(gov_address),
+                    post_balance: final_gov_balance,
+                },
             });
         }
     }
@@ -494,34 +486,45 @@ where
                             &target.target,
                             target.amount,
                         ),
-                        TokenEvent::BalanceChange {
-                            level: EventLevel::Block,
+                        TokenEvent {
                             descriptor: "pgf-payments".into(),
+                            level: EventLevel::Block,
                             token: token.clone(),
-                            target: BalanceChangeTarget::Internal(
-                                target.target.clone(),
-                            ),
-                            post_balance: read_balance(
-                                state,
-                                token,
-                                &target.target,
-                            )
-                            .ok()
-                            .map(|balance| balance.into()),
-                            diff: target.amount.change().negate(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::Internal(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: Some(
+                                    read_balance(state, token, &target.target)?
+                                        .into(),
+                                ),
+                            },
                         },
                     ),
                     PGFTarget::Ibc(target) => (
                         ibc::transfer_over_ibc(state, token, &ADDRESS, target),
-                        TokenEvent::BalanceChange {
-                            level: EventLevel::Block,
+                        TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),
+                            level: EventLevel::Block,
                             token: token.clone(),
-                            target: BalanceChangeTarget::External(
-                                target.target.clone(),
-                            ),
-                            post_balance: None,
-                            diff: target.amount.change().negate(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::External(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: None,
+                            },
                         },
                     ),
                 };

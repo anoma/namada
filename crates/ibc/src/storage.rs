@@ -19,10 +19,11 @@ use namada_core::token::Amount;
 use namada_events::{EmitEvents, EventLevel};
 use namada_state::{StorageRead, StorageResult, StorageWrite};
 use namada_token as token;
-use namada_token::event::{BalanceChangeTarget, TokenEvent};
+use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::event::TOKEN_EVENT_DESCRIPTOR;
 use crate::parameters::IbcParameters;
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
@@ -71,15 +72,15 @@ where
         amount,
     )?;
 
-    let post_balance = token::read_balance(state, token, target)?;
-
-    state.emit(TokenEvent::BalanceChange {
+    state.emit(TokenEvent {
+        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        descriptor: "mint-ibc-tokens".into(),
         token: token.clone(),
-        target: BalanceChangeTarget::Internal(target.clone()),
-        post_balance: Some(post_balance.into()),
-        diff: amount.change(),
+        operation: TokenOperation::Mint {
+            amount: amount.into(),
+            post_balance: token::read_balance(state, token, target)?.into(),
+            target_account: UserAccount::Internal(target.clone()),
+        },
     });
 
     Ok(())
@@ -97,15 +98,15 @@ where
 {
     token::burn_tokens(state, token, target, amount)?;
 
-    let post_balance = token::read_balance(state, token, target)?;
-
-    state.emit(TokenEvent::BalanceChange {
+    state.emit(TokenEvent {
+        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        descriptor: "burn-ibc-tokens".into(),
         token: token.clone(),
-        target: BalanceChangeTarget::Internal(target.clone()),
-        post_balance: Some(post_balance.into()),
-        diff: amount.change().negate(),
+        operation: TokenOperation::Burn {
+            amount: amount.into(),
+            post_balance: token::read_balance(state, token, target)?.into(),
+            target_account: UserAccount::Internal(target.clone()),
+        },
     });
 
     Ok(())
