@@ -24,8 +24,6 @@ pub mod types {
 /// The target of a balance change.
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub enum BalanceChangeTarget {
-    /// The minted supply of tokens.
-    MintedSupply,
     /// Internal chain address in Namada.
     Internal(Address),
     /// External chain address.
@@ -35,7 +33,6 @@ pub enum BalanceChangeTarget {
 impl fmt::Display for BalanceChangeTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MintedSupply => write!(f, "minted-supply"),
             Self::Internal(addr) => write!(f, "internal-address/{addr}"),
             Self::External(addr) => write!(f, "external-address/{addr}"),
         }
@@ -47,7 +44,6 @@ impl FromStr for BalanceChangeTarget {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once('/') {
-            None if s == "minted-supply" => Ok(Self::MintedSupply),
             Some(("internal-address", addr)) => {
                 Ok(Self::Internal(Address::decode(addr).map_err(|err| {
                     format!(
@@ -192,7 +188,6 @@ mod tests {
     #[test]
     fn balance_change_target_str_roundtrip() {
         let targets = [
-            BalanceChangeTarget::MintedSupply,
             BalanceChangeTarget::External(
                 "cosmos1hkgjfuznl4af5ayzn6gzl6kwwkcu28urxmqejg".to_owned(),
             ),
