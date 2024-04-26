@@ -713,7 +713,7 @@ pub struct MaspBuilder {
         serialize_with = "borsh_serde::<BuilderSerde, _>",
         deserialize_with = "serde_borsh::<BuilderSerde, _, _>"
     )]
-    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    pub builder: Builder<(), ExtendedFullViewingKey, ()>,
 }
 
 impl MaspBuilder {
