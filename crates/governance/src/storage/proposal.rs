@@ -461,7 +461,7 @@ impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProposalType::Default => write!(f, "Default"),
-            ProposalType::DefaultWithWasm(_) => write!(f, "DefaultWithWasm"),
+            ProposalType::DefaultWithWasm(_) => write!(f, "Default with Wasm"),
             ProposalType::PGFSteward(_) => write!(f, "PGF steward"),
             ProposalType::PGFPayment(_) => write!(f, "PGF funding"),
         }
@@ -732,6 +732,7 @@ pub mod testing {
     /// Generate an arbitrary proposal type
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
+            Just(ProposalType::Default),
             arb_hash().prop_map(ProposalType::DefaultWithWasm),
             collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
