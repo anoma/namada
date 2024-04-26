@@ -67,8 +67,6 @@ pub enum TxRuntimeError {
     StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::storage::Error),
-    #[error("Trying to read a permanent value with read_temp")]
-    ReadPermanentValueError,
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Address error: {0}")]
@@ -714,23 +712,16 @@ where
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (log_val, gas) = write_log.read(&key);
+    let (log_val, gas) = write_log.read_temp(&key);
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let value = match log_val {
-        Some(write_log::StorageModification::Temp { ref value }) => {
-            Ok(Some(value.clone()))
-        }
-        None => Ok(None),
-        _ => Err(TxRuntimeError::ReadPermanentValueError),
-    }?;
-    match value {
+    match log_val {
         Some(value) => {
             let len: i64 = value
                 .len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value);
+            result_buffer.replace(value.clone());
             Ok(len)
         }
         None => Ok(HostEnvResult::Fail.to_i64()),
@@ -848,10 +839,6 @@ where
             }
             Some(write_log::StorageModification::InitAccount { .. }) => {
                 // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            Some(write_log::StorageModification::Temp { .. }) => {
-                // temporary values are not returned by the iterator
                 continue;
             }
             None => {

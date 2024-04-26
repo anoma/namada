@@ -206,8 +206,6 @@ where
                 StorageModification::InitAccount { vp_code_hash } => {
                     self.batch_write_subspace_val(batch, &key, vp_code_hash)?;
                 }
-                // temporary value isn't persisted
-                StorageModification::Temp { .. } => {}
             }
         }
         debug_assert!(self.0.write_log.block_write_log.is_empty());
@@ -1223,18 +1221,15 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<T>> {
-        let (log_val, _) = self.write_log().read(key);
+        let (log_val, _) = self.write_log().read_temp(key);
         match log_val {
-            Some(crate::write_log::StorageModification::Temp { value }) => {
+            Some(value) => {
                 let value =
                     namada_core::borsh::BorshDeserialize::try_from_slice(value)
                         .map_err(Error::BorshCodingError)?;
                 Ok(Some(value))
             }
             None => Ok(None),
-            _ => Err(Error::UnknownKey {
-                key: key.to_string(),
-            }),
         }
     }
 }
