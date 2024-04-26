@@ -1006,8 +1006,6 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
-    /// The unused storage location at which to place TxId
-    pub key: Option<String>,
     /// Shielded transaction part
     pub shielded: Option<Hash>,
 }
@@ -1024,7 +1022,6 @@ pub enum AmountError {
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and strategies for tokens
 pub mod testing {
-    use proptest::option;
     use proptest::prelude::*;
 
     use super::*;
@@ -1056,14 +1053,12 @@ pub mod testing {
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
-            key in option::of("[a-zA-Z0-9_]*"),
         ) -> Transfer {
             Transfer {
                 source,
                 target,
                 token,
                 amount,
-                key,
                 shielded: None,
             }
         }

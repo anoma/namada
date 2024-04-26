@@ -75,7 +75,7 @@ use thiserror::Error;
 use token::storage_key::{balance_key, is_any_shielded_action_balance_key};
 use token::Amount;
 
-use crate::error::{Error, PinnedBalanceError, QueryError};
+use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::queries::Client;
 use crate::rpc::{
@@ -881,12 +881,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let ExtractedMaspTx {
                     fee_unshielding,
                     inner_tx,
-                } = Self::extract_masp_tx(
-                    &tx,
-                    ExtractShieldedActionArg::Event::<C>(&tx_event),
-                    true,
-                )
-                .await?;
+                } = Self::extract_masp_tx(&tx, &tx_event, true).await?;
                 // Collect the current transaction(s)
                 fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
                     shielded_txs.insert(
@@ -915,36 +910,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx<'args, C: Client + Sync>(
+    async fn extract_masp_tx(
         tx: &Tx,
-        action_arg: ExtractShieldedActionArg<'args, C>,
+        tx_event: &crate::tendermint::abci::Event,
         check_header: bool,
     ) -> Result<ExtractedMaspTx, Error> {
         // We use the changed keys instead of the Transfer object
         // because those are what the masp validity predicate works on
-        let (wrapper_changed_keys, changed_keys) =
-            if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
-                let tx_result_str = tx_event
-                    .attributes
-                    .iter()
-                    .find_map(|attr| {
-                        if attr.key == "inner_tx" {
-                            Some(&attr.value)
-                        } else {
-                            None
-                        }
-                    })
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing required tx result in event".to_string(),
-                        )
-                    })?;
-                let result = TxResult::from_str(tx_result_str)
-                    .map_err(|e| Error::Other(e.to_string()))?;
-                (result.wrapper_changed_keys, result.changed_keys)
-            } else {
-                (Default::default(), Default::default())
-            };
+        let (wrapper_changed_keys, changed_keys) = {
+            let tx_result_str = tx_event
+                .attributes
+                .iter()
+                .find_map(|attr| {
+                    if attr.key == "inner_tx" {
+                        Some(&attr.value)
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing required tx result in event".to_string(),
+                    )
+                })?;
+            let result = TxResult::from_str(tx_result_str)
+                .map_err(|e| Error::Other(e.to_string()))?;
+            (result.wrapper_changed_keys, result.changed_keys)
+        };
 
         let tx_header = tx.header();
         // NOTE: simply looking for masp sections attached to the tx
@@ -984,7 +976,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // This should be a MASP over IBC transaction, it
                 // could be a ShieldedTransfer or an Envelope
                 // message, need to try both
-                extract_payload_from_shielded_action::<C>(&tx_data, action_arg)
+                extract_payload_from_shielded_action(&tx_data, tx_event)
                     .await
                     .ok()
             }
@@ -1716,139 +1708,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok((val_acc, notes, conversions))
     }
 
-    /// Compute the combined value of the output notes of the transaction pinned
-    /// at the given payment address. This computation uses the supplied viewing
-    /// keys to try to decrypt the output notes. If no transaction is pinned at
-    /// the given payment address fails with
-    /// `PinnedBalanceError::NoTransactionPinned`.
-    pub async fn compute_pinned_balance<C: Client + Sync>(
-        client: &C,
-        owner: PaymentAddress,
-        viewing_key: &ViewingKey,
-    ) -> Result<(I128Sum, Epoch), Error> {
-        // Check that the supplied viewing key corresponds to given payment
-        // address
-        let counter_owner = viewing_key.to_payment_address(
-            *masp_primitives::sapling::PaymentAddress::diversifier(
-                &owner.into(),
-            ),
-        );
-        match counter_owner {
-            Some(counter_owner) if counter_owner == owner.into() => {}
-            _ => {
-                return Err(Error::from(PinnedBalanceError::InvalidViewingKey));
-            }
-        }
-        // Construct the key for where the transaction ID would be stored
-        let pin_key = namada_token::storage_key::masp_pin_tx_key(&owner.hash());
-        // Obtain the transaction pointer at the key
-        // If we don't discard the error message then a test fails,
-        // however the error underlying this will go undetected
-        let indexed_tx =
-            rpc::query_storage_value::<C, IndexedTx>(client, &pin_key)
-                .await
-                .map_err(|_| PinnedBalanceError::NoTransactionPinned)?;
-        let tx_epoch = query_epoch_at_height(client, indexed_tx.height)
-            .await?
-            .ok_or_else(|| {
-                Error::from(QueryError::General(
-                    "Queried height is greater than the last committed block \
-                     height"
-                        .to_string(),
-                ))
-            })?;
-
-        let block = client
-            .block(indexed_tx.height.0 as u32)
-            .await
-            .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-            .block
-            .data;
-
-        let tx = Tx::try_from(block[indexed_tx.index.0 as usize].as_ref())
-            .map_err(|e| Error::Other(e.to_string()))?;
-        let (_, shielded) = Self::extract_masp_tx(
-            &tx,
-            ExtractShieldedActionArg::Request((
-                client,
-                indexed_tx.height,
-                Some(indexed_tx.index),
-            )),
-            false,
-        )
-        .await?
-        .inner_tx
-        .ok_or_else(|| {
-            Error::Other("Missing shielded inner portion of pinned tx".into())
-        })?;
-
-        // Accumulate the combined output note value into this Amount
-        let mut val_acc = I128Sum::zero();
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Let's try to see if our viewing key can decrypt current note
-            let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
-                &NETWORK,
-                1.into(),
-                &PreparedIncomingViewingKey::new(&viewing_key.ivk()),
-                so,
-            );
-            match decres {
-                // So the given viewing key does decrypt this current note...
-                Some((note, pa, _memo)) if pa == owner.into() => {
-                    val_acc += I128Sum::from_nonnegative(
-                        note.asset_type,
-                        note.value as i128,
-                    )
-                    .map_err(|()| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
-                        )
-                    })?;
-                }
-                _ => {}
-            }
-        }
-        Ok((val_acc, tx_epoch))
-    }
-
-    /// Compute the combined value of the output notes of the pinned transaction
-    /// at the given payment address if there's any. The asset types may be from
-    /// the epoch of the transaction or even before, so exchange all these
-    /// amounts to the epoch of the transaction in order to get the value that
-    /// would have been displayed in the epoch of the transaction.
-    pub async fn compute_exchanged_pinned_balance(
-        &mut self,
-        context: &impl Namada,
-        owner: PaymentAddress,
-        viewing_key: &ViewingKey,
-    ) -> Result<(ValueSum<Address, token::Change>, I128Sum, Epoch), Error> {
-        // Obtain the balance that will be exchanged
-        let (amt, ep) =
-            Self::compute_pinned_balance(context.client(), owner, viewing_key)
-                .await?;
-        display_line!(context.io(), "Pinned balance: {:?}", amt);
-        // Finally, exchange the balance to the transaction's epoch
-        let computed_amount = self
-            .compute_exchanged_amount(
-                context.client(),
-                context.io(),
-                amt,
-                ep,
-                BTreeMap::new(),
-            )
-            .await?
-            .0;
-        display_line!(context.io(), "Exchanged amount: {:?}", computed_amount);
-        let (decoded, undecoded) = self
-            .decode_combine_sum_to_epoch(context.client(), computed_amount, ep)
-            .await;
-        Ok((decoded, undecoded, ep))
-    }
-
     /// Convert an amount whose units are AssetTypes to one whose units are
     /// Addresses that they decode to. All asset types not corresponding to
     /// the given epoch are ignored.
@@ -2433,7 +2292,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
             // MASP objects are dealt with outside of tx_search
             Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
-            Either::Left(BalanceOwner::PaymentAddress(_owner)) => vec![],
             // Unspecified owner means all known addresses are considered
             // relevant
             Either::Right(addrs) => addrs.clone(),
@@ -2647,22 +2505,17 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         }))
 }
 
-enum ExtractShieldedActionArg<'args, C: Client + Sync> {
-    Event(&'args crate::tendermint::abci::Event),
-    Request((&'args C, BlockHeight, Option<TxIndex>)),
-}
-
 // Extract the changed keys and Transaction hash from a masp over ibc message
-async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
+async fn extract_payload_from_shielded_action(
     tx_data: &[u8],
-    args: ExtractShieldedActionArg<'args, C>,
+    tx_event: &crate::tendermint::abci::Event,
 ) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let result = match message {
         IbcMessage::Transfer(msg) => {
-            let tx_result = get_sending_result(args)?;
+            let tx_result = get_tx_result(tx_event)?;
 
             let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
@@ -2671,7 +2524,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
             (tx_result.changed_keys, transfer)
         }
         IbcMessage::NftTransfer(msg) => {
-            let tx_result = get_sending_result(args)?;
+            let tx_result = get_tx_result(tx_event)?;
 
             let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
@@ -2680,7 +2533,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
             (tx_result.changed_keys, transfer)
         }
         IbcMessage::RecvPacket(msg) => {
-            let tx_result = get_receiving_result(args).await?;
+            let tx_result = get_tx_result(tx_event)?;
 
             let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
@@ -2690,7 +2543,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
         }
         IbcMessage::AckPacket(msg) => {
             // Refund tokens by the ack message
-            let tx_result = get_receiving_result(args).await?;
+            let tx_result = get_tx_result(tx_event)?;
 
             let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
@@ -2700,7 +2553,7 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
         }
         IbcMessage::Timeout(msg) => {
             // Refund tokens by the timeout message
-            let tx_result = get_receiving_result(args).await?;
+            let tx_result = get_tx_result(tx_event)?;
 
             let transfer = msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
@@ -2716,54 +2569,6 @@ async fn extract_payload_from_shielded_action<'args, C: Client + Sync>(
     };
 
     Ok(result)
-}
-
-fn get_sending_result<C: Client + Sync>(
-    args: ExtractShieldedActionArg<'_, C>,
-) -> Result<TxResult, Error> {
-    let tx_event = match args {
-        ExtractShieldedActionArg::Event(event) => event,
-        ExtractShieldedActionArg::Request(_) => {
-            return Err(Error::Other(
-                "Unexpected event request for ShieldedTransfer".to_string(),
-            ));
-        }
-    };
-
-    get_tx_result(tx_event)
-}
-
-async fn get_receiving_result<C: Client + Sync>(
-    args: ExtractShieldedActionArg<'_, C>,
-) -> Result<TxResult, Error> {
-    let tx_event = match args {
-        ExtractShieldedActionArg::Event(event) => {
-            std::borrow::Cow::Borrowed(event)
-        }
-        ExtractShieldedActionArg::Request((client, height, index)) => {
-            std::borrow::Cow::Owned(
-                get_indexed_masp_events_at_height(client, height, index)
-                    .await?
-                    .ok_or_else(|| {
-                        Error::Other(format!(
-                            "Missing required ibc event at block height {}",
-                            height
-                        ))
-                    })?
-                    .first()
-                    .ok_or_else(|| {
-                        Error::Other(format!(
-                            "Missing required ibc event at block height {}",
-                            height
-                        ))
-                    })?
-                    .1
-                    .to_owned(),
-            )
-        }
-    };
-
-    get_tx_result(&tx_event)
 }
 
 fn get_tx_result(

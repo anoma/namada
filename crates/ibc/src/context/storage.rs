@@ -30,7 +30,6 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<&str>,
     ) -> Result<(), Error>;
 
     /// Mint token

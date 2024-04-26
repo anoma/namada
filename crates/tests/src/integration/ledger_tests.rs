@@ -59,7 +59,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             token::Amount::native_whole(10),
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         ),
-        key: None,
         shielded: None,
     }
     .serialize_to_vec();
