@@ -6,8 +6,8 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx { tx: signed, cmt } = tx_data;
     // let data = signed.data().ok_or_err_msg("Missing data").or_else(|err| {
     //                 ctx.set_commitment_sentinel();
     //                 Err(err)
@@ -35,11 +35,24 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
             })
             .transpose()?;
         if let Some(shielded) = shielded {
-            token::utils::handle_masp_tx(
-                ctx,
-                &shielded,
-                transfer.key.as_deref(),
-            )?;
+            // FIXME: improve
+            match transfer.key {
+                Some(key) => token::utils::handle_masp_tx(
+                    ctx,
+                    &shielded,
+                    Some((key.as_str(), cmt)),
+                )
+                .wrap_err(
+                    "Encountered error while handling MASP transaction",
+                )?,
+                None => {
+                    token::utils::handle_masp_tx(ctx, &shielded, None)
+                        .wrap_err(
+                            "Encountered error while handling MASP transaction",
+                        )?;
+                }
+            };
+
             update_masp_note_commitment_tree(&shielded)?;
         }
     }

@@ -5,12 +5,16 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx { tx: signed, cmt } = tx_data;
+    let data =
+        signed
+            .data(&cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("Failed to decode token::Transfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
@@ -41,8 +45,21 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         })
         .transpose()?;
     if let Some(shielded) = shielded {
-        token::utils::handle_masp_tx(ctx, &shielded, transfer.key.as_deref())
-            .wrap_err("Encountered error while handling MASP transaction")?;
+        // FIXME: improve
+        match transfer.key {
+            Some(key) => token::utils::handle_masp_tx(
+                ctx,
+                &shielded,
+                Some((key.as_str(), cmt)),
+            )
+            .wrap_err("Encountered error while handling MASP transaction")?,
+            None => {
+                token::utils::handle_masp_tx(ctx, &shielded, None).wrap_err(
+                    "Encountered error while handling MASP transaction",
+                )?;
+            }
+        };
+
         update_masp_note_commitment_tree(&shielded)
             .wrap_err("Failed to update the MASP commitment tree")?;
     }

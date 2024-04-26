@@ -4,12 +4,19 @@ use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data =
+        signed
+            .data(cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let tx_data = governance::VoteProposalData::try_from_slice(&data[..])
         .wrap_err("Failed to decode VoteProposalData value")?;
 

@@ -4,12 +4,19 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data =
+        signed
+            .data(cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("Failed to decode Unbond tx data")?;
 
@@ -192,7 +199,7 @@ mod tests {
         }
 
         // Apply the unbond tx
-        apply_tx(ctx(), signed_tx)?;
+        apply_tx(ctx(), signed_tx.batch_first_tx())?;
 
         // Read the data after the unbond tx is executed.
         // The following storage keys should be updated:
@@ -352,8 +359,8 @@ mod tests {
 
     /// Generates an initial validator stake and a unbond, while making sure
     /// that the `initial_stake >= unbond.amount`.
-    fn arb_initial_stake_and_unbond()
-    -> impl Strategy<Value = (token::Amount, transaction::pos::Unbond)> {
+    fn arb_initial_stake_and_unbond(
+    ) -> impl Strategy<Value = (token::Amount, transaction::pos::Unbond)> {
         // Generate initial stake
         token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
             |initial_stake| {

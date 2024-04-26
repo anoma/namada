@@ -4,12 +4,19 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data =
+        signed
+            .data(cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let transaction::pos::Redelegation {
         src_validator,
         dest_validator,
@@ -198,7 +205,7 @@ mod tests {
         }
 
         // Apply the redelegation tx
-        apply_tx(ctx(), signed_tx)?;
+        apply_tx(ctx(), signed_tx.batch_first_tx())?;
 
         // Read the data after the redelegation tx is executed.
         // The following storage keys should be updated:
@@ -324,14 +331,16 @@ mod tests {
         );
 
         // Check that no unbonds exist
-        assert!(
-            unbond_handle(&redelegation.owner, &redelegation.src_validator)
-                .is_empty(ctx())?
-        );
-        assert!(
-            unbond_handle(&redelegation.owner, &redelegation.dest_validator)
-                .is_empty(ctx())?
-        );
+        assert!(unbond_handle(
+            &redelegation.owner,
+            &redelegation.src_validator
+        )
+        .is_empty(ctx())?);
+        assert!(unbond_handle(
+            &redelegation.owner,
+            &redelegation.dest_validator
+        )
+        .is_empty(ctx())?);
 
         // Check bonds
         for epoch in 0..pos_params.withdrawable_epoch_offset() {
@@ -377,8 +386,8 @@ mod tests {
 
     /// Generates an initial validator stake and a redelegation, while making
     /// sure that the `initial_stake >= redelegation.amount`.
-    fn arb_initial_stake_and_redelegation()
-    -> impl Strategy<Value = (token::Amount, transaction::pos::Redelegation)>
+    fn arb_initial_stake_and_redelegation(
+    ) -> impl Strategy<Value = (token::Amount, transaction::pos::Redelegation)>
     {
         // Generate initial stake
         token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(

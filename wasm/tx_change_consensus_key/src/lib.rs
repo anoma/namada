@@ -5,9 +5,12 @@ use namada_tx_prelude::transaction::pos::ConsensusKeyChange;
 use namada_tx_prelude::*;
 
 #[transaction] // TODO: need to benchmark this gas
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data = signed.data(cmt).ok_or_err_msg("Missing data")?;
     let ConsensusKeyChange {
         validator,
         consensus_key,

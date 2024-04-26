@@ -4,12 +4,19 @@ use namada_tx_prelude::transaction::pos::CommissionChange;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data =
+        signed
+            .data(cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let CommissionChange {
         validator,
         new_rate,
@@ -117,7 +124,7 @@ mod tests {
 
         assert_eq!(commission_rates_pre[0], Some(initial_rate));
 
-        apply_tx(ctx(), signed_tx)?;
+        apply_tx(ctx(), signed_tx.batch_first_tx())?;
 
         // Read the data after the tx is executed
 
@@ -235,8 +242,8 @@ mod tests {
             })
     }
 
-    fn arb_commission_info()
-    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
+    fn arb_commission_info(
+    ) -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
     {
         let min = Dec::zero();
         let max = Dec::one();

@@ -6,12 +6,19 @@ use namada_tx_prelude::transaction::pos::BecomeValidator;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx {
+        tx: signed,
+        ref cmt,
+    } = tx_data;
+    let data =
+        signed
+            .data(cmt)
+            .ok_or_err_msg("Missing data")
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
     let become_validator = BecomeValidator::try_from_slice(&data[..])
         .wrap_err("Failed to decode BecomeValidator tx data")?;
     debug_log!("apply_tx called to init a new validator account");

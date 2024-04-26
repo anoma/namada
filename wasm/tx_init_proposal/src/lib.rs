@@ -4,8 +4,9 @@ use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
-    let data = tx.data().ok_or_err_msg("Missing data").map_err(|err| {
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let BatchedTx { tx, ref cmt } = tx_data;
+    let data = tx.data(cmt).ok_or_err_msg("Missing data").map_err(|err| {
         ctx.set_commitment_sentinel();
         err
     })?;

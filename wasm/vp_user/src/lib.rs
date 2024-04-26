@@ -18,7 +18,7 @@ use namada_vp_prelude::*;
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx: Tx,
+    tx: BatchedTx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -30,9 +30,10 @@ fn validate_tx(
         verifiers
     );
 
+    let BatchedTx { tx, ref cmt } = tx;
     // Check if this is a governance proposal first
     let is_gov_proposal = tx
-        .data()
+        .data(cmt)
         .and_then(|tx_data| {
             let proposal_id = u64::try_from_slice(&tx_data).ok()?;
             Some(is_proposal_accepted(ctx, proposal_id))
@@ -244,9 +245,14 @@ mod tests {
         // The VP env must be initialized before calling `validate_tx`
         vp_host_env::init();
 
-        assert!(
-            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            tx_data.batch_first_tx(),
+            addr,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a credit transfer is accepted.
@@ -303,10 +309,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            tx_data.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a debit transfer without a valid signature is rejected.
@@ -358,15 +368,19 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-            })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("InvalidSectionSignature")
-        );
+        assert!(panic::catch_unwind(|| {
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers,
+            )
+        })
+        .err()
+        .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+        .unwrap()
+        .contains("InvalidSectionSignature"));
     }
 
     /// Test that a debit transfer with a valid signature is accepted.
@@ -432,10 +446,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a non-validator PoS action that must be authorized is rejected
@@ -512,15 +530,19 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-            })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("InvalidSectionSignature")
-        );
+        assert!(panic::catch_unwind(|| {
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers,
+            )
+        })
+        .err()
+        .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+        .unwrap()
+        .contains("InvalidSectionSignature"));
     }
 
     /// Test unjailing of a validator that causes a consensus validator to be
@@ -658,16 +680,14 @@ mod tests {
 
         vp_host_env::set(vp_env);
         // The validator3 VP must accept the authorized tx
-        assert!(
-            validate_tx(
-                &CTX,
-                signed_tx.clone(),
-                validator3,
-                keys_changed.clone(),
-                verifiers.clone()
-            )
-            .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            validator3,
+            keys_changed.clone(),
+            verifiers.clone()
+        )
+        .is_ok());
     }
 
     /// Test that a PoS action to become validator that must be authorized is
@@ -749,15 +769,19 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-            })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("InvalidSectionSignature")
-        );
+        assert!(panic::catch_unwind(|| {
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers,
+            )
+        })
+        .err()
+        .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+        .unwrap()
+        .contains("InvalidSectionSignature"));
     }
 
     /// Test that a validator PoS action that must be authorized is rejected
@@ -845,15 +869,19 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
-            })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("InvalidSectionSignature")
-        );
+        assert!(panic::catch_unwind(|| {
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                validator,
+                keys_changed,
+                verifiers,
+            )
+        })
+        .err()
+        .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+        .unwrap()
+        .contains("InvalidSectionSignature"));
     }
 
     /// Test that a non-validator PoS action that must be authorized is accepted
@@ -945,10 +973,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a signed PoS action to become validator that must be
@@ -1040,10 +1072,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a validator PoS action that must be authorized is accepted
@@ -1146,10 +1182,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, validator, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            validator,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a transfer on with accounts other than self is accepted.
@@ -1197,10 +1237,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            tx_data.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     prop_compose! {
@@ -1255,7 +1299,7 @@ mod tests {
             vp_host_env::set(vp_env);
             assert!(
                 panic::catch_unwind(|| {
-                    validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                    validate_tx(&CTX, tx_data.batch_first_tx(), vp_owner, keys_changed, verifiers)
                 })
                 .err()
                 .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -1313,7 +1357,7 @@ mod tests {
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).is_ok());
+            assert!(validate_tx(&CTX, signed_tx.batch_first_tx(), vp_owner, keys_changed, verifiers).is_ok());
         }
     }
 
@@ -1349,15 +1393,19 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-            })
-            .err()
-            .map(|a| a.downcast_ref::<String>().cloned().unwrap())
-            .unwrap()
-            .contains("InvalidSectionSignature")
-        );
+        assert!(panic::catch_unwind(|| {
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers,
+            )
+        })
+        .err()
+        .map(|a| a.downcast_ref::<String>().cloned().unwrap())
+        .unwrap()
+        .contains("InvalidSectionSignature"));
     }
 
     /// Test that a validity predicate update with a valid signature is
@@ -1405,10 +1453,14 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 
     /// Test that a validity predicate update is accepted if allowed
@@ -1461,9 +1513,13 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
-        assert!(
-            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
-                .is_ok()
-        );
+        assert!(validate_tx(
+            &CTX,
+            signed_tx.batch_first_tx(),
+            vp_owner,
+            keys_changed,
+            verifiers
+        )
+        .is_ok());
     }
 }
