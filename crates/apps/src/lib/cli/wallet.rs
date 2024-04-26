@@ -240,9 +240,6 @@ fn shielded_key_derive(
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
     };
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a key and an address with alias: \"{}\"",
@@ -313,9 +310,6 @@ fn shielded_key_gen(
         cli::safe_exit(1);
     });
 
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a spending key with alias: \"{}\"",
@@ -350,7 +344,6 @@ fn payment_address_gen(
             edisplay_line!(io, "Payment address not added");
             cli::safe_exit(1);
         });
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
         "Successfully generated payment address {} with alias {}",
@@ -410,7 +403,6 @@ fn shielded_key_address_add(
             (alias, "payment address")
         }
     };
-    wallet.save().unwrap_or_else(|err| eprintln!("{}", err));
     display_line!(
         io,
         "Successfully added a {} with the following alias to wallet: {}",
@@ -553,9 +545,6 @@ async fn transparent_key_and_address_derive(
                 cli::safe_exit(1)
             })
     };
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a key and an address with alias: \"{}\"",
@@ -631,9 +620,6 @@ fn transparent_key_and_address_gen(
         println!("No changes are persisted. Exiting.");
         cli::safe_exit(0);
     });
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a key and an address with alias: \"{}\"",
@@ -885,9 +871,6 @@ fn key_address_remove(
     wallet
         .remove_all_by_alias_atomic(alias.clone())
         .expect("Failed to update the wallet storage.");
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(io, "Successfully removed alias: \"{}\"", alias);
 }
 
@@ -1445,9 +1428,6 @@ fn transparent_secret_key_add(
             display_line!(io, "No changes are persisted. Exiting.");
             cli::safe_exit(1);
         });
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a key and an address with alias: \"{}\"",
@@ -1479,9 +1459,6 @@ fn transparent_public_key_add(
         edisplay_line!(io, "Public key not added");
         cli::safe_exit(1);
     }
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added a public key with alias: \"{}\"",
@@ -1507,9 +1484,6 @@ fn transparent_address_add(
         edisplay_line!(io, "Address not added");
         cli::safe_exit(1);
     }
-    wallet
-        .save()
-        .unwrap_or_else(|err| edisplay_line!(io, "{}", err));
     display_line!(
         io,
         "Successfully added an address with alias: \"{}\"",
