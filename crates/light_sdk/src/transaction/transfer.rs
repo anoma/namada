@@ -22,7 +22,6 @@ impl Transfer {
         target: Address,
         token: Address,
         amount: DenominatedAmount,
-        key: Option<String>,
         // FIXME: handle masp here
         shielded: Option<Hash>,
         args: GlobalArgs,
@@ -32,7 +31,6 @@ impl Transfer {
             target,
             token,
             amount,
-            key,
             shielded,
         };
 

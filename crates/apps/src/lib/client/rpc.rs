@@ -2,20 +2,19 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
-use masp_primitives::sapling::{Node, ViewingKey};
+use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada::core::address::{Address, InternalAddress, MASP, MULTITOKEN};
 use namada::core::collections::{HashMap, HashSet};
 use namada::core::hash::Hash;
 use namada::core::key::*;
-use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
+use namada::core::masp::BalanceOwner;
 use namada::core::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
 use namada::core::token::MaspDigitPos;
 use namada::governance::parameters::GovernanceParameters;
@@ -38,9 +37,7 @@ use namada::proof_of_stake::types::{
     ValidatorState, ValidatorStateInfo, WeightedValidator,
 };
 use namada::{state as storage, token};
-use namada_sdk::error::{
-    is_pinned_error, Error, PinnedBalanceError, QueryError,
-};
+use namada_sdk::error::QueryError;
 use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::queries::Client;
@@ -50,7 +47,7 @@ use namada_sdk::rpc::{
 use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::tx::display_inner_resp;
 use namada_sdk::wallet::AddressVpType;
-use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
+use namada_sdk::{display, display_line, edisplay_line, error, Namada};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
@@ -194,12 +191,7 @@ pub async fn query_balance(context: &impl Namada, args: args::QueryBalance) {
         Some(BalanceOwner::Address(_owner)) => {
             query_transparent_balance(context, args).await
         }
-        Some(BalanceOwner::PaymentAddress(_owner)) => {
-            query_pinned_balance(context, args).await
-        }
         None => {
-            // Print pinned balance
-            query_pinned_balance(context, args.clone()).await;
             // Print shielded balance
             query_shielded_balance(context, args.clone()).await;
             // Then print transparent balance
@@ -296,196 +288,6 @@ pub async fn query_transparent_balance(
             let balances = query_storage_prefix(context, &prefix).await;
             if let Some(balances) = balances {
                 print_balances(context, balances, None, None).await;
-            }
-        }
-    }
-}
-
-/// Query the token pinned balance(s)
-pub async fn query_pinned_balance(
-    context: &impl Namada,
-    args: args::QueryBalance,
-) {
-    // Map addresses to token names
-    let wallet = context.wallet().await;
-    let owners = if let Some(pa) = args.owner.and_then(|x| x.payment_address())
-    {
-        vec![pa]
-    } else {
-        wallet
-            .get_payment_addrs()
-            .into_values()
-            .filter(PaymentAddress::is_pinned)
-            .collect()
-    };
-    // Get the viewing keys with which to try note decryptions
-    let viewing_keys: Vec<ViewingKey> = wallet
-        .get_viewing_keys()
-        .values()
-        .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-        .collect();
-    let _ = context.shielded_mut().await.load().await;
-    // Precompute asset types to increase chances of success in decoding
-    let token_map =
-        query_tokens(context, args.token.as_ref(), None, args.show_ibc_tokens)
-            .await;
-    let tokens = token_map.values().collect();
-    let _ = context
-        .shielded_mut()
-        .await
-        .precompute_asset_types(context.client(), tokens)
-        .await;
-    // Print the token balances by payment address
-    for owner in owners {
-        let mut balance =
-            Err(Error::from(PinnedBalanceError::InvalidViewingKey));
-        // Find the viewing key that can recognize payments the current payment
-        // address
-        for vk in &viewing_keys {
-            balance = context
-                .shielded_mut()
-                .await
-                .compute_exchanged_pinned_balance(context, owner, vk)
-                .await;
-            if !is_pinned_error(&balance) {
-                break;
-            }
-        }
-        // If a suitable viewing key was not found, then demand it from the user
-        if is_pinned_error(&balance) {
-            let vk_str =
-                prompt!(context.io(), "Enter the viewing key for {}: ", owner)
-                    .await;
-            let fvk = match ExtendedViewingKey::from_str(vk_str.trim()) {
-                Ok(fvk) => fvk,
-                _ => {
-                    edisplay_line!(context.io(), "Invalid viewing key entered");
-                    continue;
-                }
-            };
-            let vk = ExtendedFullViewingKey::from(fvk).fvk.vk;
-            // Use the given viewing key to decrypt pinned transaction data
-            balance = context
-                .shielded_mut()
-                .await
-                .compute_exchanged_pinned_balance(context, owner, &vk)
-                .await
-        }
-
-        // Now print out the received quantities according to CLI arguments
-        match (balance, args.token.as_ref()) {
-            (Err(Error::Pinned(PinnedBalanceError::InvalidViewingKey)), _) => {
-                display_line!(
-                    context.io(),
-                    "Supplied viewing key cannot decode transactions to given \
-                     payment address."
-                )
-            }
-            (
-                Err(Error::Pinned(PinnedBalanceError::NoTransactionPinned)),
-                _,
-            ) => {
-                display_line!(
-                    context.io(),
-                    "Payment address {} has not yet been consumed.",
-                    owner
-                )
-            }
-            (Err(other), _) => {
-                display_line!(
-                    context.io(),
-                    "Error in Querying Pinned balance {}",
-                    other
-                )
-            }
-            (Ok((balance, _undecoded, epoch)), Some(base_token)) => {
-                let tokens = query_tokens(
-                    context,
-                    Some(base_token),
-                    None,
-                    args.show_ibc_tokens,
-                )
-                .await;
-                for (token_alias, token) in &tokens {
-                    let total_balance = balance
-                        .0
-                        .get(&token.clone())
-                        .cloned()
-                        .unwrap_or_default();
-
-                    if total_balance.is_zero() {
-                        display_line!(
-                            context.io(),
-                            "Payment address {} was consumed during epoch {}. \
-                             Received no shielded {}",
-                            owner,
-                            epoch,
-                            token_alias
-                        );
-                    } else {
-                        let formatted = context
-                            .format_amount(token, total_balance.into())
-                            .await;
-                        display_line!(
-                            context.io(),
-                            "Payment address {} was consumed during epoch {}. \
-                             Received {} {}",
-                            owner,
-                            epoch,
-                            formatted,
-                            token_alias,
-                        );
-                    }
-                }
-            }
-            (Ok((balance, undecoded, epoch)), None) => {
-                let mut found_any = false;
-
-                for (token_addr, value) in balance.components() {
-                    if !found_any {
-                        display_line!(
-                            context.io(),
-                            "Payment address {} was consumed during epoch {}. \
-                             Received:",
-                            owner,
-                            epoch
-                        );
-                        found_any = true;
-                    }
-                    let formatted = context
-                        .format_amount(token_addr, (*value).into())
-                        .await;
-                    let token_alias =
-                        lookup_token_alias(context, token_addr, &MASP).await;
-                    display_line!(
-                        context.io(),
-                        " {}: {}",
-                        token_alias,
-                        formatted,
-                    );
-                }
-                for (asset_type, value) in undecoded.components() {
-                    if !found_any {
-                        display_line!(
-                            context.io(),
-                            "Payment address {} was consumed during epoch {}. \
-                             Received:",
-                            owner,
-                            epoch
-                        );
-                        found_any = true;
-                    }
-                    display_line!(context.io(), " {}: {}", asset_type, value,);
-                }
-                if !found_any {
-                    display_line!(
-                        context.io(),
-                        "Payment address {} was consumed during epoch {}. \
-                         Received no shielded assets.",
-                        owner,
-                        epoch
-                    );
-                }
             }
         }
     }

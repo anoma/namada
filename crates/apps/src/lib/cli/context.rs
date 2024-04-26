@@ -621,8 +621,5 @@ impl ArgFromMutContext for BalanceOwner {
                 ExtendedViewingKey::arg_from_mut_ctx(ctx, raw)
                     .map(Self::FullViewingKey)
             })
-            .or_else(|_| {
-                PaymentAddress::arg_from_ctx(ctx, raw).map(Self::PaymentAddress)
-            })
     }
 }

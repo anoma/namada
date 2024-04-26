@@ -223,7 +223,6 @@ pub mod wrapper_tx {
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
                 amount: self.get_tx_fee()?,
-                key: None,
                 shielded: Some(masp_hash),
             };
             let data = transfer.serialize_to_vec();

@@ -1086,7 +1086,6 @@ impl BenchShieldedCtx {
                 } else {
                     DenominatedAmount::native(amount)
                 },
-                key: None,
                 shielded: shielded_section_hash,
             },
             shielded,
