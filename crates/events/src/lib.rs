@@ -1,6 +1,8 @@
 //! Events emitted by the Namada ledger.
 
 pub mod extend;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
