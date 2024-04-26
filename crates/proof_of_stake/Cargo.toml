@@ -48,6 +48,7 @@ tracing.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_events = { path = "../events", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
 
 assert_matches.workspace = true
