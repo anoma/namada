@@ -8,7 +8,7 @@ use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
-use namada_tx::{BatchedTx, Tx};
+use namada_tx::{BatchedTxRef, Tx};
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::state::StateRead;
@@ -93,7 +93,7 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        _: &BatchedTx,
+        _: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {

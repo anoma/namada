@@ -14,7 +14,9 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
-use namada_tx::{Authorization, BatchedTx, Commitments, Signed, Tx, TxError};
+use namada_tx::{
+    Authorization, BatchedTxRef, Commitments, Signed, Tx, TxError,
+};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
@@ -39,10 +41,10 @@ pub struct VoteExtension {
 
 macro_rules! ethereum_tx_data_deserialize_inner {
     ($variant:ty) => {
-        impl<'tx> TryFrom<BatchedTx<'tx>> for $variant {
+        impl<'tx> TryFrom<BatchedTxRef<'tx>> for $variant {
             type Error = TxError;
 
-            fn try_from(batched_tx: BatchedTx) -> Result<Self, TxError> {
+            fn try_from(batched_tx: BatchedTxRef) -> Result<Self, TxError> {
                 let tx_data =
                     batched_tx.tx.data(batched_tx.cmt).ok_or_else(|| {
                         TxError::Deserialization(
@@ -119,10 +121,10 @@ ethereum_tx_data_declare! {
     }
 }
 
-impl<'tx> TryFrom<BatchedTx<'tx>> for EthereumTxData {
+impl<'tx> TryFrom<BatchedTxRef<'tx>> for EthereumTxData {
     type Error = TxError;
 
-    fn try_from(batched_tx: BatchedTx) -> Result<Self, TxError> {
+    fn try_from(batched_tx: BatchedTxRef) -> Result<Self, TxError> {
         let TxType::Protocol(protocol_tx) = batched_tx.tx.header().tx_type
         else {
             return Err(TxError::Deserialization(

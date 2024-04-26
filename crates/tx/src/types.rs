@@ -1690,23 +1690,28 @@ impl Tx {
         &self.header.commitments
     }
 
-    pub fn owned_batch_tx(self, cmt: Commitments) -> OwnedBatchedTx {
-        OwnedBatchedTx { tx: self, cmt }
+    pub fn owned_batch_tx(self, cmt: Commitments) -> BatchedTx {
+        BatchedTx { tx: self, cmt }
     }
 }
 
 impl<'tx> Tx {
-    pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTx<'tx> {
-        BatchedTx { tx: self, cmt }
+    pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTxRef<'tx> {
+        BatchedTxRef { tx: self, cmt }
     }
 
-    // FIXME: need something similiar for the Owned version in benches?
     #[cfg(any(test, feature = "testing"))]
-    pub fn batch_first_tx(&'tx self) -> BatchedTx<'tx> {
-        BatchedTx {
+    pub fn batch_ref_first_tx(&'tx self) -> BatchedTxRef<'tx> {
+        BatchedTxRef {
             tx: self,
             cmt: self.commitments().get(0).unwrap(),
         }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_first_tx(self) -> BatchedTx {
+        let cmt = self.commitments().get(0).unwrap().to_owned();
+        BatchedTx { tx: self, cmt }
     }
 }
 
@@ -1763,41 +1768,48 @@ impl Default for IndexedTx {
     }
 }
 
-// FIXME: I probably need two versions of this, one with the references and
-// another with the actual object for wasm? Not sure. AS long as I'm in protocol
-// I only need references and from wasm I need the actual data. But it looks
-// like I can't serialize this struct if it carries references. FIXME: rename?
-// FIXME: if  not used much remove this
 #[derive(Debug)]
-pub struct BatchedTx<'tx> {
+pub struct BatchedTxRef<'tx> {
     pub tx: &'tx Tx,
     pub cmt: &'tx Commitments,
 }
 
-impl BorshSerialize for BatchedTx<'_> {
+//FIXME: also need to implement deserialize?
+impl BorshSerialize for BatchedTxRef<'_> {
     fn serialize<W: std::io::prelude::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        // FIXME: check that this actually works
-        // FIXME: In case I need another struct in wasm with the owned objects
+        //FIXME: remove if not needed
         BorshSerialize::serialize(self.tx, writer)?;
         BorshSerialize::serialize(self.cmt, writer)
     }
 }
 
-// FIXME: rename?
-pub struct OwnedBatchedTx {
+#[derive(Deserialize, BorshDeserialize)]
+pub struct BatchedTx {
     pub tx: Tx,
     pub cmt: Commitments,
 }
 
-impl OwnedBatchedTx {
+impl BatchedTx {
     // FIXME: check if only used for benchmarks and conditionally compile
-    pub fn to_ref(&self) -> BatchedTx {
-        BatchedTx {
+    pub fn to_ref(&self) -> BatchedTxRef {
+        BatchedTxRef {
             tx: &self.tx,
             cmt: &self.cmt,
         }
+    }
+}
+
+//FIXME: remove if not needed
+impl BorshSerialize for BatchedTx {
+    fn serialize<W: std::io::prelude::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        //FIXME: remove if not needed
+        BorshSerialize::serialize(&self.tx, writer)?;
+        BorshSerialize::serialize(&self.cmt, writer)
     }
 }

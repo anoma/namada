@@ -36,7 +36,7 @@ pub use namada_storage::{
     iter_prefix, iter_prefix_bytes, Error as StorageError, OptionExt,
     ResultExt, StorageRead,
 };
-pub use namada_tx::{Section, Tx};
+pub use namada_tx::{BatchedTx, Section, Tx};
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use namada_vp_env::{collection_validation, VpEnv};

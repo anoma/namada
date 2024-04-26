@@ -18,7 +18,7 @@ use namada_core::storage::Key;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
-use namada_tx::{BatchedTx, IndexedTx, Tx};
+use namada_tx::{BatchedTxRef, IndexedTx, Tx};
 use namada_vp_env::VpEnv;
 use num_traits::ops::checked::{CheckedAdd, CheckedSub};
 use ripemd::Digest as RipemdDigest;
@@ -427,7 +427,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &BatchedTx,
+        tx_data: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<()> {

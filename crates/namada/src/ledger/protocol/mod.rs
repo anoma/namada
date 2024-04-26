@@ -17,7 +17,7 @@ use namada_tx::data::{
     BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_tx::{new_tx_event, BatchedTx, Section, Tx};
+use namada_tx::{new_tx_event, BatchedTxRef, Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -189,7 +189,7 @@ where
             // FIXME: manage the unwrap
             let cmt = tx.commitments().first().unwrap();
             let result = apply_wasm_tx(
-                BatchedTx { tx: &tx, cmt },
+                BatchedTxRef { tx: &tx, cmt },
                 &tx_index,
                 ShellParams {
                     tx_gas_meter,
@@ -446,7 +446,7 @@ where
                 // should contain any prior changes (if any)
                 state.write_log_mut().precommit_tx();
                 match apply_wasm_tx(
-                    BatchedTx {
+                    BatchedTxRef {
                         tx: &fee_unshielding_tx,
                         // No bundles for fee unshielding
                         cmt: fee_unshielding_tx
@@ -670,7 +670,7 @@ where
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
 pub fn apply_wasm_tx<'a, S, D, H, CA>(
-    batched_tx: BatchedTx,
+    batched_tx: BatchedTxRef,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
@@ -806,7 +806,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 fn execute_tx<S, D, H, CA>(
-    batched_tx: &BatchedTx,
+    batched_tx: &BatchedTxRef,
     tx_index: &TxIndex,
     state: &mut S,
     tx_gas_meter: &RefCell<TxGasMeter>,
@@ -841,7 +841,7 @@ where
     S: State,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    batched_tx: &'a BatchedTx<'a>,
+    batched_tx: &'a BatchedTxRef<'a>,
     tx_index: &'a TxIndex,
     state: &'a S,
     tx_gas_meter: &'a mut TxGasMeter,
@@ -891,7 +891,7 @@ where
 fn execute_vps<S, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
-    batched_tx: &BatchedTx,
+    batched_tx: &BatchedTxRef,
     tx_index: &TxIndex,
     state: &S,
     tx_gas_meter: &TxGasMeter,

@@ -74,7 +74,7 @@ use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
 use namada::tx::{
-    Authorization, BatchedTx, Code, Data, OwnedBatchedTx, Section, Tx,
+    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
 };
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
@@ -291,7 +291,7 @@ impl BenchShell {
         shielded: Option<Transaction>,
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
-    ) -> OwnedBatchedTx {
+    ) -> BatchedTx {
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
 
         // NOTE: here we use the code hash to avoid including the cost for the
@@ -335,7 +335,7 @@ impl BenchShell {
         &self,
         wasm_code_path: &str,
         data: Vec<u8>,
-    ) -> OwnedBatchedTx {
+    ) -> BatchedTx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
         let code_hash = self
@@ -352,7 +352,7 @@ impl BenchShell {
         tx.owned_batch_tx(cmt)
     }
 
-    pub fn generate_ibc_transfer_tx(&self) -> OwnedBatchedTx {
+    pub fn generate_ibc_transfer_tx(&self) -> BatchedTx {
         let token = PrefixedCoin {
             denom: address::testing::nam().to_string().parse().unwrap(),
             amount: Amount::native_whole(1000)
@@ -396,7 +396,10 @@ impl BenchShell {
     }
 
     /// Execute the tx and retur a set of verifiers inserted by the tx.
-    pub fn execute_tx(&mut self, batched_tx: &BatchedTx) -> BTreeSet<Address> {
+    pub fn execute_tx(
+        &mut self,
+        batched_tx: &BatchedTxRef,
+    ) -> BTreeSet<Address> {
         let gas_meter =
             RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
         run::tx(
@@ -611,7 +614,7 @@ impl BenchShell {
     }
 }
 
-pub fn generate_foreign_key_tx(signer: &SecretKey) -> OwnedBatchedTx {
+pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
@@ -1033,7 +1036,7 @@ impl BenchShieldedCtx {
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> (Self, OwnedBatchedTx) {
+    ) -> (Self, BatchedTx) {
         let denominated_amount = DenominatedAmount::native(amount);
         let async_runtime = tokio::runtime::Runtime::new().unwrap();
         let spending_key = self
@@ -1123,7 +1126,7 @@ impl BenchShieldedCtx {
         amount: Amount,
         source: TransferSource,
         target: TransferTarget,
-    ) -> (Self, OwnedBatchedTx) {
+    ) -> (Self, BatchedTx) {
         let (ctx, tx) = self.generate_masp_tx(
             amount,
             source.clone(),

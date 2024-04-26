@@ -12,7 +12,7 @@ use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
-use namada_tx::{BatchedTx, Commitment, Commitments, Section, Tx};
+use namada_tx::{BatchedTxRef, Commitment, Commitments, Section, Tx};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
@@ -107,11 +107,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
 /// `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<S>(batched_tx: &BatchedTx, storage: &S) -> Result<()>
+pub fn check_tx_allowed<S>(batched_tx: &BatchedTxRef, storage: &S) -> Result<()>
 where
     S: StorageRead,
 {
-    let BatchedTx { tx, cmt } = batched_tx;
+    let BatchedTxRef { tx, cmt } = batched_tx;
     if let TxType::Wrapper(_) = tx.header().tx_type {
         if let Some(code_sec) = tx
             .get_section(cmt.code_sechash())
@@ -1125,21 +1125,19 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache.clone(),
-            )
-            .is_ok()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx,
+            &outer_tx.commitments()[0],
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        )
+        .is_ok());
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -1158,21 +1156,19 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx,
+            &outer_tx.commitments()[0],
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1544,21 +1540,19 @@ mod tests {
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx,
-                &outer_tx.commitments()[0],
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx,
+            &outer_tx.commitments()[0],
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     #[test]

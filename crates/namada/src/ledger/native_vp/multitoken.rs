@@ -8,7 +8,7 @@ use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;
-use namada_tx::{BatchedTx, Tx};
+use namada_tx::{BatchedTxRef, Tx};
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -51,7 +51,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &BatchedTx,
+        tx_data: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -280,7 +280,7 @@ where
     }
 
     /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter(&self, batched_tx: &BatchedTx) -> Result<()> {
+    pub fn is_valid_parameter(&self, batched_tx: &BatchedTxRef) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
@@ -412,10 +412,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_ok());
     }
 
     #[test]
@@ -453,10 +452,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]
@@ -517,10 +515,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_ok());
     }
 
     #[test]
@@ -577,10 +574,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]
@@ -630,10 +626,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]
@@ -692,10 +687,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]
@@ -734,10 +728,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]
@@ -777,10 +770,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
-        );
+        assert!(vp
+            .validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            .is_err());
     }
 
     #[test]

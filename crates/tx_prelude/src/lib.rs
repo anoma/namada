@@ -38,7 +38,7 @@ pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead, StorageWrite,
 };
-pub use namada_tx::{action, data as transaction, Section, Tx};
+pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};

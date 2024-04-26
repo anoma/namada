@@ -23,7 +23,7 @@ use namada_state::{
 };
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
-use namada_tx::{BatchedTx, Commitments, Tx};
+use namada_tx::{Commitments, Tx};
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]

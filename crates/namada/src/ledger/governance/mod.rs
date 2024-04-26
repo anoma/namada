@@ -16,7 +16,7 @@ use namada_proof_of_stake::is_validator;
 use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
-use namada_tx::{BatchedTx, Commitments, Tx};
+use namada_tx::{BatchedTxRef, Commitments, Tx};
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -67,7 +67,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &BatchedTx,
+        tx_data: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -1068,8 +1068,8 @@ where
     }
 
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, batched_tx: &BatchedTx) -> Result<()> {
-        let BatchedTx { tx, cmt } = batched_tx;
+    pub fn is_valid_parameter(&self, batched_tx: &BatchedTxRef) -> Result<()> {
+        let BatchedTxRef { tx, cmt } = batched_tx;
         tx.data(cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(

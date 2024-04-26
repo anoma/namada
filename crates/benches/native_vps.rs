@@ -55,7 +55,7 @@ use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
-use namada::tx::{Code, OwnedBatchedTx, Section, Tx};
+use namada::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -223,15 +223,13 @@ fn governance(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    governance
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            governance.ctx.keys_changed,
-                            governance.ctx.verifiers,
-                        )
-                        .is_ok()
-                )
+                assert!(governance
+                    .validate_tx(
+                        &signed_tx.to_ref(),
+                        governance.ctx.keys_changed,
+                        governance.ctx.verifiers,
+                    )
+                    .is_ok())
             })
         });
     }
@@ -312,9 +310,7 @@ fn governance(c: &mut Criterion) {
 //      group.finish();
 //  }
 
-fn prepare_ibc_tx_and_ctx(
-    bench_name: &str,
-) -> (BenchShieldedCtx, OwnedBatchedTx) {
+fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
     match bench_name {
         "open_connection" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
@@ -447,14 +443,13 @@ fn ibc(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    ibc.validate_tx(
+                assert!(ibc
+                    .validate_tx(
                         &signed_tx.to_ref(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .is_ok()
-                )
+                    .is_ok())
             })
         });
     }
@@ -514,15 +509,13 @@ fn vp_multitoken(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    multitoken
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            multitoken.ctx.keys_changed,
-                            multitoken.ctx.verifiers,
-                        )
-                        .is_ok()
-                )
+                assert!(multitoken
+                    .validate_tx(
+                        &signed_tx.to_ref(),
+                        multitoken.ctx.keys_changed,
+                        multitoken.ctx.verifiers,
+                    )
+                    .is_ok())
             })
         });
     }
@@ -532,7 +525,7 @@ fn vp_multitoken(c: &mut Criterion) {
 // from tx and the tx.
 fn setup_storage_for_masp_verification(
     bench_name: &str,
-) -> (BenchShieldedCtx, BTreeSet<Address>, OwnedBatchedTx) {
+) -> (BenchShieldedCtx, BTreeSet<Address>, BatchedTx) {
     let amount = Amount::native_whole(500);
     let mut shielded_ctx = BenchShieldedCtx::default();
 
@@ -626,14 +619,13 @@ fn masp(c: &mut Criterion) {
             };
 
             b.iter(|| {
-                assert!(
-                    masp.validate_tx(
+                assert!(masp
+                    .validate_tx(
                         &signed_tx.to_ref(),
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
-                    .is_ok()
-                );
+                    .is_ok());
             })
         });
     }
@@ -804,18 +796,14 @@ fn masp_final_check(c: &mut Criterion) {
     assert!(sapling_bundle.shielded_spends.iter().all(|spend| {
         check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk)
     }));
-    assert!(
-        sapling_bundle
-            .shielded_converts
-            .iter()
-            .all(|convert| check_convert(convert, &mut ctx, convert_vk))
-    );
-    assert!(
-        sapling_bundle
-            .shielded_outputs
-            .iter()
-            .all(|output| check_output(output, &mut ctx, output_vk))
-    );
+    assert!(sapling_bundle
+        .shielded_converts
+        .iter()
+        .all(|convert| check_convert(convert, &mut ctx, convert_vk)));
+    assert!(sapling_bundle
+        .shielded_outputs
+        .iter()
+        .all(|output| check_output(output, &mut ctx, output_vk)));
 
     c.bench_function("vp_masp_final_check", |b| {
         b.iter(|| {
@@ -902,14 +890,13 @@ fn pgf(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    pgf.validate_tx(
+                assert!(pgf
+                    .validate_tx(
                         &signed_tx.to_ref(),
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .is_ok()
-                )
+                    .is_ok())
             })
         });
     }
@@ -979,14 +966,13 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
-            assert!(
-                nut.validate_tx(
+            assert!(nut
+                .validate_tx(
                     &signed_tx.to_ref(),
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .is_ok()
-            )
+                .is_ok())
         })
     });
 }
@@ -1052,15 +1038,13 @@ fn eth_bridge(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
-            assert!(
-                eth_bridge
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        eth_bridge.ctx.keys_changed,
-                        eth_bridge.ctx.verifiers,
-                    )
-                    .is_ok()
-            )
+            assert!(eth_bridge
+                .validate_tx(
+                    &signed_tx.to_ref(),
+                    eth_bridge.ctx.keys_changed,
+                    eth_bridge.ctx.verifiers,
+                )
+                .is_ok())
         })
     });
 }
@@ -1151,15 +1135,13 @@ fn eth_bridge_pool(c: &mut Criterion) {
 
     c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
-            assert!(
-                bridge_pool
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        bridge_pool.ctx.keys_changed,
-                        bridge_pool.ctx.verifiers,
-                    )
-                    .is_ok()
-            )
+            assert!(bridge_pool
+                .validate_tx(
+                    &signed_tx.to_ref(),
+                    bridge_pool.ctx.keys_changed,
+                    bridge_pool.ctx.verifiers,
+                )
+                .is_ok())
         })
     });
 }
@@ -1222,15 +1204,13 @@ fn parameters(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    parameters
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            parameters.ctx.keys_changed,
-                            parameters.ctx.verifiers,
-                        )
-                        .is_ok()
-                )
+                assert!(parameters
+                    .validate_tx(
+                        &signed_tx.to_ref(),
+                        parameters.ctx.keys_changed,
+                        parameters.ctx.verifiers,
+                    )
+                    .is_ok())
             })
         });
     }
@@ -1296,14 +1276,13 @@ fn pos(c: &mut Criterion) {
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    pos.validate_tx(
+                assert!(pos
+                    .validate_tx(
                         &signed_tx.to_ref(),
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .is_ok()
-                )
+                    .is_ok())
             })
         });
     }

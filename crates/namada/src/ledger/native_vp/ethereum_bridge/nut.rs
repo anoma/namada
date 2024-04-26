@@ -6,7 +6,7 @@ use namada_core::address::{Address, InternalAddress};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
-use namada_tx::{BatchedTx, Tx};
+use namada_tx::{BatchedTxRef, Tx};
 use namada_vp_env::VpEnv;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -41,7 +41,7 @@ where
 
     fn validate_tx(
         &self,
-        _: &BatchedTx,
+        _: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {

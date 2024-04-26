@@ -10,7 +10,7 @@ use namada_governance::pgf::storage::keys as pgf_storage;
 use namada_governance::{is_proposal_accepted, pgf};
 use namada_state::StateRead;
 use namada_tx::action::{Action, PgfAction, Read};
-use namada_tx::{BatchedTx, Tx};
+use namada_tx::{BatchedTxRef, Tx};
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};
@@ -55,7 +55,7 @@ where
 
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -205,7 +205,7 @@ where
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {

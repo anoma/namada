@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use namada_tx::BatchedTx;
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::{
     vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
@@ -85,7 +85,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data: &BatchedTx,
+    tx_data: &BatchedTxRef,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_bytes = tx_data.serialize_to_vec();

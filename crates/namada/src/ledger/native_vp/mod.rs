@@ -15,7 +15,7 @@ use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_gas::GasMetering;
-use namada_tx::{BatchedTx, Commitments, Tx};
+use namada_tx::{BatchedTxRef, Commitments, Tx};
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
 
@@ -43,7 +43,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<(), Self::Error>;

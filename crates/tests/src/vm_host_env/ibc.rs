@@ -81,7 +81,7 @@ use namada::proof_of_stake::OwnedPosParams;
 use namada::state::testing::TestState;
 use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
-use namada::tx::{BatchedTx, Tx};
+use namada::tx::{BatchedTxRef, Tx};
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
 use namada_sdk::state::StateRead;
@@ -101,7 +101,7 @@ pub struct TestIbcVp<'a> {
 impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
     ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
         self.ibc.validate_tx(
             batched_tx,
@@ -118,7 +118,7 @@ pub struct TestMultitokenVp<'a> {
 impl<'a> TestMultitokenVp<'a> {
     pub fn validate(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
     ) -> std::result::Result<(), MultitokenVpError> {
         self.multitoken_vp.validate_tx(
             batched_tx,
@@ -131,7 +131,7 @@ impl<'a> TestMultitokenVp<'a> {
 /// Validate an IBC transaction with IBC VP.
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    batched_tx: &'a BatchedTx,
+    batched_tx: &'a BatchedTxRef,
 ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
     let (verifiers, keys_changed) = tx_env
         .state
@@ -169,7 +169,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
 /// Validate the native token VP for the given address
 pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    batched_tx: &'a BatchedTx,
+    batched_tx: &'a BatchedTxRef,
     target: &Key,
 ) -> std::result::Result<(), MultitokenVpError> {
     let (verifiers, keys_changed) = tx_env

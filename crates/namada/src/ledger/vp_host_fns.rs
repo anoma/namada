@@ -13,7 +13,7 @@ use namada_core::storage::{
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
-use namada_tx::{BatchedTx, Section, Tx};
+use namada_tx::{BatchedTxRef, Section, Tx};
 use thiserror::Error;
 
 use crate::ibc::IbcEvent;
@@ -280,7 +280,7 @@ where
 /// Getting the transaction's code hash.
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
-    batched_tx: &BatchedTx,
+    batched_tx: &BatchedTxRef,
 ) -> EnvResult<Option<Hash>> {
     add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
     let hash = batched_tx

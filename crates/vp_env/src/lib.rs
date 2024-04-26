@@ -14,7 +14,7 @@ use namada_core::storage::{
 use namada_core::token::Transfer;
 use namada_ibc::{decode_message, IbcEvent, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
-use namada_tx::{BatchedTx, Commitments, Tx};
+use namada_tx::{BatchedTxRef, Commitments, Tx};
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
 pub trait VpEnv<'view>
@@ -114,7 +114,7 @@ where
     /// Get the masp tx part of the shielded action
     fn get_shielded_action(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
     ) -> Result<Transaction, namada_storage::Error> {
         let data = batched_tx
             .tx

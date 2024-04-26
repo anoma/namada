@@ -14,7 +14,7 @@ use namada_state::StateRead;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
 };
-use namada_tx::{BatchedTx, Tx};
+use namada_tx::{BatchedTxRef, Tx};
 use thiserror::Error;
 
 use crate::address::Address;
@@ -55,7 +55,7 @@ where
 
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
