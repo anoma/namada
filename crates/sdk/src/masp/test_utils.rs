@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
@@ -11,8 +12,8 @@ use crate::error::Error;
 use crate::io::Io;
 use crate::masp::types::IndexedNoteEntry;
 use crate::masp::utils::{
-    CommitmentTreeUpdates, FetchQueueSender, MaspClient, PeekableIter,
-    ProgressLogger,
+    CommitmentTreeUpdates, FetchQueueSender, IterProgress, MaspClient,
+    PeekableIter, ProgressTracker,
 };
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::queries::testing::TestClient;
@@ -136,7 +137,7 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
 
     async fn fetch_shielded_transfer<IO: Io>(
         &self,
-        logger: &impl ProgressLogger<IO>,
+        logger: &impl ProgressTracker<IO>,
         mut tx_sender: FetchQueueSender,
         from: u64,
         to: u64,
@@ -159,5 +160,81 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
             fetch_iter.next();
         }
         Ok(())
+    }
+}
+
+/// An iterator that yields its first element
+/// but runs forever on the second
+/// `next` call.
+struct YieldOnceIterator {
+    first: Option<IndexedNoteEntry>,
+}
+
+impl YieldOnceIterator {
+    fn new<T>(mut iter: T) -> Self
+    where
+        T: Iterator<Item = IndexedNoteEntry>,
+    {
+        let first = iter.next();
+        Self { first }
+    }
+}
+
+impl Iterator for YieldOnceIterator {
+    type Item = IndexedNoteEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.first.take()
+    }
+}
+
+/// A progress tracker that only scans the first fetched
+/// block. The rest are left in the unscanned cache
+/// for the purposes of testing the persistence of
+/// this cache.
+pub(super) struct TestUnscannedTracker<'io, IO> {
+    io: &'io IO,
+    progress: Arc<Mutex<IterProgress>>,
+}
+
+impl<'io, IO: Io> TestUnscannedTracker<'io, IO> {
+    pub fn new(io: &'io IO) -> Self {
+        Self {
+            io,
+            progress: Arc::new(Mutex::new(Default::default())),
+        }
+    }
+}
+
+impl<'io, IO: Io> ProgressTracker<IO> for TestUnscannedTracker<'io, IO> {
+    fn io(&self) -> &IO {
+        self.io
+    }
+
+    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
+    where
+        I: Iterator<Item = u64>,
+    {
+        {
+            let mut locked = self.progress.lock().unwrap();
+            locked.length = items.size_hint().0;
+        }
+        crate::masp::utils::DefaultFetchIterator {
+            inner: items,
+            progress: self.progress.clone(),
+            peeked: None,
+        }
+    }
+
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
+    where
+        I: Iterator<Item = IndexedNoteEntry> + Send,
+    {
+        YieldOnceIterator::new(items)
+    }
+
+    fn left_to_fetch(&self) -> usize {
+        let locked = self.progress.lock().unwrap();
+        locked.length - locked.index
     }
 }
