@@ -4040,7 +4040,6 @@ dependencies = [
 name = "namada_token"
 version = "0.34.0"
 dependencies = [
- "konst",
  "namada_core",
  "namada_events",
  "namada_shielded_token",
@@ -4052,7 +4051,9 @@ dependencies = [
 name = "namada_trans_token"
 version = "0.34.0"
 dependencies = [
+ "konst",
  "namada_core",
+ "namada_events",
  "namada_storage",
 ]
 

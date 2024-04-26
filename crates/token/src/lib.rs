@@ -4,7 +4,6 @@
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
 
-pub mod event;
 pub mod storage_key {
     pub use namada_shielded_token::storage_key::*;
     pub use namada_trans_token::storage_key::*;
