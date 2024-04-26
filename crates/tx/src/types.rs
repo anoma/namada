@@ -1594,3 +1594,26 @@ impl Tx {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use data_encoding::HEXLOWER;
+
+    use super::*;
+
+    #[test]
+    /// Tx encoding must not change
+    fn test_txs_fixture_decoding() {
+        let file = fs::File::open("../tests/fixtures/txs.json")
+            .expect("file should open read only");
+        let serialized_txs: Vec<String> =
+            serde_json::from_reader(file).expect("file should be proper JSON");
+
+        for serialized_tx in serialized_txs {
+            let tmp = HEXLOWER.decode(serialized_tx.as_bytes()).unwrap();
+            Tx::try_from(tmp.as_ref()).unwrap();
+        }
+    }
+}
