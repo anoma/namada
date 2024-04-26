@@ -238,6 +238,34 @@ where
                 &address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-refund";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)
+                    .ok()
+                    .map(|balance| balance.into());
+            let final_target_balance =
+                read_balance(&shell.state, &native_token, &address)
+                    .ok()
+                    .map(|balance| balance.into());
+
+            events.emit(TokenEvent::BalanceChange {
+                level: EventLevel::Block,
+                descriptor: DESCRIPTOR.into(),
+                token: native_token.clone(),
+                target: BalanceChangeTarget::Internal(gov_address),
+                post_balance: final_gov_balance,
+                diff: funds.change().negate(),
+            });
+            events.emit(TokenEvent::BalanceChange {
+                level: EventLevel::Block,
+                descriptor: DESCRIPTOR.into(),
+                token: native_token.clone(),
+                target: BalanceChangeTarget::Internal(address),
+                post_balance: final_target_balance,
+                diff: funds.change(),
+            });
         } else {
             token::burn_tokens(
                 &mut shell.state,
@@ -245,6 +273,22 @@ where
                 &gov_address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-burn";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)
+                    .ok()
+                    .map(|balance| balance.into());
+
+            events.emit(TokenEvent::BalanceChange {
+                level: EventLevel::Block,
+                descriptor: DESCRIPTOR.into(),
+                token: native_token.clone(),
+                target: BalanceChangeTarget::Internal(gov_address),
+                post_balance: final_gov_balance,
+                diff: funds.change().negate(),
+            });
         }
     }
 
