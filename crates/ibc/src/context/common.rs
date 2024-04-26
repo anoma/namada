@@ -15,7 +15,6 @@ use namada_core::ibc::core::channel::types::error::{
 };
 use namada_core::ibc::core::channel::types::packet::Receipt;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::core::client::context::consensus_state::ConsensusState;
 use namada_core::ibc::core::client::types::error::ClientError;
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::connection::types::error::ConnectionError;
@@ -103,7 +102,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         consensus_state: AnyConsensusState,
     ) -> Result<()> {
         let key = storage::consensus_state_key(client_id, height);
-        let bytes = consensus_state.encode_vec();
+        let bytes = Any::from(consensus_state).encode_to_vec();
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 

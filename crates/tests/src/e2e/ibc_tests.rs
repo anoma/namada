@@ -953,7 +953,7 @@ fn make_client_state(test: &Test, height: Height) -> TmClientState {
         Duration::from_secs(unbonding_period),
         max_clock_drift,
         height,
-        ibc_proof_specs::<Sha256Hasher>().into(),
+        ibc_proof_specs::<Sha256Hasher>().try_into().unwrap(),
         vec![],
         AllowUpdate {
             after_expiry: true,

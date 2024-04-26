@@ -3,13 +3,14 @@
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada_core::ibc::clients::tendermint::context::ValidationContext as TmValidationContext;
 use namada_core::ibc::core::channel::types::channel::ChannelEnd;
 use namada_core::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
 use namada_core::ibc::core::channel::types::packet::Receipt;
-use namada_core::ibc::core::client::context::ClientValidationContext;
+use namada_core::ibc::core::client::context::{
+    ClientValidationContext, ExtClientValidationContext,
+};
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::commitment_types::commitment::CommitmentPrefix;
 use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
@@ -33,7 +34,7 @@ use crate::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> TmValidationContext for IbcContext<C>
+impl<C> ExtClientValidationContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {

@@ -63,8 +63,10 @@ impl Default for ValidationParams {
     fn default() -> Self {
         Self {
             chain_id: IbcChainId::new("non-init-chain")
-                .expect("Convert the default chain ID shouldn't fail"),
-            proof_specs: proof_specs::<Sha256Hasher>().into(),
+                .expect("Converting the default chain ID shouldn't fail"),
+            proof_specs: proof_specs::<Sha256Hasher>()
+                .try_into()
+                .expect("Converting the proof specs shouldn't fail"),
             unbonding_period: Duration::default(),
             upgrade_path: Vec::default(),
         }

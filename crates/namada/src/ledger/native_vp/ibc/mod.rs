@@ -193,7 +193,9 @@ where
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(&chain_id)
                 .map_err(ActionError::ChainId)?,
-            proof_specs: proof_specs.into(),
+            proof_specs: proof_specs
+                .try_into()
+                .expect("Converting the proof specs shouldn't fail"),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
             upgrade_path: Vec::new(),
         })
