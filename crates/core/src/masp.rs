@@ -98,8 +98,7 @@ pub fn encode_asset_type(
 pub type TokenMap = BTreeMap<String, Address>;
 
 // enough capacity to store the payment address
-// plus the pinned/unpinned discriminant
-const PAYMENT_ADDRESS_SIZE: usize = 43 + 1;
+const PAYMENT_ADDRESS_SIZE: usize = 43;
 
 /// Wrapper for masp_primitive's FullViewingKey
 #[derive(
@@ -173,8 +172,7 @@ impl string_encoding::Format for PaymentAddress {
         }
         let payment_addr =
             masp_primitives::sapling::PaymentAddress::from_bytes(&{
-                // NB: the first byte is the pinned/unpinned discriminant
-                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE - 1];
+                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE];
                 payment_addr.copy_from_slice(&bytes[0..]);
                 payment_addr
             })
