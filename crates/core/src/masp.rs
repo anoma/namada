@@ -159,7 +159,6 @@ impl string_encoding::Format for PaymentAddress {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PAYMENT_ADDRESS_SIZE);
-        bytes.push(self.is_pinned() as u8);
         bytes.extend_from_slice(self.0.to_bytes().as_slice());
         bytes
     }
@@ -172,16 +171,11 @@ impl string_encoding::Format for PaymentAddress {
                 "expected {PAYMENT_ADDRESS_SIZE} bytes for the payment address"
             )));
         }
-        let pinned = match bytes[0] {
-            0 => false,
-            1 => true,
-            k => return Err(DecodeError::UnexpectedDiscriminant(k)),
-        };
         let payment_addr =
             masp_primitives::sapling::PaymentAddress::from_bytes(&{
                 // NB: the first byte is the pinned/unpinned discriminant
                 let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE - 1];
-                payment_addr.copy_from_slice(&bytes[1..]);
+                payment_addr.copy_from_slice(&bytes[0..]);
                 payment_addr
             })
             .ok_or_else(|| {
@@ -189,7 +183,7 @@ impl string_encoding::Format for PaymentAddress {
                     "invalid payment address provided".to_string(),
                 )
             })?;
-        Ok(Self(payment_addr, pinned))
+        Ok(Self(payment_addr))
     }
 }
 
@@ -256,22 +250,12 @@ impl<'de> serde::Deserialize<'de> for ExtendedViewingKey {
     BorshDeserialize,
     BorshDeserializer,
 )]
-pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress, bool);
+pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress);
 
 impl PaymentAddress {
-    /// Turn this PaymentAddress into a pinned/unpinned one
-    pub fn pinned(self, pin: bool) -> PaymentAddress {
-        PaymentAddress(self.0, pin)
-    }
-
-    /// Determine whether this PaymentAddress is pinned
-    pub fn is_pinned(&self) -> bool {
-        self.1
-    }
-
     /// Hash this payment address
     pub fn hash(&self) -> String {
-        let bytes = (self.0, self.1).serialize_to_vec();
+        let bytes = self.0.serialize_to_vec();
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash
@@ -287,7 +271,7 @@ impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
 
 impl From<masp_primitives::sapling::PaymentAddress> for PaymentAddress {
     fn from(addr: masp_primitives::sapling::PaymentAddress) -> Self {
-        Self(addr, false)
+        Self(addr)
     }
 }
 

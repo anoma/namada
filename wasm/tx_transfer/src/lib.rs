@@ -41,7 +41,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         })
         .transpose()?;
     if let Some(shielded) = shielded {
-        token::utils::handle_masp_tx(ctx, &shielded, transfer.key.as_deref())
+        token::utils::handle_masp_tx(ctx, &shielded)
             .wrap_err("Encountered error while handling MASP transaction")?;
         update_masp_note_commitment_tree(&shielded)
             .wrap_err("Failed to update the MASP commitment tree")?;
