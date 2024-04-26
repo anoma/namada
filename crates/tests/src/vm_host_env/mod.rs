@@ -28,7 +28,7 @@ mod tests {
     use namada::account::pks_handle;
     use namada::core::hash::Hash;
     use namada::core::key::*;
-    use namada::core::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
+    use namada::core::storage::{self, BlockHeight, Key, KeySeg};
     use namada::core::time::DateTimeUtc;
     use namada::core::{address, key};
     use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
@@ -349,10 +349,6 @@ mod tests {
             tx_host_env::with(|env| env.state.in_mem().get_block_height().0)
         );
         assert_eq!(
-            tx::ctx().get_block_hash().unwrap(),
-            tx_host_env::with(|env| env.state.in_mem().get_block_hash().0)
-        );
-        assert_eq!(
             tx::ctx().get_block_epoch().unwrap(),
             tx_host_env::with(|env| env.state.in_mem().get_current_epoch().0)
         );
@@ -616,10 +612,6 @@ mod tests {
             vp_host_env::with(|env| env.state.in_mem().get_block_height().0)
         );
         assert_eq!(
-            vp::CTX.get_block_hash().unwrap(),
-            vp_host_env::with(|env| env.state.in_mem().get_block_hash().0)
-        );
-        assert_eq!(
             vp::CTX.get_block_epoch().unwrap(),
             vp_host_env::with(|env| env.state.in_mem().get_current_epoch().0)
         );
@@ -727,10 +719,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // update the block height for the following client update
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -802,10 +791,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -878,10 +864,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -956,10 +939,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1034,10 +1014,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1229,10 +1206,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1767,10 +1741,7 @@ mod tests {
         let mut env = tx_host_env::take();
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1851,10 +1822,7 @@ mod tests {
         let mut env = tx_host_env::take();
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())

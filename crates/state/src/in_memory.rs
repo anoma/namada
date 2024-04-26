@@ -14,9 +14,8 @@ use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::types::CommitOnlyData;
 use namada_storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key, KeySeg, StorageHasher, TxIndex, BLOCK_HASH_LENGTH,
-    BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
+    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
+    KeySeg, StorageHasher, TxIndex, BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
 };
 
 use crate::{Error, Result};
@@ -81,8 +80,6 @@ where
 pub struct LastBlock {
     /// Block height
     pub height: BlockHeight,
-    /// Block hash
-    pub hash: BlockHash,
     /// Block time
     pub time: DateTimeUtc,
 }
@@ -92,10 +89,6 @@ pub struct LastBlock {
 pub struct BlockStorage<H: StorageHasher> {
     /// Merkle tree of all the other data in block storage
     pub tree: MerkleTree<H>,
-    /// During `FinalizeBlock`, this is updated to be the hash of the block
-    /// that is going to be committed. If it is `BlockHash::default()`,
-    /// then no `FinalizeBlock` stage has been reached yet.
-    pub hash: BlockHash,
     /// From the start of `FinalizeBlock` until the end of `Commit`, this is
     /// height of the block that is going to be committed. Otherwise, it is the
     /// height of the most recently committed block, or `BlockHeight::sentinel`
@@ -124,7 +117,6 @@ where
     ) -> Self {
         let block = BlockStorage {
             tree: MerkleTree::default(),
-            hash: BlockHash::default(),
             height: BlockHeight::default(),
             epoch: Epoch::default(),
             pred_epochs: Epochs::default(),
@@ -179,12 +171,7 @@ where
 
     /// Block data is in the Merkle tree as it's tracked by Tendermint in the
     /// block header. Hence, we don't update the tree when this is set.
-    pub fn begin_block(
-        &mut self,
-        hash: BlockHash,
-        height: BlockHeight,
-    ) -> Result<()> {
-        self.block.hash = hash;
+    pub fn begin_block(&mut self, height: BlockHeight) -> Result<()> {
         self.block.height = height;
         Ok(())
     }
@@ -206,14 +193,6 @@ where
         (
             self.block.height,
             BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-        )
-    }
-
-    /// Get the block hash
-    pub fn get_block_hash(&self) -> (BlockHash, u64) {
-        (
-            self.block.hash.clone(),
-            BLOCK_HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
 

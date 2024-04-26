@@ -36,7 +36,6 @@
 //!     - `tree`: merkle tree
 //!       - `root`: root hash
 //!       - `store`: the tree's store
-//!     - `hash`: block hash
 //!     - `time`: block time
 //!     - `epoch`: block epoch
 //!     - `address_gen`: established address generator
@@ -103,7 +102,6 @@ const PRED_KEY_PREFIX: &str = "pred";
 const MERKLE_TREE_ROOT_KEY_SEGMENT: &str = "root";
 const MERKLE_TREE_STORE_KEY_SEGMENT: &str = "store";
 const BLOCK_HEADER_KEY_SEGMENT: &str = "header";
-const BLOCK_HASH_KEY_SEGMENT: &str = "hash";
 const BLOCK_TIME_KEY_SEGMENT: &str = "time";
 const EPOCH_KEY_SEGMENT: &str = "epoch";
 const PRED_EPOCHS_KEY_SEGMENT: &str = "pred_epochs";
@@ -780,12 +778,6 @@ impl DB for RocksDB {
 
         // Resotring the Mekle tree later
 
-        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
-        let hash = match self.read_value(block_cf, hash_key)? {
-            Some(h) => h,
-            None => return Ok(None),
-        };
-
         let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
         let time = match self.read_value(block_cf, time_key)? {
             Some(t) => t,
@@ -811,7 +803,6 @@ impl DB for RocksDB {
         };
 
         Ok(Some(BlockStateRead {
-            hash,
             height,
             time,
             epoch,
@@ -837,7 +828,6 @@ impl DB for RocksDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             height,
             time,
             epoch,
@@ -945,9 +935,6 @@ impl DB for RocksDB {
             let header_key = format!("{prefix}/{BLOCK_HEADER_KEY_SEGMENT}");
             self.add_value_to_batch(block_cf, header_key, &h, batch);
         }
-        // Block hash
-        let hash_key = format!("{prefix}/{BLOCK_HASH_KEY_SEGMENT}");
-        self.add_value_to_batch(block_cf, hash_key, &hash, batch);
         // Block time
         let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
         self.add_value_to_batch(block_cf, time_key, &time, batch);
@@ -1807,7 +1794,7 @@ mod imp {
 mod test {
     use namada::address::EstablishedAddressGen;
     use namada::core::hash::Hash;
-    use namada::core::storage::{BlockHash, Epochs};
+    use namada::core::storage::Epochs;
     use namada::ledger::storage::ConversionState;
     use namada::state::{MerkleTree, Sha256Hasher};
     use namada::storage::{BlockResults, EthEventsQueue};
@@ -2335,7 +2322,6 @@ mod test {
     ) -> Result<()> {
         let merkle_tree = MerkleTree::<Sha256Hasher>::default();
         let merkle_tree_stores = merkle_tree.stores();
-        let hash = BlockHash::default();
         #[allow(clippy::disallowed_methods)]
         let time = DateTimeUtc::now();
         let next_epoch_min_start_height = BlockHeight::default();
@@ -2349,7 +2335,6 @@ mod test {
         let block = BlockStateWrite {
             merkle_tree_stores,
             header: None,
-            hash: &hash,
             height,
             time,
             epoch,

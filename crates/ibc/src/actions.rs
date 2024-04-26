@@ -79,10 +79,6 @@ where
         StorageRead::get_block_header(self.state, height)
     }
 
-    fn get_block_hash(&self) -> StorageResult<namada_storage::BlockHash> {
-        self.state.get_block_hash()
-    }
-
     fn get_block_epoch(&self) -> StorageResult<namada_storage::Epoch> {
         self.state.get_block_epoch()
     }

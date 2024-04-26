@@ -343,11 +343,12 @@ pub fn get_height(test: &Test, ledger_address: &str) -> Result<u64> {
         &["block", "--node", ledger_address],
         Some(10)
     )?;
-    let (unread, matched) = find.exp_regex("Last committed block ID: .*")?;
+    let (unread, matched) =
+        find.exp_regex("Last committed block height: .*")?;
     // Expected `matched` string is e.g.:
     //
     // ```
-    // Last committed block F10B5E77F972F68CA051D289474B6E75574B446BF713A7B7B71D7ECFC61A3B21, height: 4, time: 2022-10-20T10:52:28.828745Z
+    // Last committed block height: 4, time: 2022-10-20T10:52:28.828745Z
     // ```
     let height_str = strip_trailing_newline(&matched)
         .trim()

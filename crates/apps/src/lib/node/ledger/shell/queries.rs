@@ -63,7 +63,7 @@ where
 // access to the `Shell` there
 #[cfg(test)]
 mod test_queries {
-    use namada::core::storage::{BlockHash, Epoch};
+    use namada::core::storage::Epoch;
     use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada::ledger::pos::PosQueries;
     use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
@@ -95,8 +95,10 @@ mod test_queries {
                 for (curr_epoch, curr_block_height, can_send) in
                     epoch_assertions
                 {
-                    shell.state.in_mem_mut().begin_block(
-                        BlockHash::default(), curr_block_height.into()).unwrap();
+                    shell.state
+                        .in_mem_mut()
+                        .begin_block(curr_block_height.into())
+                        .unwrap();
 
                     if prev_epoch != Some(curr_epoch) {
                         prev_epoch = Some(curr_epoch);

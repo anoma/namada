@@ -60,7 +60,7 @@ mod tests {
     use namada::core::ethereum_events::Uint;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
-    use namada::core::storage::{BlockHash, BlockHeight, Key};
+    use namada::core::storage::{BlockHeight, Key};
     use namada::core::time::DurationSecs;
     use namada::core::{address, storage};
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
@@ -146,7 +146,7 @@ mod tests {
         );
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(100))
+            .begin_block(BlockHeight(100))
             .expect("begin_block failed");
         state
             .in_mem_mut()
@@ -193,7 +193,6 @@ mod tests {
 
         // save the last state and the storage
         let root = state.in_mem().merkle_root().0;
-        let hash = state.in_mem().get_block_hash().0;
         let address_gen = state.in_mem().address_gen.clone();
 
         // Release DB lock
@@ -212,7 +211,6 @@ mod tests {
             state.in_mem().get_state().expect("no block exists");
         assert_eq!(loaded_root.0, root);
         assert_eq!(height, 100);
-        assert_eq!(state.in_mem().get_block_hash().0, hash);
         assert_eq!(state.in_mem().address_gen, address_gen);
         let (val, _) = state.db_read(&key).expect("read failed");
         assert_eq!(val.expect("no value"), value_bytes);
@@ -276,7 +274,7 @@ mod tests {
         );
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(100))
+            .begin_block(BlockHeight(100))
             .expect("begin_block failed");
 
         let addr = state
@@ -364,8 +362,7 @@ mod tests {
 
         let key = Key::parse("key").expect("cannot parse the key string");
         for (height, write_value) in blocks_write_value.clone() {
-            let hash = BlockHash::default();
-            state.in_mem_mut().begin_block(hash, height)?;
+            state.in_mem_mut().begin_block(height)?;
             assert_eq!(
                 height,
                 state.in_mem().block.height,
@@ -468,9 +465,8 @@ mod tests {
         state.db_write(&key, bytes)?;
 
         // Update and commit
-        let hash = BlockHash::default();
         let height = BlockHeight(1);
-        state.in_mem_mut().begin_block(hash, height)?;
+        state.in_mem_mut().begin_block(height)?;
         // Epoch 0
         state.in_mem_mut().block.pred_epochs.new_epoch(height);
         let mut batch = PersistentState::batch();
@@ -489,9 +485,8 @@ mod tests {
                     state.in_mem().block.height,
                     state.in_mem().merkle_root(),
                 );
-                let hash = BlockHash::default();
                 let next_height = state.in_mem().block.height.next_height();
-                state.in_mem_mut().begin_block(hash, next_height)?;
+                state.in_mem_mut().begin_block(next_height)?;
                 batch = PersistentState::batch();
             }
             match write_type {
@@ -572,7 +567,7 @@ mod tests {
 
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), new_epoch_start)
+            .begin_block(new_epoch_start)
             .expect("begin_block failed");
 
         let key = ibc_key("key").unwrap();
@@ -590,7 +585,7 @@ mod tests {
         let new_epoch_start = BlockHeight(6);
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), new_epoch_start)
+            .begin_block(new_epoch_start)
             .expect("begin_block failed");
 
         let key = ibc_key("key2").unwrap();
@@ -615,7 +610,7 @@ mod tests {
         let new_epoch_start = BlockHeight(11);
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), new_epoch_start)
+            .begin_block(new_epoch_start)
             .expect("begin_block failed");
 
         let nonce = nonce + 1;
@@ -648,7 +643,7 @@ mod tests {
 
         state
             .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(12))
+            .begin_block(BlockHeight(12))
             .expect("begin_block failed");
 
         let nonce = nonce + 1;
