@@ -113,7 +113,7 @@ impl VoteProposal {
             id,
             vote,
             voter,
-            delegations,
+            delegation_validators: delegations,
         };
 
         Self(transaction::build_tx(

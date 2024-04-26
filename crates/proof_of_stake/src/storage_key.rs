@@ -61,6 +61,7 @@ const LIVENESS_MISSED_VOTES_SUM: &str = "sum_missed_votes";
 const LAST_STAKED_RATIO_KEY: &str = "last_staked_ratio";
 const LAST_POS_INFLATION_AMOUNT_KEY: &str = "last_inflation_amount";
 const TOTAL_ACTIVE_DELTAS_KEY: &str = "total_active_deltas";
+const DELEGATION_TARGETS_PREFIX: &str = "delegation_targets";
 
 /// Is the given key a PoS storage key?
 pub fn is_pos_key(key: &Key) -> bool {
@@ -1077,6 +1078,36 @@ pub fn is_total_active_deltas_key(key: &Key) -> bool {
             [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(prefix)] => {
                 addr == &ADDRESS && prefix == TOTAL_ACTIVE_DELTAS_KEY
             }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
+/// Storage prefix for the delegation targets.
+pub fn delegation_targets_prefix() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&DELEGATION_TARGETS_PREFIX.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Storage key for the delegation targets of a delegator.
+pub fn delegation_targets_key(delegator: &Address) -> Key {
+    delegation_targets_prefix()
+        .push(&delegator.to_db_key())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Is storage key for the delegation targets of a delegator?
+pub fn is_delegation_targets_key(key: &Key) -> bool {
+    if key.segments.len() >= 3 {
+        match &key.segments[..3] {
+            [
+                DbKeySeg::AddressSeg(addr),
+                DbKeySeg::StringSeg(prefix),
+                DbKeySeg::AddressSeg(_delegator),
+            ] => addr == &ADDRESS && prefix == DELEGATION_TARGETS_PREFIX,
             _ => false,
         }
     } else {
