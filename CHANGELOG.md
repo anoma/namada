@@ -1,5 +1,74 @@
 # CHANGELOG
 
+## v0.34.0
+
+Namada 0.34.0 is a minor release that makes many different improvements to the protocol, transaction format, and user experience essential for the mainnet candidate software.
+
+### BUG FIXES
+
+- Fixed a bug in the masp vp that allowed a shielding transaction to reveal
+  nullifiers. ([\#2621](https://github.com/anoma/namada/pull/2621))
+- Fix dry-run for ibc-transfer by checking previous header's time
+  ([\#2730](https://github.com/anoma/namada/issues/2730))
+ - Checks that a MASP key was changed when identifying a MASP tx ([\#2684](https://github.com/anoma/namada/pull/2790))
+- Fix the denomination for PGF over IBC to use the one of the token
+  ([\#3085](https://github.com/anoma/namada/issues/3085))
+- Ensure that date-time generator conforms to RFC 3339.
+  ([\#3130](https://github.com/anoma/namada/pull/3130))
+- Removed block hash and all the associated functions that were using it.
+  ([\#3136](https://github.com/anoma/namada/pull/3136))
+
+### IMPROVEMENTS
+
+- Update the PoS state machine test to include validator deactivation and
+  reactivation transitions. ([\#2605](https://github.com/anoma/namada/pull/2605))
+- Fee unshielding now charges gas fees.
+  ([\#2619](https://github.com/anoma/namada/pull/2619))
+- Refactors `GasLimit` and removes unused methods and constants.
+  ([\#2620](https://github.com/anoma/namada/issues/2620))
+ - Previously on startup, the merkle root persisted was trusted to agree with the persisted db. Now a flag can be see to remerkelize storage and check against the saved root. ([\#2778](https://github.com/anoma/namada/pull/2778))
+- Adds masp commitment tree anchor keys to the merkle tree.
+  ([\#2794](https://github.com/anoma/namada/issues/2794))
+- After auditing the abci++ shims, found some small cleanups.
+  ([\#2861](https://github.com/anoma/namada/pull/2861))
+- Borsh serialize all values except for IBC-related data written to storage
+  ([\#2868](https://github.com/anoma/namada/issues/2868))
+- Refactoring rocksdb.rs ([\#2938](https://github.com/anoma/namada/issues/2938))
+- Simplified the replay protection implementation. Improved tests.
+  ([\#2956](https://github.com/anoma/namada/pull/2956))
+- Set a shared gas limit default value for both the client and
+  the SDK. Removed the default implementation of gas limit.
+  ([\#2981](https://github.com/anoma/namada/issues/2981))
+- Various small changes to client and logging, largely related to PoS.
+  ([\#3031](https://github.com/anoma/namada/pull/3031))
+- Optimize the finding of validators to which a delegator has bonds at a
+  given epoch. Now keeps data in storage rather than iterating over all bonds.
+  ([\#3043](https://github.com/anoma/namada/pull/3043))
+- Fixes various dynamics of the execution of governance proposals and their
+  voting period. ([\#3087](https://github.com/anoma/namada/pull/3087))
+- Adds the validator established account address to the wallet
+  upon join-network or post-genesis validator initialization.
+  ([\#3093](https://github.com/anoma/namada/pull/3093))
+- Add max allowed latency between the current epoch and a proposal start epoch
+  to genesis params. ([\#3107](https://github.com/anoma/namada/pull/3107))
+- Use token functions from the token crate inside the tx_prelude.
+  ([\#3109](https://github.com/anoma/namada/pull/3109))
+- Separate the temporary key-values in write-log to simplify the implementation.
+  ([\#3110](https://github.com/anoma/namada/pull/3110))
+- Improve a client error message
+  ([\#3116](https://github.com/anoma/namada/pull/3116))
+- Adjusted hardware wallet test vectors to simplify hardware wallet app
+  ([\#3122](https://github.com/anoma/namada/pull/3122))
+- Set a default expiration for transactions when no value is provided.
+  ([\#3123](https://github.com/anoma/namada/pull/3123))
+
+### MISCELLANEOUS
+
+- Remove the show-transfer CLI command.
+  ([\#3121](https://github.com/anoma/namada/pull/3121))
+- Switched back to upstream tower-abci v0.11.1.
+  ([\#3137](https://github.com/anoma/namada/pull/3137))
+
 ## v0.33.0
 
 Namada 0.33.0 is a minor release that contains various new features, improvements and bug-fixes.
@@ -116,9 +185,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.

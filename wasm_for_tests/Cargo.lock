@@ -3475,7 +3475,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3551,7 +3551,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -3563,14 +3563,14 @@ dependencies = [
 
 [[package]]
 name = "namada_controller"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_core"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "bech32 0.8.1",
  "borsh 1.2.1",
@@ -3615,7 +3615,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "ethabi",
@@ -3644,7 +3644,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -3655,7 +3655,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -3673,7 +3673,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "ibc",
@@ -3699,7 +3699,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "data-encoding",
  "lazy_static",
@@ -3712,7 +3712,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "eyre",
@@ -3726,7 +3726,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -3737,7 +3737,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
@@ -3760,14 +3760,14 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_sdk"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "async-trait",
  "bimap",
@@ -3831,7 +3831,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -3846,7 +3846,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "ics23",
@@ -3870,7 +3870,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -3888,7 +3888,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -3897,7 +3897,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3931,7 +3931,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -3941,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -3949,7 +3949,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "ark-bls12-381",
  "bitflags 2.5.0",
@@ -3973,7 +3973,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -3981,7 +3981,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -4003,7 +4003,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -4012,7 +4012,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4023,7 +4023,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -4036,7 +4036,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_account",
@@ -6455,7 +6455,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tx_fail"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6471,7 +6471,7 @@ dependencies = [
 
 [[package]]
 name = "tx_infinite_guest_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6487,7 +6487,7 @@ dependencies = [
 
 [[package]]
 name = "tx_infinite_host_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6503,7 +6503,7 @@ dependencies = [
 
 [[package]]
 name = "tx_invalid_data"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6519,7 +6519,7 @@ dependencies = [
 
 [[package]]
 name = "tx_memory_limit"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6535,7 +6535,7 @@ dependencies = [
 
 [[package]]
 name = "tx_no_op"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6551,7 +6551,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_code"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6567,7 +6567,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_ibc_token_inflation"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6583,7 +6583,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_masp_reward"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6599,7 +6599,7 @@ dependencies = [
 
 [[package]]
 name = "tx_read_storage_key"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6615,7 +6615,7 @@ dependencies = [
 
 [[package]]
 name = "tx_write"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6775,7 +6775,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_always_false"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6791,7 +6791,7 @@ dependencies = [
 
 [[package]]
 name = "vp_always_true"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6807,7 +6807,7 @@ dependencies = [
 
 [[package]]
 name = "vp_eval"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6823,7 +6823,7 @@ dependencies = [
 
 [[package]]
 name = "vp_infinite_guest_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6839,7 +6839,7 @@ dependencies = [
 
 [[package]]
 name = "vp_infinite_host_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6855,7 +6855,7 @@ dependencies = [
 
 [[package]]
 name = "vp_memory_limit"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
@@ -6871,7 +6871,7 @@ dependencies = [
 
 [[package]]
 name = "vp_read_storage_key"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "getrandom 0.2.11",
  "namada_test_utils",
