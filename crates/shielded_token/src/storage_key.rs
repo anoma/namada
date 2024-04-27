@@ -83,11 +83,11 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
             true
         }
 
-        [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key), DbKeySeg::StringSeg(_nullifier)]
-            if *addr == address::MASP && key == MASP_NULLIFIERS_KEY =>
-        {
-            true
-        }
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(key),
+            DbKeySeg::StringSeg(_nullifier),
+        ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
         _ => false,
     }
 }
