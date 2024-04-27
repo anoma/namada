@@ -10,7 +10,6 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use itertools::Either;
 use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
@@ -66,7 +65,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::data::{TxResult, WrapperTx};
+use namada_tx::data::TxResult;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
@@ -82,8 +81,6 @@ use crate::rpc::{
     query_block, query_conversion, query_denom, query_epoch_at_height,
     query_native_token,
 };
-use crate::tendermint_rpc::query::Query;
-use crate::tendermint_rpc::Order;
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
@@ -2257,137 +2254,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(())
     }
 
-    /// Obtain the known effects of all accepted shielded and transparent
-    /// transactions. If an owner is specified, then restrict the set to only
-    /// transactions crediting/debiting the given owner. If token is specified,
-    /// then restrict set to only transactions involving the given token.
-    pub async fn query_tx_deltas<C: Client + Sync, IO: Io>(
-        &mut self,
-        client: &C,
-        io: &IO,
-        query_owner: &Either<BalanceOwner, Vec<Address>>,
-        query_token: &Option<Address>,
-        viewing_keys: &HashMap<String, ExtendedViewingKey>,
-    ) -> Result<
-        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
-        Error,
-    > {
-        const TXS_PER_PAGE: u8 = 100;
-        let _ = self.load().await;
-        let vks = viewing_keys;
-        let fvks: Vec<_> = vks
-            .values()
-            .map(|fvk| ExtendedFullViewingKey::from(*fvk).fvk.vk)
-            .collect();
-        self.fetch(client, &DefaultLogger::new(io), None, None, 1, &[], &fvks)
-            .await?;
-        // Save the update state so that future fetches can be short-circuited
-        let _ = self.save().await;
-        // Required for filtering out rejected transactions from Tendermint
-        // responses
-        let block_results = rpc::query_results(client).await?;
-        let mut transfers = self.get_tx_deltas().clone();
-        // Construct the set of addresses relevant to user's query
-        let relevant_addrs = match &query_owner {
-            Either::Left(BalanceOwner::Address(owner)) => vec![owner.clone()],
-            // MASP objects are dealt with outside of tx_search
-            Either::Left(BalanceOwner::FullViewingKey(_viewing_key)) => vec![],
-            // Unspecified owner means all known addresses are considered
-            // relevant
-            Either::Right(addrs) => addrs.clone(),
-        };
-        // Find all transactions to or from the relevant address set
-        for addr in relevant_addrs {
-            for prop in ["transfer.source", "transfer.target"] {
-                // Query transactions involving the current address
-                let mut tx_query = Query::eq(prop, addr.encode());
-                // Elaborate the query if requested by the user
-                if let Some(token) = &query_token {
-                    tx_query =
-                        tx_query.and_eq("transfer.token", token.encode());
-                }
-                for page in 1.. {
-                    let txs = &client
-                        .tx_search(
-                            tx_query.clone(),
-                            true,
-                            page,
-                            TXS_PER_PAGE,
-                            Order::Ascending,
-                        )
-                        .await
-                        .map_err(|e| {
-                            Error::from(QueryError::General(format!(
-                                "for transaction: {e}"
-                            )))
-                        })?
-                        .txs;
-                    for response_tx in txs {
-                        let height = BlockHeight(response_tx.height.value());
-                        let idx = TxIndex(response_tx.index);
-                        // Only process yet unprocessed transactions which have
-                        // been accepted by node VPs
-                        // TODO: Check that wrappers shouldn't be considered
-                        // here
-                        let should_process =
-                            !transfers.contains_key(&IndexedTx {
-                                height,
-                                index: idx,
-                                is_wrapper: false,
-                            }) && block_results[u64::from(height) as usize]
-                                .is_accepted(idx.0 as usize);
-                        if !should_process {
-                            continue;
-                        }
-                        let tx = Tx::try_from(response_tx.tx.as_ref())
-                            .map_err(|e| Error::Other(e.to_string()))?;
-                        let mut wrapper = None;
-                        let mut transfer = None;
-                        extract_payload(tx, &mut wrapper, &mut transfer)?;
-                        // Epoch data is not needed for transparent transactions
-                        let epoch =
-                            wrapper.map(|x| x.epoch).unwrap_or_default();
-                        if let Some(transfer) = transfer {
-                            // Skip MASP addresses as they are already handled
-                            // by ShieldedContext
-                            if transfer.source == MASP
-                                || transfer.target == MASP
-                            {
-                                continue;
-                            }
-                            // Describe how a Transfer simply subtracts from one
-                            // account and adds the same to another
-
-                            let delta = TransferDelta::from([(
-                                transfer.source.clone(),
-                                MaspChange {
-                                    asset: transfer.token.clone(),
-                                    change: -transfer.amount.amount().change(),
-                                },
-                            )]);
-
-                            // No shielded accounts are affected by this
-                            // Transfer
-                            transfers.insert(
-                                IndexedTx {
-                                    height,
-                                    index: idx,
-                                    is_wrapper: false,
-                                },
-                                (epoch, delta, TransactionDelta::new()),
-                            );
-                        }
-                    }
-                    // An incomplete page signifies no more transactions
-                    if (txs.len() as u8) < TXS_PER_PAGE {
-                        break;
-                    }
-                }
-            }
-        }
-        Ok(transfers)
-    }
-
     /// Get the asset type with the given epoch, token, and denomination. If it
     /// does not exist in the protocol, then remove the timestamp. Make sure to
     /// store the derived AssetType so that future decoding is possible.
@@ -2446,19 +2312,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             amount,
         ))
     }
-}
-
-/// Extract the payload from the given Tx object
-fn extract_payload(
-    tx: Tx,
-    wrapper: &mut Option<WrapperTx>,
-    transfer: &mut Option<Transfer>,
-) -> Result<(), Error> {
-    *wrapper = tx.header.wrapper();
-    let _ = tx.data().map(|signed| {
-        Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))
-    });
-    Ok(())
 }
 
 // Retrieves all the indexes and tx events at the specified height which refer
