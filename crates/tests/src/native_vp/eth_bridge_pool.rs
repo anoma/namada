@@ -64,10 +64,9 @@ mod test_bridge_pool_vp {
     }
 
     /// Create necessary accounts and balances for the test.
-    fn setup_env(tx: BatchedTx) -> TestTxEnv {
+    fn setup_env(batched_tx: BatchedTx) -> TestTxEnv {
         let mut env = TestTxEnv {
-            tx: tx.tx,
-            cmt: tx.cmt,
+            batched_tx,
             ..Default::default()
         };
         let config = EthereumBridgeParams {

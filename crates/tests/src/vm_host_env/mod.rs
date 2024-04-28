@@ -45,7 +45,7 @@ mod tests {
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
-    use namada_tx_prelude::{Address, StorageRead, StorageWrite};
+    use namada_tx_prelude::{Address, BatchedTx, StorageRead, StorageWrite};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::{sha256, VpEnv};
     use prost::Message;
@@ -560,49 +560,41 @@ mod tests {
         ] {
             let keypairs = vec![keypair.clone()];
             let pks_map = AccountPublicKeysMap::from_iter(vec![pk.clone()]);
-            let signed_tx_data = vp_host_env::with(|env| {
+            let BatchedTx { tx, cmt } = vp_host_env::with(|env| {
                 let chain_id = env.state.in_mem().chain_id.clone();
                 let mut tx = Tx::new(chain_id, expiration);
                 tx.add_code(code.clone(), None)
                     .add_serialized_data(data.to_vec())
                     .sign_raw(keypairs.clone(), pks_map.clone(), None)
                     .sign_wrapper(keypair.clone());
-                env.tx = tx;
-                env.tx.clone()
+                let batched_tx = tx.batch_first_tx();
+                env.batched_tx = batched_tx;
+                env.batched_tx.clone()
             });
-            assert_eq!(
-                signed_tx_data
-                    .data(&signed_tx_data.commitments()[0])
-                    .as_ref(),
-                Some(data)
-            );
+            assert_eq!(tx.data(&cmt).as_ref(), Some(data));
             assert!(
-                signed_tx_data
-                    .verify_signatures(
-                        &[signed_tx_data.header_hash(),],
-                        pks_map,
-                        &None,
-                        1,
-                        None,
-                        || Ok(())
-                    )
-                    .is_ok()
+                tx.verify_signatures(
+                    &[tx.header_hash(),],
+                    pks_map,
+                    &None,
+                    1,
+                    None,
+                    || Ok(())
+                )
+                .is_ok()
             );
 
             let other_keypair = key::testing::keypair_2();
             assert!(
-                signed_tx_data
-                    .verify_signatures(
-                        &[signed_tx_data.header_hash(),],
-                        AccountPublicKeysMap::from_iter([
-                            other_keypair.ref_to()
-                        ]),
-                        &None,
-                        1,
-                        None,
-                        || Ok(())
-                    )
-                    .is_err()
+                tx.verify_signatures(
+                    &[tx.header_hash(),],
+                    AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
+                    &None,
+                    1,
+                    None,
+                    || Ok(())
+                )
+                .is_err()
             );
         }
     }
