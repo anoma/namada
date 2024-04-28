@@ -1125,20 +1125,18 @@ mod tests {
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache.clone(),
-            )
-            .is_ok()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        )
+        .is_ok());
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -1157,20 +1155,18 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1538,20 +1534,18 @@ mod tests {
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
         let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     #[test]
@@ -1585,7 +1579,9 @@ mod tests {
         wrapper_tx.add_code_from_hash(read_code_hash, None);
         tx.add_serialized_data(vec![]);
         wrapper_tx.add_serialized_data(vec![]);
-        let batched_tx = wrapper_tx.batch_tx(&wrapper_tx.commitments()[0]);
+        let mut raw_tx = wrapper_tx.clone();
+        raw_tx.update_header(TxType::Raw);
+        let batched_tx = wrapper_tx.batch_ref_first_tx();
 
         // Check that using a disallowed wrapper tx leads to an error, but a raw
         // tx is ok even if not allowlisted
@@ -1599,7 +1595,8 @@ mod tests {
 
             let result = check_tx_allowed(&batched_tx, &state);
             assert_matches!(result.unwrap_err(), Error::DisallowedTx);
-            let result = check_tx_allowed(&batched_tx, &state);
+            let batched_raw_tx = raw_tx.batch_ref_first_tx();
+            let result = check_tx_allowed(&batched_raw_tx, &state);
             if let Err(result) = result {
                 assert!(!matches!(result, Error::DisallowedTx));
             }
@@ -1886,7 +1883,8 @@ mod tests {
         )
             .expect("unexpected error converting wat2wasm").into_owned();
 
-        let outer_tx = Tx::from_type(TxType::Raw);
+        let mut outer_tx = Tx::from_type(TxType::Raw);
+        outer_tx.push_default_commitments();
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");

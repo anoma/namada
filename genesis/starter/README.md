@@ -117,7 +117,7 @@ Validator transactions require an extra `--alias` argument to find the validator
 namada client utils \
   sign-genesis-txs \
   --path "{validator_txs_file}.toml" \
-  --output "{signed_validator_txs_file}.toml"
+  --output "{signed_validator_txs_file}.toml" \
   --alias my-validator
 ```
 

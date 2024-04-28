@@ -417,6 +417,7 @@ mod test_prepare_proposal {
     fn test_prepare_proposal_rejects_non_wrapper_tx() {
         let (shell, _recv, _, _) = test_utils::setup();
         let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_commitments();
         tx.header.chain_id = shell.chain_id.clone();
         let req = RequestPrepareProposal {
             txs: vec![tx.to_bytes().into()],

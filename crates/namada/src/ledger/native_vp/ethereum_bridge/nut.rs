@@ -196,7 +196,9 @@ mod test_nuts {
             v
         };
 
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_commitments();
+
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));

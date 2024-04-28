@@ -1105,7 +1105,8 @@ impl Tx {
     }
 
     /// Add new default commitments to the transaction
-    pub fn new_commitments(&mut self) {
+    #[cfg(any(test, feature = "testing"))]
+    pub fn push_default_commitments(&mut self) {
         self.header.commitments.push(Commitments::default())
     }
 
@@ -1592,7 +1593,7 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
-        // The inner tx signer signs the Decrypted version of the Header
+        // The inner tx signer signs the Raw version of the Header
         let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
 
