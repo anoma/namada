@@ -551,6 +551,7 @@ mod tests {
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
+
         assert!(
             panic::catch_unwind(|| {
                 validate_tx(
@@ -642,7 +643,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -651,21 +652,15 @@ mod tests {
             None,
         )));
 
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(
-                &CTX,
-                signed_tx.batch_first_tx(),
-                vp_owner,
-                keys_changed,
-                verifiers
-            )
-            .is_ok()
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .is_ok()
         );
     }
 
@@ -789,7 +784,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -798,22 +793,16 @@ mod tests {
             None,
         )));
 
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
 
         assert!(
-            validate_tx(
-                &CTX,
-                signed_tx.batch_first_tx(),
-                vp_owner,
-                keys_changed,
-                verifiers
-            )
-            .is_ok()
+            validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers)
+                .is_ok()
         );
     }
 
@@ -935,9 +924,6 @@ mod tests {
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
 
-                    validate_tx(&CTX, tx_data.batch_first_tx(), vp_owner, keys_changed, verifiers);
-
-
             assert!(
              panic::catch_unwind(|| {
                  validate_tx(&CTX, tx_data.batch_first_tx(), vp_owner, keys_changed, verifiers)
@@ -978,7 +964,7 @@ mod tests {
             let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
             let mut vp_env = vp_host_env::take();
-            let mut tx = vp_env.tx.clone();
+            let mut tx = vp_env.batched_tx.tx.clone();
             tx.set_data(Data::new(vec![]));
             tx.set_code(Code::new(vec![], None));
             tx.add_section(Section::Authorization(Authorization::new(
@@ -986,13 +972,13 @@ mod tests {
                 pks_map.index_secret_keys(vec![secret_key]),
                 None,
             )));
-            let signed_tx = tx.clone();
-            vp_env.tx = signed_tx.clone();
+            let signed_tx = tx.batch_first_tx();
+            vp_env.batched_tx = signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
             vp_host_env::set(vp_env);
-            assert!(validate_tx(&CTX, signed_tx.batch_first_tx(), vp_owner, keys_changed, verifiers).is_ok());
+            assert!(validate_tx(&CTX, signed_tx, vp_owner, keys_changed, verifiers).is_ok());
         }
     }
 
