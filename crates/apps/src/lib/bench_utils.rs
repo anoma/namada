@@ -72,7 +72,9 @@ use namada::ledger::queries::{
 };
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
-use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
+use namada::tx::data::{
+    BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
+};
 use namada::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
 };
@@ -900,18 +902,20 @@ impl Client for BenchShell {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
                             wrapper_changed_keys: Default::default(),
-                            batch_results: [(
-                                tx.commitments()[0].get_hash(),
-                                Ok(BatchedTxResult {
-                                    changed_keys: changed_keys.to_owned(),
-                                    vps_result: VpsResult::default(),
-                                    initialized_accounts: vec![],
-                                    ibc_events: BTreeSet::default(),
-                                    eth_bridge_events: BTreeSet::default(),
-                                }),
-                            )]
-                            .into_iter()
-                            .collect(),
+                            batch_results: BatchResults(
+                                [(
+                                    tx.commitments()[0].get_hash(),
+                                    Ok(BatchedTxResult {
+                                        changed_keys: changed_keys.to_owned(),
+                                        vps_result: VpsResult::default(),
+                                        initialized_accounts: vec![],
+                                        ibc_events: BTreeSet::default(),
+                                        eth_bridge_events: BTreeSet::default(),
+                                    }),
+                                )]
+                                .into_iter()
+                                .collect(),
+                            ),
                         };
                         namada::tendermint::abci::Event {
                             kind: "applied".to_string(),

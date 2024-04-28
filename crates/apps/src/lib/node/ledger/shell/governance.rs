@@ -367,17 +367,20 @@ where
             .delete(&pending_execution_key)
             .expect("Should be able to delete the storage.");
         match tx_result {
-            Ok(tx_result) => match tx_result.batch_results.get(&cmt.get_hash())
-            {
-                Some(Ok(batched_result)) if batched_result.is_accepted() => {
-                    shell.state.commit_tx();
-                    Ok(true)
+            Ok(tx_result) => {
+                match tx_result.batch_results.0.get(&cmt.get_hash()) {
+                    Some(Ok(batched_result))
+                        if batched_result.is_accepted() =>
+                    {
+                        shell.state.commit_tx();
+                        Ok(true)
+                    }
+                    _ => {
+                        shell.state.drop_tx();
+                        Ok(false)
+                    }
                 }
-                _ => {
-                    shell.state.drop_tx();
-                    Ok(false)
-                }
-            },
+            }
             Err(_) => {
                 shell.state.drop_tx();
                 Ok(false)

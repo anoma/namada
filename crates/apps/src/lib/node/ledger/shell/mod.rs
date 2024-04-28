@@ -1130,7 +1130,7 @@ where
                     {
                         response.code = ResultCode::ReplayTx.into();
                         response.log = format!(
-                            "{INVALID_MSG}: Inner transaction hash {} already \
+                            "{INVALID_MSG}: Batch transaction hash {} already \
                              in storage, replay attempt",
                             inner_tx_hash
                         );
@@ -1232,7 +1232,7 @@ where
         .expect("Error while checking inner tx hash key in storage")
     {
         return Err(Error::ReplayAttempt(format!(
-            "Inner transaction hash {} already in storage",
+            "Batch transaction hash {} already in storage",
             &inner_tx_hash,
         )));
     }
@@ -2413,8 +2413,6 @@ mod shell_tests {
     fn test_replay_attack() {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
-        let keypair = super::test_utils::gen_keypair();
-
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -2424,7 +2422,7 @@ mod shell_tests {
                     ),
                     token: shell.state.in_mem().native_token.clone(),
                 },
-                keypair.ref_to(),
+                crate::wallet::defaults::albert_keypair().ref_to(),
                 Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
@@ -2434,7 +2432,9 @@ mod shell_tests {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
+            [(0, crate::wallet::defaults::albert_keypair())]
+                .into_iter()
+                .collect(),
             None,
         )));
 
@@ -2476,15 +2476,19 @@ mod shell_tests {
             )
         );
 
-        let inner_tx_hash = wrapper.raw_header_hash();
-        // Write inner hash in storage
-        let inner_hash_key = replay_protection::last_key(&inner_tx_hash);
+        let batch_hash = wrapper.raw_header_hash();
+        // Write batch hash in storage and remove the wrapper one
+        let batch_hash_key = replay_protection::last_key(&batch_hash);
         shell
             .state
-            .write_replay_protection_entry(&mut batch, &inner_hash_key)
+            .write_replay_protection_entry(&mut batch, &batch_hash_key)
+            .expect("Test failed");
+        shell
+            .state
+            .delete_replay_protection_entry(&mut batch, &wrapper_hash_key)
             .expect("Test failed");
 
-        // Try inner tx replay attack
+        // Try batch replay attack
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
@@ -2493,9 +2497,9 @@ mod shell_tests {
         assert_eq!(
             result.log,
             format!(
-                "Mempool validation failed: Inner transaction hash {} already \
+                "Mempool validation failed: Batch transaction hash {} already \
                  in storage, replay attempt",
-                inner_tx_hash
+                batch_hash
             )
         );
 
@@ -2507,9 +2511,9 @@ mod shell_tests {
         assert_eq!(
             result.log,
             format!(
-                "Mempool validation failed: Inner transaction hash {} already \
+                "Mempool validation failed: Batch transaction hash {} already \
                  in storage, replay attempt",
-                inner_tx_hash
+                batch_hash
             )
         )
     }

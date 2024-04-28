@@ -7,7 +7,6 @@ use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use masp_primitives::transaction::Transaction;
 use namada_core::booleans::BoolResultUnitExt;
-use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_gas::TxGasMeter;
@@ -15,8 +14,8 @@ use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags, VpsResult,
-    WrapperTx,
+    BatchResults, BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags,
+    VpsResult, WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Section, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -202,9 +201,9 @@ where
             Ok(TxResult {
                 gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                 wrapper_changed_keys: Default::default(),
-                batch_results: [(cmt.get_hash(), Ok(result))]
-                    .into_iter()
-                    .collect(),
+                batch_results: BatchResults(
+                    [(cmt.get_hash(), Ok(result))].into_iter().collect(),
+                ),
             })
         }
         TxType::Protocol(protocol_tx) => {
@@ -216,9 +215,9 @@ where
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
             Ok(TxResult {
-                batch_results: [(cmt.get_hash(), Ok(result))]
-                    .into_iter()
-                    .collect(),
+                batch_results: BatchResults(
+                    [(cmt.get_hash(), Ok(result))].into_iter().collect(),
+                ),
                 ..Default::default()
             })
         }
@@ -239,6 +238,16 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
+
+            // Replay protection check on the batch
+            let tx_hash = tx.raw_header_hash();
+            if let Some(true) =
+                state.write_log().has_replay_protection_entry(&tx_hash)
+            {
+                // If the same batch has already been committed in
+                // this block, skip execution and return
+                return Err(Error::ReplayAttempt(tx_hash));
+            }
 
             for cmt in tx.commitments() {
                 match apply_wasm_tx(
@@ -264,7 +273,7 @@ where
                         let is_accepted =
                             matches!(&res, Ok(result) if result.is_accepted());
 
-                        tx_result.batch_results.insert(cmt.get_hash(), res);
+                        tx_result.batch_results.0.insert(cmt.get_hash(), res);
                         if is_accepted {
                             state.write_log_mut().commit_tx_to_batch(cmt);
                         } else {
@@ -340,7 +349,7 @@ where
     Ok(TxResult {
         gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
         wrapper_changed_keys,
-        batch_results: HashMap::default(),
+        batch_results: BatchResults::default(),
     })
 }
 
@@ -661,14 +670,6 @@ where
         tx_wasm_cache,
     } = shell_params;
 
-    let tx_hash = batched_tx.tx.raw_header_hash();
-    if let Some(true) = state.write_log().has_replay_protection_entry(&tx_hash)
-    {
-        // If the same transaction (or bundle) has already been committed in
-        // this block, skip execution and return
-        return Err(Error::ReplayAttempt(tx_hash));
-    }
-
     let verifiers = execute_tx(
         &batched_tx,
         tx_index,
@@ -689,11 +690,6 @@ where
 
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
-    // FIXME: if I return early the ibc events could still be populated and it
-    // remaing the write log until I commit or drop, meaning that I post in the
-    // events the same ibc events multiple times FIXME: I could fix this by
-    // committing for the non-atomic batch, but what about the atomic ones? I'd
-    // still have the duplicated entries!
     let ibc_events = state.write_log_mut().take_ibc_events();
 
     Ok(BatchedTxResult {

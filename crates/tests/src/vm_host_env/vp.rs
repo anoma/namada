@@ -68,6 +68,7 @@ impl Default for TestVpEnv {
 
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_commitments();
         let cmt = tx.commitments().first().unwrap().to_owned();
         tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {

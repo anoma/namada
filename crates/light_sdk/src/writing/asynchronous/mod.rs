@@ -45,7 +45,7 @@ pub async fn broadcast_tx(
         // acceptance/application results later
         {
             println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
+            println!("Batch transaction hash: {:?}", decrypted_tx_hash);
         }
         Ok(response)
     } else {

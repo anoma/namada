@@ -17,6 +17,7 @@ pub const WASM_FOR_TESTS_DIR: &str = "wasm_for_tests";
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum TestWasms {
+    TxFail,
     TxMemoryLimit,
     TxNoOp,
     TxInvalidData,
@@ -41,6 +42,7 @@ impl TestWasms {
     /// able to.
     pub fn path(&self) -> PathBuf {
         let filename = match self {
+            TestWasms::TxFail => "tx_fail.wasm",
             TestWasms::TxMemoryLimit => "tx_memory_limit.wasm",
             TestWasms::TxNoOp => "tx_no_op.wasm",
             TestWasms::TxInvalidData => "tx_invalid_data.wasm",

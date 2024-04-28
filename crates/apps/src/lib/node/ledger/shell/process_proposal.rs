@@ -1315,7 +1315,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     format!(
-                        "Transaction replay attempt: Inner transaction hash \
+                        "Transaction replay attempt: Batch transaction hash \
                          {} already in storage",
                         wrapper.raw_header_hash()
                     )

@@ -347,7 +347,7 @@ where
                     // fails, since we need to drop everything
                     if is_atomic_batch &&
                         //FIXME: improve this
-                        tx_result.batch_results.iter().any(|(_, result)| {
+                        tx_result.batch_results.0.iter().any(|(_, result)| {
                             match result {
                                 Ok(res) => {
 // If an inner tx failed for any reason but
@@ -393,7 +393,7 @@ true                                },
                         tx_event.extend(Code(ResultCode::InvalidTx));
                     } else {
                         for (cmt_hash, batched_result) in
-                            &tx_result.batch_results
+                            &tx_result.batch_results.0
                         {
                             match batched_result {
                                 Ok(result) => {
@@ -558,6 +558,8 @@ true                                },
                     // didn't fail because of out of gas nor
                     // invalid section commitment, commit
                     // its hash to prevent replays
+                    // FIXME: if I commit anything from the batch I need to
+                    // commit anyway!
                     if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
                         if !matches!(
                             msg,
@@ -585,7 +587,7 @@ true                                },
                     // if is_atomic_batch {
                     // FIXME: should we commit the valid txs of the batch if it
                     // is non-atomic?
-                    // FIXME: nee to increment the errored txs too
+                    // FIXME: need to increment the errored txs too
                     for _ in 0..commitments_len {
                         stats.increment_rejected_txs();
                     }
@@ -2607,6 +2609,7 @@ mod test_finalize_block {
     /// doesn't get reapplied
     #[test]
     fn test_duplicated_tx_same_block() {
+        // FIXME: seems like we are not cathing the replay attack
         let (mut shell, _, _, _) = setup();
         let keypair = crate::wallet::defaults::albert_keypair();
         let keypair_2 = crate::wallet::defaults::bertha_keypair();
@@ -2679,7 +2682,7 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
 
         for wrapper in [&wrapper, &new_wrapper] {
             assert!(
@@ -2836,13 +2839,49 @@ mod test_finalize_block {
         assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[1].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&unsigned_wrapper.commitments().first().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(event[2].event_type.to_string(), String::from("applied"));
         let code = event[2].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[2].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(
+                &wrong_commitment_wrapper
+                    .commitments()
+                    .first()
+                    .unwrap()
+                    .get_hash(),
+            )
+            .unwrap();
+        assert!(inner_result.is_err());
         assert_eq!(event[3].event_type.to_string(), String::from("applied"));
         let code = event[3].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[3].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&failing_wrapper.commitments().first().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.is_err());
 
         for valid_wrapper in [
             out_of_gas_wrapper,
@@ -2980,7 +3019,8 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        // Set no code to let the inner tx fail
+        wrapper.set_code(Code::new(TestWasms::TxFail.read_bytes(), None));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
@@ -3020,7 +3060,17 @@ mod test_finalize_block {
         // Check balance of fee payer
         assert_eq!(event.event_type.to_string(), String::from("applied"));
         let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event.attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&wrapper.commitments().first().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.is_err());
 
         let new_signer_balance = namada::token::read_balance(
             &shell.state,

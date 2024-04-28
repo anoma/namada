@@ -933,7 +933,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     TxResult::from_str(tx_result_str)
                         .map_err(|e| Error::Other(e.to_string()))?;
                 let mut changed_keys_vec = BTreeMap::default();
-                for (cmt_hash, cmt_result) in result.batch_results {
+                for (cmt_hash, cmt_result) in result.batch_results.0 {
                     if tx_event.attributes.iter().any(|attr| {
                         attr.key == format!("{cmt_hash}/is_valid_masp_tx")
                     }) {
@@ -2834,7 +2834,7 @@ fn get_tx_result(
                     TxResult::from_str(&attribute.value)
                         .expect("The event value should be parsable");
                 // FIXME: improve here
-                match tx_result.batch_results.get(cmt_hash) {
+                match tx_result.batch_results.0.get(cmt_hash) {
                     Some(res) => match res {
                         Ok(res) => Some(res.to_owned()),
                         Err(_) => None,

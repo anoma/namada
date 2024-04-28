@@ -58,7 +58,7 @@ pub struct TestTxEnv {
     pub vp_cache_dir: TempDir,
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
-    // FIXME: put these two together?
+    // FIXME: put these two together? yes
     pub tx: Tx,
     pub cmt: Commitments,
 }
@@ -70,6 +70,7 @@ impl Default for TestTxEnv {
             wasm::compilation_cache::common::testing::cache();
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_commitments();
         let cmt = tx.commitments().first().unwrap().to_owned();
         tx.header.chain_id = state.in_mem().chain_id.clone();
         Self {

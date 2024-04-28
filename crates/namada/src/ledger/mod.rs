@@ -105,6 +105,7 @@ mod dry_run_tx {
             );
             tx_result
                 .batch_results
+                .0
                 .insert(cmt.get_hash(), batched_tx_result);
         }
         // Account gas for both batch and wrapper
@@ -288,6 +289,7 @@ mod test {
             result
                 .data
                 .batch_results
+                .0
                 .get(&cmt.get_hash())
                 .unwrap()
                 .as_ref()

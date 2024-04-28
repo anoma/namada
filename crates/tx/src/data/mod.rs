@@ -13,8 +13,9 @@ pub mod protocol;
 /// wrapper txs with encrypted payloads
 pub mod wrapper;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -23,7 +24,6 @@ use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::collections::HashMap;
 use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
@@ -34,7 +34,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use serde::de::DeserializeOwned;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -161,10 +161,82 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-/// Transaction application result
 // The generic is only used to return typed errors in protocol for error
 // management with regards to replay protection, whereas for logging we use
-// strings TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
+// strings
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct BatchResults<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
+
+impl<T> Default for BatchResults<T> {
+    fn default() -> Self {
+        Self(BTreeMap::default())
+    }
+}
+
+impl<T: Serialize> Serialize for BatchResults<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+
+        for (k, v) in &self.0 {
+            map.serialize_entry(&k.to_string(), v)?;
+        }
+        map.end()
+    }
+}
+
+struct BatchResultVisitor<T> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T> BatchResultVisitor<T> {
+    fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<'de, T> serde::de::Visitor<'de> for BatchResultVisitor<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    type Value = BatchResults<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("BatchResult")
+    }
+
+    fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+    where
+        V: serde::de::MapAccess<'de>,
+    {
+        let mut result = BatchResults::<T>::default();
+
+        while let Some((key, value)) = map.next_entry()? {
+            result.0.insert(
+                Hash::from_str(key).map_err(serde::de::Error::custom)?,
+                value,
+            );
+        }
+
+        Ok(result)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for BatchResults<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(BatchResultVisitor::new())
+    }
+}
+
+/// Transaction application result
+// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
@@ -175,7 +247,7 @@ pub struct TxResult<T> {
     pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// The results of the batch, indexed by the hash of the specific
     /// [`Commitments`]
-    pub batch_results: HashMap<Hash, Result<BatchedTxResult, T>>,
+    pub batch_results: BatchResults<T>,
 }
 
 impl<T> Default for TxResult<T> {
@@ -191,10 +263,10 @@ impl<T> Default for TxResult<T> {
 impl<T: Display> TxResult<T> {
     pub fn to_result_string(self) -> TxResult<String> {
         // FIXME: improve
-        let mut batch_results: HashMap<Hash, Result<BatchedTxResult, String>> =
-            Default::default();
+        let mut batch_results: BTreeMap<Hash, Result<BatchedTxResult, String>> =
+            BTreeMap::new();
 
-        for (hash, res) in self.batch_results {
+        for (hash, res) in self.batch_results.0 {
             let res = match res {
                 Ok(value) => Ok(value),
                 Err(e) => Err(e.to_string()),
@@ -205,7 +277,7 @@ impl<T: Display> TxResult<T> {
         TxResult {
             gas_used: self.gas_used,
             wrapper_changed_keys: self.wrapper_changed_keys,
-            batch_results,
+            batch_results: BatchResults(batch_results),
         }
     }
 }
@@ -319,7 +391,7 @@ impl<T: Serialize> fmt::Display for TxResult<T> {
     }
 }
 
-impl<T: DeserializeOwned> FromStr for TxResult<T> {
+impl<T: for<'de> Deserialize<'de>> FromStr for TxResult<T> {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
