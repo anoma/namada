@@ -1,5 +1,7 @@
 //! Arithmetics helpers
 
+pub use smooth_operator::{checked, Error};
+
 /// Performs addition that returns `None` instead of wrapping around on
 /// overflow.
 pub trait CheckedAdd: Sized + Copy {

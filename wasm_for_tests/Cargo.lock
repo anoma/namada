@@ -3603,6 +3603,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
@@ -5755,6 +5756,24 @@ name = "smallvec"
 version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
+
+[[package]]
+name = "smooth-operator"
+version = "0.6.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+dependencies = [
+ "smooth-operator-impl",
+]
+
+[[package]]
+name = "smooth-operator-impl"
+version = "0.6.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.39",
+]
 
 [[package]]
 name = "socket2"
