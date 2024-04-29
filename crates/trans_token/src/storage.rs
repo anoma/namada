@@ -143,12 +143,14 @@ where
                     storage.write(&src_key, new_src_balance)?;
                     storage.write(&dest_key, new_dest_balance)
                 }
-                None => Err(storage::Error::new_const(
-                    "The transfer would overflow destination balance",
-                )),
+                None => Err(storage::Error::new_alloc(format!(
+                    "The transfer would overflow balance of {dest}"
+                ))),
             }
         }
-        None => Err(storage::Error::new_const("Insufficient source balance")),
+        None => Err(storage::Error::new_alloc(format!(
+            "{src} has insufficient balance"
+        ))),
     }
 }
 
