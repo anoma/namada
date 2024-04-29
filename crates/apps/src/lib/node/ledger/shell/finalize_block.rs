@@ -2745,12 +2745,12 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         // This hash must be present as succesfully added by the second
         // transaction
