@@ -13,13 +13,13 @@ pub const VALIDATOR_NODE: &str = "This node is a validator";
 pub const NON_VALIDATOR_NODE: &str = "This node is not a validator";
 
 /// Inner tx applied and accepted by VPs.
-pub const TX_APPLIED_SUCCESS: &str = "Transaction was successfully applied";
+pub const TX_APPLIED_SUCCESS: &str = "was successfully applied";
 
 /// Inner transaction rejected by VP(s).
-pub const TX_REJECTED: &str = "Transaction was rejected by VPs";
+pub const TX_REJECTED: &str = "was rejected by VPs";
 
 /// Inner transaction failed in execution (no VPs ran).
-pub const TX_FAILED: &str = "Transaction failed";
+pub const TX_FAILED: &str = "failed with error";
 
 pub const WALLET_HD_PASSPHRASE_PROMPT: &str =
     "Enter BIP39 passphrase (empty for none): ";

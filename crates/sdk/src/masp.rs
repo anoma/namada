@@ -935,7 +935,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let mut changed_keys_vec = BTreeMap::default();
                 for (cmt_hash, cmt_result) in result.batch_results.0 {
                     if tx_event.attributes.iter().any(|attr| {
-                        attr.key == format!("{cmt_hash}/is_valid_masp_tx")
+                        attr.key == format!("cmt/{cmt_hash}/is_valid_masp_tx")
                     }) {
                         let cmt_result = cmt_result.map_err(|msg| {
                             Error::Other(format!(
@@ -1001,12 +1001,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let cmt_hash = cmt.get_hash();
             let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
                 Ok(transfer) => Some((
-                    changed_keys
-                        .get(&cmt_hash)
-                        .ok_or_else(|| {
-                            Error::Other("Missing commitments hash".to_string())
-                        })?
-                        .to_owned(),
+                    changed_keys.get(&cmt_hash).cloned().unwrap_or_default(),
                     transfer,
                 )),
                 Err(_) => {

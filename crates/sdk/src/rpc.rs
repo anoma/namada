@@ -514,19 +514,19 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas.", result.gas_used);
+    let result_str = format!("Transaction consumed {} gas", result.gas_used);
     let mut cmt_result_str = String::new();
     for (cmt_hash, cmt_result) in &result.batch_results.0 {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
-                    cmt_result_str.push_str(
-                        "Commitments {cmt_hash} was succesfully applied",
-                    );
+                    cmt_result_str.push_str(&format!(
+                        "Inner transaction {cmt_hash} was successfully applied",
+                    ));
                 } else {
                     cmt_result_str.push_str(&format!(
-                        "Commitments {} was rejected by VPs: {}\nErrors: \
-                         {}\nChanged keys: {}",
+                        "Inner transaction {} was rejected by VPs: \
+                         {}\nErrors: {}\nChanged keys: {}",
                         cmt_hash,
                         serde_json::to_string_pretty(
                             &result.vps_result.rejected_vps
@@ -540,7 +540,7 @@ pub async fn dry_run_tx<N: Namada>(
                 }
             }
             Err(msg) => cmt_result_str.push_str(&format!(
-                "Commitments {cmt_hash} failed with error: {msg}"
+                "Inner transaction {cmt_hash} failed with error: {msg}"
             )),
         }
     }
