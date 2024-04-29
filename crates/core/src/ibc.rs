@@ -358,11 +358,11 @@ impl TryFrom<RawIbcEvent> for IbcEvent {
 /// Returns the trace path and the token string if the denom is an IBC
 /// denom.
 pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
-    if is_nft_trace(denom.as_ref()).is_some() {
-        return None;
-    }
     let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
-    if prefixed_denom.trace_path.is_empty() {
+    if prefixed_denom.trace_path.is_empty()
+        || prefixed_denom.base_denom.to_string().contains('/')
+    {
+        // The denom is just a token or an NFT trace
         return None;
     }
     // The base token isn't decoded because it could be non Namada token
