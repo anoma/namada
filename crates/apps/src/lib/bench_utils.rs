@@ -133,7 +133,6 @@ pub struct BenchShell {
     pub inner: Shell,
     // Cache of the masp transactions and their changed keys in the last block
     // committed, the tx index coincides with the index in this collection
-    // FIXME: need batched_Tx here?
     pub last_block_masp_txs: Vec<(Tx, BTreeSet<Key>)>,
     // NOTE: Temporary directory should be dropped last since Shell need to
     // flush data on drop
@@ -922,12 +921,18 @@ impl Client for BenchShell {
                             // Mock the masp and tx attributes
                             attributes: vec![
                                 namada::tendermint::abci::EventAttribute {
-                                    key: "is_valid_masp_tx".to_string(),
+                                    key: format!(
+                                        "cmt/{}/is_valid_masp_tx",
+                                        tx.commitments()
+                                            .first()
+                                            .unwrap()
+                                            .get_hash()
+                                    ),
                                     value: format!("{}", idx),
                                     index: true,
                                 },
                                 namada::tendermint::abci::EventAttribute {
-                                    key: "inner_tx".to_string(),
+                                    key: "batch".to_string(),
                                     value: tx_result.to_string(),
                                     index: true,
                                 },
