@@ -1653,11 +1653,33 @@ impl Tx {
 
     // FIXME: review the return type, maybe a slice?
     // FIXME: rename?
+    // FIXME: look for all the usages of this where we pick the first one and
+    // sue first_commitments instead
     pub fn commitments(&self) -> &Vec<Commitments> {
         &self.header.commitments
     }
 
+    // FIXME: rename?
+    pub fn first_commitments(&self) -> Option<&Commitments> {
+        self.header.commitments.first()
+    }
+
+    // FIXME: rename
     pub fn owned_batch_tx(self, cmt: Commitments) -> BatchedTx {
+        BatchedTx { tx: self, cmt }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_ref_first_tx(&self) -> BatchedTxRef {
+        BatchedTxRef {
+            tx: self,
+            cmt: self.first_commitments().unwrap(),
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_first_tx(self) -> BatchedTx {
+        let cmt = self.first_commitments().unwrap().to_owned();
         BatchedTx { tx: self, cmt }
     }
 }
@@ -1665,20 +1687,6 @@ impl Tx {
 impl<'tx> Tx {
     pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTxRef<'tx> {
         BatchedTxRef { tx: self, cmt }
-    }
-
-    #[cfg(any(test, feature = "testing"))]
-    pub fn batch_ref_first_tx(&'tx self) -> BatchedTxRef<'tx> {
-        BatchedTxRef {
-            tx: self,
-            cmt: self.commitments().first().unwrap(),
-        }
-    }
-
-    #[cfg(any(test, feature = "testing"))]
-    pub fn batch_first_tx(self) -> BatchedTx {
-        let cmt = self.commitments().first().unwrap().to_owned();
-        BatchedTx { tx: self, cmt }
     }
 }
 

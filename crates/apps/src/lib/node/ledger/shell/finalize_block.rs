@@ -253,10 +253,20 @@ where
                         (TxGasMeter::new_from_sub_limit(0.into()), None)
                     }
                     ProtocolTxType::EthEventsVext => {
+                        let cmt = match tx.first_commitments() {
+                            Some(cmt) => cmt,
+                            None => {
+                                tracing::error!(
+                                    "Internal logic error: FinalizeBlock \
+                                     received an empty TxType::Protocol \
+                                     transaction"
+                                );
+                                continue;
+                            }
+                        };
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
-                                // FIXME: manage unwrap
-                                tx.batch_tx(tx.commitments().first().unwrap()),
+                                tx.batch_tx(cmt),
                             )
                             .unwrap();
                         if self
@@ -274,10 +284,20 @@ where
                         (TxGasMeter::new_from_sub_limit(0.into()), None)
                     }
                     ProtocolTxType::EthereumEvents => {
+                        let cmt = match tx.first_commitments() {
+                            Some(cmt) => cmt,
+                            None => {
+                                tracing::error!(
+                                    "Internal logic error: FinalizeBlock \
+                                     received an empty TxType::Protocol \
+                                     transaction"
+                                );
+                                continue;
+                            }
+                        };
                         let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
-                                //FIXME: manage unwrap
-                                tx.batch_tx(tx.commitments().first().unwrap()),
+                                tx.batch_tx(cmt),
                             ).unwrap();
                         if let Some(address) =
                             self.mode.get_validator_address().cloned()

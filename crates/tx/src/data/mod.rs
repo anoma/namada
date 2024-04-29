@@ -262,7 +262,6 @@ impl<T> Default for TxResult<T> {
 
 impl<T: Display> TxResult<T> {
     pub fn to_result_string(self) -> TxResult<String> {
-        // FIXME: improve
         let mut batch_results: BTreeMap<Hash, Result<BatchedTxResult, String>> =
             BTreeMap::new();
 

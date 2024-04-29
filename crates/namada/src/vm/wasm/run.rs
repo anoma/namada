@@ -364,7 +364,6 @@ fn run_vp(
     verifiers: &BTreeSet<Address>,
     yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
 ) -> Result<()> {
-    // FIXME: need the batched tx as input for the vp too? Probably yes
     let input: VpInput = VpInput {
         addr: address,
         data: input_data,

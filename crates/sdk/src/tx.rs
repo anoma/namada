@@ -149,14 +149,13 @@ impl ProcessTxResponse {
     // all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(
         &self,
-        // FIXME: probably better to pass Commitments directly in here
-        cmt_hash: &Hash,
+        cmt: &Commitments,
     ) -> Option<&BatchedTxResult> {
         match self {
             ProcessTxResponse::Applied(resp) => {
                 if resp.code == ResultCode::Ok {
                     if let Some(InnerTxResult::Success(result)) =
-                        resp.batch_result().get(cmt_hash)
+                        resp.batch_result().get(&cmt.get_hash())
                     {
                         return Some(result);
                     }

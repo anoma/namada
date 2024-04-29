@@ -131,12 +131,17 @@ where
                     return false;
                 }
             };
-            // FIXME: manage unwrap
-            match tx
-                .batch_tx(tx.commitments().first().unwrap())
-                .try_into()
-                .ok()
-            {
+            let cmt = match tx.first_commitments() {
+                Some(cmt) => cmt,
+                None => {
+                    tracing::warn!(
+                        "Missing inner protocol transaction in batch"
+                    );
+                    return false;
+                }
+            };
+
+            match tx.batch_tx(cmt).try_into().ok() {
                 Some(EthereumTxData::BridgePoolVext(_)) => true,
                 Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least

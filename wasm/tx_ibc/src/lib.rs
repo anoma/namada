@@ -35,7 +35,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
             })
             .transpose()?;
         if let Some(shielded) = shielded {
-            // FIXME: improve
             match transfer.key {
                 Some(key) => token::utils::handle_masp_tx(
                     ctx,

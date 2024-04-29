@@ -45,6 +45,8 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("No inner transactions were found")]
+    MissingInnerTxs,
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("State error: {0}")]
@@ -184,10 +186,9 @@ where
 {
     match tx.header().tx_type {
         // Raw trasaction type is allowed only for governance proposals
-        // No bundles of governance transactions, just take the first one
         TxType::Raw => {
-            // FIXME: manage the unwrap
-            let cmt = tx.commitments().first().unwrap();
+            // No bundles of governance transactions, just take the first one
+            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
             let result = apply_wasm_tx(
                 BatchedTxRef { tx: &tx, cmt },
                 &tx_index,
@@ -207,10 +208,9 @@ where
             })
         }
         TxType::Protocol(protocol_tx) => {
-            // FIXME: should we support protocol bundles?
             // No bundles of protocol transactions, only take the first one
-            // FIXME: manage the unwrap
-            let cmt = tx.commitments().first().unwrap();
+            // FIXME: should prevent empty protocol txs to get to finalize block
+            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
             let result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
@@ -398,9 +398,6 @@ where
     } = shell_params;
 
     // Unshield funds if requested
-    // FIXME: there's still a problem, this could fail but than an inner tx
-    // could carry a valid masp_tx. In the logs I need to specify which one are
-    // valid!
     let is_valid_fee_unshielding = if let Some(transaction) = masp_transaction {
         // The unshielding tx does not charge gas, instantiate a
         // custom gas meter for this step
@@ -415,9 +412,8 @@ where
                     .expect("Missing fee unshielding gas limit in storage")),
             ));
 
-        // If it fails, do not return early
-        // from this function but try to take the funds from the unshielded
-        // balance
+        // If it fails, do not return early from this function but try to take
+        // the funds from the unshielded balance
         match wrapper.generate_fee_unshielding(
             get_transfer_hash_from_storage(*state),
             Some(TX_TRANSFER_WASM.to_string()),
@@ -432,12 +428,9 @@ where
                     BatchedTxRef {
                         tx: &fee_unshielding_tx,
                         // No bundles for fee unshielding
-                        cmt: fee_unshielding_tx
-                            .header
-                            .commitments
-                            .first()
-                            // FIXME: manage unwrap
-                            .unwrap(),
+                        // Ok to unwrap here because the transaction is built in
+                        // protocol
+                        cmt: fee_unshielding_tx.first_commitments().unwrap(),
                     },
                     &TxIndex::default(),
                     ShellParams {

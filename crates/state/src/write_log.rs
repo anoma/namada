@@ -155,10 +155,9 @@ impl Default for TxWriteLog {
     }
 }
 
-/// The write log for an already evaluated transaction. This allows managing the
-/// result of a single inner transaction inside a batch
+/// The write log for an already evaluated transaction of a batch. This allows
+/// managing the result of a single inner transaction inside a batch
 #[derive(Debug, Clone, PartialEq, Eq)]
-// FIXME: rename?
 pub(crate) struct BatchedTxWriteLog {
     // The generator of established addresses
     address_gen: Option<EstablishedAddressGen>,
@@ -174,10 +173,10 @@ pub struct WriteLog {
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
     pub(crate) block_write_log: HashMap<storage::Key, StorageModification>,
-    // The write log of the transactions of the current batch, indexed by the
-    // hash of the Commitments FIXME: when done verifying a batch check
-    // that this is empty INVARIANT: this has to be sorted by the insertion
-    // order
+    /// The write log of the transactions of the current batch, indexed by the
+    /// hash of the Commitments
+    /// INVARIANT: this has to be sorted by the insertion
+    /// order
     pub(crate) batch_write_log: HashMap<Hash, BatchedTxWriteLog>,
     // The write log of the current active transaction
     pub(crate) tx_write_log: TxWriteLog,
@@ -588,8 +587,6 @@ impl WriteLog {
         &self,
     ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
         use itertools::Either;
-        // FIXME: should also consider precommit?
-        // FIXME: is this function even used??
         self.tx_write_log
             .write_log
             .iter()
@@ -656,7 +653,6 @@ impl WriteLog {
         self.tx_write_log.precommit_write_log.retain(|_, v| {
             !matches!(v, StorageModification::Temp { value: _ })
         });
-        // FIXME: need a From impl?
         let tx_write_log = std::mem::take(&mut self.tx_write_log);
         let batched_log = BatchedTxWriteLog {
             address_gen: tx_write_log.address_gen,

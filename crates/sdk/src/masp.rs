@@ -2828,13 +2828,10 @@ fn get_tx_result(
                 let tx_result: TxResult<String> =
                     TxResult::from_str(&attribute.value)
                         .expect("The event value should be parsable");
-                // FIXME: improve here
-                match tx_result.batch_results.0.get(cmt_hash) {
-                    Some(res) => match res {
-                        Ok(res) => Some(res.to_owned()),
-                        Err(_) => None,
-                    },
-                    None => None,
+                if let Some(Ok(res)) = tx_result.batch_results.0.get(cmt_hash) {
+                    Some(res.to_owned())
+                } else {
+                    None
                 }
             } else {
                 None

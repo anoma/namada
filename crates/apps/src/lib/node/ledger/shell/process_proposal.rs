@@ -301,11 +301,21 @@ where
                         };
                     }
                 }
+
+                let cmt = match tx.first_commitments() {
+                    Some(cmt) => cmt,
+                    None => {
+                        return TxResult {
+                            code: ResultCode::InvalidTx.into(),
+                            info: "Missing inner protocol tx".to_string(),
+                        };
+                    }
+                };
+
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
-                        // FIXME: manage unwrawp
                         ethereum_tx_data_variants::EthEventsVext::try_from(
-                            tx.batch_tx(tx.commitments().first().unwrap()),
+                            tx.batch_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -334,9 +344,8 @@ where
                         })
                     }
                     ProtocolTxType::BridgePoolVext => {
-                        // FIXME: manage unwrap
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            tx.batch_tx(tx.commitments().first().unwrap()),
+                            tx.batch_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -366,8 +375,7 @@ where
                     }
                     ProtocolTxType::ValSetUpdateVext => {
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            // FIXME: manage unwrap
-                            tx.batch_tx(tx.commitments().first().unwrap()),
+                            tx.batch_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {

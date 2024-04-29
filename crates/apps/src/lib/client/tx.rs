@@ -299,9 +299,9 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
-        let cmt_hash = tx.commitments()[0].get_hash();
+        let cmt = tx.first_commitments().unwrap().to_owned();
         let response = namada.submit(tx, &args.tx).await?;
-        if let Some(result) = response.is_applied_and_valid(&cmt_hash) {
+        if let Some(result) = response.is_applied_and_valid(&cmt) {
             return Ok(result.initialized_accounts.first().cloned());
         }
     }
@@ -378,11 +378,11 @@ pub async fn submit_change_consensus_key(
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt_hash = tx.commitments()[0].get_hash();
+        let cmt = tx.commitments().first().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if !args.tx.dry_run {
-            if resp.is_applied_and_valid(&cmt_hash).is_some() {
+            if resp.is_applied_and_valid(&cmt).is_some() {
                 namada.wallet_mut().await.save().unwrap_or_else(|err| {
                     edisplay_line!(namada.io(), "{}", err)
                 });
@@ -570,7 +570,7 @@ pub async fn submit_become_validator(
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt_hash = tx.commitments()[0].get_hash();
+        let cmt = tx.commitments().first().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if args.tx.dry_run {
@@ -581,7 +581,7 @@ pub async fn submit_become_validator(
             safe_exit(0)
         }
 
-        if resp.is_applied_and_valid(&cmt_hash).is_none() {
+        if resp.is_applied_and_valid(&cmt).is_none() {
             display_line!(
                 namada.io(),
                 "Transaction failed. No key or addresses have been saved."
@@ -1053,10 +1053,10 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt_hash = tx.commitments()[0].get_hash();
+        let cmt = tx.commitments().first().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
-        if !args.tx.dry_run && resp.is_applied_and_valid(&cmt_hash).is_some() {
+        if !args.tx.dry_run && resp.is_applied_and_valid(&cmt).is_some() {
             tx::query_unbonds(namada, args.clone(), latest_withdrawal_pre)
                 .await?;
         }

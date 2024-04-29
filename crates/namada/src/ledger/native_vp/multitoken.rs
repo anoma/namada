@@ -314,7 +314,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::{Authorization, Code, Commitments, Data, Section, Tx};
+    use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
 
     use super::*;
     use crate::core::address::testing::{
@@ -335,8 +335,7 @@ mod tests {
         state
     }
 
-    // FIXME: BatchedTx?
-    fn dummy_tx(state: &TestState) -> (Tx, Commitments) {
+    fn dummy_tx(state: &TestState) -> BatchedTx {
         let tx_code = vec![];
         let tx_data = vec![];
         let mut tx = Tx::from_type(TxType::Raw);
@@ -348,8 +347,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let cmt = tx.commitments().first().unwrap().to_owned();
-        (tx, cmt)
+        tx.batch_first_tx()
     }
 
     fn transfer(
@@ -392,7 +390,7 @@ mod tests {
         let keys_changed = transfer(&mut state, &src, &dest);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -434,7 +432,7 @@ mod tests {
             .expect("write failed");
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -494,7 +492,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -556,7 +554,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -611,7 +609,7 @@ mod tests {
         // no minter is set
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -671,7 +669,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -713,7 +711,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -758,7 +756,7 @@ mod tests {
         keys_changed.insert(key);
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -795,7 +793,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -833,7 +831,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -871,7 +869,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let (tx, cmt) = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));

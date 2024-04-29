@@ -347,8 +347,8 @@ where
         tx.header.chain_id = shell.chain_id.clone();
         tx.set_data(Data::new(encode(&id)));
         tx.set_code(Code::new(code, None));
-        // FIXME: manage unwrap
-        let cmt = tx.commitments().first().unwrap().to_owned();
+        // Ok to unwrap cause we constructed the tx in protocol
+        let cmt = tx.first_commitments().unwrap().to_owned();
 
         let tx_result = protocol::dispatch_tx(
             tx,
