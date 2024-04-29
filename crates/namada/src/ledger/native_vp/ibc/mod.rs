@@ -867,7 +867,30 @@ mod tests {
         let client_counter_key = client_counter_key();
         increment_counter(&mut state, &client_counter_key);
         keys_changed.insert(client_counter_key);
-
+        // client update time
+        let client_update_time_key = client_update_timestamp_key(&client_id);
+        let time = StateRead::get_block_header(&state, None)
+            .unwrap()
+            .0
+            .unwrap()
+            .time;
+        let bytes = TmTime::try_from(time).unwrap().encode_vec();
+        state
+            .write_log_mut()
+            .write(&client_update_time_key, bytes)
+            .expect("write failed");
+        keys_changed.insert(client_update_time_key);
+        // client update height
+        let client_update_height_key = client_update_height_key(&client_id);
+        let host_height = state.in_mem().get_block_height().0;
+        let host_height =
+            Height::new(0, host_height.0).expect("invalid height");
+        state
+            .write_log_mut()
+            .write(&client_update_height_key, host_height.encode_vec())
+            .expect("write failed");
+        keys_changed.insert(client_update_height_key);
+        // event
         let event = RawIbcEvent::CreateClient(CreateClient::new(
             client_id,
             client_type(),
