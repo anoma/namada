@@ -17,8 +17,8 @@ pub use namada_sdk::{control_flow, io};
 pub use tendermint_rpc;
 pub use {
     bip39, namada_account as account, namada_core as core,
-    namada_ethereum_bridge as ethereum_bridge, namada_gas as gas,
-    namada_governance as governance, namada_ibc as ibc,
+    namada_ethereum_bridge as ethereum_bridge, namada_events as events,
+    namada_gas as gas, namada_governance as governance, namada_ibc as ibc,
     namada_parameters as parameters, namada_proof_of_stake as proof_of_stake,
     namada_replay_protection as replay_protection, namada_sdk as sdk,
     namada_state as state, namada_token as token, namada_tx as tx,
