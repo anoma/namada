@@ -3,9 +3,9 @@
 use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
-use namada_core::event::EventError;
 use namada_core::storage;
 use namada_core::storage::Epoch;
+use namada_events::EventError;
 use namada_tx::Tx;
 use prost::EncodeError;
 use tendermint_rpc::Error as RpcError;

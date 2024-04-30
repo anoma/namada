@@ -1,5 +1,6 @@
 extern crate core;
 
+pub mod event;
 pub mod oracle;
 pub mod protocol;
 pub mod storage;

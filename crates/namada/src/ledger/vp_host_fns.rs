@@ -5,11 +5,11 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
-use namada_core::event::{Event, EventTypeBuilder};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
 };
+use namada_events::{Event, EventTypeBuilder};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, StateRead, DB};
