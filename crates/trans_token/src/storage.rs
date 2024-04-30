@@ -1,8 +1,9 @@
 use namada_core::address::{Address, InternalAddress};
 use namada_core::hints;
-use namada_core::token::{self, Amount, DenominatedAmount};
+use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
+use storage::ResultExt;
 
 use crate::storage_key::*;
 
@@ -41,11 +42,11 @@ pub fn update_balance<S, F>(
 ) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
-    F: FnOnce(token::Amount) -> token::Amount,
+    F: FnOnce(token::Amount) -> storage::Result<token::Amount>,
 {
     let key = balance_key(token, owner);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
-    let new_balance = f(balance);
+    let new_balance = f(balance)?;
     storage.write(&key, new_balance)
 }
 
@@ -70,11 +71,11 @@ pub fn update_total_supply<S, F>(
 ) -> storage::Result<()>
 where
     S: StorageRead + StorageWrite,
-    F: FnOnce(token::Amount) -> token::Amount,
+    F: FnOnce(token::Amount) -> storage::Result<token::Amount>,
 {
     let key = minted_balance_key(token);
     let total_supply = storage.read::<token::Amount>(&key)?.unwrap_or_default();
-    let new_supply = f(total_supply);
+    let new_supply = f(total_supply)?;
     storage.write(&key, new_supply)
 }
 
@@ -197,10 +198,20 @@ where
     S: StorageRead + StorageWrite,
 {
     // Update the destination balance
-    update_balance(storage, token, dest, |cur_amount| cur_amount + amount)?;
+    update_balance(storage, token, dest, |cur_amount| {
+        cur_amount
+            .checked_add(amount)
+            .ok_or(AmountError::Overflow)
+            .into_storage_result()
+    })?;
 
     // Update the total supply
-    update_total_supply(storage, token, |cur_supply| cur_supply + amount)
+    update_total_supply(storage, token, |cur_supply| {
+        cur_supply
+            .checked_add(amount)
+            .ok_or(AmountError::Overflow)
+            .into_storage_result()
+    })
 }
 
 /// Burn a specified amount of tokens from some address. If the burn amount is
@@ -231,7 +242,8 @@ where
     update_total_supply(storage, token, |cur_supply| {
         cur_supply
             .checked_sub(amount_to_burn)
-            .expect("Total token supply underflowed")
+            .ok_or(AmountError::Insufficient)
+            .into_storage_result()
     })
 }
 

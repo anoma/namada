@@ -850,7 +850,7 @@ mod test_finalize_block {
             &mut shell.state,
             &native_token,
             &Address::from(&keypair.ref_to()),
-            |_| Amount::native_whole(1000),
+            |_| Ok(Amount::native_whole(1000)),
         )
         .unwrap();
 
@@ -1151,7 +1151,7 @@ mod test_finalize_block {
                     &mut shell.state,
                     &native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
-                    |_| amt,
+                    |_| Ok(amt),
                 )
                 .expect("Test failed");
             }
