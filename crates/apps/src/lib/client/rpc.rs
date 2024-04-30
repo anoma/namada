@@ -41,7 +41,7 @@ use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
 };
-use namada_sdk::masp::MaspTokenRewardData;
+use namada_sdk::masp::types::MaspTokenRewardData;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::{
@@ -50,15 +50,12 @@ use namada_sdk::rpc::{
 use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::tx::display_inner_resp;
 use namada_sdk::wallet::AddressVpType;
-use namada_sdk::{
-    display, display_line, edisplay_line, error, prompt, Namada, NamadaImpl,
-};
+use namada_sdk::{display, display_line, edisplay_line, error, prompt, Namada};
 use tokio::time::Instant;
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::ProofOps;
 use crate::facade::tendermint_rpc::error::Error as TError;
-use crate::wallet::CliWalletUtils;
 
 /// Query the status of a given transaction.
 ///
