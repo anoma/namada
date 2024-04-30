@@ -24,6 +24,7 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::ethereum_events::EthAddress;
+use namada_core::event::{Event, EventToEmit, EventType};
 use namada_core::internal::HostEnvResult;
 use namada_core::key::common;
 use namada_core::storage::TxIndex;
@@ -336,11 +337,10 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn emit_ibc_event(&mut self, event: &ibc::IbcEvent) -> Result<(), Error> {
-        let event = borsh::to_vec(event).unwrap();
-        unsafe {
-            namada_tx_emit_ibc_event(event.as_ptr() as _, event.len() as _)
-        };
+    fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<(), Error> {
+        let event: Event = event.into();
+        let event = borsh::to_vec(&event).unwrap();
+        unsafe { namada_tx_emit_event(event.as_ptr() as _, event.len() as _) };
         Ok(())
     }
 
@@ -349,19 +349,16 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<ibc::IbcEvent>, Error> {
-        let event_type = event_type.as_ref().to_string();
+    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>, Error> {
+        let event_type = event_type.to_string();
         let read_result = unsafe {
-            namada_tx_get_ibc_events(
+            namada_tx_get_events(
                 event_type.as_ptr() as _,
                 event_type.len() as _,
             )
         };
         match read_from_buffer(read_result, namada_tx_result_buffer) {
-            Some(value) => Ok(Vec::<ibc::IbcEvent>::try_from_slice(&value[..])
+            Some(value) => Ok(Vec::<Event>::try_from_slice(&value[..])
                 .expect("The conversion shouldn't fail")),
             None => Ok(Vec::new()),
         }
