@@ -2126,36 +2126,6 @@ pub async fn build_vote_proposal(
     let is_validator =
         rpc::is_validator(context.client(), voter_address).await?;
 
-    // Prevent jailed or inactive validators from voting
-    if is_validator {
-        let state = rpc::get_validator_state(
-            context.client(),
-            voter_address,
-            Some(current_epoch),
-        )
-        .await?
-        .0
-        .expect("Expected to find the state of the validator");
-
-        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
-            edisplay_line!(
-                context.io(),
-                "The voter {} is a validator who is currently jailed or \
-                 inactive. Thus, this address is prohibited from voting in \
-                 governance right now.",
-                voter_address
-            );
-            if !tx.force {
-                return Err(Error::from(
-                    TxSubmitError::CannotVoteInGovernance(
-                        voter_address.clone(),
-                        current_epoch,
-                    ),
-                ));
-            }
-        }
-    }
-
     // Check if the voting period is still valid for the voter
     if !proposal.can_be_voted(current_epoch, is_validator) {
         edisplay_line!(
@@ -2180,6 +2150,36 @@ pub async fn build_vote_proposal(
     }
 
     if is_validator {
+        // Prevent a validator voter from voting if they are jailed or inactive
+        // right now
+        let state = rpc::get_validator_state(
+            context.client(),
+            voter_address,
+            Some(current_epoch),
+        )
+        .await?
+        .0
+        .expect("Expected to find the state of the validator");
+
+        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
+            edisplay_line!(
+                context.io(),
+                "The voter {} is a validator who is currently jailed or \
+                 inactive. Thus, this address is prohibited from voting in \
+                 governance right now. Please try again when not jailed or \
+                 inactive.",
+                voter_address
+            );
+            if !tx.force {
+                return Err(Error::from(
+                    TxSubmitError::CannotVoteInGovernance(
+                        voter_address.clone(),
+                        current_epoch,
+                    ),
+                ));
+            }
+        }
+
         let stake =
             get_validator_stake(context.client(), current_epoch, voter_address)
                 .await?;
@@ -2196,65 +2196,15 @@ pub async fn build_vote_proposal(
                 ));
             }
         }
-        let val_state = rpc::get_validator_state(
-            context.client(),
-            voter_address,
-            Some(current_epoch),
-        )
-        .await?
-        .0
-        .expect("Expected to find the state of the validator");
-
-        if matches!(
-            val_state,
-            ValidatorState::Jailed | ValidatorState::Inactive
-        ) {
-            edisplay_line!(
-                context.io(),
-                "Voter address {voter_address} is a validator that is either \
-                 jailed or inactive, and so it may not vote in governance at \
-                 this moment.",
-            );
-            if !tx.force {
-                return Err(Error::from(
-                    TxSubmitError::CannotVoteInGovernance(
-                        voter_address.clone(),
-                        current_epoch,
-                    ),
-                ));
-            }
-        }
     } else {
-        // Get active valid validators with whom the voter has delegations
-        // (bonds)
-        let delegation_vals = rpc::get_delegation_validators(
+        // Check that there are delegations to vote with
+        let delegation_validators = rpc::get_delegation_validators(
             context.client(),
             voter_address,
-            proposal.voting_start_epoch,
+            current_epoch,
         )
         .await?;
 
-        let mut delegation_validators = Vec::<Address>::new();
-        for validator in delegation_vals {
-            let val_state = rpc::get_validator_state(
-                context.client(),
-                &validator,
-                Some(current_epoch),
-            )
-            .await?
-            .0
-            .expect("Expected to find the state of the validator");
-
-            if matches!(
-                val_state,
-                ValidatorState::Jailed | ValidatorState::Inactive
-            ) {
-                continue;
-            }
-            delegation_validators.push(validator.clone());
-        }
-
-        // Check that there are delegations to vote with
         if delegation_validators.is_empty() {
             edisplay_line!(
                 context.io(),
