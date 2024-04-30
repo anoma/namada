@@ -72,6 +72,9 @@ impl Client for TestingClient {
         self.inner.perform(request).await
     }
 }
+
+/// Creat a test client for unit testing as well
+/// as a channel for communicating with it.
 pub fn test_client(
     last_height: BlockHeight,
 ) -> (TestingClient, flume::Sender<Option<IndexedNoteEntry>>) {
@@ -92,6 +95,9 @@ pub fn test_client(
     )
 }
 
+/// A client for unit tests. It "fetches" a new note
+/// when a channel controlled by the unit test sends
+/// it one.
 #[derive(Clone)]
 pub struct TestingMaspClient<'a> {
     client: &'a TestingClient,
@@ -109,7 +115,7 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         &self,
         _: &ShieldedContext<U>,
         _: &IO,
-        _: IndexedTx,
+        last_witness_tx: IndexedTx,
         _: BlockHeight,
     ) -> Result<CommitmentTreeUpdates, Error> {
         let mut note_map_delta: BTreeMap<IndexedTx, usize> = Default::default();
@@ -117,8 +123,10 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         let mut note_pos = 0;
         for msg in self.client.next_masp_txs.drain() {
             if let Some((ix, _)) = msg.as_ref() {
-                note_map_delta.insert(*ix, note_pos);
-                note_pos += 1;
+                if *ix >= last_witness_tx {
+                    note_map_delta.insert(*ix, note_pos);
+                    note_pos += 1;
+                }
             }
             channel_temp.push(msg);
         }
@@ -163,9 +171,7 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
     }
 }
 
-/// An iterator that yields its first element
-/// but runs forever on the second
-/// `next` call.
+/// An iterator that yields its first element only
 struct YieldOnceIterator {
     first: Option<IndexedNoteEntry>,
 }

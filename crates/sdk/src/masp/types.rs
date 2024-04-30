@@ -103,6 +103,9 @@ pub struct MaspTokenRewardData {
     pub locked_amount_target: Uint,
 }
 
+/// The MASP transaction(s) found in a Namada tx.
+/// These transactions can appear in the fee payment
+/// and / or the main payload.
 #[derive(Debug, Clone)]
 pub(super) struct ExtractedMaspTx {
     pub(crate) fee_unshielding:
@@ -131,7 +134,7 @@ pub enum ContextSyncStatus {
     Speculative,
 }
 
-/// a masp change
+/// A MASP specific amount delta.
 #[derive(BorshSerialize, BorshDeserialize, BorshDeserializer, Debug, Clone)]
 pub struct MaspChange {
     /// the token address
@@ -142,6 +145,10 @@ pub struct MaspChange {
 
 #[derive(Debug, Default)]
 /// Data returned by successfully scanning a tx
+///
+/// This is append-only data that will be sent
+/// to a [`TaskManager`] to be applied to the
+/// shielded context.
 pub(super) struct ScannedData {
     pub div_map: HashMap<usize, Diversifier>,
     pub memo_map: HashMap<usize, MemoBytes>,
@@ -153,6 +160,7 @@ pub(super) struct ScannedData {
 }
 
 impl ScannedData {
+    /// Append `self` to a [`ShieldedContext`]
     pub(super) fn apply_to<U: ShieldedUtils>(
         mut self,
         ctx: &mut ShieldedContext<U>,
@@ -181,6 +189,7 @@ impl ScannedData {
         ctx.decrypted_note_cache.merge(self.decrypted_note_cache);
     }
 
+    /// Merge to different instances of `Self`.
     pub(super) fn merge(&mut self, mut other: Self) {
         for (k, v) in other.note_map.drain(..) {
             self.note_map.insert(k, v);
@@ -211,6 +220,11 @@ impl ScannedData {
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 /// Data extracted from a successfully decrypted MASP note
+///
+/// These will be cached until the trial-decryption phase
+/// of shielded-sync has finished. Then they will be
+/// re-scanned as part of nullifying spent notes (which
+/// is not parallelizable).
 pub struct DecryptedData {
     pub tx: Transaction,
     pub keys: BTreeSet<namada_core::storage::Key>,
@@ -227,6 +241,7 @@ pub struct DecryptedDataCache {
 }
 
 impl DecryptedDataCache {
+    /// Add an entry to the cache
     pub fn insert(
         &mut self,
         key: (IndexedTx, ViewingKey),
@@ -235,12 +250,15 @@ impl DecryptedDataCache {
         self.inner.insert(key, value);
     }
 
+    /// Merge another cache into `self`.
     pub fn merge(&mut self, mut other: Self) {
         for (k, v) in other.inner.drain(..) {
             self.insert(k, v);
         }
     }
 
+    /// Check if the cache already contains an entry for a given IndexedTx and
+    /// viewing key.
     pub fn contains(&self, ix: &IndexedTx, vk: &ViewingKey) -> bool {
         self.inner
             .keys()
@@ -248,6 +266,7 @@ impl DecryptedDataCache {
             .is_some()
     }
 
+    /// Return an iterator over the cache that consumes it.
     pub fn drain(
         &mut self,
     ) -> impl Iterator<Item = ((IndexedTx, ViewingKey), DecryptedData)> + '_
@@ -258,8 +277,9 @@ impl DecryptedDataCache {
 
 /// A cache of fetched indexed transactions.
 ///
-/// The cache is designed so that it either contains
-/// all transactions from a given height, or none.
+/// An invariant that shielded-sync maintains is that
+/// this cache either contains all transactions from
+/// a given height, or none.
 #[derive(Debug, Default, Clone)]
 pub struct Unscanned {
     pub(super) txs: Arc<Mutex<IndexedNoteData>>,
@@ -283,6 +303,7 @@ impl BorshDeserialize for Unscanned {
 }
 
 impl Unscanned {
+    /// Append elements to the cache from an iterator.
     pub fn extend<I>(&self, items: I)
     where
         I: IntoIterator<Item = IndexedNoteEntry>,
@@ -291,11 +312,14 @@ impl Unscanned {
         locked.extend(items);
     }
 
+    /// Add a single entry to the cache.
     pub fn insert(&self, (k, v): IndexedNoteEntry) {
         let mut locked = self.txs.lock().unwrap();
         locked.insert(k, v);
     }
 
+    /// Check if this cache has already been populated for a given
+    /// block height.
     pub fn contains_height(&self, height: u64) -> bool {
         let locked = self.txs.lock().unwrap();
         locked.keys().any(|k| k.height.0 == height)
@@ -327,6 +351,7 @@ impl Unscanned {
             .unwrap_or_default()
     }
 
+    /// Remove the first entry from the cache and return it.
     pub fn pop_first(&self) -> Option<IndexedNoteEntry> {
         let mut locked = self.txs.lock().unwrap();
         locked.pop_first()

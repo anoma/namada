@@ -135,9 +135,9 @@ pub(super) fn extract_payload(
     Ok(())
 }
 
-// Retrieves all the indexes and tx events at the specified height which refer
-// to a valid MASP transaction. If an index is given, it filters only the
-// transactions with an index equal or greater to the provided one.
+/// Retrieves all the indexes and tx events at the specified height which refer
+/// to a valid MASP transaction. If an index is given, it filters only the
+/// transactions with an index equal or greater to the provided one.
 pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
@@ -288,7 +288,7 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
     })
 }
 
-// Extract the changed keys and Transaction hash from a MASP over ibc message
+/// Extract the changed keys and Transaction hash from a MASP over ibc message
 pub(super) async fn extract_payload_from_shielded_action<
     'args,
     C: Client + Sync,
@@ -429,13 +429,17 @@ fn get_tx_result(
         })
 }
 
+/// The updates to the commitment tree and witness maps
+/// fetched at the beginning of shielded-sync.
 pub struct CommitmentTreeUpdates {
     pub commitment_tree: CommitmentTree<Node>,
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
     pub note_map_delta: BTreeMap<IndexedTx, usize>,
 }
 
-/// TODO: Used the sealed pattern?
+/// This abstracts away the implementation details
+/// of how shielded-sync fetches the necessary data
+/// from a remote server.
 pub trait MaspClient<'a, C: Client> {
     fn new(client: &'a C) -> Self
     where
@@ -680,9 +684,7 @@ pub(super) struct FetchQueueReceiver {
 }
 
 impl FetchQueueReceiver {
-    /// Check if the sender has hung up. If so, manually calculate the latest
-    /// height fetched. Otherwise, update the latest height fetched with the
-    /// data provided by the sender.
+    /// Check if the sender has hung up.
     fn sender_alive(&self) -> bool {
         self.last_fetched.sender_count() > 0
     }
@@ -711,10 +713,12 @@ impl Iterator for FetchQueueReceiver {
 }
 
 impl FetchQueueSender {
+    /// Checks if the channel is already populated for the given block height
     pub(super) fn contains_height(&self, height: u64) -> bool {
         self.cache.contains_height(height)
     }
 
+    /// Send a new value of the channel
     pub(super) fn send(&mut self, data: IndexedNoteEntry) {
         self.last_fetched.send(data.0.height).unwrap();
         self.cache.insert(data);
@@ -775,6 +779,8 @@ pub(super) struct TaskScheduler<U> {
 }
 
 impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
+    /// Create a new [`TaskManage`] and a [`TaskScheduler`] which can be used
+    /// to schedule tasks to be run by the manager.
     pub(super) fn new(ctx: ShieldedContext<U>) -> (TaskScheduler<U>, Self) {
         let (action_send, action_recv) = tokio::sync::mpsc::channel(100);
         (
@@ -815,8 +821,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                     return Ok(());
                 }
                 Action::Data(scanned, idx) => {
-                    // track the latest scanned height
-                    self.latest_idx = idx;
+                    // track the latest scanned height. Due to parallelism,
+                    // these won't come in ascending order, thus we should
+                    // track the maximum seen.
+                    self.latest_idx = std::cmp::max(self.latest_idx, idx);
                     // apply state changes from the scanning process
                     let mut locked = self.ctx.lock().await;
                     scanned.apply_to(&mut locked);
@@ -944,7 +952,7 @@ pub trait ProgressTracker<IO: Io> {
     fn left_to_fetch(&self) -> usize;
 }
 
-/// The default type for logging sync progress.
+/// The default type for tracking the progress of shielded-sync.
 #[derive(Debug, Clone)]
 pub struct DefaultTracker<'io, IO: Io> {
     io: &'io IO,
