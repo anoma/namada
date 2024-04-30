@@ -32,9 +32,6 @@ const CLIENT_CMD: &str = "client";
 const WALLET_CMD: &str = "wallet";
 const RELAYER_CMD: &str = "relayer";
 
-// FIXME: to bundle tx probably best option is to a ccept an optional --bundle
-// args and concatenate tx construction somehow
-
 pub mod cmds {
 
     use super::utils::*;

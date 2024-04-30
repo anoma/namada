@@ -1108,6 +1108,12 @@ impl Tx {
         self.header.batch.insert(TxCommitments::default())
     }
 
+    /// Add a new inner tx commitment to the transaction. Returns `false` if the
+    /// item already exidted in the collection
+    pub fn add_inner_tx_commitments(&mut self, cmt: TxCommitments) -> bool {
+        self.header.batch.insert(cmt)
+    }
+
     /// Get the transaction header
     pub fn header(&self) -> Header {
         self.header.clone()

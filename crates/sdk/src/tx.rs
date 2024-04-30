@@ -2864,6 +2864,38 @@ async fn used_asset_types<P, R, K, N>(
     Ok(asset_types)
 }
 
+/// Constructs the batched tx from the provided list. Returns also the data for
+/// signing
+pub fn build_batch(
+    mut txs: Vec<(Tx, SigningTxData)>,
+) -> Result<(Tx, Vec<SigningTxData>)> {
+    let (mut batched_tx, sig_data) = txs.pop().ok_or_else(|| {
+        Error::Other("No transactions provided for the batch".to_string())
+    })?;
+    let mut signing_data = vec![sig_data];
+
+    for (tx, sig_data) in txs {
+        if tx.commitments().len() != 1 {
+            return Err(Error::Other(format!(
+                "Inner tx did not contain exactly one transaction, \
+                 transaction length: {}",
+                tx.commitments().len()
+            )));
+        }
+
+        let cmt = tx.first_commitments().unwrap();
+        if !batched_tx.add_inner_tx_commitments(cmt.to_owned()) {
+            return Err(Error::Other(format!(
+                "The transaction batch already contains inner tx: {}",
+                cmt.get_hash()
+            )));
+        }
+        signing_data.push(sig_data);
+    }
+
+    Ok((batched_tx, signing_data))
+}
+
 /// Submit an ordinary transfer
 pub async fn build_transfer<N: Namada>(
     context: &N,
