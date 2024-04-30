@@ -1000,7 +1000,7 @@ pub mod testing {
                 chain_id,
                 expiration,
                 timestamp,
-                //FIXME: arbitrary number of commitments
+                //TODO: arbitrary number of commitments
                 batch: [TxCommitments{
                     data_hash,
                     code_hash,

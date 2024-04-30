@@ -599,7 +599,7 @@ where
                         }
                     })
                 {
-                    // FIXME: nee to increment the rejected txs too
+                    // TODO: nee to increment the rejected txs too
                     for _ in 0..commitments_len {
                         stats.increment_errored_txs();
                     }
@@ -753,18 +753,13 @@ where
                     tx_event["hash"],
                     msg
                 );
-                // FIXME: also, about gas errors,
-                // if the 3rd tx runs out of gas but the first two succeeded
-                // and the batch is non-atomic I must commit the first two
-                // and emit their result in the log IMPORTANT
-                // FIXME: should I put the Error in TxResult? => Then I'd
-                // need to always produce the event with the batch
-                // attribute. But this is probably the only solution
+                // TODO: instead of dropping everything, commit the successful
+                // txs before the error (and emit their events) and adjust the
+                // replay protection handling
 
                 // If user transaction didn't fail because of out of gas nor
                 // invalid section commitment, commit its hash to prevent
-                // replays FIXME: if I commit anything from the
-                // batch I need to commit the hash anyway!
+                // replays
                 if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
                     if !matches!(
                         msg,
@@ -787,40 +782,14 @@ where
                     }
                 }
 
-                // if is_atomic_batch {
-                // FIXME: should we commit the valid txs of the batch if it
-                // is non-atomic?
-                // FIXME: need to increment the rejected txs too
                 for _ in 0..commitments_len {
                     stats.increment_errored_txs();
                 }
                 self.state.write_log_mut().drop_batch();
-                // } else {
-                //     //FIXME: also, I don't have TxResult here so I cannot
-                // log anything! -> I need it     //FIXME:
-                // options:     //    - I don't return
-                // an error in case of out of gas, but just Ok and I abort
-                // the execution so that I have the TxResult -> But I'd
-                // still need to tell that there was a gas error
-                //     //    - I create the TxResult before and pass it as
-                // an argument to dispatch_Tx so that I can update it
-                // anyway. Also, after the out of gas error I populate all
-                // the missing tx results with out of gas error
-
-                //     //FIXME: I need the amount of entries in the batch
-                // log to compute the difference     for
-                // _ in 0..(commitments_len - self.state) {
-                //         stats.increment_errored_txs();
-                //     }
-                //     // Commit the transaction that were accepted before
-                // the failure     self.state.
-                // write_log_mut().commit_batch(); }
 
                 tx_event
                     .extend(WithGasUsed(consumed_gas))
                     .extend(Info(msg.to_string()))
-                    // FIXME: correct to mark it as invalid even if some txs
-                    // might have been committed?
                     .extend(Code(ResultCode::InvalidTx));
             }
         }
