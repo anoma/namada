@@ -87,7 +87,7 @@ pub enum Error {
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
-    #[error("IBC Token native VP: {0}")]
+    #[error("Multitoken native VP: {0}")]
     MultitokenNativeVpError(crate::ledger::native_vp::multitoken::Error),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(crate::ledger::governance::Error),
