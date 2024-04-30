@@ -764,12 +764,12 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
-    use namada::replay_protection;
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::Fee;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
+    use namada::{address, replay_protection};
     use namada_sdk::eth_bridge::storage::vote_tallies::BridgePoolRoot;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
