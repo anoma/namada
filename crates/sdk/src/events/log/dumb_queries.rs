@@ -1,20 +1,23 @@
-//! Silly simple Tendermint query parser.
-//!
-//! This parser will only work with simple queries of the form:
-//!
-//! ```text
-//! tm.event='NewBlock' AND <accepted|applied>.<$attr>='<$value>'
-//! ```
+//! Silly simple event matcher.
 
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
 
-use crate::events::{Event, EventType};
+use crate::events::extend::{ExtendAttributesMap, TxHash as TxHashAttr};
+use crate::events::{Event, EventType, EventTypeBuilder};
 use crate::ibc::core::client::types::Height as IbcHeight;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
+use crate::ibc::event::types::UPDATE_CLIENT;
+use crate::ibc::event::{
+    ClientId as ClientIdAttr, ConsensusHeights, PacketDstChannel,
+    PacketDstPort, PacketSequence, PacketSrcChannel, PacketSrcPort,
+};
+use crate::ibc::{IbcEvent, IbcEventType};
+use crate::tx::event::types::APPLIED as APPLIED_TX;
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
 /// given Tendermint query.
@@ -25,27 +28,53 @@ pub struct QueryMatcher {
 }
 
 impl QueryMatcher {
+    /// Returns the event type that this [`QueryMatcher`]
+    /// attempts to match.
+    pub fn event_type(&self) -> &EventType {
+        &self.event_type
+    }
+
     /// Checks if this [`QueryMatcher`] validates the
     /// given [`Event`].
     pub fn matches(&self, event: &Event) -> bool {
-        if event.event_type != self.event_type {
+        if *event.kind() != self.event_type {
             return false;
         }
+        event.has_subset_of_attrs(&self.attributes)
+    }
 
-        self.attributes.iter().all(|(key, value)| {
-            match event.attributes.get(key) {
-                Some(v) => v == value,
-                None => false,
-            }
-        })
+    /// Returns a query matching the given relayed Bridge pool transaction hash.
+    pub fn bridge_pool_relayed(tx_hash: &KeccakHash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.with_attribute(
+            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
+        );
+        Self {
+            event_type:
+                namada_core::ethereum_structs::event_types::BRIDGE_POOL_RELAYED,
+            attributes,
+        }
+    }
+
+    /// Returns a query matching the given expired Bridge pool transaction hash.
+    pub fn bridge_pool_expired(tx_hash: &KeccakHash) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.with_attribute(
+            namada_core::ethereum_structs::BridgePoolTxHash(tx_hash),
+        );
+        Self {
+            event_type:
+                namada_core::ethereum_structs::event_types::BRIDGE_POOL_EXPIRED,
+            attributes,
+        }
     }
 
     /// Returns a query matching the given applied transaction hash.
     pub fn applied(tx_hash: Hash) -> Self {
         let mut attributes = HashMap::new();
-        attributes.insert("hash".to_string(), tx_hash.to_string());
+        attributes.with_attribute(TxHashAttr(tx_hash));
         Self {
-            event_type: EventType::Applied,
+            event_type: APPLIED_TX,
             attributes,
         }
     }
@@ -55,29 +84,23 @@ impl QueryMatcher {
         client_id: ClientId,
         consensus_height: BlockHeight,
     ) -> Self {
-        use crate::ibc::core::client::types::events::{
-            CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
-            UPDATE_CLIENT_EVENT,
-        };
-
         let mut attributes = HashMap::new();
+
         attributes
-            .insert(CLIENT_ID_ATTRIBUTE_KEY.to_string(), client_id.to_string());
-        attributes.insert(
-            CONSENSUS_HEIGHTS_ATTRIBUTE_KEY.to_string(),
-            IbcHeight::new(0, consensus_height.0)
-                .expect("invalid height")
-                .to_string(),
-        );
+            .with_attribute(ClientIdAttr(client_id))
+            .with_attribute(ConsensusHeights(
+                IbcHeight::new(0, consensus_height.0).expect("invalid height"),
+            ));
+
         Self {
-            event_type: EventType::Ibc(UPDATE_CLIENT_EVENT.to_string()),
+            event_type: UPDATE_CLIENT,
             attributes,
         }
     }
 
     /// Returns a query matching the given IBC packet parameters
     pub fn ibc_packet(
-        event_type: EventType,
+        event_type: IbcEventType,
         source_port: PortId,
         source_channel: ChannelId,
         destination_port: PortId,
@@ -85,23 +108,18 @@ impl QueryMatcher {
         sequence: Sequence,
     ) -> Self {
         let mut attributes = HashMap::new();
+
         attributes
-            .insert("packet_src_port".to_string(), source_port.to_string());
-        attributes.insert(
-            "packet_src_channel".to_string(),
-            source_channel.to_string(),
-        );
-        attributes.insert(
-            "packet_dst_port".to_string(),
-            destination_port.to_string(),
-        );
-        attributes.insert(
-            "packet_dst_channel".to_string(),
-            destination_channel.to_string(),
-        );
-        attributes.insert("packet_sequence".to_string(), sequence.to_string());
+            .with_attribute(PacketSrcPort(source_port))
+            .with_attribute(PacketSrcChannel(source_channel))
+            .with_attribute(PacketDstPort(destination_port))
+            .with_attribute(PacketDstChannel(destination_channel))
+            .with_attribute(PacketSequence(sequence));
+
         Self {
-            event_type,
+            event_type: EventTypeBuilder::new_of::<IbcEvent>()
+                .with_segment(event_type.0)
+                .build(),
             attributes,
         }
     }
@@ -110,6 +128,7 @@ impl QueryMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::extend::ComposeEvent;
     use crate::events::EventLevel;
 
     /// Test if query matching is working as expected.
@@ -118,37 +137,29 @@ mod tests {
         const HASH: &str =
             "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
-        let mut attributes = HashMap::new();
-        attributes.insert("hash".to_string(), HASH.to_string());
+        let tx_hash: Hash = HASH.parse().unwrap();
+
         let matcher = QueryMatcher {
-            event_type: EventType::Proposal,
-            attributes,
+            event_type: APPLIED_TX,
+            attributes: {
+                let mut attrs = namada_core::collections::HashMap::new();
+                attrs.with_attribute(TxHashAttr(tx_hash));
+                attrs
+            },
         };
 
         let tests = {
-            let event_1 = Event {
-                event_type: EventType::Proposal,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = namada_core::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), HASH.to_string());
-                    attrs
-                },
-            };
-            let accepted_1 = true;
+            let event_1: Event = Event::new(UPDATE_CLIENT, EventLevel::Block)
+                .with(TxHashAttr(tx_hash))
+                .into();
+            let applied_1 = false;
 
-            let event_2 = Event {
-                event_type: EventType::Applied,
-                level: EventLevel::Block,
-                attributes: {
-                    let mut attrs = namada_core::collections::HashMap::new();
-                    attrs.insert("hash".to_string(), HASH.to_string());
-                    attrs
-                },
-            };
-            let accepted_2 = false;
+            let event_2: Event = Event::new(APPLIED_TX, EventLevel::Tx)
+                .with(TxHashAttr(tx_hash))
+                .into();
+            let applied_2 = true;
 
-            [(event_1, accepted_1), (event_2, accepted_2)]
+            [(event_1, applied_1), (event_2, applied_2)]
         };
 
         for (ref ev, status) in tests {

@@ -1,13 +1,52 @@
 //! Transaction events.
 
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::event::extend::{
-    ComposeEvent, ExtendEvent, Height, Log, TxHash,
+    ComposeEvent, EventAttributeEntry, Height, Log, TxHash,
 };
-use namada_core::event::Event;
+use namada_core::event::{Event, EventToEmit};
+use namada_macros::BorshDeserializer;
+#[cfg(feature = "migrations")]
+use namada_migrations::*;
 
 use super::Tx;
 use crate::data::{ResultCode, TxResult};
 use crate::TxType;
+
+/// Transaction event.
+/// using a websocket client
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
+pub struct TxEvent(pub Event);
+
+impl From<TxEvent> for Event {
+    #[inline]
+    fn from(TxEvent(event): TxEvent) -> Self {
+        event
+    }
+}
+
+impl EventToEmit for TxEvent {
+    const DOMAIN: &'static str = "tx";
+}
+
+pub mod types {
+    //! Transaction event types.
+
+    use namada_core::event::EventType;
+
+    use super::TxEvent;
+
+    /// Applied transaction.
+    pub const APPLIED: EventType = namada_core::event_type!(TxEvent, "applied");
+}
 
 /// Creates a new event with the hash and height of the transaction
 /// already filled in
@@ -27,21 +66,27 @@ pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
 /// Extend an [`Event`] with result code data.
 pub struct Code(pub ResultCode);
 
-impl ExtendEvent for Code {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(code) = self;
-        event["code"] = code.into();
+impl EventAttributeEntry<'static> for Code {
+    type Value = ResultCode;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "code";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 
 /// Extend an [`Event`] with inner tx data.
 pub struct InnerTx<'result>(pub &'result TxResult);
 
-impl ExtendEvent for InnerTx<'_> {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(tx_result) = self;
-        event["inner_tx"] = tx_result.to_string();
+impl<'result> EventAttributeEntry<'result> for InnerTx<'result> {
+    type Value = &'result TxResult;
+    type ValueOwned = TxResult;
+
+    const KEY: &'static str = "inner_tx";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
