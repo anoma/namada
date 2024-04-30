@@ -20,7 +20,6 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;
-use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -1496,14 +1495,12 @@ impl Tx {
         &mut self,
         fee: Fee,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
         fee_unshield_hash: Option<namada_core::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
             fee,
             fee_payer,
-            epoch,
             gas_limit,
             fee_unshield_hash,
         )));
