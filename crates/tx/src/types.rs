@@ -1103,15 +1103,30 @@ impl Tx {
 
     /// Add new default commitments to the transaction. Returns false if the
     /// commitment is already contained in the set
+    pub fn init_new_commitments(&mut self) -> bool {
+        self.header.batch.insert(TxCommitments::default())
+    }
+
+    /// Add new default commitments to the transaction. Returns false if the
+    /// commitment is already contained in the set
     #[cfg(any(test, feature = "testing"))]
     pub fn push_default_commitments(&mut self) -> bool {
         self.header.batch.insert(TxCommitments::default())
     }
 
-    /// Add a new inner tx commitment to the transaction. Returns `false` if the
-    /// item already exidted in the collection
-    pub fn add_inner_tx_commitments(&mut self, cmt: TxCommitments) -> bool {
-        self.header.batch.insert(cmt)
+    /// Add a new inner tx to the transaction. Returns `false` if the
+    /// commitments already existed in the collection. This function expects a
+    /// transaction carrying a single inner tx as input
+    pub fn add_inner_tx(&mut self, other: Tx, cmt: TxCommitments) -> bool {
+        if !self.header.batch.insert(cmt) {
+            return false;
+        }
+
+        for section in other.sections {
+            self.sections.push(section)
+        }
+
+        true
     }
 
     /// Get the transaction header

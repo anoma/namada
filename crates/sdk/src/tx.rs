@@ -2883,8 +2883,8 @@ pub fn build_batch(
             )));
         }
 
-        let cmt = tx.first_commitments().unwrap();
-        if !batched_tx.add_inner_tx_commitments(cmt.to_owned()) {
+        let cmt = tx.first_commitments().unwrap().to_owned();
+        if !batched_tx.add_inner_tx(tx, cmt.clone()) {
             return Err(Error::Other(format!(
                 "The transaction batch already contains inner tx: {}",
                 cmt.get_hash()
