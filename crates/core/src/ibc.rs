@@ -1,7 +1,5 @@
 //! IBC-related data types
 
-pub mod event;
-
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -13,7 +11,6 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub use self::event::{IbcEvent, IbcEventType};
 use super::address::{Address, InternalAddress, HASH_LEN};
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
@@ -28,7 +25,6 @@ use crate::ibc::core::channel::types::msgs::{
     MsgAcknowledgement as IbcMsgAcknowledgement,
     MsgRecvPacket as IbcMsgRecvPacket, MsgTimeout as IbcMsgTimeout,
 };
-use crate::ibc::core::handler::types::events::Error as IbcEventError;
 use crate::ibc::core::handler::types::msgs::MsgEnvelope;
 use crate::ibc::primitives::proto::Protobuf;
 use crate::token::Transfer;
@@ -271,8 +267,6 @@ impl BorshDeserialize for MsgTimeout {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("IBC event error: {0}")]
-    IbcEvent(IbcEventError),
     #[error("IBC transfer memo HEX decoding error: {0}")]
     DecodingHex(data_encoding::DecodeError),
     #[error("IBC transfer memo decoding error: {0}")]

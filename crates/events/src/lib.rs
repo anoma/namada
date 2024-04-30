@@ -1,4 +1,4 @@
-//! Ledger events
+//! Events emitted by the Namada ledger.
 
 pub mod extend;
 
@@ -8,36 +8,20 @@ use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
 
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::borsh::{BorshDeserialize, BorshSerialize};
-use crate::ethereum_structs::EthBridgeEvent;
-use crate::ibc::IbcEvent;
-
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __event_type_impl {
     ($domain:ty) => {
-        <$domain as $crate::event::EventToEmit>::DOMAIN
+        <$domain as $crate::EventToEmit>::DOMAIN
     };
     ($domain:ty, $($subdomain:expr),*) => {
-        ::konst::string::str_join!(
-            "/",
-            &[
-                $crate::__event_type_impl!($domain),
-                $($subdomain),*
-            ],
-        )
-    };
-    // TODO: remove these variants of the macro
-    ($domain:expr) => {
-        $domain
-    };
-    ($domain:expr, $($subdomain:expr),*) => {
         ::konst::string::str_join!(
             "/",
             &[
@@ -59,7 +43,7 @@ macro_rules! __event_type_impl {
 #[macro_export]
 macro_rules! event_type {
     ($($tt:tt)*) => {
-        $crate::event::EventType::new($crate::__event_type_impl!($($tt)*))
+        $crate::EventType::new($crate::__event_type_impl!($($tt)*))
     };
 }
 
@@ -73,14 +57,6 @@ pub trait EventToEmit: Into<Event> {
 
 impl EventToEmit for Event {
     const DOMAIN: &'static str = "unknown";
-}
-
-impl EventToEmit for IbcEvent {
-    const DOMAIN: &'static str = "ibc";
-}
-
-impl EventToEmit for EthBridgeEvent {
-    const DOMAIN: &'static str = "eth-bridge";
 }
 
 /// Used in sub-systems that may emit events.
@@ -350,11 +326,6 @@ impl Event {
         }
     }
 
-    /// Create an applied tx event with empty attributes.
-    pub fn applied_tx() -> Self {
-        Self::new(event_type!("tx", "applied"), EventLevel::Tx)
-    }
-
     /// Return the level of the event.
     #[inline]
     pub fn level(&self) -> &EventLevel {
@@ -475,52 +446,7 @@ impl Event {
     }
 }
 
-impl From<EthBridgeEvent> for Event {
-    #[inline]
-    fn from(event: EthBridgeEvent) -> Event {
-        Self::from(&event)
-    }
-}
-
-impl From<&EthBridgeEvent> for Event {
-    fn from(event: &EthBridgeEvent) -> Event {
-        match event {
-            EthBridgeEvent::BridgePool { tx_hash, status } => Event {
-                event_type: status.into(),
-                level: EventLevel::Tx,
-                attributes: {
-                    use self::extend::ExtendAttributesMap;
-                    use crate::ethereum_structs::BridgePoolTxHash;
-
-                    let mut attributes = BTreeMap::new();
-                    attributes.with_attribute(BridgePoolTxHash(tx_hash));
-                    attributes
-                },
-            },
-        }
-    }
-}
-
-impl From<IbcEvent> for Event {
-    fn from(ibc_event: IbcEvent) -> Self {
-        Self {
-            event_type: EventTypeBuilder::new_of::<IbcEvent>()
-                .with_segment(ibc_event.event_type.0)
-                .build(),
-            level: EventLevel::Tx,
-            attributes: {
-                use extend::{event_domain_of, ExtendAttributesMap};
-
-                let mut attrs: BTreeMap<_, _> =
-                    ibc_event.attributes.into_iter().collect();
-                attrs.with_attribute(event_domain_of::<IbcEvent>());
-                attrs
-            },
-        }
-    }
-}
-
-impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
+impl From<Event> for namada_core::tendermint_proto::v0_37::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: {
@@ -539,14 +465,14 @@ impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
                 .attributes
                 .into_iter()
                 .map(|(key, value)| {
-                    crate::tendermint_proto::v0_37::abci::EventAttribute {
+                    namada_core::tendermint_proto::v0_37::abci::EventAttribute {
                         key,
                         value,
                         index: true,
                     }
                 })
                 .chain(std::iter::once_with(|| {
-                    crate::tendermint_proto::v0_37::abci::EventAttribute {
+                    namada_core::tendermint_proto::v0_37::abci::EventAttribute {
                         key: "event-level".to_string(),
                         value: event.level.to_string(),
                         index: true,
@@ -557,7 +483,7 @@ impl From<Event> for crate::tendermint_proto::v0_37::abci::Event {
     }
 }
 
-impl From<Event> for crate::tendermint::abci::Event {
+impl From<Event> for namada_core::tendermint::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             kind: {
@@ -575,13 +501,15 @@ impl From<Event> for crate::tendermint::abci::Event {
             attributes: event
                 .attributes
                 .into_iter()
-                .map(|(key, value)| crate::tendermint::abci::EventAttribute {
-                    key,
-                    value,
-                    index: true,
+                .map(|(key, value)| {
+                    namada_core::tendermint::abci::EventAttribute {
+                        key,
+                        value,
+                        index: true,
+                    }
                 })
                 .chain(std::iter::once_with(|| {
-                    crate::tendermint::abci::EventAttribute {
+                    namada_core::tendermint::abci::EventAttribute {
                         key: "event-level".to_string(),
                         value: event.level.to_string(),
                         index: true,

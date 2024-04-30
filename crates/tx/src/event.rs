@@ -1,10 +1,10 @@
 //! Transaction events.
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::event::extend::{
+use namada_events::extend::{
     ComposeEvent, EventAttributeEntry, Height, Log, TxHash,
 };
-use namada_core::event::{Event, EventToEmit};
+use namada_events::{Event, EventLevel, EventToEmit};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -39,12 +39,13 @@ impl EventToEmit for TxEvent {
 pub mod types {
     //! Transaction event types.
 
-    use namada_core::event::EventType;
+    use namada_events::EventType;
 
     use super::TxEvent;
 
     /// Applied transaction.
-    pub const APPLIED: EventType = namada_core::event_type!(TxEvent, "applied");
+    pub const APPLIED: EventType =
+        namada_events::event_type!(TxEvent, "applied");
 }
 
 /// Creates a new event with the hash and height of the transaction
@@ -52,7 +53,8 @@ pub mod types {
 pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
     let base_event = match tx.header().tx_type {
         TxType::Wrapper(_) | TxType::Protocol(_) => {
-            Event::applied_tx().with(TxHash(tx.header_hash()))
+            Event::new(types::APPLIED, EventLevel::Tx)
+                .with(TxHash(tx.header_hash()))
         }
         _ => unreachable!(),
     };

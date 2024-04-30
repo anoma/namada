@@ -7,7 +7,6 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod bytes;
-pub mod event;
 pub mod hints;
 
 pub use {masp_primitives, tendermint, tendermint_proto};

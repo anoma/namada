@@ -12,6 +12,7 @@ use namada_core::address::Address;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
+use namada_ibc::event::IbcEvent;
 use namada_ibc::{
     Error as ActionError, IbcActions, NftTransferModule, TransferModule,
     ValidationParams,
@@ -24,7 +25,6 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
-use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::{
     calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
     mint_amount_key, withdraw_key,
@@ -400,6 +400,7 @@ mod tests {
     use namada_core::address::InternalAddress;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
+    use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
     use namada_token::NATIVE_MAX_DECIMAL_PLACES;
@@ -492,7 +493,7 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{IbcEventType, NftClass, NftMetadata};
+    use crate::ibc::{NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{

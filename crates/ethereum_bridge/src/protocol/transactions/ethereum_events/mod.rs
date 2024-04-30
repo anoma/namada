@@ -11,7 +11,6 @@ use eyre::Result;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::ethereum_events::EthereumEvent;
-use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch, Key};
 use namada_core::token::Amount;
@@ -22,6 +21,7 @@ use namada_tx::data::TxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
 
 use super::ChangedKeys;
+use crate::event::EthBridgeEvent;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};

@@ -18,6 +18,7 @@ use namada_core::storage::{
 };
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
+use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
@@ -30,7 +31,6 @@ use crate::events::Event;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
-use crate::ibc::IbcEventType;
 use crate::masp::MaspTokenRewardData;
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
