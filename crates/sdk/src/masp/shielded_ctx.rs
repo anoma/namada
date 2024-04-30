@@ -1722,7 +1722,6 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error> {
-        // add new viewing keys
         // Reload the state from file to get the last confirmed state and
         // discard any speculative data, we cannot fetch on top of a
         // speculative state
@@ -1737,6 +1736,7 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
             };
         }
 
+        // add new viewing keys
         for esk in sks {
             let vk = to_viewing_key(esk).vk;
             self.vk_heights.entry(vk).or_default();
@@ -1748,11 +1748,12 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         let _ = self.save().await;
 
         let native_token = query_native_token(client).await?;
-        // the latest block height which has been added to the witness Merkle
-        // tree
+        // the height of the key that is least synced
         let Some(least_idx) = self.vk_heights.values().min().cloned() else {
             return Ok(());
         };
+        // the latest block height which has been added to the witness Merkle
+        // tree
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
         // get the bounds on the block heights to fetch
         let start_height =
@@ -1766,6 +1767,8 @@ impl<U: ShieldedUtils + Send + Sync> ShieldedContext<U> {
         let last_query_height = last_query_height.unwrap_or(last_block_height);
         let last_query_height =
             std::cmp::min(last_query_height, last_block_height);
+
+        // Update the commitment tree and witnesses
         self.update_witness_map::<_, _, M>(
             client,
             progress.io(),
@@ -2484,5 +2487,112 @@ mod shielded_ctx_tests {
             is_wrapper: false,
         }];
         assert_eq!(keys, expected);
+    }
+
+    /// Test that we cache and persist trial-decryptions
+    /// when the scanning process does not complete successfully.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_decrypted_cache() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+        let (client, masp_tx_sender) = test_client(100.into());
+        let io = StdIo;
+        let progress = DefaultTracker::new(&io);
+        let vk = ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
+        )
+        .fvk
+        .vk;
+
+        // Fetch a large number of MASP notes
+        let (masp_tx, changed_keys) = arbitrary_masp_tx();
+        for h in 1..20 {
+            masp_tx_sender
+                .send(Some((
+                    IndexedTx {
+                        height: h.into(),
+                        index: TxIndex(1),
+                        is_wrapper: false,
+                    },
+                    (Default::default(), changed_keys.clone(), masp_tx.clone()),
+                )))
+                .expect("Test failed");
+        }
+        masp_tx_sender.send(None).expect("Test failed");
+
+        // we expect this to fail.
+        let result = shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        match result {
+            Error::Other(msg) => assert_eq!(
+                msg.as_str(),
+                "After retrying, could not fetch all MASP txs."
+            ),
+            other => panic!("{:?} does not match Error::Other(_)", other),
+        }
+
+        // reload the shielded context
+        shielded_ctx.load_confirmed().await.expect("Test failed");
+
+        // maliciously remove an entry from the shielded context
+        // so that one of the last fetched notes will fail to scan.
+        shielded_ctx.vk_heights.clear();
+        shielded_ctx.tx_note_map.remove(&IndexedTx {
+            height: 18.into(),
+            index: TxIndex(1),
+            is_wrapper: false,
+        });
+        shielded_ctx.save().await.expect("Test failed");
+
+        // refetch the same MASP notes
+        for h in 1..20 {
+            masp_tx_sender
+                .send(Some((
+                    IndexedTx {
+                        height: h.into(),
+                        index: TxIndex(1),
+                        is_wrapper: false,
+                    },
+                    (Default::default(), changed_keys.clone(), masp_tx.clone()),
+                )))
+                .expect("Test failed");
+        }
+        masp_tx_sender.send(None).expect("Test failed");
+
+        // we expect this to fail.
+        shielded_ctx
+            .fetch::<_, _, _, TestingMaspClient>(
+                &client,
+                &progress,
+                RetryStrategy::Times(1),
+                None,
+                None,
+                0,
+                &[],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+
+        // because of an error in scanning, there should be elements
+        // in the decrypted cache.
+        shielded_ctx.load_confirmed().await.expect("Test failed");
+        let result: HashMap<(IndexedTx, ViewingKey), DecryptedData> =
+            shielded_ctx.decrypted_note_cache.drain().collect();
+        // unfortunately we cannot easily assert what will be in this
+        // cache as scanning is done in parallel, introducing non-determinism
+        assert!(!result.is_empty());
     }
 }
