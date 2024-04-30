@@ -491,6 +491,7 @@ pub struct LedgerMaspClient<'a, C: Client> {
     client: &'a C,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<'a, C: Client + Sync> MaspClient<'a, C> for LedgerMaspClient<'a, C>
 where
     LedgerMaspClient<'a, C>: 'a,
@@ -841,7 +842,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
     }
 }
 
-impl<U: ShieldedUtils> TaskScheduler<U> {
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskScheduler<U> {
     /// Signal the [`TaskManager`] that the scanning thread has completed
     pub(super) fn complete(&self, with_error: bool) {
         _ = self.action.blocking_send(Action::Complete { with_error });
