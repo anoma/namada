@@ -1,0 +1,7 @@
+### Update documentation to reflect the use of transparent addresses for PGF stewardship
+
+This pull request updates the Namada documentation to accurately reflect the use of transparent addresses for PGF stewardship. 
+It addresses the discrepancy between the existing documentation and the actual governance protocols, as confirmed by the project team. 
+These changes ensure clarity and alignment with current practices, enhancing usability for the community.
+
+Related Issue: [Issue #3048](https://github.com/anoma/namada/issues/3048) (for reference)
