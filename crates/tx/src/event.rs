@@ -14,7 +14,6 @@ use crate::data::{ResultCode, TxResult};
 use crate::TxType;
 
 /// Transaction event.
-/// using a websocket client
 #[derive(
     Clone,
     Debug,
@@ -49,7 +48,7 @@ pub mod types {
 }
 
 /// Creates a new event with the hash and height of the transaction
-/// already filled in
+/// already filled in.
 pub fn new_tx_event(tx: &Tx, height: u64) -> Event {
     let base_event = match tx.header().tx_type {
         TxType::Wrapper(_) | TxType::Protocol(_) => {

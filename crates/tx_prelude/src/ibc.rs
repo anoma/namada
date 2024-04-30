@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use namada_core::address::{Address, InternalAddress};
+use namada_core::event::EventTypeBuilder;
 pub use namada_core::ibc::IbcEvent;
 use namada_core::token::Amount;
 pub use namada_ibc::storage::{ibc_token, is_ibc_key};
@@ -40,14 +41,21 @@ impl IbcStorageContext for Ctx {
         &mut self,
         event: IbcEvent,
     ) -> std::result::Result<(), Error> {
-        <Ctx as TxEnv>::emit_ibc_event(self, &event)
+        <Ctx as TxEnv>::emit_event(self, event)
     }
 
     fn get_ibc_events(
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, Error> {
-        <Ctx as TxEnv>::get_ibc_events(self, &event_type)
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type.as_ref())
+            .build();
+
+        Ok(<Ctx as TxEnv>::get_events(self, &event_type)?
+            .into_iter()
+            .filter_map(|event| IbcEvent::try_from(event).ok())
+            .collect())
     }
 
     fn transfer_token(

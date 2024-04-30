@@ -24,6 +24,7 @@ use namada_vp_env::VpEnv;
 use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
+use crate::ibc::IbcEvent;
 use crate::ledger::ibc::storage::{
     calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
     mint_amount_key, withdraw_key,
@@ -143,13 +144,19 @@ where
             match_value(key, actual, ctx.borrow().get_changed_value(key))?;
         }
 
-        // check the event
-        let actual = self.ctx.state.write_log().get_ibc_events();
-        if *actual != ctx.borrow().event {
+        // check the events
+        let actual: BTreeSet<_> = self
+            .ctx
+            .state
+            .write_log()
+            .get_events_of::<IbcEvent>()
+            .collect();
+        let ctx_borrow = ctx.borrow();
+        let expected: BTreeSet<_> = ctx_borrow.event.iter().collect();
+        if actual != expected {
             return Err(Error::IbcEvent(format!(
-                "The IBC event is invalid: Actual {:?}, Expected {:?}",
-                actual,
-                ctx.borrow().event
+                "The IBC event is invalid: Actual {actual:?}, Expected \
+                 {expected:?}",
             )));
         }
 
@@ -485,7 +492,7 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{NftClass, NftMetadata};
+    use crate::ibc::{IbcEventType, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
@@ -874,10 +881,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Client);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1073,10 +1080,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Client);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1174,10 +1181,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1387,10 +1394,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1488,10 +1495,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
@@ -1581,10 +1588,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Connection);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
@@ -1702,10 +1709,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1822,10 +1829,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -1927,10 +1934,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2030,10 +2037,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2169,7 +2176,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::SendPacket(SendPacket::new(
             packet,
             Order::Unordered,
@@ -2178,10 +2185,15 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
+        let message_event =
+            RawIbcEvent::Message(MessageEvent::Module("transfer".to_owned()));
+        state
+            .write_log_mut()
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2357,7 +2369,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(recv_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let denom_trace_event = DenomTraceEvent {
             trace_hash: Some(trace_hash),
             denom: coin.denom,
@@ -2365,7 +2377,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(denom_trace_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::ReceivePacket(ReceivePacket::new(
             msg.packet.clone(),
             Order::Unordered,
@@ -2374,10 +2386,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event =
             RawIbcEvent::WriteAcknowledgement(WriteAcknowledgement::new(
                 packet,
@@ -2387,10 +2399,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2518,7 +2530,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(ack_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::AcknowledgePacket(AcknowledgePacket::new(
             packet,
             Order::Unordered,
@@ -2527,10 +2539,20 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
+        state.write_log_mut().emit_event(IbcEvent {
+            event_type: IbcEventType("fungible_token_packet".to_owned()),
+            attributes: {
+                let mut attrs = namada_core::collections::HashMap::new();
+                // NB: fuck it, not worth adding a domain
+                // type for this
+                attrs.insert("success".to_owned(), "AQ==".to_owned());
+                attrs
+            },
+        });
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2676,7 +2698,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(timeout_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::TimeoutPacket(TimeoutPacket::new(
             packet,
             Order::Unordered,
@@ -2684,10 +2706,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2834,7 +2856,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(timeout_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::TimeoutPacket(TimeoutPacket::new(
             packet,
             Order::Unordered,
@@ -2842,10 +2864,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -2997,7 +3019,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(transfer_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::SendPacket(SendPacket::new(
             packet,
             Order::Unordered,
@@ -3006,10 +3028,16 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
+        let message_event = RawIbcEvent::Message(MessageEvent::Module(
+            "nft_transfer".to_owned(),
+        ));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
+        state
+            .write_log_mut()
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
@@ -3207,7 +3235,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(recv_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let trace_event = TokenTraceEvent {
             trace_hash: Some(trace_hash),
             class: class_id,
@@ -3216,7 +3244,7 @@ mod tests {
         let event = RawIbcEvent::Module(ModuleEvent::from(trace_event));
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event = RawIbcEvent::ReceivePacket(ReceivePacket::new(
             msg.packet.clone(),
             Order::Unordered,
@@ -3225,10 +3253,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
         let event =
             RawIbcEvent::WriteAcknowledgement(WriteAcknowledgement::new(
                 packet,
@@ -3238,10 +3266,10 @@ mod tests {
         let message_event = RawIbcEvent::Message(MessageEvent::Channel);
         state
             .write_log_mut()
-            .emit_ibc_event(message_event.try_into().unwrap());
+            .emit_event::<IbcEvent>(message_event.try_into().unwrap());
         state
             .write_log_mut()
-            .emit_ibc_event(event.try_into().unwrap());
+            .emit_event::<IbcEvent>(event.try_into().unwrap());
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
