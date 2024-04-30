@@ -1752,25 +1752,15 @@ impl Default for IndexedTx {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize)]
 pub struct BatchedTxRef<'tx> {
     pub tx: &'tx Tx,
     pub cmt: &'tx Commitments,
 }
 
-// FIXME: also need to implement deserialize?
-impl BorshSerialize for BatchedTxRef<'_> {
-    fn serialize<W: std::io::prelude::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        // FIXME: remove if not needed
-        BorshSerialize::serialize(self.tx, writer)?;
-        BorshSerialize::serialize(self.cmt, writer)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+)]
 pub struct BatchedTx {
     pub tx: Tx,
     pub cmt: Commitments,
@@ -1782,17 +1772,5 @@ impl BatchedTx {
             tx: &self.tx,
             cmt: &self.cmt,
         }
-    }
-}
-
-// FIXME: remove if not needed
-impl BorshSerialize for BatchedTx {
-    fn serialize<W: std::io::prelude::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        // FIXME: remove if not needed
-        BorshSerialize::serialize(&self.tx, writer)?;
-        BorshSerialize::serialize(&self.cmt, writer)
     }
 }
