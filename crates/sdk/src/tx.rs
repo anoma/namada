@@ -2907,9 +2907,9 @@ async fn add_asset_type(
 /// Collect the asset types used in the given Builder and decode them. This
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
-async fn used_asset_types<P, R, K, N>(
+async fn used_asset_types<P, K, N>(
     context: &impl Namada,
-    builder: &Builder<P, R, K, N>,
+    builder: &Builder<P, K, N>,
 ) -> std::result::Result<HashSet<AssetData>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs

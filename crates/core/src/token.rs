@@ -921,6 +921,7 @@ impl From<Amount> for Uint {
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]

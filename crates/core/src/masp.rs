@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use namada_macros::BorshDeserializer;
@@ -27,6 +27,7 @@ use crate::token::{Denomination, MaspDigitPos};
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    BorshSchema,
     Clone,
     Debug,
     PartialOrd,
