@@ -67,12 +67,16 @@ pub async fn syncing<
     }
 }
 
+/// The amount of progress a shielded sync sub-process has made
 #[derive(Default, Copy, Clone)]
 struct IterProgress {
     index: usize,
     length: usize,
 }
 
+/// A type that can track progress for
+/// shielded sync and draw corresponding
+/// progress bars to hte provided I/O
 struct StdoutDrawer<'io, IO: Io> {
     io: &'io IO,
     fetch: IterProgress,
@@ -80,6 +84,7 @@ struct StdoutDrawer<'io, IO: Io> {
 }
 
 impl<'io, IO: Io> StdoutDrawer<'io, IO> {
+    /// Given the current progress, print progress bars to the provided I/O
     fn draw(&self) {
         let (fetch_percent, fetch_completed) = (self.fetch.length > 0)
             .then(|| {
@@ -184,6 +189,7 @@ impl<'io, IO: Io> Drop for StdoutDrawer<'io, IO> {
     }
 }
 
+/// An iterator that logs to screen the progress it tracks
 pub struct LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
@@ -196,7 +202,6 @@ where
     peeked: Option<T>,
 }
 
-/// An iterator that logs to screen the progress it tracks
 impl<'io, T, I, IO> LoggingIterator<'io, T, I, IO>
 where
     T: Debug,
