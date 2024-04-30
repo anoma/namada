@@ -82,7 +82,6 @@ pub fn test_client(
     let mut client = TestClient::new(RPC);
     client.state.in_mem_mut().last_block = Some(LastBlock {
         height: last_height,
-        hash: Default::default(),
         time: Default::default(),
     });
     (
