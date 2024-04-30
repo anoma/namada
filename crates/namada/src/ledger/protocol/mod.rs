@@ -209,7 +209,6 @@ where
         }
         TxType::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
-            // FIXME: should prevent empty protocol txs to get to finalize block
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
             let result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
