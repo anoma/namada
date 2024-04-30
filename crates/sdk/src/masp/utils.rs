@@ -515,7 +515,9 @@ where
             self.fetch_shielded_transfer(
                 &progress,
                 tx_sender,
-                last_witnessed_tx.height.0,
+                // we don't want to re-fetch the last witnessed tx.
+                // instead, we start fetching block one after
+                last_witnessed_tx.height.0 + 1,
                 last_query_height.0,
             ),
             async {
@@ -524,8 +526,8 @@ where
                     witness_map: ctx.witness_map.clone(),
                     note_map_delta: Default::default(),
                 };
+                let mut note_pos = updates.commitment_tree.size();
                 for (indexed_tx, (_, _, ref shielded)) in tx_receiver {
-                    let mut note_pos = updates.commitment_tree.size();
                     updates.note_map_delta.insert(indexed_tx, note_pos);
                     for so in shielded
                         .sapling_bundle()
