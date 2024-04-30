@@ -4786,6 +4786,7 @@ dependencies = [
  "proptest",
  "proptest-state-machine",
  "serde 1.0.193",
+ "smooth-operator",
  "test-log",
  "thiserror",
  "tracing",

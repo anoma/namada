@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 
 use namada_account::protocol_pk_key;
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::{common, tm_consensus_key_raw_hash};
@@ -14,7 +15,6 @@ use namada_governance::storage::get_max_proposal_period;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::collections::{LazyCollection, LazySet};
 use namada_storage::{Result, StorageRead, StorageWrite};
-use num_traits::CheckedAdd;
 
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
@@ -496,12 +496,13 @@ where
 {
     let handle = validator_deltas_handle(validator);
     let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = checked!(current_epoch + offset)?;
     let val = handle
-        .get_delta_val(storage, current_epoch + offset)?
+        .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
     handle.set(
         storage,
-        val.checked_add(&delta)
+        val.checked_add(delta)
             .expect("Validator deltas updated amount should not overflow"),
         current_epoch,
         offset,
@@ -704,15 +705,16 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
     let total_deltas = total_deltas_handle();
     let total_active_deltas = total_active_deltas_handle();
+    let offset_epoch = checked!(current_epoch + offset)?;
 
     // Update total deltas
     let total_deltas_val = total_deltas
-        .get_delta_val(storage, current_epoch + offset)?
+        .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
     total_deltas.set(
         storage,
         total_deltas_val
-            .checked_add(&delta)
+            .checked_add(delta)
             .expect("Total deltas updated amount should not overflow"),
         current_epoch,
         offset,
@@ -721,11 +723,11 @@ where
     // Update total active voting power
     if update_active_voting_power {
         let active_delta = total_active_deltas
-            .get_delta_val(storage, current_epoch + offset)?
+            .get_delta_val(storage, offset_epoch)?
             .unwrap_or_default();
         total_active_deltas.set(
             storage,
-            active_delta.checked_add(&delta).expect(
+            active_delta.checked_add(delta).expect(
                 "Total active voting power updated amount should not overflow",
             ),
             current_epoch,

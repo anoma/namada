@@ -740,10 +740,11 @@ impl Display for SlashType {
 /// Calculate voting power in the tendermint context (which is stored as i64)
 /// from the number of tokens
 pub fn into_tm_voting_power(votes_per_token: Dec, tokens: Amount) -> i64 {
-    let pow = votes_per_token
-        * u128::try_from(tokens).expect("Voting power out of bounds");
-    i64::try_from(pow.to_uint().expect("Can't fail"))
-        .expect("Invalid voting power")
+    let prod = tokens
+        .mul_floor(votes_per_token)
+        .expect("Must be able to convert tokens to TM votes");
+    let res = i128::try_from(prod.change()).expect("Failed conversion to i128");
+    i64::try_from(res).expect("Invalid validator voting power (i64)")
 }
 
 #[cfg(test)]
