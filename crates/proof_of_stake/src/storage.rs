@@ -446,6 +446,19 @@ where
     storage.write(&key, inflation)
 }
 
+/// Read the validator state
+pub fn read_validator_state<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: &Epoch,
+) -> namada_storage::Result<Option<ValidatorState>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_state_handle(validator).get(storage, *epoch, &params)
+}
+
 /// Read PoS validator's delta value.
 pub fn read_validator_deltas_value<S>(
     storage: &S,

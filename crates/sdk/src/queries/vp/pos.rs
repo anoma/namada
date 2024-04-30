@@ -306,7 +306,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let state = namada_proof_of_stake::queries::validator_state(
+    let state = namada_proof_of_stake::storage::read_validator_state(
         ctx.state, &validator, &epoch,
     )?;
     Ok((state, epoch))
@@ -573,10 +573,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    Ok(find_delegation_validators(ctx.state, &owner, &epoch)?
-        .keys()
-        .cloned()
-        .collect())
+    find_delegation_validators(ctx.state, &owner, &epoch)
 }
 
 /// Find all the validator addresses to whom the given `owner` address has

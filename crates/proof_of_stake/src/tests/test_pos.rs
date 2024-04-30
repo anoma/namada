@@ -385,7 +385,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         assert_eq!(
             details.bonds.len(),
             2,
-            "contains_key genesis and newly added self-bond"
+            "Contains genesis and newly added self-bond"
         );
         // dbg!(&details.bonds);
         assert_eq!(
@@ -527,7 +527,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         assert_eq!(
             self_bond_details.bonds.len(),
             2,
-            "contains_key genesis and newly added self-bond"
+            "Contains genesis and newly added self-bond"
         );
         assert_eq!(
             self_bond_details.bonds[0],
@@ -645,7 +645,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         assert_eq!(
             self_bond_details.bonds.len(),
             1,
-            "contains_key only part of the genesis bond now"
+            "Contains only part of the genesis bond now"
         );
         assert_eq!(
             self_bond_details.bonds[0],
@@ -667,8 +667,8 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         assert_eq!(
             self_bond_details.unbonds.len(),
             if unbonded_genesis_self_bond { 2 } else { 1 },
-            "contains_key a full unbond of the last self-bond and an unbond \
-             from the genesis bond"
+            "Contains a full unbond of the last self-bond and an unbond from \
+             the genesis bond"
         );
         if unbonded_genesis_self_bond {
             assert_eq!(
@@ -1809,8 +1809,8 @@ fn test_delegation_targets() {
             find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
-        assert!(delegatees1.contains_key(&validator1));
-        assert!(delegatees2.contains_key(&validator2));
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
     }
 
     // Advance to epoch 1 and check if the delegation targets are properly
@@ -1826,8 +1826,8 @@ fn test_delegation_targets() {
             find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
-        assert!(delegatees1.contains_key(&validator1));
-        assert!(delegatees2.contains_key(&validator2));
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
     }
 
     // Bond from a delegator to validator1 in epoch 1
@@ -1863,15 +1863,15 @@ fn test_delegation_targets() {
             find_delegation_validators(&storage, &validator2, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
-        assert!(delegatees1.contains_key(&validator1));
-        assert!(delegatees2.contains_key(&validator2));
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
     }
 
     let delegatees1 =
         find_delegation_validators(&storage, &validator1, &pipeline_epoch)
             .unwrap();
     assert_eq!(delegatees1.len(), 1);
-    assert!(delegatees1.contains_key(&validator1));
+    assert!(delegatees1.contains(&validator1));
 
     let delegatees2 =
         find_delegation_validators(&storage, &validator2, &pipeline_epoch)
@@ -1882,7 +1882,7 @@ fn test_delegation_targets() {
         find_delegation_validators(&storage, &delegator, &pipeline_epoch)
             .unwrap();
     assert_eq!(del_delegatees.len(), 1);
-    assert!(del_delegatees.contains_key(&validator1));
+    assert!(del_delegatees.contains(&validator1));
 
     // Advance to epoch 3
     advance_epoch(&mut storage, &params);
@@ -1925,8 +1925,8 @@ fn test_delegation_targets() {
             find_delegation_validators(&storage, &delegator, &epoch).unwrap();
         assert_eq!(delegatees1.len(), 1);
         assert_eq!(delegatees2.len(), 1);
-        assert!(delegatees1.contains_key(&validator1));
-        assert!(delegatees2.contains_key(&validator2));
+        assert!(delegatees1.contains(&validator1));
+        assert!(delegatees2.contains(&validator2));
         assert!(del_delegatees.is_empty());
     }
 
@@ -1943,8 +1943,8 @@ fn test_delegation_targets() {
         assert_eq!(delegatees1.len(), 1);
         assert!(delegatees2.is_empty());
         assert_eq!(del_delegatees.len(), 1);
-        assert!(delegatees1.contains_key(&validator1));
-        assert!(del_delegatees.contains_key(&validator1));
+        assert!(delegatees1.contains(&validator1));
+        assert!(del_delegatees.contains(&validator1));
     }
 
     // Epoch 5 (pipeline)
@@ -1960,9 +1960,9 @@ fn test_delegation_targets() {
     assert_eq!(delegatees1.len(), 1);
     assert!(delegatees2.is_empty());
     assert_eq!(del_delegatees.len(), 2);
-    assert!(delegatees1.contains_key(&validator1));
-    assert!(del_delegatees.contains_key(&validator1));
-    assert!(del_delegatees.contains_key(&validator2));
+    assert!(delegatees1.contains(&validator1));
+    assert!(del_delegatees.contains(&validator1));
+    assert!(del_delegatees.contains(&validator2));
 
     // Advance to epoch 4 and self-bond from validator2 again
     current_epoch = advance_epoch(&mut storage, &params);
@@ -1991,10 +1991,10 @@ fn test_delegation_targets() {
     assert_eq!(delegatees1.len(), 1);
     assert_eq!(delegatees2.len(), 1);
     assert_eq!(del_delegatees.len(), 2);
-    assert!(delegatees1.contains_key(&validator1));
-    assert!(delegatees2.contains_key(&validator2));
-    assert!(del_delegatees.contains_key(&validator1));
-    assert!(del_delegatees.contains_key(&validator2));
+    assert!(delegatees1.contains(&validator1));
+    assert!(delegatees2.contains(&validator2));
+    assert!(del_delegatees.contains(&validator1));
+    assert!(del_delegatees.contains(&validator2));
 
     // Check everything again including the raw bond amount this time
 

@@ -3,7 +3,6 @@
 use namada_tx_prelude::action::{Action, GovAction, Write};
 use namada_tx_prelude::gov_storage::keys::get_voting_start_epoch_key;
 use namada_tx_prelude::proof_of_stake::find_delegation_validators;
-use namada_tx_prelude::proof_of_stake::types::ValidatorState;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -39,16 +38,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
 
     let delegations_targets =
         find_delegation_validators(ctx, &tx_data.voter, &proposal_start_epoch)?;
-    let active_delegations_targets = delegations_targets
-        .into_iter()
-        .filter_map(|(address, state)| {
-            if matches!(state, ValidatorState::Consensus) {
-                Some(address)
-            } else {
-                None
-            }
-        })
-        .collect();
 
     governance::vote_proposal(ctx, tx_data, active_delegations_targets)
         .wrap_err("Failed to vote on governance proposal")
