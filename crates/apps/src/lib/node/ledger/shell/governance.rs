@@ -269,10 +269,20 @@ where
         let validator = vote.validator.clone();
         let validator_state =
             validator_state_handle(&validator).get(storage, epoch, params)?;
+
         if matches!(
             validator_state,
             Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
         ) {
+            continue;
+        }
+        if validator_state.is_none() {
+            tracing::error!(
+                "While computing votes for proposal id {proposal_id} in epoch \
+                 {epoch}, encountered validator {validator} that has no \
+                 stored state. Please report this as a bug. Skipping this \
+                 vote."
+            );
             continue;
         }
 
