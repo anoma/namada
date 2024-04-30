@@ -15,7 +15,7 @@ use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_gas::GasMetering;
-use namada_tx::{BatchedTxRef, Commitments, Tx};
+use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
 
@@ -71,7 +71,7 @@ where
     /// The transaction
     pub tx: &'a Tx,
     /// The commitments in the transaction
-    pub cmt: &'a Commitments,
+    pub cmt: &'a TxCommitments,
     /// The transaction index is used to obtain the shielded transaction's
     /// parent
     pub tx_index: &'a TxIndex,
@@ -121,7 +121,7 @@ where
         address: &'a Address,
         state: &'a S,
         tx: &'a Tx,
-        cmt: &'a Commitments,
+        cmt: &'a TxCommitments,
         tx_index: &'a TxIndex,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,

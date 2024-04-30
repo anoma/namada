@@ -4,7 +4,7 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
-use namada_tx::{Commitments, IndexedTx};
+use namada_tx::{IndexedTx, TxCommitments};
 
 use crate::storage_key::{
     masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
@@ -61,7 +61,7 @@ pub fn update_note_commitment_tree(
 pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
     shielded: &Transaction,
-    pin_key: Option<(&str, Commitments)>,
+    pin_key: Option<(&str, TxCommitments)>,
 ) -> Result<()> {
     // TODO: temporarily disabled because of the node aggregation issue in WASM.
     // Using the host env tx_update_masp_note_commitment_tree or directly the

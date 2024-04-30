@@ -68,7 +68,7 @@ use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
 use namada_tx::data::{BatchedTxResult, TxResult, WrapperTx};
-use namada_tx::{Commitments, IndexedTx, IndexedTxType, Tx};
+use namada_tx::{IndexedTx, IndexedTxType, Tx, TxCommitments};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -2639,7 +2639,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 /// Extract the payload from the given Tx object
 fn extract_payload(
     tx: &Tx,
-    cmt: &Commitments,
+    cmt: &TxCommitments,
     wrapper: &mut Option<WrapperTx>,
     transfer: &mut Option<Transfer>,
 ) -> Result<(), Error> {

@@ -23,7 +23,7 @@ use namada_state::{
 };
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
-use namada_tx::{BatchedTx, BatchedTxRef, Commitments, Tx};
+use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -127,7 +127,7 @@ where
     /// The transaction
     pub tx: HostRef<'a, &'a Tx>,
     /// The commitments inside the transaction
-    pub cmt: HostRef<'a, &'a Commitments>,
+    pub cmt: HostRef<'a, &'a TxCommitments>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -173,7 +173,7 @@ where
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -342,7 +342,7 @@ where
     /// The transaction
     pub tx: HostRef<'a, &'a Tx>,
     /// The commitments inside the transaction
-    pub cmt: HostRef<'a, &'a Commitments>,
+    pub cmt: HostRef<'a, &'a TxCommitments>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -413,7 +413,7 @@ where
         db: &D,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
@@ -489,7 +489,7 @@ where
         db: &D,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
@@ -2492,7 +2492,7 @@ pub mod testing {
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
@@ -2540,7 +2540,7 @@ pub mod testing {
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
@@ -2593,7 +2593,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
-        cmt: &Commitments,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,

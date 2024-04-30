@@ -8,7 +8,7 @@ use namada_core::storage::Epochs;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
 use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
-use namada_tx::Commitments;
+use namada_tx::TxCommitments;
 use namada_vp_env::VpEnv;
 
 use crate::address::{Address, InternalAddress};
@@ -224,7 +224,7 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<(&str, Commitments)>,
+        pin_key: Option<(&str, TxCommitments)>,
     ) -> Result<()> {
         crate::token::utils::handle_masp_tx(self, shielded, pin_key)?;
         crate::token::utils::update_note_commitment_tree(self, shielded)
@@ -399,7 +399,7 @@ where
     fn handle_masp_tx(
         &mut self,
         _shielded: &masp_primitives::transaction::Transaction,
-        _pin_key: Option<(&str, Commitments)>,
+        _pin_key: Option<(&str, TxCommitments)>,
     ) -> Result<()> {
         unimplemented!("Validation doesn't handle a masp tx")
     }

@@ -179,7 +179,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::{Commitments, Tx};
+    use namada_tx::{Tx, TxCommitments};
     use rand::Rng;
 
     use super::*;
@@ -249,7 +249,7 @@ mod tests {
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
-        cmt: &'a Commitments,
+        cmt: &'a TxCommitments,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,

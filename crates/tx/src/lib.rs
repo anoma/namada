@@ -12,9 +12,9 @@ pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
-    BatchedTxRef, Code, Commitment, Commitments, CompressedSignature, Data,
-    DecodeError, Header, IndexedTx, IndexedTxType, MaspBuilder, Memo, Section,
-    Signed, Signer, Tx, TxError, VerifySigError,
+    BatchedTxRef, Code, Commitment, CompressedSignature, Data, DecodeError,
+    Header, IndexedTx, IndexedTxType, MaspBuilder, Memo, Section, Signed,
+    Signer, Tx, TxCommitments, TxError, VerifySigError,
 };
 
 #[cfg(test)]

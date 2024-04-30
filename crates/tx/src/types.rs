@@ -881,6 +881,8 @@ impl Section {
     }
 }
 
+/// An inner transaction of the batch, represented by its commitments to the
+/// [`Code`], [`Data`] and [`Memo`] sections
 #[derive(
     Clone,
     Debug,
@@ -897,8 +899,7 @@ impl Section {
     PartialOrd,
     Hash,
 )]
-// FIXME: rename to InnerTx? Or messges?
-pub struct Commitments {
+pub struct TxCommitments {
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
     /// The SHA-256 hash of the transaction's data section
@@ -910,7 +911,7 @@ pub struct Commitments {
     pub memo_hash: namada_core::hash::Hash,
 }
 
-impl Commitments {
+impl TxCommitments {
     /// Get the hash of this transaction's code
     pub fn code_sechash(&self) -> &namada_core::hash::Hash {
         &self.code_hash
@@ -959,7 +960,7 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     /// The commitments to the transaction's sections
-    pub batch: HashSet<Commitments>,
+    pub batch: HashSet<TxCommitments>,
     /// Whether the inner txs should be executed atomically
     pub atomic: bool,
     /// The type of this transaction
@@ -1104,7 +1105,7 @@ impl Tx {
     /// commitment is already contained in the set
     #[cfg(any(test, feature = "testing"))]
     pub fn push_default_commitments(&mut self) -> bool {
-        self.header.batch.insert(Commitments::default())
+        self.header.batch.insert(TxCommitments::default())
     }
 
     /// Get the transaction header
@@ -1167,7 +1168,7 @@ impl Tx {
                 last.memo_hash = hash;
                 last
             }
-            None => Commitments {
+            None => TxCommitments {
                 memo_hash: hash,
                 ..Default::default()
             },
@@ -1178,7 +1179,7 @@ impl Tx {
 
     /// Get the memo designated by the memo hash in the header for the specified
     /// commitment
-    pub fn memo(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+    pub fn memo(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
         if cmt.memo_hash == namada_core::hash::Hash::default() {
             return None;
         }
@@ -1202,7 +1203,7 @@ impl Tx {
                 last.code_hash = hash;
                 last
             }
-            None => Commitments {
+            None => TxCommitments {
                 code_hash: hash,
                 ..Default::default()
             },
@@ -1213,7 +1214,7 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header for
     /// the specified commitment
-    pub fn code(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+    pub fn code(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
         match self.get_section(&cmt.code_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
@@ -1235,7 +1236,7 @@ impl Tx {
                 last.data_hash = hash;
                 last
             }
-            None => Commitments {
+            None => TxCommitments {
                 data_hash: hash,
                 ..Default::default()
             },
@@ -1254,7 +1255,7 @@ impl Tx {
 
     /// Get the data designated by the transaction data hash in the header at
     /// the specified commitment
-    pub fn data(&self, cmt: &Commitments) -> Option<Vec<u8>> {
+    pub fn data(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
         match self.get_section(&cmt.data_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
@@ -1663,17 +1664,15 @@ impl Tx {
         self
     }
 
-    // FIXME: rename?
-    pub fn commitments(&self) -> &HashSet<Commitments> {
+    pub fn commitments(&self) -> &HashSet<TxCommitments> {
         &self.header.batch
     }
 
-    // FIXME: rename?
-    pub fn first_commitments(&self) -> Option<&Commitments> {
+    pub fn first_commitments(&self) -> Option<&TxCommitments> {
         self.header.batch.first()
     }
 
-    pub fn batch_tx(self, cmt: Commitments) -> BatchedTx {
+    pub fn batch_tx(self, cmt: TxCommitments) -> BatchedTx {
         BatchedTx { tx: self, cmt }
     }
 
@@ -1693,7 +1692,10 @@ impl Tx {
 }
 
 impl<'tx> Tx {
-    pub fn batch_ref_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTxRef<'tx> {
+    pub fn batch_ref_tx(
+        &'tx self,
+        cmt: &'tx TxCommitments,
+    ) -> BatchedTxRef<'tx> {
         BatchedTxRef { tx: self, cmt }
     }
 }
@@ -1714,7 +1716,7 @@ impl<'tx> Tx {
 )]
 pub enum IndexedTxType {
     Wrapper,
-    Inner(Commitments),
+    Inner(TxCommitments),
 }
 
 /// Represents the pointers of an indexed tx, which are the block height, the
@@ -1751,18 +1753,22 @@ impl Default for IndexedTx {
     }
 }
 
+/// A reference to a transaction with the commitment to a specific inner
+/// transaction of the batch
 #[derive(Debug, BorshSerialize)]
 pub struct BatchedTxRef<'tx> {
     pub tx: &'tx Tx,
-    pub cmt: &'tx Commitments,
+    pub cmt: &'tx TxCommitments,
 }
 
+/// A transaction with the commitment to a specific inner transaction of the
+/// batch
 #[derive(
     Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct BatchedTx {
     pub tx: Tx,
-    pub cmt: Commitments,
+    pub cmt: TxCommitments,
 }
 
 impl BatchedTx {

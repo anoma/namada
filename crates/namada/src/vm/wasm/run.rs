@@ -12,7 +12,7 @@ use namada_core::validity_predicate::VpError;
 use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
-use namada_tx::{BatchedTxRef, Commitment, Commitments, Section, Tx};
+use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
@@ -136,7 +136,7 @@ pub fn tx<S, CA>(
     gas_meter: &RefCell<TxGasMeter>,
     tx_index: &TxIndex,
     tx: &Tx,
-    cmt: &Commitments,
+    cmt: &TxCommitments,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<BTreeSet<Address>>

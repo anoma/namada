@@ -821,8 +821,8 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Authorization, Code, Commitment, Commitments, Header, MaspBuilder,
-        Section,
+        Authorization, Code, Commitment, Header, MaspBuilder, Section,
+        TxCommitments,
     };
 
     #[derive(Debug, Clone)]
@@ -1001,7 +1001,7 @@ pub mod testing {
                 expiration,
                 timestamp,
                 //FIXME: arbitrary number of commitments
-                batch: [Commitments{
+                batch: [TxCommitments{
                     data_hash,
                     code_hash,
                     memo_hash,
