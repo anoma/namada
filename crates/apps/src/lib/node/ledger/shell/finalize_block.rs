@@ -999,6 +999,56 @@ mod test_finalize_block {
         )
     }
 
+    // Make a transaction batch from the provided list. Signs both the batch and
+    // the wrapper with the provided secret key
+    fn mk_tx_batch(
+        shell: &TestShell,
+        mut txs: Vec<Tx>,
+        sk: &common::SecretKey,
+        set_atomic: bool,
+    ) -> (Tx, ProcessedTx) {
+        let mut batch = txs.pop().unwrap();
+        for tx in txs {
+            let cmt = tx.first_commitments().unwrap().to_owned();
+            batch.add_inner_tx(tx, cmt);
+        }
+
+        batch.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            sk.ref_to(),
+            Epoch(0),
+            // FIXME: maybe need to raise this for the batch?
+            WRAPPER_GAS_LIMIT.into(),
+            None,
+        ))));
+        batch.header.chain_id = shell.chain_id.clone();
+        batch.header.atomic = set_atomic;
+        batch.add_section(Section::Authorization(Authorization::new(
+            vec![batch.raw_header_hash()],
+            [(0, sk.clone())].into_iter().collect(),
+            None,
+        )));
+        batch.add_section(Section::Authorization(Authorization::new(
+            batch.sechashes(),
+            [(0, sk.clone())].into_iter().collect(),
+            None,
+        )));
+        let tx = batch.to_bytes();
+        (
+            batch,
+            ProcessedTx {
+                tx: tx.into(),
+                result: TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "".into(),
+                },
+            },
+        )
+    }
+
     /// Check that if a wrapper tx was rejected by [`process_proposal`],
     /// check that the correct event is returned. Check that it does
     /// not appear in the queue of txs to be decrypted
@@ -5001,4 +5051,9 @@ mod test_finalize_block {
             control_receiver.recv().await.expect("Test failed");
         assert_eq!(u64::from(cmd.min_confirmations), 42);
     }
+
+    // TODO (@brentstone):
+    //    - a real valid batch (2 txs)
+    //    - a failing atomic batch (using a failing tx)
+    //    - a failing non-atomic batch (using a failing tx)
 }
