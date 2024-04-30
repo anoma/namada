@@ -1,8 +1,133 @@
 //! Extend [events](Event) with additional fields.
 
+use std::fmt::Display;
+use std::marker::PhantomData;
+use std::ops::ControlFlow;
+use std::str::FromStr;
+
 use super::*;
 use crate::hash::Hash;
-use crate::storage::BlockHeight;
+use crate::storage::{BlockHeight, TxIndex};
+
+/// Map of event attributes.
+pub trait AttributesMap {
+    /// Insert a new attribute.
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>;
+
+    /// Retrieve an attribute.
+    fn retrieve_attribute(&self, key: &str) -> Option<&str>;
+
+    /// Check for the existence of an attribute.
+    fn is_attribute(&self, key: &str) -> bool;
+
+    /// Iterate over all the key value pairs.
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)>;
+}
+
+impl AttributesMap for HashMap<String, String> {
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.insert(key.into(), value.into());
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.get(key).map(String::as_ref)
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.contains_key(key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+}
+
+impl AttributesMap for Vec<crate::tendermint::abci::EventAttribute> {
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.push(crate::tendermint::abci::EventAttribute {
+            key: key.into(),
+            value: value.into(),
+            index: true,
+        });
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.iter().find_map(|attr| {
+            if attr.key == key {
+                Some(attr.value.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.iter().any(|attr| attr.key == key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter()
+            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
+    }
+}
+
+impl AttributesMap
+    for Vec<crate::tendermint_proto::v0_37::abci::EventAttribute>
+{
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.push(crate::tendermint_proto::v0_37::abci::EventAttribute {
+            key: key.into(),
+            value: value.into(),
+            index: true,
+        });
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.iter().find_map(|attr| {
+            if attr.key == key {
+                Some(attr.value.as_str())
+            } else {
+                None
+            }
+        })
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.iter().any(|attr| attr.key == key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter()
+            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
+    }
+}
 
 /// Provides event composition routines.
 pub trait ComposeEvent {
@@ -52,78 +177,434 @@ where
     }
 }
 
-/// Extend an [event](Event) with additional fields.
+impl<E, DATA> EventToEmit for CompositeEvent<DATA, E>
+where
+    E: EventToEmit,
+    DATA: ExtendEvent,
+{
+    const DOMAIN: &'static str = E::DOMAIN;
+}
+
+/// Extend a [`HashMap`] of string to string with event attributed
+/// related methods.
+pub trait ExtendAttributesMap: Sized {
+    /// Insert a new attribute into a map of event attributes.
+    fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: ExtendEventAttributes;
+}
+
+impl<A: AttributesMap> ExtendAttributesMap for A {
+    #[inline(always)]
+    fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: ExtendEventAttributes,
+    {
+        data.extend_event_attributes(self);
+        self
+    }
+}
+
+/// Represents an entry in the attributes of an [`Event`].
+pub trait EventAttributeEntry<'a> {
+    /// Key to read or write and event attribute to.
+    const KEY: &'static str;
+
+    /// Data to be stored in the given `KEY`.
+    type Value;
+
+    /// Identical to [`Self::Value`], with the exception that this
+    /// should be an owned variant of that type.
+    type ValueOwned;
+
+    /// Return the data to be stored in the given `KEY`.
+    fn into_value(self) -> Self::Value;
+}
+
+/// Extend an [event](Event) with additional attributes.
+pub trait ExtendEventAttributes {
+    /// Add additional attributes to some `event`.
+    fn extend_event_attributes<A>(self, attributes: &mut A)
+    where
+        A: AttributesMap;
+}
+
+impl<'value, DATA> ExtendEventAttributes for DATA
+where
+    DATA: EventAttributeEntry<'value>,
+    DATA::Value: ToString,
+{
+    #[inline]
+    fn extend_event_attributes<A>(self, attributes: &mut A)
+    where
+        A: AttributesMap,
+    {
+        attributes.insert_attribute(
+            DATA::KEY.to_string(),
+            self.into_value().to_string(),
+        );
+    }
+}
+
+/// Read an attribute from an [event](Event)'s attributes.
+pub trait ReadFromEventAttributes<'value> {
+    /// The attribute to be read.
+    type Value;
+
+    /// Read an attribute from the provided event attributes.
+    fn read_opt_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Option<Self::Value>, EventError>
+    where
+        A: AttributesMap;
+
+    /// Read an attribute from the provided event attributes.
+    fn read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Self::Value, EventError>
+    where
+        A: AttributesMap;
+}
+
+// NB: some domain specific types take references instead of owned
+// values as arguments, so we must decode into the owned counterparts
+// of these types... hence the trait spaghetti
+impl<'value, DATA> ReadFromEventAttributes<'value> for DATA
+where
+    DATA: EventAttributeEntry<'value>,
+    <DATA as EventAttributeEntry<'value>>::ValueOwned: FromStr,
+    <<DATA as EventAttributeEntry<'value>>::ValueOwned as FromStr>::Err:
+        Display,
+{
+    type Value = <DATA as EventAttributeEntry<'value>>::ValueOwned;
+
+    #[inline]
+    fn read_opt_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Option<Self::Value>, EventError>
+    where
+        A: AttributesMap,
+    {
+        attributes
+            .retrieve_attribute(DATA::KEY)
+            .map(|encoded_value| {
+                encoded_value.parse().map_err(
+                    |err: <Self::Value as FromStr>::Err| {
+                        EventError::AttributeEncoding(err.to_string())
+                    },
+                )
+            })
+            .transpose()
+    }
+
+    #[inline]
+    fn read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<Self::Value, EventError>
+    where
+        A: AttributesMap,
+    {
+        Self::read_opt_from_event_attributes(attributes)?.ok_or(
+            EventError::MissingAttribute(
+                <Self as EventAttributeEntry<'value>>::KEY,
+            ),
+        )
+    }
+}
+
+/// Read a raw (string encoded) attribute from an [event](Event)'s attributes.
+pub trait RawReadFromEventAttributes<'value> {
+    /// Check if the associated attribute is present in the provided event
+    /// attributes.
+    fn check_if_present_in<A>(attributes: &A) -> bool
+    where
+        A: AttributesMap;
+
+    /// Read a string encoded attribute from the provided event attributes.
+    fn raw_read_opt_from_event_attributes<A>(attributes: &A) -> Option<&str>
+    where
+        A: AttributesMap;
+
+    /// Read a string encoded attribute from the provided event attributes.
+    fn raw_read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<&str, EventError>
+    where
+        A: AttributesMap;
+}
+
+impl<'value, DATA> RawReadFromEventAttributes<'value> for DATA
+where
+    DATA: EventAttributeEntry<'value>,
+{
+    #[inline]
+    fn check_if_present_in<A>(attributes: &A) -> bool
+    where
+        A: AttributesMap,
+    {
+        attributes.is_attribute(DATA::KEY)
+    }
+
+    #[inline]
+    fn raw_read_opt_from_event_attributes<A>(attributes: &A) -> Option<&str>
+    where
+        A: AttributesMap,
+    {
+        attributes.retrieve_attribute(DATA::KEY)
+    }
+
+    #[inline]
+    fn raw_read_from_event_attributes<A>(
+        attributes: &A,
+    ) -> Result<&str, EventError>
+    where
+        A: AttributesMap,
+    {
+        Self::raw_read_opt_from_event_attributes(attributes).ok_or(
+            EventError::MissingAttribute(
+                <Self as EventAttributeEntry<'value>>::KEY,
+            ),
+        )
+    }
+}
+
+/// Extend an [event](Event) with additional data.
 pub trait ExtendEvent {
-    /// Add additional fields to the specified `event`.
+    /// Add additional data to the specified `event`.
     fn extend_event(self, event: &mut Event);
 }
 
-/// Leaves an [`Event`] as is.
-pub struct WithNoOp;
-
-impl ExtendEvent for WithNoOp {
+impl<E: ExtendEventAttributes> ExtendEvent for E {
     #[inline]
-    fn extend_event(self, _: &mut Event) {}
+    fn extend_event(self, event: &mut Event) {
+        self.extend_event_attributes(&mut event.attributes);
+    }
 }
 
 /// Extend an [`Event`] with block height information.
 pub struct Height(pub BlockHeight);
 
-impl ExtendEvent for Height {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(height) = self;
-        event["height"] = height.to_string();
+impl EventAttributeEntry<'static> for Height {
+    type Value = BlockHeight;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "height";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 
 /// Extend an [`Event`] with transaction hash information.
 pub struct TxHash(pub Hash);
 
-impl ExtendEvent for TxHash {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(hash) = self;
-        event["hash"] = hash.to_string();
+impl EventAttributeEntry<'static> for TxHash {
+    type Value = Hash;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "hash";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 
 /// Extend an [`Event`] with log data.
 pub struct Log(pub String);
 
-impl ExtendEvent for Log {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(log) = self;
-        event["log"] = log;
+impl EventAttributeEntry<'static> for Log {
+    type Value = String;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "log";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 
 /// Extend an [`Event`] with info data.
 pub struct Info(pub String);
 
-impl ExtendEvent for Info {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(info) = self;
-        event["info"] = info;
+impl EventAttributeEntry<'static> for Info {
+    type Value = String;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "info";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }
 
 /// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct ValidMaspTx(pub usize);
+pub struct ValidMaspTx(pub TxIndex);
 
-impl ExtendEvent for ValidMaspTx {
+impl EventAttributeEntry<'static> for ValidMaspTx {
+    type Value = TxIndex;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "is_valid_masp_tx";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with success data.
+pub struct Success(pub bool);
+
+impl EventAttributeEntry<'static> for Success {
+    type Value = bool;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "success";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with a new domain.
+pub struct Domain<E>(PhantomData<E>);
+
+/// Build a new [`Domain`] to extend an [event](Event) with.
+pub const fn event_domain_of<E: EventToEmit>() -> Domain<E> {
+    Domain(PhantomData)
+}
+
+/// Parsed domain of some [event](Event).
+pub struct ParsedDomain<E> {
+    domain: String,
+    _marker: PhantomData<E>,
+}
+
+impl<E> ParsedDomain<E> {
+    /// Return the inner domain as a [`String`].
     #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(masp_tx_index) = self;
-        event["is_valid_masp_tx"] = masp_tx_index.to_string();
+    pub fn into_inner(self) -> String {
+        self.domain
+    }
+}
+
+impl<E> From<ParsedDomain<E>> for String {
+    #[inline]
+    fn from(parsed_domain: ParsedDomain<E>) -> String {
+        parsed_domain.into_inner()
+    }
+}
+
+impl<E> FromStr for ParsedDomain<E>
+where
+    E: EventToEmit,
+{
+    type Err = EventError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == E::DOMAIN {
+            Ok(Self {
+                domain: s.to_owned(),
+                _marker: PhantomData,
+            })
+        } else {
+            Err(EventError::InvalidDomain(format!(
+                "Expected {:?}, but found {s:?}",
+                E::DOMAIN
+            )))
+        }
+    }
+}
+
+impl<E> EventAttributeEntry<'static> for Domain<E>
+where
+    E: EventToEmit,
+{
+    type Value = &'static str;
+    type ValueOwned = ParsedDomain<E>;
+
+    const KEY: &'static str = "event-domain";
+
+    fn into_value(self) -> Self::Value {
+        E::DOMAIN
+    }
+}
+
+/// Checks for the presence of an attribute in the
+/// provided attributes map.
+pub trait EventAttributeChecker<'value, A>
+where
+    A: AttributesMap,
+{
+    /// Check if the associated attribute is present in the provided event
+    /// attributes.
+    fn is_present(&self, attributes: &A) -> bool
+    where
+        A: AttributesMap;
+}
+
+/// Return a new implementation of [`EventAttributeChecker`].
+pub fn attribute_checker<'value, DATA, ATTR>()
+-> Box<dyn EventAttributeChecker<'value, ATTR>>
+where
+    DATA: EventAttributeEntry<'value> + 'static,
+    ATTR: AttributesMap,
+{
+    Box::new(EventAttributeCheckerImpl(PhantomData::<DATA>))
+}
+
+/// Dispatch a callback on a list of attribute kinds.
+pub fn dispatch_attribute<'value, I, K, A, F>(
+    attributes: &A,
+    dispatch_list: I,
+    mut dispatch: F,
+) where
+    A: AttributesMap,
+    I: IntoIterator<Item = (K, Box<dyn EventAttributeChecker<'value, A>>)>,
+    F: FnMut(K) -> ControlFlow<()>,
+{
+    for (kind, checker) in dispatch_list {
+        if !checker.is_present(attributes) {
+            continue;
+        }
+        if let ControlFlow::Break(_) = dispatch(kind) {
+            break;
+        }
+    }
+}
+
+struct EventAttributeCheckerImpl<DATA>(PhantomData<DATA>);
+
+impl<'value, DATA, A> EventAttributeChecker<'value, A>
+    for EventAttributeCheckerImpl<DATA>
+where
+    DATA: EventAttributeEntry<'value>,
+    A: AttributesMap,
+{
+    fn is_present(&self, attributes: &A) -> bool
+    where
+        A: AttributesMap,
+    {
+        attributes.is_attribute(DATA::KEY)
     }
 }
 
 #[cfg(test)]
 mod event_composition_tests {
     use super::*;
+    use crate::ibc::IbcEventType;
+
+    #[test]
+    fn test_event_height_parse() {
+        let event: Event =
+            Event::applied_tx().with(Height(BlockHeight(300))).into();
+
+        let height = event.raw_read_attribute::<Height>().unwrap();
+        assert_eq!(height, "300");
+        assert_eq!(height.parse::<u64>().unwrap(), 300u64);
+
+        let height = event.read_attribute::<Height>().unwrap();
+        assert_eq!(height, BlockHeight(300));
+    }
 
     #[test]
     fn test_event_compose_basic() {
@@ -176,5 +657,59 @@ mod event_composition_tests {
             .into();
 
         assert_eq!(base_event.attributes, expected_attrs);
+    }
+
+    #[test]
+    fn test_domain_of_composed_event() {
+        let composite_event = IbcEvent {
+            event_type: IbcEventType("update_account".into()),
+            attributes: Default::default(),
+        }
+        .with(Log("this is sparta!".to_string()))
+        .with(Height(300.into()))
+        .with(TxHash(Hash::default()));
+
+        fn event_domain<E: EventToEmit>(_: &E) -> &'static str {
+            E::DOMAIN
+        }
+
+        assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
+    }
+
+    #[test]
+    fn test_event_attribute_dispatching() {
+        enum AttrKind {
+            Log,
+            Info,
+        }
+
+        let attributes = {
+            let mut attrs = HashMap::with_capacity(1);
+            attrs.with_attribute(Info(String::new()));
+            attrs
+        };
+
+        let log_attribute = attribute_checker::<Log, _>();
+        let info_attribute = attribute_checker::<Info, _>();
+
+        let mut found_info = false;
+        let mut found_log = false;
+
+        dispatch_attribute(
+            &attributes,
+            [
+                (AttrKind::Info, info_attribute),
+                (AttrKind::Log, log_attribute),
+            ],
+            |kind| {
+                match kind {
+                    AttrKind::Info => found_info = true,
+                    AttrKind::Log => found_log = true,
+                }
+                ControlFlow::Continue(())
+            },
+        );
+
+        assert!(found_info && !found_log);
     }
 }

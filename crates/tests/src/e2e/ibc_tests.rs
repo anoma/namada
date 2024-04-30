@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use namada::core::address::{Address, InternalAddress};
+use namada::core::event::extend::ReadFromEventAttributes;
 use namada::core::key::PublicKey;
 use namada::core::storage::{BlockHeight, Epoch, Key};
 use namada::core::token::Amount;
@@ -36,7 +37,6 @@ use namada::ibc::core::channel::types::msgs::{
     MsgTimeout as IbcMsgTimeout,
 };
 use namada::ibc::core::channel::types::packet::Packet;
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada::ibc::core::channel::types::Version as ChanVersion;
 use namada::ibc::core::client::context::client_state::ClientStateCommon;
 use namada::ibc::core::client::types::msgs::{
@@ -57,8 +57,8 @@ use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
 use namada::ibc::primitives::proto::Any;
-use namada::ibc::primitives::{Signer, Timestamp, ToProto};
-use namada::ledger::events::EventType;
+use namada::ibc::primitives::{Signer, ToProto};
+use namada::ibc::{event as ibc_events, IbcEventType};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
@@ -78,7 +78,6 @@ use namada_apps::config::{ethereum_bridge, TendermintMode};
 use namada_apps::facade::tendermint::block::Header as TmHeader;
 use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
-use namada_core::collections::HashMap;
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
@@ -1388,7 +1387,7 @@ fn transfer_token(
     )?;
     let events = get_events(test_a, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
-    check_ibc_packet_query(test_a, &"send_packet".parse().unwrap(), &packet)?;
+    check_ibc_packet_query(test_a, "send_packet", &packet)?;
 
     let height_a = query_height(test_a)?;
     let proof_commitment_on_a =
@@ -1412,11 +1411,7 @@ fn transfer_token(
     let events = get_events(test_b, height)?;
     let packet = get_packet_from_events(&events).ok_or(eyre!(TX_FAILED))?;
     let ack = get_ack_from_events(&events).ok_or(eyre!(TX_FAILED))?;
-    check_ibc_packet_query(
-        test_b,
-        &"write_acknowledgement".parse().unwrap(),
-        &packet,
-    )?;
+    check_ibc_packet_query(test_b, "write_acknowledgement", &packet)?;
 
     // get the proof on Chain B
     let height_b = query_height(test_b)?;
@@ -2056,7 +2051,7 @@ fn check_ibc_update_query(
 
 fn check_ibc_packet_query(
     test: &Test,
-    event_type: &EventType,
+    event_type: &str,
     packet: &Packet,
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -2064,7 +2059,7 @@ fn check_ibc_packet_query(
     let client = HttpClient::new(tendermint_url).unwrap();
     match test.async_runtime().block_on(RPC.shell().ibc_packet(
         &client,
-        event_type,
+        &IbcEventType(event_type.to_owned()),
         &packet.port_id_on_a,
         &packet.chan_id_on_a,
         &packet.port_id_on_b,
@@ -2342,92 +2337,38 @@ fn signer() -> Signer {
     "signer".to_string().into()
 }
 
-fn get_client_id_from_events(events: &Vec<AbciEvent>) -> Option<ClientId> {
-    get_attribute_from_events(events, "client_id").map(|v| v.parse().unwrap())
+fn get_client_id_from_events(events: &[AbciEvent]) -> Option<ClientId> {
+    get_attribute_from_events::<ibc_events::ClientId>(events)
 }
 
-fn get_connection_id_from_events(
-    events: &Vec<AbciEvent>,
-) -> Option<ConnectionId> {
-    get_attribute_from_events(events, "connection_id")
-        .map(|v| v.parse().unwrap())
+fn get_connection_id_from_events(events: &[AbciEvent]) -> Option<ConnectionId> {
+    get_attribute_from_events::<ibc_events::ConnectionId>(events)
 }
 
-fn get_channel_id_from_events(events: &Vec<AbciEvent>) -> Option<ChannelId> {
-    get_attribute_from_events(events, "channel_id").map(|v| v.parse().unwrap())
+fn get_channel_id_from_events(events: &[AbciEvent]) -> Option<ChannelId> {
+    get_attribute_from_events::<ibc_events::ChannelId>(events)
 }
 
-fn get_ack_from_events(events: &Vec<AbciEvent>) -> Option<Vec<u8>> {
-    get_attribute_from_events(events, "packet_ack")
-        .map(|v| Vec::from(v.as_bytes()))
+fn get_ack_from_events(events: &[AbciEvent]) -> Option<Vec<u8>> {
+    get_attribute_from_events::<ibc_events::PacketAck>(events)
+        .map(String::into_bytes)
 }
 
-fn get_attribute_from_events(
-    events: &Vec<AbciEvent>,
-    key: &str,
-) -> Option<String> {
-    for event in events {
-        let attributes = get_attributes_from_event(event);
-        if let Some(value) = attributes.get(key) {
-            return Some(value.clone());
-        }
-    }
-    None
+fn get_attribute_from_events<'value, DATA>(
+    events: &[AbciEvent],
+) -> Option<<DATA as ReadFromEventAttributes<'value>>::Value>
+where
+    DATA: ReadFromEventAttributes<'value>,
+{
+    events.iter().find_map(|event| {
+        DATA::read_from_event_attributes(&event.attributes).ok()
+    })
 }
 
-fn get_packet_from_events(events: &Vec<AbciEvent>) -> Option<Packet> {
-    for event in events {
-        let attributes = get_attributes_from_event(event);
-        if !attributes.contains_key("packet_src_port") {
-            continue;
-        }
-        let mut packet = Packet {
-            seq_on_a: 0.into(),
-            port_id_on_a: PortId::transfer(),
-            chan_id_on_a: ChannelId::default(),
-            port_id_on_b: PortId::transfer(),
-            chan_id_on_b: ChannelId::default(),
-            data: vec![],
-            timeout_height_on_b: TimeoutHeight::default(),
-            timeout_timestamp_on_b: Timestamp::default(),
-        };
-        for (key, val) in attributes {
-            match key.as_str() {
-                "packet_src_port" => packet.port_id_on_a = val.parse().unwrap(),
-                "packet_src_channel" => {
-                    packet.chan_id_on_a = val.parse().unwrap()
-                }
-                "packet_dst_port" => packet.port_id_on_b = val.parse().unwrap(),
-                "packet_dst_channel" => {
-                    packet.chan_id_on_b = val.parse().unwrap()
-                }
-                "packet_timeout_height" => {
-                    packet.timeout_height_on_b = match Height::from_str(&val) {
-                        Ok(height) => TimeoutHeight::At(height),
-                        Err(_) => TimeoutHeight::Never,
-                    }
-                }
-                "packet_timeout_timestamp" => {
-                    packet.timeout_timestamp_on_b = val.parse().unwrap()
-                }
-                "packet_sequence" => {
-                    packet.seq_on_a = u64::from_str(&val).unwrap().into()
-                }
-                "packet_data" => packet.data = Vec::from(val.as_bytes()),
-                _ => {}
-            }
-        }
-        return Some(packet);
-    }
-    None
-}
-
-fn get_attributes_from_event(event: &AbciEvent) -> HashMap<String, String> {
-    event
-        .attributes
-        .iter()
-        .map(|tag| (tag.key.to_string(), tag.value.to_string()))
-        .collect()
+fn get_packet_from_events(events: &[AbciEvent]) -> Option<Packet> {
+    events.iter().find_map(|event| {
+        ibc_events::packet_from_event_attributes(&event.attributes).ok()
+    })
 }
 
 fn get_events(test: &Test, height: u32) -> Result<Vec<AbciEvent>> {

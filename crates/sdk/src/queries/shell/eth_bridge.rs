@@ -41,7 +41,6 @@ use namada_vote_ext::validator_set_update::{
 use serde::{Deserialize, Serialize};
 
 use crate::eth_bridge::ethers::abi::AbiDecode;
-use crate::events::EventType;
 use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
 /// Container for the status of queried transfers to Ethereum.
@@ -296,32 +295,25 @@ where
     // INVARIANT: transfers that are in the event log will have already
     // been processed and therefore removed from the Bridge pool at the
     // time of this query
-    let kind_key: String = "kind".into();
     let completed_transfers = ctx.event_log.iter().filter_map(|ev| {
-        if !matches!(&ev.event_type, EventType::EthereumBridge) {
+        let Ok(transfer_status) =
+            ethereum_structs::BpTransferStatus::try_from(ev.kind())
+        else {
             return None;
-        }
-        let eth_event_kind =
-            ev.attributes.get(&kind_key).map(|k| k.as_str())?;
-        let is_relayed = match eth_event_kind {
-            "bridge_pool_relayed" => true,
-            "bridge_pool_expired" => false,
-            _ => return None,
         };
         let tx_hash: KeccakHash = ev
-            .attributes
-            .get("tx_hash")
-            .expect("The transfer hash must be available")
-            .as_str()
-            .try_into()
-            .expect("We must have a valid KeccakHash");
+            .read_attribute::<ethereum_structs::BridgePoolTxHash>()
+            .expect("The transfer hash must be available");
         if !transfer_hashes.swap_remove(&tx_hash) {
             return None;
         }
-        Some((tx_hash, is_relayed, transfer_hashes.is_empty()))
+        Some((tx_hash, transfer_status, transfer_hashes.is_empty()))
     });
-    for (hash, is_relayed, early_exit) in completed_transfers {
-        if hints::likely(is_relayed) {
+    for (hash, transfer_status, early_exit) in completed_transfers {
+        if hints::likely(matches!(
+            transfer_status,
+            ethereum_structs::BpTransferStatus::Relayed
+        )) {
             status.relayed.insert(hash.clone());
         } else {
             status.expired.insert(hash.clone());
