@@ -958,7 +958,6 @@ pub struct Header {
     pub expiration: Option<DateTimeUtc>,
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
-    // FIXME: this could be empty, is this a problem?
     /// The commitments to the transaction's sections
     pub batch: HashSet<Commitments>,
     /// Whether the inner txs should be executed atomically

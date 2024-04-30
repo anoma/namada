@@ -10,7 +10,6 @@ use namada_core::hash::Hash;
 use namada_core::ibc::IbcEvent;
 use namada_core::storage;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
-use namada_tx::Commitments;
 use thiserror::Error;
 
 #[allow(missing_docs)]
@@ -173,11 +172,10 @@ pub struct WriteLog {
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
     pub(crate) block_write_log: HashMap<storage::Key, StorageModification>,
-    /// The write log of the transactions of the current batch, indexed by the
-    /// hash of the Commitments
+    /// The write log of the transactions of the current batch
     /// INVARIANT: this has to be sorted by the insertion
-    /// order
-    pub(crate) batch_write_log: HashMap<Hash, BatchedTxWriteLog>,
+    /// order to correctly read values
+    pub(crate) batch_write_log: Vec<BatchedTxWriteLog>,
     // The write log of the current active transaction
     pub(crate) tx_write_log: TxWriteLog,
     /// Storage modifications for the replay protection storage, cannot be
@@ -207,7 +205,7 @@ impl Default for WriteLog {
         Self {
             block_address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
-            batch_write_log: HashMap::with_capacity(5),
+            batch_write_log: Vec::with_capacity(5),
             tx_write_log: Default::default(),
             replay_protection: HashMap::with_capacity(1_000),
         }
@@ -236,7 +234,7 @@ impl WriteLog {
                 self.batch_write_log
                     .iter()
                     .rev()
-                    .find_map(|(_, log)| log.write_log.get(key))
+                    .find_map(|log| log.write_log.get(key))
             })
             .or_else(|| {
                 // if not found, then try to read from block write log
@@ -272,7 +270,7 @@ impl WriteLog {
             &self.tx_write_log.write_log,
             &self.tx_write_log.precommit_write_log,
         ];
-        for (_, tx_log) in self.batch_write_log.iter().rev() {
+        for tx_log in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
         }
         buckets.push(&self.block_write_log);
@@ -309,7 +307,7 @@ impl WriteLog {
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
         let mut buckets = vec![];
-        for (_, tx_log) in self.batch_write_log.iter().rev() {
+        for tx_log in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
         }
         buckets.push(&self.block_write_log);
@@ -642,10 +640,7 @@ impl WriteLog {
     /// Commit the current transaction's write log and precommit log to the
     /// batch when it's accepted by all the triggered validity predicates.
     /// Starts a new transaction write log.
-    // FIXME: do I need this? Better, do I need to pass the cmt? No, more in
-    // generale the batch_write_log does not need to be indexed and can be just
-    // a Vec
-    pub fn commit_tx_to_batch(&mut self, cmt: &Commitments) {
+    pub fn commit_tx_to_batch(&mut self) {
         // First precommit everything
         self.precommit_tx();
 
@@ -659,7 +654,7 @@ impl WriteLog {
             write_log: tx_write_log.precommit_write_log,
         };
 
-        self.batch_write_log.insert(cmt.get_hash(), batched_log);
+        self.batch_write_log.push(batched_log);
     }
 
     /// Drop the current transaction's write log and IBC events and precommit
@@ -679,7 +674,7 @@ impl WriteLog {
 
     /// Commit the entire batch to the block log.
     pub fn commit_batch(&mut self) {
-        for (_, log) in std::mem::take(&mut self.batch_write_log) {
+        for log in std::mem::take(&mut self.batch_write_log) {
             self.block_write_log.extend(log.write_log);
             self.block_address_gen = log.address_gen;
         }
@@ -743,7 +738,7 @@ impl WriteLog {
         let mut matches = BTreeMap::new();
 
         let mut buckets = vec![&self.block_write_log];
-        for (_, tx_log) in self.batch_write_log.iter().rev() {
+        for tx_log in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
         }
 
@@ -765,7 +760,7 @@ impl WriteLog {
         let mut matches = BTreeMap::new();
 
         let mut buckets = vec![&self.block_write_log];
-        for (_, tx_log) in self.batch_write_log.iter().rev() {
+        for tx_log in self.batch_write_log.iter().rev() {
             buckets.push(&tx_log.write_log);
         }
         buckets.push(&self.tx_write_log.precommit_write_log);
@@ -1001,7 +996,6 @@ mod tests {
         assert_matches!(result, Error::DeleteVp);
     }
 
-    // FIXME: test batch commit and wrapper commit
     #[test]
     fn test_commit() {
         let mut state = crate::testing::TestState::default();

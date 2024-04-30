@@ -259,13 +259,9 @@ where
                         tx_wasm_cache,
                     },
                 ) {
-                    // FIXME: we keep going even for atomic batches which could
-                    // instead be aborted, should we do that?
                     Err(e @ Error::GasError(_)) => {
                         // Gas error aborts the execution of the entire batch
                         state.write_log_mut().drop_tx();
-                        // FIXME: should push something to the batch results in
-                        // this case?
                         return Err(e);
                     }
                     res => {
@@ -274,7 +270,7 @@ where
 
                         tx_result.batch_results.0.insert(cmt.get_hash(), res);
                         if is_accepted {
-                            state.write_log_mut().commit_tx_to_batch(cmt);
+                            state.write_log_mut().commit_tx_to_batch();
                         } else {
                             state.write_log_mut().drop_tx();
                         }
