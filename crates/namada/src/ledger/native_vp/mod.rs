@@ -490,7 +490,7 @@ where
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
         vp_host_fns::get_tx_code_hash(
             self.gas_meter,
-            &self.tx.batch_tx(self.cmt),
+            &self.tx.batch_ref_tx(self.cmt),
         )
         .into_storage_result()
     }

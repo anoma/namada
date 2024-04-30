@@ -378,7 +378,7 @@ pub async fn submit_change_consensus_key(
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt = tx.commitments().first().unwrap().to_owned();
+        let cmt = tx.first_commitments().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if !args.tx.dry_run {
@@ -570,7 +570,7 @@ pub async fn submit_become_validator(
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt = tx.commitments().first().unwrap().to_owned();
+        let cmt = tx.first_commitments().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if args.tx.dry_run {
@@ -745,7 +745,7 @@ pub async fn submit_transfer(
             break;
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
-            let cmt_hash = tx.commitments()[0].get_hash();
+            let cmt_hash = tx.first_commitments().unwrap().get_hash();
 
             let result = namada.submit(tx, &args.tx).await?;
 
@@ -1053,7 +1053,7 @@ where
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt = tx.commitments().first().unwrap().to_owned();
+        let cmt = tx.first_commitments().unwrap().to_owned();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if !args.tx.dry_run && resp.is_applied_and_valid(&cmt).is_some() {

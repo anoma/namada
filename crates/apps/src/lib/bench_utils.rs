@@ -328,8 +328,8 @@ impl BenchShell {
             )));
         }
 
-        let cmt = tx.commitments().first().unwrap().clone();
-        tx.owned_batch_tx(cmt)
+        let cmt = tx.first_commitments().unwrap().clone();
+        tx.batch_tx(cmt)
     }
 
     pub fn generate_ibc_tx(
@@ -349,8 +349,8 @@ impl BenchShell {
 
         tx.set_data(Data::new(data));
         // NOTE: the Ibc VP doesn't actually check the signature
-        let cmt = tx.commitments().first().unwrap().clone();
-        tx.owned_batch_tx(cmt)
+        let cmt = tx.first_commitments().unwrap().clone();
+        tx.batch_tx(cmt)
     }
 
     pub fn generate_ibc_transfer_tx(&self) -> BatchedTx {
@@ -634,8 +634,8 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
         None,
     )));
 
-    let cmt = tx.commitments().first().unwrap().clone();
-    tx.owned_batch_tx(cmt)
+    let cmt = tx.first_commitments().unwrap().clone();
+    tx.batch_tx(cmt)
 }
 
 pub struct BenchShieldedCtx {
@@ -903,7 +903,7 @@ impl Client for BenchShell {
                             wrapper_changed_keys: Default::default(),
                             batch_results: BatchResults(
                                 [(
-                                    tx.commitments()[0].get_hash(),
+                                    tx.first_commitments().unwrap().get_hash(),
                                     Ok(BatchedTxResult {
                                         changed_keys: changed_keys.to_owned(),
                                         vps_result: VpsResult::default(),
@@ -923,8 +923,7 @@ impl Client for BenchShell {
                                 namada::tendermint::abci::EventAttribute {
                                     key: format!(
                                         "cmt/{}/is_valid_masp_tx",
-                                        tx.commitments()
-                                            .first()
+                                        tx.first_commitments()
                                             .unwrap()
                                             .get_hash()
                                     ),

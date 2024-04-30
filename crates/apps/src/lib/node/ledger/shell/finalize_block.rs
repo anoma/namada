@@ -266,7 +266,7 @@ where
                         };
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
-                                tx.batch_tx(cmt),
+                                tx.batch_ref_tx(cmt),
                             )
                             .unwrap();
                         if self
@@ -297,7 +297,7 @@ where
                         };
                         let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
-                                tx.batch_tx(cmt),
+                                tx.batch_ref_tx(cmt),
                             ).unwrap();
                         if let Some(address) =
                             self.mode.get_validator_address().cloned()
@@ -2867,7 +2867,7 @@ mod test_finalize_block {
         let inner_result = inner_tx_result
             .batch_results
             .0
-            .get(&unsigned_wrapper.commitments().first().unwrap().get_hash())
+            .get(&unsigned_wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
         assert!(inner_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(event[2].event_type.to_string(), String::from("applied"));
@@ -2882,8 +2882,7 @@ mod test_finalize_block {
             .0
             .get(
                 &wrong_commitment_wrapper
-                    .commitments()
-                    .first()
+                    .first_commitments()
                     .unwrap()
                     .get_hash(),
             )
@@ -2899,7 +2898,7 @@ mod test_finalize_block {
         let inner_result = inner_tx_result
             .batch_results
             .0
-            .get(&failing_wrapper.commitments().first().unwrap().get_hash())
+            .get(&failing_wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
         assert!(inner_result.is_err());
 
@@ -3088,7 +3087,7 @@ mod test_finalize_block {
         let inner_result = inner_tx_result
             .batch_results
             .0
-            .get(&wrapper.commitments().first().unwrap().get_hash())
+            .get(&wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
         assert!(inner_result.is_err());
 
@@ -4926,7 +4925,7 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),

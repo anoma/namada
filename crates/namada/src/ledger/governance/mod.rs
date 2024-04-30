@@ -1336,13 +1336,13 @@ mod test {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
 
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1593,12 +1593,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1689,12 +1689,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1788,12 +1788,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1886,12 +1886,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1964,12 +1964,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2042,12 +2042,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2138,12 +2138,12 @@ mod test {
             true,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2234,12 +2234,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2312,12 +2312,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2363,12 +2363,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2441,12 +2441,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2492,12 +2492,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2570,12 +2570,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2621,12 +2621,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2699,12 +2699,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2767,12 +2767,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2845,12 +2845,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2913,12 +2913,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2991,12 +2991,12 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3059,12 +3059,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
-            &tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,

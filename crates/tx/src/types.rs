@@ -897,7 +897,7 @@ impl Section {
     PartialOrd,
     Hash,
 )]
-// FIXME: rename to InnerTx?
+// FIXME: rename to InnerTx? Or messges?
 pub struct Commitments {
     /// The SHA-256 hash of the transaction's code section
     pub code_hash: namada_core::hash::Hash,
@@ -959,11 +959,8 @@ pub struct Header {
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
     // FIXME: this could be empty, is this a problem?
-    // FIXME: this should be the safe version of an HashSet to avoid duplicated
-    // txs
     /// The commitments to the transaction's sections
-    // FIXME: rename the field to bundle
-    pub commitments: Vec<Commitments>,
+    pub batch: HashSet<Commitments>,
     /// Whether the inner txs should be executed atomically
     pub atomic: bool,
     /// The type of this transaction
@@ -979,7 +976,7 @@ impl Header {
             expiration: None,
             #[allow(clippy::disallowed_methods)]
             timestamp: DateTimeUtc::now(),
-            commitments: Default::default(),
+            batch: Default::default(),
             atomic: Default::default(),
         }
     }
@@ -1104,10 +1101,11 @@ impl Tx {
         }
     }
 
-    /// Add new default commitments to the transaction
+    /// Add new default commitments to the transaction. Returns false if the
+    /// commitment is already contained in the set
     #[cfg(any(test, feature = "testing"))]
-    pub fn push_default_commitments(&mut self) {
-        self.header.commitments.push(Commitments::default())
+    pub fn push_default_commitments(&mut self) -> bool {
+        self.header.batch.insert(Commitments::default())
     }
 
     /// Get the transaction header
@@ -1165,13 +1163,18 @@ impl Tx {
 
     /// Set the last transaction memo hash stored in the header
     pub fn set_memo_sechash(&mut self, hash: namada_core::hash::Hash) {
-        match self.header.commitments.last_mut() {
-            Some(last) => last.memo_hash = hash,
-            None => self.header.commitments.push(Commitments {
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.memo_hash = hash;
+                last
+            }
+            None => Commitments {
                 memo_hash: hash,
                 ..Default::default()
-            }),
-        }
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
     /// Get the memo designated by the memo hash in the header for the specified
@@ -1195,13 +1198,18 @@ impl Tx {
 
     /// Set the last transaction code hash stored in the header
     pub fn set_code_sechash(&mut self, hash: namada_core::hash::Hash) {
-        match self.header.commitments.last_mut() {
-            Some(last) => last.code_hash = hash,
-            None => self.header.commitments.push(Commitments {
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.code_hash = hash;
+                last
+            }
+            None => Commitments {
                 code_hash: hash,
                 ..Default::default()
-            }),
-        }
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
     /// Get the code designated by the transaction code hash in the header for
@@ -1223,13 +1231,18 @@ impl Tx {
 
     /// Set the last transaction data hash stored in the header
     pub fn set_data_sechash(&mut self, hash: namada_core::hash::Hash) {
-        match self.header.commitments.last_mut() {
-            Some(last) => last.data_hash = hash,
-            None => self.header.commitments.push(Commitments {
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.data_hash = hash;
+                last
+            }
+            None => Commitments {
                 data_hash: hash,
                 ..Default::default()
-            }),
-        }
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
     /// Add the given code to the transaction and set the hash in the header
@@ -1651,21 +1664,17 @@ impl Tx {
         self
     }
 
-    // FIXME: review the return type, maybe a slice?
     // FIXME: rename?
-    // FIXME: look for all the usages of this where we pick the first one and
-    // sue first_commitments instead
-    pub fn commitments(&self) -> &Vec<Commitments> {
-        &self.header.commitments
+    pub fn commitments(&self) -> &HashSet<Commitments> {
+        &self.header.batch
     }
 
     // FIXME: rename?
     pub fn first_commitments(&self) -> Option<&Commitments> {
-        self.header.commitments.first()
+        self.header.batch.first()
     }
 
-    // FIXME: rename
-    pub fn owned_batch_tx(self, cmt: Commitments) -> BatchedTx {
+    pub fn batch_tx(self, cmt: Commitments) -> BatchedTx {
         BatchedTx { tx: self, cmt }
     }
 
@@ -1685,7 +1694,7 @@ impl Tx {
 }
 
 impl<'tx> Tx {
-    pub fn batch_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTxRef<'tx> {
+    pub fn batch_ref_tx(&'tx self, cmt: &'tx Commitments) -> BatchedTxRef<'tx> {
         BatchedTxRef { tx: self, cmt }
     }
 }

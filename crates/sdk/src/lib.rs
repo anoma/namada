@@ -1001,12 +1001,11 @@ pub mod testing {
                 expiration,
                 timestamp,
                 //FIXME: arbitrary number of commitments
-                commitments: vec![Commitments{
-
-                 data_hash,
-                 code_hash,
-                memo_hash,
-                    }],
+                batch: [Commitments{
+                    data_hash,
+                    code_hash,
+                    memo_hash,
+                }].into(),
                 atomic,
                 tx_type,
             }

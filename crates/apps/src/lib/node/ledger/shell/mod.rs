@@ -969,7 +969,7 @@ where
                             "Ethereum events",
                             response,
                             ethereum_tx_data_variants::EthEventsVext::try_from(
-                                tx.batch_tx(cmt)
+                                tx.batch_ref_tx(cmt)
                             ),
                         );
                         if let Err(err) = validate_eth_events_vext(
@@ -1000,7 +1000,7 @@ where
                             "Bridge pool roots",
                             response,
                             ethereum_tx_data_variants::BridgePoolVext::try_from(
-                                tx.batch_tx(cmt)
+                                tx.batch_ref_tx(cmt)
                             ),
                         );
                         if let Err(err) = validate_bp_roots_vext(
@@ -1031,7 +1031,7 @@ where
                         "validator set update",
                         response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            tx.batch_tx(cmt)
+                            tx.batch_ref_tx(cmt)
                         ),
                     );
                         if let Err(err) = validate_valset_upd_vext(
@@ -1131,7 +1131,7 @@ where
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =
-                        check_tx_allowed(&tx.batch_tx(cmt), &self.state)
+                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
                     {
                         response.code = ResultCode::TxNotAllowlisted.into();
                         response.log = format!(
@@ -1418,7 +1418,7 @@ where
 
     let result = apply_wasm_tx(
         // Ok to unwrap cause tx is built in protocol
-        unshield.batch_tx(unshield.first_commitments().unwrap()),
+        unshield.batch_ref_tx(unshield.first_commitments().unwrap()),
         &TxIndex::default(),
         ShellParams::new(
             &RefCell::new(TxGasMeter::new(fee_unshielding_gas_limit)),
@@ -2035,7 +2035,7 @@ mod shell_tests {
             let tx = Tx::try_from(&serialized_tx[..]).unwrap();
 
             match ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                tx.batch_tx(&tx.commitments()[0]),
+                tx.batch_ref_first_tx(),
             ) {
                 Ok(signed_valset_upd) => break signed_valset_upd,
                 Err(_) => continue,
@@ -2089,7 +2089,7 @@ mod shell_tests {
         // check data inside tx
         let vote_extension =
             ethereum_tx_data_variants::EthEventsVext::try_from(
-                tx.batch_tx(&tx.commitments()[0]),
+                tx.batch_ref_first_tx(),
             )
             .unwrap();
         assert_eq!(

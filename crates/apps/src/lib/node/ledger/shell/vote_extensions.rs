@@ -141,7 +141,7 @@ where
                 }
             };
 
-            match tx.batch_tx(cmt).try_into().ok() {
+            match tx.batch_ref_tx(cmt).try_into().ok() {
                 Some(EthereumTxData::BridgePoolVext(_)) => true,
                 Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least

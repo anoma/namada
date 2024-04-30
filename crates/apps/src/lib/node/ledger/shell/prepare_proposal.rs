@@ -696,10 +696,8 @@ mod test_prepare_proposal {
 
         let tx_bytes = rsp.txs.remove(0);
         let got = Tx::try_from(&tx_bytes[..]).unwrap();
-        let eth_tx_data = got
-            .batch_tx(&got.commitments()[0])
-            .try_into()
-            .expect("Test failed");
+        let eth_tx_data =
+            got.batch_ref_first_tx().try_into().expect("Test failed");
         let rsp_ext = match eth_tx_data {
             EthereumTxData::EthEventsVext(ext) => ext,
             _ => panic!("Test failed"),
@@ -1344,7 +1342,7 @@ mod test_prepare_proposal {
             // extension, we drop it from the proposal
             for tx in proposed_txs {
                 if ethereum_tx_data_variants::EthEventsVext::try_from(
-                    tx.batch_tx(&tx.commitments()[0]),
+                    tx.batch_ref_first_tx(),
                 )
                 .is_ok()
                 {
@@ -1395,7 +1393,7 @@ mod test_prepare_proposal {
                 for tx in proposed_txs {
                     if let Ok(ext) =
                         ethereum_tx_data_variants::EthEventsVext::try_from(
-                            tx.batch_tx(&tx.commitments()[0]),
+                            tx.batch_ref_first_tx(),
                         )
                     {
                         break 'ext ext;

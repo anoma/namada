@@ -152,7 +152,7 @@ where
     // Check if the tx code is allowed (to be done after the check on the code
     // section commitment to let the replay protection mechanism run some
     // optimizations)
-    let batched_tx = tx.batch_tx(cmt);
+    let batched_tx = tx.batch_ref_tx(cmt);
     check_tx_allowed(&batched_tx, state)?;
 
     // If the transaction code has a tag, ensure that the tag hash equals the
@@ -1039,12 +1039,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1056,12 +1057,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let error = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1273,12 +1275,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_no_op, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1408,12 +1411,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_read_key, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let error = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         )
@@ -1651,12 +1655,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1691,12 +1696,13 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let result = tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         );
@@ -1811,13 +1817,14 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash, None));
         outer_tx.set_data(Data::new(tx_data));
+        let batched_tx = outer_tx.batch_ref_first_tx();
 
         tx(
             &mut state,
             &gas_meter,
             &tx_index,
-            &outer_tx,
-            &outer_tx.commitments()[0],
+            batched_tx.tx,
+            batched_tx.cmt,
             &mut vp_cache,
             &mut tx_cache,
         )

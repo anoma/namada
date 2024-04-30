@@ -202,7 +202,7 @@ mod test_nuts {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let batched_tx = tx.batch_tx(&tx.commitments()[0]);
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::<_, WasmCacheRwAccess>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,

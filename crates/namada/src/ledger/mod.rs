@@ -92,7 +92,7 @@ mod dry_run_tx {
 
         let tx_gas_meter = RefCell::new(tx_gas_meter);
         for cmt in tx.commitments() {
-            let batched_tx = tx.batch_tx(cmt);
+            let batched_tx = tx.batch_ref_tx(cmt);
             let batched_tx_result = protocol::apply_wasm_tx(
                 batched_tx,
                 &TxIndex(0),
@@ -278,7 +278,7 @@ mod test {
         outer_tx.header.chain_id = client.state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::from_hash(tx_hash, None));
         outer_tx.set_data(Data::new(vec![]));
-        let cmt = outer_tx.commitments().first().unwrap();
+        let cmt = outer_tx.first_commitments().unwrap();
         let tx_bytes = outer_tx.to_bytes();
         let result = RPC
             .shell()

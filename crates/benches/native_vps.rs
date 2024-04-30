@@ -1188,8 +1188,8 @@ fn parameters(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.commitments().first().unwrap().clone();
-                let batched_tx = tx.owned_batch_tx(cmt);
+                let cmt = tx.first_commitments().unwrap().clone();
+                let batched_tx = tx.batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }
             _ => panic!("Unexpected bench test"),
@@ -1262,8 +1262,8 @@ fn pos(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.commitments().first().unwrap().clone();
-                let batched_tx = tx.owned_batch_tx(cmt);
+                let cmt = tx.first_commitments().unwrap().clone();
+                let batched_tx = tx.batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }
             _ => panic!("Unexpected bench test"),

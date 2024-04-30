@@ -251,7 +251,7 @@ where
 
             for cmt in tx.commitments() {
                 match apply_wasm_tx(
-                    tx.batch_tx(cmt),
+                    tx.batch_ref_tx(cmt),
                     &tx_index,
                     ShellParams {
                         tx_gas_meter,
@@ -1324,7 +1324,7 @@ mod tests {
         // gas meter with no gas left
         let gas_meter = TxGasMeter::new(0);
 
-        let batched_tx = dummy_tx.batch_tx(&dummy_tx.commitments()[0]);
+        let batched_tx = dummy_tx.batch_ref_first_tx();
         let result = execute_vps(
             verifiers,
             changed_keys,

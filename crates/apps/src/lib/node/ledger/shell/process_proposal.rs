@@ -315,7 +315,7 @@ where
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
                         ethereum_tx_data_variants::EthEventsVext::try_from(
-                            tx.batch_tx(cmt),
+                            tx.batch_ref_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -345,7 +345,7 @@ where
                     }
                     ProtocolTxType::BridgePoolVext => {
                         ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            tx.batch_tx(cmt),
+                            tx.batch_ref_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -375,7 +375,7 @@ where
                     }
                     ProtocolTxType::ValSetUpdateVext => {
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            tx.batch_tx(cmt),
+                            tx.batch_ref_tx(cmt),
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
@@ -489,7 +489,7 @@ where
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =
-                        check_tx_allowed(&tx.batch_tx(cmt), &self.state)
+                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
                     {
                         return TxResult {
                             code: ResultCode::TxNotAllowlisted.into(),

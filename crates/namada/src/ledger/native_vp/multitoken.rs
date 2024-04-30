@@ -411,7 +411,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_ok()
         );
     }
@@ -452,7 +452,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -516,7 +516,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_ok()
         );
     }
@@ -576,7 +576,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -629,7 +629,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -691,7 +691,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -733,7 +733,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -776,7 +776,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers)
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
         );
     }
@@ -814,7 +814,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert_matches!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers),
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -852,7 +852,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert_matches!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers),
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -890,7 +890,7 @@ mod tests {
 
         let vp = MultitokenVp { ctx };
         assert_matches!(
-            vp.validate_tx(&tx.batch_tx(&cmt), &keys_changed, &verifiers),
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Err(_)
         );
     }

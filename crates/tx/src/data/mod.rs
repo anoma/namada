@@ -548,7 +548,7 @@ mod test_process_tx {
             TxType::Raw => {
                 assert_eq!(
                     code_sec.get_hash(),
-                    outer_tx.commitments()[0].code_hash,
+                    outer_tx.first_commitments().unwrap().code_hash,
                 )
             }
             _ => panic!("Test failed: Expected Raw Tx"),
@@ -571,14 +571,8 @@ mod test_process_tx {
         tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(
-                    code_sec.get_hash(),
-                    tx.header().commitments[0].code_hash,
-                );
-                assert_eq!(
-                    data_sec.get_hash(),
-                    tx.header().commitments[0].data_hash,
-                );
+                assert_eq!(code_sec.get_hash(), tx.header().batch[0].code_hash,);
+                assert_eq!(data_sec.get_hash(), tx.header().batch[0].data_hash,);
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }
@@ -604,14 +598,8 @@ mod test_process_tx {
         tx.validate_tx().expect("Test failed");
         match tx.header().tx_type {
             TxType::Raw => {
-                assert_eq!(
-                    code_sec.get_hash(),
-                    tx.header().commitments[0].code_hash,
-                );
-                assert_eq!(
-                    data_sec.get_hash(),
-                    tx.header().commitments[0].data_hash,
-                );
+                assert_eq!(code_sec.get_hash(), tx.header().batch[0].code_hash,);
+                assert_eq!(data_sec.get_hash(), tx.header().batch[0].data_hash,);
             }
             _ => panic!("Test failed: Expected Raw Tx"),
         }

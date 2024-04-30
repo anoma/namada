@@ -1895,7 +1895,7 @@ where
     let gas_meter = env.ctx.gas_meter();
     let tx = unsafe { env.ctx.tx.get() };
     let cmt = unsafe { env.ctx.cmt.get() };
-    let batched_tx = tx.batch_tx(cmt);
+    let batched_tx = tx.batch_ref_tx(cmt);
     let hash = vp_host_fns::get_tx_code_hash(gas_meter, &batched_tx)?;
     let mut result_bytes = vec![];
     if let Some(hash) = hash {
