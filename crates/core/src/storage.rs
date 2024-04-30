@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::key::common;
-use crate::address::{self, Address};
+use crate::address::{self, Address, PARAMETERS};
 use crate::bytes::ByteBuf;
 use crate::ethereum_events::{GetEventNonce, TransfersToNamada, Uint};
 use crate::hash::Hash;
@@ -717,7 +717,8 @@ impl Key {
     /// Returns a key of the wasm code of the given hash
     pub fn wasm_code(code_hash: &Hash) -> Self {
         let mut segments =
-            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+            Self::from(PARAMETERS.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(WASM_CODE_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
         Key { segments }
@@ -726,7 +727,8 @@ impl Key {
     /// Returns a key of wasm code's hash of the given name
     pub fn wasm_code_name(code_name: String) -> Self {
         let mut segments =
-            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+            Self::from(PARAMETERS.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(WASM_CODE_NAME_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_name));
         Key { segments }
@@ -735,7 +737,8 @@ impl Key {
     /// Returns a key of the wasm code's length of the given hash
     pub fn wasm_code_len(code_hash: &Hash) -> Self {
         let mut segments =
-            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+            Self::from(PARAMETERS.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(WASM_CODE_LEN_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_hash.to_string()));
         Key { segments }
@@ -744,7 +747,8 @@ impl Key {
     /// Returns a key of the wasm code hash of the given code path
     pub fn wasm_hash(code_path: impl AsRef<str>) -> Self {
         let mut segments =
-            Self::from(WASM_KEY_PREFIX.to_owned().to_db_key()).segments;
+            Self::from(PARAMETERS.to_owned().to_db_key()).segments;
+        segments.push(DbKeySeg::StringSeg(WASM_KEY_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(WASM_HASH_PREFIX.to_owned()));
         segments.push(DbKeySeg::StringSeg(code_path.as_ref().to_string()));
         Key { segments }
