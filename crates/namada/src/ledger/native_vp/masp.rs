@@ -14,7 +14,7 @@ use namada_core::address::InternalAddress::Masp;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::encode_asset_type;
-use namada_core::storage::{IndexedTx, Key};
+use namada_core::storage::Key;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
@@ -26,9 +26,8 @@ use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
     balance_key, is_any_shielded_action_balance_key, is_masp_allowed_key,
-    is_masp_key, is_masp_nullifier_key, is_masp_tx_pin_key,
-    masp_commitment_anchor_key, masp_commitment_tree_key,
-    masp_convert_anchor_key, masp_nullifier_key,
+    is_masp_key, is_masp_nullifier_key, masp_commitment_anchor_key,
+    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
 };
 use token::Amount;
 
@@ -268,40 +267,6 @@ where
             return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Found modifications to non-allowed masp keys",
             )));
-        }
-
-        // Validate pin key if found
-        let pin_keys: Vec<_> = masp_keys_changed
-            .iter()
-            .filter(|key| is_masp_tx_pin_key(key))
-            .collect();
-        match pin_keys.len() {
-            0 => (),
-            1 => {
-                match self
-                    .ctx
-                    .read_post::<IndexedTx>(pin_keys.first().unwrap())?
-                {
-                    Some(IndexedTx { height, index, .. })
-                        if height == self.ctx.get_block_height()?
-                            && index == self.ctx.get_tx_index()? => {}
-                    Some(_) => {
-                        return Err(Error::NativeVpError(
-                            native_vp::Error::SimpleMessage(
-                                "Invalid MASP pin key",
-                            ),
-                        ));
-                    }
-                    _ => (),
-                }
-            }
-            _ => {
-                return Err(Error::NativeVpError(
-                    native_vp::Error::SimpleMessage(
-                        "Found more than one pin key",
-                    ),
-                ));
-            }
         }
 
         // Verify the changes to balance keys and return the transparent

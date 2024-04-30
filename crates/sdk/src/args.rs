@@ -2328,8 +2328,6 @@ pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
     pub alias_force: bool,
     /// Viewing key
     pub viewing_key: C::ViewingKey,
-    /// Pin
-    pub pin: bool,
 }
 
 /// Bridge pool batch recommendation.

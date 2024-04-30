@@ -15,7 +15,7 @@ use booleans::BoolResultUnitExt;
 use namada_vp_prelude::tx::action::*;
 use namada_vp_prelude::*;
 
-#[validity_predicate(gas = 118452)]
+#[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
     tx: Tx,

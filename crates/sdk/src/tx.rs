@@ -2704,9 +2704,6 @@ pub async fn build_ibc_transfer(
             target: Address::Internal(InternalAddress::Ibc),
             token: args.token.clone(),
             amount: validated_amount,
-            // The address could be a payment address, but the address isn't
-            // that of this chain.
-            key: None,
             // Link the Transfer to the MASP Transaction by hash code
             shielded: Some(masp_tx_hash),
         };
@@ -3002,11 +2999,6 @@ pub async fn build_transfer<N: Namada>(
         } else {
             (validated_amount, args.token.clone())
         };
-    // Determine whether to pin this transaction to a storage key
-    let key = match &args.target {
-        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
-        _ => None,
-    };
 
     let shielded_parts = construct_shielded_parts(
         context,
@@ -3025,7 +3017,6 @@ pub async fn build_transfer<N: Namada>(
         target: target.clone(),
         token: transparent_token.clone(),
         amount: transparent_amount,
-        key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
         shielded: None,
     };
@@ -3345,11 +3336,6 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
 ) -> Result<Option<(token::Transfer, MaspTransaction)>> {
-    let key = match args.target.payment_address() {
-        Some(pa) if pa.is_pinned() => Some(pa.hash()),
-        Some(_) => None,
-        None => return Ok(None),
-    };
     let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
@@ -3409,7 +3395,6 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             target: MASP,
             token: token.clone(),
             amount: validated_amount,
-            key,
             shielded: Some(masp_tx_hash),
         };
         Ok(Some((transfer, shielded_transfer.masp_tx)))
