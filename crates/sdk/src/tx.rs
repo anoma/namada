@@ -61,6 +61,7 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
+use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
@@ -3157,9 +3158,18 @@ pub async fn build_init_account(
             {
                 threshold
             } else {
-                return Err(Error::from(
-                    TxSubmitError::InvalidAccountThreshold,
-                ));
+                edisplay_line!(
+                    context.io(),
+                    "Invalid account threshold: either the provided threshold \
+                     is zero or the number of public keys is less than the \
+                     threshold."
+                );
+                if !tx_args.force {
+                    return Err(Error::from(
+                        TxSubmitError::InvalidAccountThreshold,
+                    ));
+                }
+                threshold
             }
         }
         None => {
@@ -3242,13 +3252,22 @@ pub async fn build_update_account(
     let threshold = if let Some(threshold) = threshold {
         let threshold = *threshold;
 
-        let invalid_threshold = threshold == 0;
+        let invalid_threshold = threshold.is_zero();
         let invalid_too_few_pks: bool = (public_keys.is_empty()
             && public_keys.len() < threshold as usize)
             || (account.get_all_public_keys().len() < threshold as usize);
 
-        if (invalid_threshold || invalid_too_few_pks) && !tx_args.force {
-            return Err(Error::from(TxSubmitError::InvalidAccountThreshold));
+        if invalid_threshold || invalid_too_few_pks {
+            edisplay_line!(
+                context.io(),
+                "Invalid account threshold: either the provided threshold is \
+                 zero or the number of public keys is less than the threshold."
+            );
+            if !tx_args.force {
+                return Err(Error::from(
+                    TxSubmitError::InvalidAccountThreshold,
+                ));
+            }
         }
 
         Some(threshold)
