@@ -473,6 +473,7 @@ fn iterable_to_string<T: fmt::Display>(
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum TxType {
     /// An ordinary tx

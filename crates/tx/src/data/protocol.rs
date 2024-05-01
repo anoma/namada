@@ -22,6 +22,7 @@ use crate::TxError;
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 /// Txs sent by validators as part of internal protocols
 pub struct ProtocolTx {
@@ -63,6 +64,7 @@ impl ProtocolTx {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 #[allow(clippy::large_enum_variant)]
 /// Types of protocol messages to be sent

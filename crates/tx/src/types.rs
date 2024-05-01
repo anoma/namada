@@ -223,6 +223,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Data {
     pub salt: [u8; 8],
@@ -264,6 +265,7 @@ pub struct CommitmentError;
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum Commitment {
     /// Result of applying hash function to bytes
@@ -324,6 +326,7 @@ impl Commitment {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Code {
     /// Additional random data
@@ -389,6 +392,7 @@ pub type Memo = Vec<u8>;
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum Signer {
     /// The address of a multisignature account
@@ -407,6 +411,7 @@ pub enum Signer {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Authorization {
     /// The hash of the section being signed
@@ -598,6 +603,7 @@ impl CompressedSignature {
     BorshDeserialize,
     BorshDeserializer,
     BorshSchema,
+    PartialEq,
 )]
 pub struct Ciphertext {
     /// Ciphertext representation when ferveo not available
@@ -710,6 +716,12 @@ pub struct MaspBuilder {
     pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
 }
 
+impl PartialEq for MaspBuilder {
+    fn eq(&self, other: &Self) -> bool {
+        self.target == other.target
+    }
+}
+
 impl MaspBuilder {
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
@@ -744,6 +756,7 @@ impl borsh::BorshSchema for MaspBuilder {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
@@ -755,6 +768,7 @@ pub enum Section {
     /// A transaction header/protocol signature
     Authorization(Authorization),
     /// Ciphertext obtained by encrypting arbitrary transaction sections
+    // FIXME: remove this
     Ciphertext(Ciphertext),
     /// Embedded MASP transaction section
     #[serde(
@@ -951,6 +965,7 @@ impl TxCommitments {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Header {
     /// The chain which this transaction is being submitted to
@@ -1122,9 +1137,13 @@ impl Tx {
             return false;
         }
 
-        for section in other.sections {
-            self.sections.push(section)
-        }
+        let new_sections: Vec<Section> = other
+            .sections
+            .into_iter()
+            // Avoid bloating the message with redundant sections
+            .filter(|sec| !self.sections.contains(sec))
+            .collect();
+        self.sections.extend(new_sections);
 
         true
     }
