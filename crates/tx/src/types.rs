@@ -593,32 +593,6 @@ impl CompressedSignature {
     }
 }
 
-/// Represents a section obtained by encrypting another section
-#[derive(
-    Clone,
-    Debug,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-    PartialEq,
-)]
-pub struct Ciphertext {
-    /// Ciphertext representation when ferveo not available
-    pub opaque: Vec<u8>,
-}
-
-impl Ciphertext {
-    /// Get the hash of this ciphertext section. This operation is done in such
-    /// a way it matches the hash of the type pun
-    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(self.serialize_to_vec());
-        hasher
-    }
-}
-
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TransactionSerde(Vec<u8>);
 
@@ -767,9 +741,6 @@ pub enum Section {
     Code(Code),
     /// A transaction header/protocol signature
     Authorization(Authorization),
-    /// Ciphertext obtained by encrypting arbitrary transaction sections
-    // FIXME: remove this
-    Ciphertext(Ciphertext),
     /// Embedded MASP transaction section
     #[serde(
         serialize_with = "borsh_serde::<TransactionSerde, _>",
@@ -796,7 +767,6 @@ impl Section {
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
             Self::Authorization(signature) => signature.hash(hasher),
-            Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
                 hasher.update(tx.txid().as_ref());
@@ -861,15 +831,6 @@ impl Section {
     /// Extract the signature from this section if possible
     pub fn signature(&self) -> Option<Authorization> {
         if let Self::Authorization(data) = self {
-            Some(data.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Extract the ciphertext from this section if possible
-    pub fn ciphertext(&self) -> Option<Ciphertext> {
-        if let Self::Ciphertext(data) = self {
             Some(data.clone())
         } else {
             None
