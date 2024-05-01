@@ -40,6 +40,9 @@ impl StewardDetail {
                 return false;
             }
             sum += percentage;
+            if sum > Dec::one() {
+                return false;
+            }
         }
 
         sum <= Dec::one()

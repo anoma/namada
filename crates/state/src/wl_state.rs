@@ -12,9 +12,7 @@ use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 
 use crate::in_memory::InMemory;
-use crate::write_log::{
-    ReProtStorageModification, StorageModification, WriteLog,
-};
+use crate::write_log::{StorageModification, WriteLog};
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
     MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result, State,
@@ -208,57 +206,21 @@ where
                 StorageModification::InitAccount { vp_code_hash } => {
                     self.batch_write_subspace_val(batch, &key, vp_code_hash)?;
                 }
-                // temporary value isn't persisted
-                StorageModification::Temp { .. } => {}
             }
         }
         debug_assert!(self.0.write_log.block_write_log.is_empty());
 
-        // Replay protections specifically. Starts with pruning the buffer from
-        // the previous block
-        self.prune_replay_protection_buffer(batch)?;
+        // Replay protections specifically. Starts with moving the current
+        // hashes from the previous block to the general bucket
+        self.move_current_replay_protection_entries(batch)?;
 
-        for (hash, entry) in
-            std::mem::take(&mut self.0.write_log.replay_protection).into_iter()
+        for hash in
+            std::mem::take(&mut self.0.write_log.replay_protection).iter()
         {
-            match entry {
-                ReProtStorageModification::Write => self
-                    .write_replay_protection_entry(
-                        batch,
-                        // Can only write tx hashes to the previous block, no
-                        // further
-                        &replay_protection::last_key(&hash),
-                    )?,
-                ReProtStorageModification::Delete => {
-                    // Cache in case of a rollback
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::buffer_key(&hash),
-                    )?;
-
-                    self.delete_replay_protection_entry(
-                        batch,
-                        // Can only delete tx hashes from the previous block,
-                        // no further
-                        &replay_protection::last_key(&hash),
-                    )?
-                }
-                ReProtStorageModification::Finalize => {
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::all_key(&hash),
-                    )?;
-                    // Cache in case of a rollback
-                    self.write_replay_protection_entry(
-                        batch,
-                        &replay_protection::buffer_key(&hash),
-                    )?;
-                    self.delete_replay_protection_entry(
-                        batch,
-                        &replay_protection::last_key(&hash),
-                    )?;
-                }
-            }
+            self.write_replay_protection_entry(
+                batch,
+                &replay_protection::current_key(hash),
+            )?;
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
@@ -395,31 +357,12 @@ where
         Ok(())
     }
 
-    /// Delete the provided tx hash from storage
-    pub fn delete_replay_protection_entry(
-        &mut self,
-        batch: &mut D::WriteBatch,
-        key: &Key,
-    ) -> Result<()> {
-        self.db.delete_replay_protection_entry(batch, key)?;
-        Ok(())
-    }
-
-    /// Delete the replay protection buffer
-    pub fn prune_replay_protection_buffer(
+    /// Move the tx hashes from the current bucket to the general one
+    pub fn move_current_replay_protection_entries(
         &mut self,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
-        Ok(self.db.prune_replay_protection_buffer(batch)?)
-    }
-
-    /// Iterate the replay protection storage from the last block
-    pub fn iter_replay_protection(
-        &self,
-    ) -> Box<dyn Iterator<Item = Hash> + '_> {
-        Box::new(self.db.iter_replay_protection().map(|(raw_key, _, _)| {
-            raw_key.parse().expect("Failed hash conversion")
-        }))
+        Ok(self.db.move_current_replay_protection_entries(batch)?)
     }
 
     /// Get oldest epoch which has the valid signed nonce of the bridge pool
@@ -477,8 +420,6 @@ where
     /// Merkle root hash and the height of the committed block.
     fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
-            merkle_tree_stores,
-            hash,
             height,
             time,
             epoch,
@@ -500,12 +441,11 @@ where
         {
             {
                 let in_mem = &mut self.0.in_mem;
-                in_mem.block.hash = hash.clone();
                 in_mem.block.height = height;
                 in_mem.block.epoch = epoch;
                 in_mem.block.results = results;
                 in_mem.block.pred_epochs = pred_epochs;
-                in_mem.last_block = Some(LastBlock { height, hash, time });
+                in_mem.last_block = Some(LastBlock { height, time });
                 in_mem.last_epoch = epoch;
                 in_mem.next_epoch_min_start_height =
                     next_epoch_min_start_height;
@@ -516,9 +456,11 @@ where
             }
 
             // Rebuild Merkle tree - requires the values above to be set first
-            let tree = MerkleTree::new(merkle_tree_stores)
-                .or_else(|_| self.rebuild_full_merkle_tree(height))
-                .unwrap();
+            let tree = self
+                .rebuild_full_merkle_tree(height)
+                .expect("Merkle tree should be restored");
+
+            tree.validate().map_err(Error::MerkleTreeError).unwrap();
 
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;
@@ -570,7 +512,6 @@ where
         let state = BlockStateWrite {
             merkle_tree_stores: self.in_mem.block.tree.stores(),
             header: self.in_mem.header.as_ref(),
-            hash: &self.in_mem.block.hash,
             height: self.in_mem.block.height,
             time: self
                 .in_mem
@@ -601,7 +542,6 @@ where
             .expect("Must have a block header on commit");
         self.in_mem.last_block = Some(LastBlock {
             height: self.in_mem.block.height,
-            hash: header.hash.into(),
             time: header.time,
         });
         self.in_mem.last_epoch = self.in_mem.block.epoch;
@@ -664,9 +604,13 @@ where
         self.write_log.drop_tx()
     }
 
-    /// Delete the provided transaction's hash from storage.
-    pub fn delete_tx_hash(&mut self, hash: Hash) {
-        self.write_log.delete_tx_hash(hash);
+    /// Mark the provided transaction's hash as redundant to prevent committing
+    /// it to storage.
+    pub fn redundant_tx_hash(
+        &mut self,
+        hash: &Hash,
+    ) -> crate::write_log::Result<()> {
+        self.write_log.redundant_tx_hash(hash)
     }
 
     #[inline]
@@ -1081,9 +1025,8 @@ where
 
     /// Check if the given tx hash has already been processed
     pub fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
-        if let Some(present) = self.write_log.has_replay_protection_entry(hash)
-        {
-            return Ok(present);
+        if self.write_log.has_replay_protection_entry(hash) {
+            return Ok(true);
         }
 
         self.db()
@@ -1273,18 +1216,15 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<T>> {
-        let (log_val, _) = self.write_log().read(key);
+        let (log_val, _) = self.write_log().read_temp(key);
         match log_val {
-            Some(crate::write_log::StorageModification::Temp { value }) => {
+            Some(value) => {
                 let value =
                     namada_core::borsh::BorshDeserialize::try_from_slice(value)
                         .map_err(Error::BorshCodingError)?;
                 Ok(Some(value))
             }
             None => Ok(None),
-            _ => Err(Error::UnknownKey {
-                key: key.to_string(),
-            }),
         }
     }
 }

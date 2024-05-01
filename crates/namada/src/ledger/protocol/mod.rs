@@ -240,9 +240,7 @@ where
 
             // Replay protection check on the batch
             let tx_hash = tx.raw_header_hash();
-            if let Some(true) =
-                state.write_log().has_replay_protection_entry(&tx_hash)
-            {
+            if state.write_log().has_replay_protection_entry(&tx_hash) {
                 // If the same batch has already been committed in
                 // this block, skip execution and return
                 return Err(Error::ReplayAttempt(tx_hash));
@@ -366,16 +364,17 @@ pub fn get_fee_unshielding_transaction(
         })
 }
 
-/// Charge fee for the provided wrapper transaction. In ABCI returns an error if
-/// the balance of the block proposer overflows. In ABCI plus returns error if:
-/// - The unshielding fails
+/// Charge fee for the provided wrapper transaction. Returns error if:
+/// - The unshielding fails because of gas (other errors are ignored cause we
+///   still try to get the fees amount from the transparent balance and, if it
+///   works, execution can continue)
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<'a, S, D, H, CA>(
+fn charge_fee<S, D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    shell_params: &mut ShellParams<'a, S, D, H, CA>,
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
     wrapper_args: Option<&mut WrapperArgs>,
 ) -> Result<()>
@@ -385,108 +384,150 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    // Unshield funds if requested
+    let valid_fee_unshielding = if let Some(transaction) = masp_transaction {
+        run_fee_unshielding(wrapper, shell_params, transaction)
+    } else {
+        Ok(false)
+    };
+
+    // Charge or check fees before propagating any possible error coming from
+    // the fee unshielding. If fee unshielding failed for non-gas reasons but
+    // the fees can still be paid we'll continue with the execution (this is a
+    // different logic from the one we apply in process_proposal)
+    match wrapper_args {
+        Some(WrapperArgs {
+            block_proposer,
+            is_committed_fee_unshield: _,
+        }) => transfer_fee(shell_params.state, block_proposer, wrapper)?,
+        None => check_fees(shell_params.state, wrapper)?,
+    }
+
+    changed_keys
+        .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
+
+    // Commit tx write log even in case of subsequent errors
+    shell_params.state.write_log_mut().commit_tx();
+
+    // Update the flag only after the valid fee payment has been committed. If
+    // fee unshielding went out of gas propagate the error
+    if let Some(args) = wrapper_args {
+        args.is_committed_fee_unshield = valid_fee_unshielding?;
+    }
+
+    Ok(())
+}
+
+/// Executes the masp fee unshielding transaction. Returns `true if the unshield
+/// was successful, `false` otherwise and error in case of out-of-gas
+pub fn run_fee_unshielding<S, D, H, CA>(
+    wrapper: &WrapperTx,
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
+    transaction: Transaction,
+) -> Result<bool>
+where
+    S: State<D = D, H = H> + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
     let ShellParams {
-        tx_gas_meter: _,
+        tx_gas_meter,
         state,
         vp_wasm_cache,
         tx_wasm_cache,
     } = shell_params;
 
-    // Unshield funds if requested
-    let is_valid_fee_unshielding = if let Some(transaction) = masp_transaction {
-        // The unshielding tx does not charge gas, instantiate a
-        // custom gas meter for this step
-        let  tx_gas_meter =
-            RefCell::new(TxGasMeter::new(GasLimit::from(
-                state
-                    .read::<u64>(
-                        &namada_parameters::storage::get_fee_unshielding_gas_limit_key(
-                        ),
-                    )
-                    .expect("Error reading the storage")
-                    .expect("Missing fee unshielding gas limit in storage")),
-            ));
+    // The unshielding is subject to a gas limit imposed by a protocol
+    // parameter, instantiate a custom gas meter for this step and
+    // initialize it with the already consumed gas. The gas limit should
+    // actually be the lowest between the protocol parameter and the actual gas
+    // limit of the transaction
+    let min_gas_limit = state
+        .read::<u64>(
+            &namada_parameters::storage::get_fee_unshielding_gas_limit_key(),
+        )
+        .expect("Error reading the storage")
+        .expect("Missing fee unshielding gas limit in storage")
+        .min(tx_gas_meter.borrow().tx_gas_limit.into());
+    let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
+    unshield_gas_meter
+        .copy_consumed_gas_from(&tx_gas_meter.borrow())
+        .map_err(|e| Error::GasError(e.to_string()))?;
+    let ref_unshield_gas_meter = RefCell::new(unshield_gas_meter);
 
-        // If it fails, do not return early from this function but try to take
-        // the funds from the unshielded balance
-        match wrapper.generate_fee_unshielding(
-            get_transfer_hash_from_storage(*state),
-            Some(TX_TRANSFER_WASM.to_string()),
-            transaction,
-        ) {
-            Ok(fee_unshielding_tx) => {
-                // NOTE: A clean tx write log must be provided to this call
-                // for a correct vp validation. Block write log, instead,
-                // should contain any prior changes (if any)
-                state.write_log_mut().precommit_tx();
-                match apply_wasm_tx(
-                    BatchedTxRef {
-                        tx: &fee_unshielding_tx,
-                        // No bundles for fee unshielding
-                        // Ok to unwrap here because the transaction is built in
-                        // protocol
-                        cmt: fee_unshielding_tx.first_commitments().unwrap(),
-                    },
-                    &TxIndex::default(),
-                    ShellParams {
-                        tx_gas_meter: &tx_gas_meter,
-                        state: *state,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                    },
-                ) {
-                    Ok(result) => {
-                        // NOTE: do not commit yet cause this could be
-                        // exploited to get free unshieldings
-                        if !result.is_accepted() {
-                            state.write_log_mut().drop_tx_keep_precommit();
-                            tracing::error!(
-                                "The unshielding tx is invalid, some VPs \
-                                 rejected it: {:#?}",
-                                result.vps_result.rejected_vps
-                            );
-                        }
-                        result.is_accepted()
-                    }
-                    Err(e) => {
+    let result = match wrapper.generate_fee_unshielding(
+        get_transfer_hash_from_storage(*state),
+        Some(TX_TRANSFER_WASM.to_string()),
+        transaction,
+    ) {
+        Ok(fee_unshielding_tx) => {
+            // NOTE: A clean tx write log must be provided to this call
+            // for a correct vp validation. Block write log, instead,
+            // should contain any prior changes (if any). This is to simulate
+            // the unshielding tx (to prevent the already written
+            // keys from being passed/triggering VPs) but we cannot
+            // commit the tx write log yet cause the tx could still
+            // be invalid.
+            state.write_log_mut().precommit_tx();
+            match apply_wasm_tx(
+                BatchedTxRef {
+                    tx: &fee_unshielding_tx,
+                    // No bundles for fee unshielding
+                    // Ok to unwrap here because the transaction is built in
+                    // protocol
+                    cmt: fee_unshielding_tx.first_commitments().unwrap(),
+                },
+                &TxIndex::default(),
+                ShellParams {
+                    tx_gas_meter: &ref_unshield_gas_meter,
+                    state: *state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+            ) {
+                Ok(result) => {
+                    // NOTE: do not commit yet cause this could be
+                    // exploited to get free unshieldings and shielded
+                    // operations
+                    if !result.is_accepted() {
                         state.write_log_mut().drop_tx_keep_precommit();
                         tracing::error!(
-                            "The unshielding tx is invalid, wasm run failed: \
-                             {}",
-                            e
+                            "The unshielding tx is invalid, some VPs rejected \
+                             it: {:#?}",
+                            result.vps_result.rejected_vps
                         );
-                        false
                     }
+
+                    result.is_accepted()
+                }
+                Err(e) => {
+                    state.write_log_mut().drop_tx_keep_precommit();
+                    tracing::error!(
+                        "The unshielding tx is invalid, wasm run failed: {}",
+                        e
+                    );
+                    if let Error::GasError(_) = e {
+                        // Popagate only if it is a gas error
+                        return Err(e);
+                    }
+
+                    false
                 }
             }
-            Err(e) => {
-                tracing::error!("{}", e);
-                false
-            }
         }
-    } else {
-        false
+        Err(e) => {
+            tracing::error!("{}", e);
+            false
+        }
     };
 
-    // Charge or check fees
-    match wrapper_args {
-        Some(WrapperArgs {
-            block_proposer,
-            is_committed_fee_unshield: _,
-        }) => transfer_fee(*state, block_proposer, wrapper)?,
-        None => check_fees(*state, wrapper)?,
-    }
+    tx_gas_meter
+        .borrow_mut()
+        .copy_consumed_gas_from(&ref_unshield_gas_meter.borrow())
+        .map_err(|e| Error::GasError(e.to_string()))?;
 
-    changed_keys.extend(state.write_log_mut().get_keys_with_precommit());
-
-    // Commit tx write log even in case of subsequent errors
-    state.write_log_mut().commit_tx();
-    // Update the flag only after the fee payment has been committed
-    if let Some(args) = wrapper_args {
-        args.is_committed_fee_unshield = is_valid_fee_unshielding;
-    }
-
-    Ok(())
+    Ok(result)
 }
 
 /// Perform the actual transfer of fess from the fee payer to the block
@@ -524,7 +565,7 @@ where
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
                 // the fee payer. This shouldn't happen as it should be
-                // prevented from mempool.
+                // prevented from mempool/process_proposal.
                 tracing::error!(
                     "Transfer of tx fee cannot be applied to due to \
                      insufficient funds. Falling back to transferring the \
@@ -550,7 +591,7 @@ where
         }
         Err(e) => {
             // Fee overflow. This shouldn't happen as it should be prevented
-            // from mempool.
+            // from mempool/process_proposal.
             tracing::error!(
                 "Transfer of tx fee cannot be applied to due to fee overflow. \
                  This shouldn't happen."
@@ -1096,7 +1137,6 @@ fn merge_vp_results(
 
 #[cfg(test)]
 mod tests {
-    use borsh::BorshDeserialize;
     use eyre::Result;
     use namada_core::collections::HashMap;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
@@ -1170,12 +1210,8 @@ mod tests {
         apply_eth_tx(tx, &mut state)?;
 
         let eth_msg_keys = vote_tallies::Keys::from(&event);
-        let seen_by_bytes = state.read_bytes(&eth_msg_keys.seen_by())?;
-        let seen_by_bytes = seen_by_bytes.unwrap();
-        assert_eq!(
-            Votes::try_from_slice(&seen_by_bytes)?,
-            Votes::from([(validator_a, BlockHeight(100))])
-        );
+        let seen_by: Votes = state.read(&eth_msg_keys.seen_by())?.unwrap();
+        assert_eq!(seen_by, Votes::from([(validator_a, BlockHeight(100))]));
 
         // the vote should have only be applied once
         let voting_power: EpochedVotingPower =
@@ -1233,9 +1269,9 @@ mod tests {
             &vote_tallies::BridgePoolRoot(EthereumProof::new((root, nonce))),
             100.into(),
         ));
-        let root_seen_by_bytes = state.read_bytes(&bp_root_keys.seen_by())?;
+        let root_seen_by: Votes = state.read(&bp_root_keys.seen_by())?.unwrap();
         assert_eq!(
-            Votes::try_from_slice(root_seen_by_bytes.as_ref().unwrap())?,
+            root_seen_by,
             Votes::from([(validator_a, BlockHeight(100))])
         );
         // the vote should have only be applied once

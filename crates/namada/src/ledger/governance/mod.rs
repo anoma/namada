@@ -81,13 +81,21 @@ where
             .into());
         };
 
+        // Is VP triggered by a governance proposal?
+        let is_governance_proposal = is_proposal_accepted(
+            &self.ctx.pre(),
+            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+        )
+        .unwrap_or_default();
+
         let native_token = self.ctx.pre().get_native_token()?;
 
         // Find the actions applied in the tx
         let actions = self.ctx.read_actions()?;
 
         // There must be at least one action if any of the keys belong to gov
-        if actions.is_empty()
+        if !is_governance_proposal
+            && actions.is_empty()
             && keys_changed.iter().any(gov_storage::is_governance_key)
         {
             tracing::info!(
@@ -127,7 +135,7 @@ where
                     }
                 },
                 _ => {
-                    // Other actions are not relevant to PoS VP
+                    // Other actions are not relevant to Governance VP
                     continue;
                 }
             }
@@ -257,21 +265,16 @@ where
         let pre_voting_end_epoch: Epoch =
             self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
 
-        let voter = gov_storage::get_voter_address(key);
-        let delegation_address = gov_storage::get_vote_delegation_address(key);
-
-        let (voter_address, delegation_address) =
-            match (voter, delegation_address) {
-                (Some(voter_address), Some(delegator_address)) => {
-                    (voter_address, delegator_address)
-                }
-                _ => {
-                    return Err(native_vp::Error::new_alloc(format!(
-                        "Vote key is not valid: {key}"
-                    ))
-                    .into());
-                }
-            };
+        let voter = gov_storage::get_voter_address(key).ok_or(
+            native_vp::Error::new_alloc(format!(
+                "Failed to parse a voter from the vote key {key}",
+            )),
+        )?;
+        let validator = gov_storage::get_vote_delegation_address(key).ok_or(
+            native_vp::Error::new_alloc(format!(
+                "Failed to parse a validator from the vote key {key}",
+            )),
+        )?;
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
@@ -286,8 +289,8 @@ where
 
         let vote_key = gov_storage::get_vote_proposal_key(
             proposal_id,
-            voter_address.clone(),
-            delegation_address.clone(),
+            voter.clone(),
+            validator.clone(),
         );
 
         if self
@@ -302,32 +305,32 @@ where
 
         // TODO: We should refactor this by modifying the vote proposal tx
         let all_delegations_are_valid = if let Ok(delegations) =
-            find_delegations(&self.ctx.pre(), voter_address, &current_epoch)
+            find_delegations(&self.ctx.pre(), voter, &current_epoch)
         {
             if delegations.is_empty() {
                 return Err(native_vp::Error::new_alloc(format!(
-                    "No delegations found for {voter_address}"
+                    "No delegations found for {voter}"
                 ))
                 .into());
             } else {
-                delegations.iter().all(|(address, _)| {
+                delegations.iter().all(|(val_address, _)| {
                     let vote_key = gov_storage::get_vote_proposal_key(
                         proposal_id,
-                        voter_address.clone(),
-                        address.clone(),
+                        voter.clone(),
+                        val_address.clone(),
                     );
                     self.ctx.post().has_key(&vote_key).unwrap_or(false)
                 })
             }
         } else {
             return Err(native_vp::Error::new_alloc(format!(
-                "Failed to query delegations for {voter_address}"
+                "Failed to query delegations for {voter}"
             ))
             .into());
         };
         if !all_delegations_are_valid {
             return Err(native_vp::Error::new_alloc(format!(
-                "Not all delegations of {voter_address} were deemed valid"
+                "Not all delegations of {voter} were deemed valid"
             ))
             .into());
         }
@@ -351,8 +354,7 @@ where
         }
 
         // first check if validator, then check if delegator
-        let is_validator =
-            self.is_validator(verifiers, voter_address, delegation_address)?;
+        let is_validator = self.is_validator(verifiers, voter, validator)?;
 
         if is_validator {
             return is_valid_validator_voting_period(
@@ -362,9 +364,9 @@ where
             )
             .ok_or_else(|| {
                 native_vp::Error::new_alloc(format!(
-                    "Validator {voter_address} voted outside of the voting \
-                     period. Current epoch: {current_epoch}, pre voting start \
-                     epoch: {pre_voting_start_epoch}, pre voting end epoch: \
+                    "Validator {voter} voted outside of the voting period. \
+                     Current epoch: {current_epoch}, pre voting start epoch: \
+                     {pre_voting_start_epoch}, pre voting end epoch: \
                      {pre_voting_end_epoch}."
                 ))
                 .into()
@@ -374,14 +376,13 @@ where
         let is_delegator = self.is_delegator(
             pre_voting_start_epoch,
             verifiers,
-            voter_address,
-            delegation_address,
+            voter,
+            validator,
         )?;
 
         if !is_delegator {
             return Err(native_vp::Error::new_alloc(format!(
-                "Address {voter_address} is neither a validator nor a \
-                 delegator."
+                "Address {voter} is neither a validator nor a delegator."
             ))
             .into());
         }
@@ -406,14 +407,15 @@ where
 
         let max_content_length: usize =
             self.force_read(&max_content_length_parameter_key, ReadType::Pre)?;
-        let post_content =
+        // Check the byte length
+        let post_content_bytes =
             self.ctx.read_bytes_post(&content_key)?.unwrap_or_default();
 
-        let is_valid = post_content.len() <= max_content_length;
+        let is_valid = post_content_bytes.len() <= max_content_length;
         if !is_valid {
             let error = native_vp::Error::new_alloc(format!(
                 "Max content length {max_content_length}, got {}.",
-                post_content.len()
+                post_content_bytes.len()
             ))
             .into();
             tracing::info!("{error}");
@@ -620,7 +622,7 @@ where
         let max_proposal_length: usize =
             self.force_read(&max_code_size_parameter_key, ReadType::Pre)?;
         let post_code: Vec<u8> =
-            self.ctx.read_bytes_post(&code_key)?.unwrap_or_default();
+            self.ctx.read_post(&code_key)?.unwrap_or_default();
 
         let wasm_code_below_max_len = post_code.len() <= max_proposal_length;
 
@@ -719,6 +721,8 @@ where
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
         let min_period_parameter_key =
             gov_storage::get_min_proposal_voting_period_key();
+        let max_latency_paramater_key =
+            gov_storage::get_max_proposal_latency_key();
 
         let current_epoch = self.ctx.get_block_epoch()?;
 
@@ -771,8 +775,8 @@ where
             .into());
         }
 
-        // TODO: HACK THAT NEEDS TO BE PROPERLY FIXED WITH PARAM
-        let latency = 30u64;
+        let latency: u64 =
+            self.force_read(&max_latency_paramater_key, ReadType::Pre)?;
         if start_epoch.0 - current_epoch.0 > latency {
             return Err(native_vp::Error::new_alloc(format!(
                 "Starting epoch {start_epoch} of the proposal with id \
@@ -1097,20 +1101,20 @@ where
     pub fn is_validator(
         &self,
         verifiers: &BTreeSet<Address>,
-        address: &Address,
-        delegation_address: &Address,
+        voter: &Address,
+        validator: &Address,
     ) -> Result<bool>
     where
         S: StateRead,
         CA: 'static + WasmCacheAccess,
     {
-        if !address.eq(delegation_address) {
+        if !voter.eq(validator) {
             return Ok(false);
         }
 
-        let is_validator = is_validator(&self.ctx.pre(), address)?;
+        let is_validator = is_validator(&self.ctx.pre(), voter)?;
 
-        Ok(is_validator && verifiers.contains(address))
+        Ok(is_validator && verifiers.contains(voter))
     }
 
     /// Private method to read from storage data that are 100% in storage.
@@ -1267,8 +1271,8 @@ mod test {
     use namada_state::mockdb::MockDB;
     use namada_state::testing::TestState;
     use namada_state::{
-        BlockHash, BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher,
-        State, StorageRead, TxIndex,
+        BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher, State,
+        StorageRead, TxIndex,
     };
     use namada_token::storage_key::balance_key;
     use namada_tx::action::{Action, GovAction, Write};
@@ -1299,10 +1303,7 @@ mod test {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
 
         state
     }
@@ -1479,8 +1480,6 @@ mod test {
         let funds_key = get_funds_key(proposal_id);
         let commiting_key =
             get_committing_proposals_key(proposal_id, grace_epoch);
-        // let governance_balance_key = balance_key(&nam(), &ADDRESS);
-        // let author_balance_key = balance_key(&nam(), signer_address);
 
         transfer(state, signer_address, &ADDRESS, funds);
 

@@ -8,9 +8,7 @@ use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusStat
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::hash::Hash;
-use namada::core::storage::{
-    self, BlockHash, BlockHeight, Epoch, Key, TxIndex,
-};
+use namada::core::storage::{self, BlockHeight, Epoch, Key, TxIndex};
 use namada::core::time::DurationSecs;
 use namada::gas::TxGasMeter;
 use namada::governance::parameters::GovernanceParameters;
@@ -237,10 +235,7 @@ pub fn init_storage() -> (Address, Address) {
             .in_mem_mut()
             .set_header(tm_dummy_header())
             .unwrap();
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
     });
 
     // initialize a token
@@ -293,10 +288,7 @@ pub fn init_storage() -> (Address, Address) {
             .in_mem_mut()
             .set_header(tm_dummy_header())
             .unwrap();
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
     });
 
     (token, account)

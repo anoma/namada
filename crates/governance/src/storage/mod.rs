@@ -41,6 +41,7 @@ where
     );
 
     let content_key = governance_keys::get_content_key(proposal_id);
+    // The content should have been already encoded with borsh
     storage.write_bytes(&content_key, content)?;
 
     let author_key = governance_keys::get_author_key(proposal_id);
@@ -55,7 +56,7 @@ where
 
             let proposal_code =
                 code.ok_or(Error::new_const("Missing proposal code"))?;
-            storage.write_bytes(&proposal_code_key, proposal_code)?;
+            storage.write(&proposal_code_key, proposal_code)?;
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
     }
@@ -103,11 +104,11 @@ pub fn vote_proposal<S>(storage: &mut S, data: VoteProposalData) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
-    for delegation in data.delegations {
+    for validator in data.delegation_validators {
         let vote_key = governance_keys::get_vote_proposal_key(
             data.id,
             data.voter.clone(),
-            delegation,
+            validator,
         );
         storage.write(&vote_key, data.vote.clone())?;
     }
@@ -224,7 +225,7 @@ where
     S: StorageRead,
 {
     let proposal_code_key = governance_keys::get_proposal_code_key(proposal_id);
-    storage.read_bytes(&proposal_code_key)
+    storage.read(&proposal_code_key)
 }
 
 /// Get the code associated with a proposal
@@ -266,6 +267,10 @@ where
 
     let max_proposal_period: u64 = get_max_proposal_period(storage)?;
 
+    let key = governance_keys::get_max_proposal_latency_key();
+    let max_proposal_latency: u64 =
+        storage.read(&key)?.expect("Parameter should be defined.");
+
     Ok(GovernanceParameters {
         min_proposal_fund,
         max_proposal_code_size,
@@ -273,6 +278,7 @@ where
         max_proposal_period,
         max_proposal_content_size,
         min_proposal_grace_epochs,
+        max_proposal_latency,
     })
 }
 

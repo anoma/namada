@@ -263,6 +263,20 @@ pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 /// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 
+/// Contains information on epoch periods (start, end) in which a delegator had
+/// a bonded with a certain validator. The `end` epoch is the first epoch at
+/// which the bond ceased to exist (exclusive).
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub struct DelegationEpochs {
+    /// Previous ranges during which a bond existed (Map<start, end>)
+    pub prev_ranges: BTreeMap<Epoch, Epoch>,
+    /// The last range during which a bond existed
+    pub last_range: (Epoch, Option<Epoch>),
+}
+
+/// The set of all target validators for a given delegator.
+pub type DelegationTargets = LazyMap<Address, DelegationEpochs>;
+
 #[derive(
     Debug,
     Clone,
@@ -285,9 +299,11 @@ pub struct SlashedAmount {
 /// Commission rate and max commission rate change per epoch for a validator
 pub struct CommissionPair {
     /// Validator commission rate
-    pub commission_rate: Dec,
+    pub commission_rate: Option<Dec>,
     /// Validator max commission rate change per epoch
-    pub max_commission_change_per_epoch: Dec,
+    pub max_commission_change_per_epoch: Option<Dec>,
+    /// Query epoch
+    pub epoch: Epoch,
 }
 
 /// Epoched rewards products
@@ -547,6 +563,9 @@ pub enum ValidatorState {
     /// consensus due to a misbehavior
     Jailed,
 }
+
+/// The validator state from a query and the epoch when it was queried.
+pub type ValidatorStateInfo = (Option<ValidatorState>, Epoch);
 
 /// A slash applied to validator, to punish byzantine behavior by removing
 /// their staked tokens at and before the epoch of the slash.

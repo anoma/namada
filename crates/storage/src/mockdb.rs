@@ -2,19 +2,15 @@
 
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
-use std::ops::Bound::{Excluded, Included};
 use std::path::Path;
-use std::str::FromStr;
 
 use itertools::Either;
-use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::Hash;
 use namada_core::storage::{
-    BlockHeight, BlockResults, DbColFam, Epoch, EthEventsQueue, Header, Key,
-    KeySeg, KEY_SEGMENT_SEPARATOR,
+    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
 };
-use namada_core::time::DateTimeUtc;
-use namada_core::{decode, encode, ethereum_events, ethereum_structs};
+use namada_core::{decode, encode, ethereum_events};
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
     MerkleTreeStoresRead, StoreType,
@@ -22,13 +18,30 @@ use namada_merkle_tree::{
 use namada_replay_protection as replay_protection;
 use regex::Regex;
 
-use crate::conversion_state::ConversionState;
 use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
-use crate::types::{CommitOnlyData, KVBytes, PatternIterator, PrefixIterator};
+use crate::types::{KVBytes, PatternIterator, PrefixIterator};
 
 const SUBSPACE_CF: &str = "subspace";
+
+const BLOCK_HEIGHT_KEY: &str = "height";
+const NEXT_EPOCH_MIN_START_HEIGHT_KEY: &str = "next_epoch_min_start_height";
+const NEXT_EPOCH_MIN_START_TIME_KEY: &str = "next_epoch_min_start_time";
+const UPDATE_EPOCH_BLOCKS_DELAY_KEY: &str = "update_epoch_blocks_delay";
+const COMMIT_ONLY_DATA_KEY: &str = "commit_only_data_commitment";
+const CONVERSION_STATE_KEY: &str = "conversion_state";
+const ETHEREUM_HEIGHT_KEY: &str = "ethereum_height";
+const ETH_EVENTS_QUEUE_KEY: &str = "eth_events_queue";
+const RESULTS_KEY_PREFIX: &str = "results";
+
+const MERKLE_TREE_ROOT_KEY_SEGMENT: &str = "root";
+const MERKLE_TREE_STORE_KEY_SEGMENT: &str = "store";
+const BLOCK_HEADER_KEY_SEGMENT: &str = "header";
+const BLOCK_TIME_KEY_SEGMENT: &str = "time";
+const EPOCH_KEY_SEGMENT: &str = "epoch";
+const PRED_EPOCHS_KEY_SEGMENT: &str = "pred_epochs";
+const ADDRESS_GEN_KEY_SEGMENT: &str = "address_gen";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
@@ -51,6 +64,28 @@ unsafe impl Sync for MockDB {}
 #[derive(Debug, Default)]
 pub struct MockDBWriteBatch;
 
+impl MockDB {
+    fn read_value<T>(&self, key: impl AsRef<str>) -> Result<Option<T>>
+    where
+        T: BorshDeserialize,
+    {
+        self.0
+            .borrow()
+            .get(key.as_ref())
+            .map(|bytes| decode(bytes).map_err(Error::CodingError))
+            .transpose()
+    }
+
+    fn write_value<T>(&self, key: impl AsRef<str>, value: &T)
+    where
+        T: BorshSerialize,
+    {
+        self.0
+            .borrow_mut()
+            .insert(key.as_ref().to_string(), encode(value));
+    }
+}
+
 impl DB for MockDB {
     /// There is no cache for MockDB
     type Cache = ();
@@ -66,165 +101,94 @@ impl DB for MockDB {
 
     fn read_last_block(&self) -> Result<Option<BlockStateRead>> {
         // Block height
-        let height: BlockHeight = match self.0.borrow().get("height") {
-            Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+        let height: BlockHeight = match self.read_value(BLOCK_HEIGHT_KEY)? {
+            Some(h) => h,
             None => return Ok(None),
         };
-        // Block results
-        let results_path = format!("results/{}", height.raw());
-        let results: BlockResults =
-            match self.0.borrow().get(results_path.as_str()) {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-                None => return Ok(None),
-            };
 
         // Epoch start height and time
-        let next_epoch_min_start_height: BlockHeight =
-            match self.0.borrow().get("next_epoch_min_start_height") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+        let next_epoch_min_start_height =
+            match self.read_value(NEXT_EPOCH_MIN_START_HEIGHT_KEY)? {
+                Some(h) => h,
                 None => return Ok(None),
             };
-        let next_epoch_min_start_time: DateTimeUtc =
-            match self.0.borrow().get("next_epoch_min_start_time") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+        let next_epoch_min_start_time =
+            match self.read_value(NEXT_EPOCH_MIN_START_TIME_KEY)? {
+                Some(t) => t,
                 None => return Ok(None),
             };
-        let update_epoch_blocks_delay: Option<u32> =
-            match self.0.borrow().get("update_epoch_blocks_delay") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
+        let update_epoch_blocks_delay =
+            match self.read_value(UPDATE_EPOCH_BLOCKS_DELAY_KEY)? {
+                Some(d) => d,
                 None => return Ok(None),
             };
-        let commit_only_data: CommitOnlyData =
-            match self.0.borrow().get("commit_only_data") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-                None => return Ok(None),
-            };
-        let conversion_state: ConversionState =
-            match self.0.borrow().get("conversion_state") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-                None => return Ok(None),
-            };
+        let commit_only_data = match self.read_value(COMMIT_ONLY_DATA_KEY)? {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        let conversion_state = match self.read_value(CONVERSION_STATE_KEY)? {
+            Some(c) => c,
+            None => return Ok(None),
+        };
 
-        let ethereum_height: Option<ethereum_structs::BlockHeight> =
-            match self.0.borrow().get("ethereum_height") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-                None => return Ok(None),
-            };
+        let ethereum_height = match self.read_value(ETHEREUM_HEIGHT_KEY)? {
+            Some(h) => h,
+            None => return Ok(None),
+        };
 
-        let eth_events_queue: EthEventsQueue =
-            match self.0.borrow().get("ethereum_height") {
-                Some(bytes) => decode(bytes).map_err(Error::CodingError)?,
-                None => return Ok(None),
-            };
+        let eth_events_queue = match self.read_value(ETH_EVENTS_QUEUE_KEY)? {
+            Some(q) => q,
+            None => return Ok(None),
+        };
 
-        // Load data at the height
-        let prefix = format!("{}/", height.raw());
-        let upper_prefix = format!("{}/", height.next_height().raw());
-        let mut merkle_tree_stores = MerkleTreeStoresRead::default();
-        let mut hash = None;
-        let mut time = None;
-        let mut epoch: Option<Epoch> = None;
-        let mut pred_epochs = None;
-        let mut address_gen = None;
-        for (path, bytes) in self
-            .0
-            .borrow()
-            .range((Included(prefix), Excluded(upper_prefix)))
-        {
-            let segments: Vec<&str> =
-                path.split(KEY_SEGMENT_SEPARATOR).collect();
-            match segments.get(1) {
-                Some(prefix) => match *prefix {
-                    "tree" => match segments.get(2) {
-                        Some(s) => {
-                            let st = StoreType::from_str(s)?;
-                            match segments.get(3) {
-                                Some(&"root") => merkle_tree_stores.set_root(
-                                    &st,
-                                    decode(bytes)
-                                        .map_err(Error::CodingError)?,
-                                ),
-                                Some(&"store") => merkle_tree_stores
-                                    .set_store(st.decode_store(bytes)?),
-                                _ => unknown_key_error(path)?,
-                            }
-                        }
-                        None => unknown_key_error(path)?,
-                    },
-                    "header" => {
-                        // the block header doesn't have to be restored
-                    }
-                    "hash" => {
-                        hash = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "time" => {
-                        time = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "epoch" => {
-                        epoch = Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "pred_epochs" => {
-                        pred_epochs =
-                            Some(decode(bytes).map_err(Error::CodingError)?)
-                    }
-                    "address_gen" => {
-                        address_gen =
-                            Some(decode(bytes).map_err(Error::CodingError)?);
-                    }
-                    _ => unknown_key_error(path)?,
-                },
-                None => unknown_key_error(path)?,
-            }
-        }
-        // Restore subtrees of Merkle tree
-        if let Some(epoch) = epoch {
-            for st in StoreType::iter_subtrees() {
-                let prefix_key = tree_key_prefix_with_epoch(st, epoch);
-                let root_key =
-                    prefix_key.clone().with_segment("root".to_owned());
-                if let Some(bytes) = self.0.borrow().get(&root_key.to_string())
-                {
-                    merkle_tree_stores.set_root(
-                        st,
-                        decode(bytes).map_err(Error::CodingError)?,
-                    );
-                }
-                let store_key = prefix_key.with_segment("store".to_owned());
-                if let Some(bytes) = self.0.borrow().get(&store_key.to_string())
-                {
-                    merkle_tree_stores.set_store(st.decode_store(bytes)?);
-                }
-            }
-        }
-        match (hash, time, epoch, pred_epochs, address_gen) {
-            (
-                Some(hash),
-                Some(time),
-                Some(epoch),
-                Some(pred_epochs),
-                Some(address_gen),
-            ) => Ok(Some(BlockStateRead {
-                merkle_tree_stores,
-                hash,
-                height,
-                time,
-                epoch,
-                pred_epochs,
-                next_epoch_min_start_height,
-                next_epoch_min_start_time,
-                update_epoch_blocks_delay,
-                address_gen,
-                results,
-                conversion_state,
-                ethereum_height,
-                eth_events_queue,
-                commit_only_data,
-            })),
-            _ => Err(Error::Temporary {
-                error: "Essential data couldn't be read from the DB"
-                    .to_string(),
-            }),
-        }
+        // Block results
+        let results_key = format!("{RESULTS_KEY_PREFIX}/{}", height.raw());
+        let results = match self.read_value(results_key)? {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        let prefix = height.raw();
+
+        let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
+        let time = match self.read_value(time_key)? {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        let epoch = match self.read_value(epoch_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let pred_epochs_key = format!("{prefix}/{PRED_EPOCHS_KEY_SEGMENT}");
+        let pred_epochs = match self.read_value(pred_epochs_key)? {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let address_gen_key = format!("{prefix}/{ADDRESS_GEN_KEY_SEGMENT}");
+        let address_gen = match self.read_value(address_gen_key)? {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        Ok(Some(BlockStateRead {
+            height,
+            time,
+            epoch,
+            pred_epochs,
+            results,
+            conversion_state,
+            next_epoch_min_start_height,
+            next_epoch_min_start_time,
+            update_epoch_blocks_delay,
+            address_gen,
+            ethereum_height,
+            eth_events_queue,
+            commit_only_data,
+        }))
     }
 
     fn add_block_to_batch(
@@ -236,7 +200,6 @@ impl DB for MockDB {
         let BlockStateWrite {
             merkle_tree_stores,
             header,
-            hash,
             time,
             height,
             epoch,
@@ -252,134 +215,77 @@ impl DB for MockDB {
             commit_only_data,
         }: BlockStateWrite = state;
 
-        // Epoch start height and time
-        self.0.borrow_mut().insert(
-            "next_epoch_min_start_height".into(),
-            encode(&next_epoch_min_start_height),
+        self.write_value(
+            NEXT_EPOCH_MIN_START_HEIGHT_KEY,
+            &next_epoch_min_start_height,
         );
-        self.0.borrow_mut().insert(
-            "next_epoch_min_start_time".into(),
-            encode(&next_epoch_min_start_time),
+        self.write_value(
+            NEXT_EPOCH_MIN_START_TIME_KEY,
+            &next_epoch_min_start_time,
         );
-        self.0.borrow_mut().insert(
-            "update_epoch_blocks_delay".into(),
-            encode(&update_epoch_blocks_delay),
+        self.write_value(
+            UPDATE_EPOCH_BLOCKS_DELAY_KEY,
+            &update_epoch_blocks_delay,
         );
-        self.0
-            .borrow_mut()
-            .insert("ethereum_height".into(), encode(&ethereum_height));
-        self.0
-            .borrow_mut()
-            .insert("eth_events_queue".into(), encode(&eth_events_queue));
-        self.0
-            .borrow_mut()
-            .insert("conversion_state".into(), encode(conversion_state));
-        self.0.borrow_mut().insert(
-            "commit_only_data_commitment".into(),
-            commit_only_data.serialize(),
-        );
+        self.write_value(ETHEREUM_HEIGHT_KEY, &ethereum_height);
+        self.write_value(ETH_EVENTS_QUEUE_KEY, &eth_events_queue);
+        self.write_value(CONVERSION_STATE_KEY, &conversion_state);
+        self.write_value(COMMIT_ONLY_DATA_KEY, &commit_only_data);
 
-        let prefix_key = Key::from(height.to_db_key());
+        let prefix = height.raw();
+
         // Merkle tree
-        {
-            for st in StoreType::iter() {
-                if *st == StoreType::Base
-                    || *st == StoreType::CommitData
-                    || is_full_commit
-                {
-                    let key_prefix = match st {
-                        StoreType::Base | StoreType::CommitData => {
-                            tree_key_prefix_with_height(st, height)
-                        }
-                        _ => tree_key_prefix_with_epoch(st, epoch),
-                    };
-                    let root_key =
-                        key_prefix.clone().with_segment("root".to_owned());
-                    self.0.borrow_mut().insert(
-                        root_key.to_string(),
-                        encode(merkle_tree_stores.root(st)),
-                    );
-                    let store_key = key_prefix.with_segment("store".to_owned());
-                    self.0.borrow_mut().insert(
-                        store_key.to_string(),
-                        merkle_tree_stores.store(st).encode(),
-                    );
-                }
+        for st in StoreType::iter() {
+            if *st == StoreType::Base
+                || *st == StoreType::CommitData
+                || is_full_commit
+            {
+                let key_prefix = match st {
+                    StoreType::Base | StoreType::CommitData => {
+                        tree_key_prefix_with_height(st, height)
+                    }
+                    _ => tree_key_prefix_with_epoch(st, epoch),
+                };
+                let root_key =
+                    format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+                self.write_value(root_key, merkle_tree_stores.root(st));
+                let store_key =
+                    format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+                self.0
+                    .borrow_mut()
+                    .insert(store_key, merkle_tree_stores.store(st).encode());
             }
         }
         // Block header
-        {
-            if let Some(h) = header {
-                let key = prefix_key
-                    .push(&"header".to_owned())
-                    .map_err(Error::KeyError)?;
-                self.0
-                    .borrow_mut()
-                    .insert(key.to_string(), h.serialize_to_vec());
-            }
-        }
-        // Block hash
-        {
-            let key = prefix_key
-                .push(&"hash".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0.borrow_mut().insert(key.to_string(), encode(&hash));
+        if let Some(h) = header {
+            let header_key = format!("{prefix}/{BLOCK_HEADER_KEY_SEGMENT}");
+            self.write_value(header_key, &h);
         }
         // Block time
-        {
-            let key = prefix_key
-                .push(&"time".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0.borrow_mut().insert(key.to_string(), encode(&time));
-        }
+        let time_key = format!("{prefix}/{BLOCK_TIME_KEY_SEGMENT}");
+        self.write_value(time_key, &time);
         // Block epoch
-        {
-            let key = prefix_key
-                .push(&"epoch".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0.borrow_mut().insert(key.to_string(), encode(&epoch));
-        }
-        // Predecessor block epochs
-        {
-            let key = prefix_key
-                .push(&"pred_epochs".to_owned())
-                .map_err(Error::KeyError)?;
-            self.0
-                .borrow_mut()
-                .insert(key.to_string(), encode(&pred_epochs));
-        }
-        // Address gen
-        {
-            let key = prefix_key
-                .push(&"address_gen".to_owned())
-                .map_err(Error::KeyError)?;
-            let value = &address_gen;
-            self.0.borrow_mut().insert(key.to_string(), encode(value));
-        }
-        self.0
-            .borrow_mut()
-            .insert("height".to_owned(), encode(&height));
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        self.write_value(epoch_key, &epoch);
         // Block results
-        {
-            let results_path = format!("results/{}", height.raw());
-            self.0.borrow_mut().insert(results_path, encode(&results));
-        }
+        let results_key = format!("{RESULTS_KEY_PREFIX}/{}", height.raw());
+        self.write_value(results_key, &results);
+        // Predecessor block epochs
+        let pred_epochs_key = format!("{prefix}/{PRED_EPOCHS_KEY_SEGMENT}");
+        self.write_value(pred_epochs_key, &pred_epochs);
+        // Address gen
+        let address_gen_key = format!("{prefix}/{ADDRESS_GEN_KEY_SEGMENT}");
+        self.write_value(address_gen_key, &address_gen);
+
+        // Block height
+        self.write_value(BLOCK_HEIGHT_KEY, &height);
+
         Ok(())
     }
 
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
-        let prefix_key = Key::from(height.to_db_key());
-        let key = prefix_key
-            .push(&"header".to_owned())
-            .map_err(Error::KeyError)?;
-        let value = self.0.borrow().get(&key.to_string()).cloned();
-        match value {
-            Some(v) => Ok(Some(
-                BorshDeserialize::try_from_slice(&v[..])
-                    .map_err(Error::BorshCodingError)?,
-            )),
-            None => Ok(None),
-        }
+        let header_key = format!("{}/{BLOCK_HEADER_KEY_SEGMENT}", height.raw());
+        self.read_value(header_key)
     }
 
     fn read_merkle_tree_stores(
@@ -400,17 +306,14 @@ impl DB for MockDB {
                 }
                 _ => tree_key_prefix_with_epoch(st, epoch),
             };
-            let root_key = key_prefix.clone().with_segment("root".to_owned());
-            let bytes = self.0.borrow().get(&root_key.to_string()).cloned();
-            match bytes {
-                Some(b) => {
-                    let root = decode(b).map_err(Error::CodingError)?;
-                    merkle_tree_stores.set_root(st, root);
-                }
+            let root_key =
+                format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+            match self.read_value(root_key)? {
+                Some(root) => merkle_tree_stores.set_root(st, root),
                 None => return Ok(None),
             }
-
-            let store_key = key_prefix.with_segment("store".to_owned());
+            let store_key =
+                format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
             let bytes = self.0.borrow().get(&store_key.to_string()).cloned();
             match bytes {
                 Some(b) => {
@@ -425,14 +328,13 @@ impl DB for MockDB {
     fn has_replay_protection_entry(&self, hash: &Hash) -> Result<bool> {
         let prefix_key =
             Key::parse("replay_protection").map_err(Error::KeyError)?;
-        for subkey in [
-            replay_protection::last_key(hash),
-            replay_protection::all_key(hash),
-        ] {
-            let key = prefix_key.join(&subkey);
-            if self.0.borrow().contains_key(&key.to_string()) {
-                return Ok(true);
-            }
+        let key = prefix_key.join(&replay_protection::key(hash));
+        let current_key =
+            prefix_key.join(&replay_protection::current_key(hash));
+        if self.0.borrow().contains_key(&key.to_string())
+            || self.0.borrow().contains_key(&current_key.to_string())
+        {
+            return Ok(true);
         }
 
         Ok(false)
@@ -512,7 +414,7 @@ impl DB for MockDB {
         MockDBWriteBatch
     }
 
-    fn exec_batch(&mut self, _batch: Self::WriteBatch) -> Result<()> {
+    fn exec_batch(&self, _batch: Self::WriteBatch) -> Result<()> {
         // Nothing to do - in MockDB, batch writes are committed directly from
         // `batch_write_subspace_val` and `batch_delete_subspace_val`.
         Ok(())
@@ -635,15 +537,11 @@ impl DB for MockDB {
         store_type: &StoreType,
         epoch: Epoch,
     ) -> Result<()> {
-        let prefix_key = tree_key_prefix_with_epoch(store_type, epoch);
-        let root_key = prefix_key
-            .push(&"root".to_owned())
-            .map_err(Error::KeyError)?;
-        self.0.borrow_mut().remove(&root_key.to_string());
-        let store_key = prefix_key
-            .push(&"store".to_owned())
-            .map_err(Error::KeyError)?;
-        self.0.borrow_mut().remove(&store_key.to_string());
+        let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
+        let root_key = format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+        self.0.borrow_mut().remove(&root_key);
+        let store_key = format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+        self.0.borrow_mut().remove(&store_key);
         Ok(())
     }
 
@@ -672,31 +570,38 @@ impl DB for MockDB {
         }
     }
 
-    fn delete_replay_protection_entry(
-        &mut self,
-        _batch: &mut Self::WriteBatch,
-        key: &Key,
-    ) -> Result<()> {
-        let key = Key::parse("replay_protection")
-            .map_err(Error::KeyError)?
-            .join(key);
-
-        self.0.borrow_mut().remove(&key.to_string());
-
-        Ok(())
-    }
-
-    fn prune_replay_protection_buffer(
+    fn move_current_replay_protection_entries(
         &mut self,
         _batch: &mut Self::WriteBatch,
     ) -> Result<()> {
-        let buffer_key = Key::parse("replay_protection")
+        let current_key_prefix = Key::parse("replay_protection")
             .map_err(Error::KeyError)?
-            .push(&"buffer".to_string())
+            .push(&"current".to_string())
             .map_err(Error::KeyError)?;
-        self.0
-            .borrow_mut()
-            .retain(|key, _| !key.starts_with(&buffer_key.to_string()));
+        let mut target_hashes = vec![];
+
+        for (key, _) in self.0.borrow().iter() {
+            if key.starts_with(&current_key_prefix.to_string()) {
+                let hash = key
+                    .rsplit(KEY_SEGMENT_SEPARATOR)
+                    .last()
+                    .unwrap()
+                    .to_string();
+                target_hashes.push(hash);
+            }
+        }
+
+        for hash in target_hashes {
+            let current_key =
+                current_key_prefix.push(&hash).map_err(Error::KeyError)?;
+            let key = Key::parse("replay_protection")
+                .map_err(Error::KeyError)?
+                .push(&hash)
+                .map_err(Error::KeyError)?;
+
+            self.0.borrow_mut().remove(&current_key.to_string());
+            self.0.borrow_mut().insert(key.to_string(), vec![]);
+        }
 
         Ok(())
     }
@@ -810,18 +715,10 @@ impl<'iter> DBIter<'iter> for MockDB {
         MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
     }
 
-    fn iter_replay_protection(&'iter self) -> Self::PrefixIter {
-        let stripped_prefix =
-            format!("replay_protection/{}/", replay_protection::last_prefix());
-        let prefix = stripped_prefix.clone();
-        let iter = self.0.borrow().clone().into_iter();
-        MockPrefixIterator::new(MockIterator { prefix, iter }, stripped_prefix)
-    }
-
-    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter {
+    fn iter_current_replay_protection(&'iter self) -> Self::PrefixIter {
         let stripped_prefix = format!(
             "replay_protection/{}/",
-            replay_protection::buffer_prefix()
+            replay_protection::current_prefix()
         );
         let prefix = stripped_prefix.clone();
         let iter = self.0.borrow().clone().into_iter();
@@ -906,9 +803,3 @@ impl Iterator for MockPatternIterator {
 }
 
 impl DBWriteBatch for MockDBWriteBatch {}
-
-fn unknown_key_error(key: &str) -> Result<()> {
-    Err(Error::UnknownKey {
-        key: key.to_owned(),
-    })
-}

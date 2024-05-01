@@ -68,6 +68,8 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
+pub const DEFAULT_GAS_LIMIT: u64 = 25_000;
+
 #[cfg(not(feature = "async-send"))]
 pub trait MaybeSync {}
 #[cfg(not(feature = "async-send"))]
@@ -138,8 +140,8 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             wrapper_fee_payer: None,
             fee_token: self.native_token(),
             fee_unshield: None,
-            gas_limit: GasLimit::from(20_000),
-            expiration: None,
+            gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
+            expiration: Default::default(),
             disposable_signing_key: false,
             chain_id: None,
             signing_keys: vec![],
@@ -663,8 +665,8 @@ where
                 wrapper_fee_payer: None,
                 fee_token: native_token,
                 fee_unshield: None,
-                gas_limit: GasLimit::from(20_000),
-                expiration: None,
+                gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
+                expiration: Default::default(),
                 disposable_signing_key: false,
                 chain_id: None,
                 signing_keys: vec![],
@@ -813,7 +815,7 @@ pub mod testing {
     use crate::masp::testing::{
         arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
     };
-    use crate::time::{DateTime, DateTimeUtc, Utc};
+    use crate::time::{DateTime, DateTimeUtc, TimeZone, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
         arb_become_validator, arb_bond, arb_commission_change,
@@ -918,7 +920,7 @@ pub mod testing {
     prop_compose! {
         // Generate a date and time
         pub fn arb_date_time_utc()(
-            secs in DateTime::<Utc>::MIN_UTC.timestamp()..=DateTime::<Utc>::MAX_UTC.timestamp(),
+            secs in Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap().timestamp()..=Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap().timestamp(),
             nsecs in ..1000000000u32,
         ) -> DateTimeUtc {
             DateTimeUtc(DateTime::<Utc>::from_timestamp(secs, nsecs).unwrap())

@@ -279,7 +279,6 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
     if !dry_run {
         tracing::info!("Persisting DB changes...");
         let batch = db_visitor.take_batch();
-        let mut db = db;
         db.exec_batch(batch).expect("Failed to execute write batch");
         db.flush(true).expect("Failed to flush data to disk");
 

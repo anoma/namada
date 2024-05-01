@@ -703,7 +703,7 @@ fn pos_bonds() -> Result<()> {
     let tx_args = vec![
         "bond",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--amount",
         "10000.0",
         "--signing-keys",
@@ -758,7 +758,7 @@ fn pos_bonds() -> Result<()> {
     let tx_args = vec![
         "unbond",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--amount",
         "5100.0",
         "--signing-keys",
@@ -846,7 +846,7 @@ fn pos_bonds() -> Result<()> {
     let tx_args = vec![
         "withdraw",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--signing-keys",
         "validator-0-balance-key",
         "--node",
@@ -1474,7 +1474,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let tx_args = vec![
         "unjail-validator",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &validator_one_rpc,
     ];
@@ -1675,7 +1675,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     let tx_args = vec![
         "deactivate-validator",
         "--validator",
-        "validator-1",
+        "validator-1-validator",
         "--signing-keys",
         "validator-1-balance-key",
         "--node",
@@ -1725,7 +1725,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
     let tx_args = vec![
         "reactivate-validator",
         "--validator",
-        "validator-1",
+        "validator-1-validator",
         "--signing-keys",
         "validator-1-balance-key",
         "--node",
@@ -1879,7 +1879,7 @@ fn test_invalid_validator_txs() -> Result<()> {
     let tx_args = vec![
         "deactivate-validator",
         "--validator",
-        "validator-1",
+        "validator-1-validator",
         "--signing-keys",
         "validator-1-balance-key",
         "--node",
@@ -1997,7 +1997,7 @@ fn change_consensus_key() -> Result<()> {
     let tx_args = vec![
         "change-consensus-key",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--signing-keys",
         "validator-0-balance-key",
         "--node",
@@ -2034,7 +2034,7 @@ fn change_consensus_key() -> Result<()> {
     // 4. Configure validator-0 node with the new key
 
     // Get the new consensus SK
-    let new_key_alias = "validator-0-consensus-key-1";
+    let new_key_alias = "validator-0-validator-consensus-key";
     let new_sk = wallet.find_secret_key(new_key_alias, None).unwrap();
     // Write the key to CometBFT dir
     let cometbft_dir = test.get_cometbft_home(Who::Validator(0));
@@ -2168,7 +2168,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         "--vote",
         "yay",
         "--address",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &validator_one_rpc,
     ];

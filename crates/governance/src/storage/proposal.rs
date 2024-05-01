@@ -83,7 +83,7 @@ pub struct VoteProposalData {
     /// The proposal voter address
     pub voter: Address,
     /// Validators to who the voter has delegations to
-    pub delegations: Vec<Address>,
+    pub delegation_validators: Vec<Address>,
 }
 
 impl TryFrom<DefaultProposal> for InitProposalData {
@@ -461,7 +461,7 @@ impl Display for ProposalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProposalType::Default => write!(f, "Default"),
-            ProposalType::DefaultWithWasm(_) => write!(f, "DefaultWithWasm"),
+            ProposalType::DefaultWithWasm(_) => write!(f, "Default with Wasm"),
             ProposalType::PGFSteward(_) => write!(f, "PGF steward"),
             ProposalType::PGFPayment(_) => write!(f, "PGF funding"),
         }
@@ -566,7 +566,7 @@ impl StorageProposal {
             )
         } else {
             let valid_start_epoch = current_epoch >= self.voting_start_epoch;
-            let valid_end_epoch = current_epoch <= self.voting_end_epoch;
+            let valid_end_epoch = current_epoch < self.voting_end_epoch;
             valid_start_epoch && valid_end_epoch
         }
     }
@@ -581,7 +581,7 @@ impl StorageProposal {
         if self.voting_start_epoch > current_epoch {
             ProposalStatus::Pending
         } else if self.voting_start_epoch <= current_epoch
-            && current_epoch <= self.voting_end_epoch
+            && current_epoch < self.voting_end_epoch
         {
             ProposalStatus::OnGoing
         } else {
@@ -732,6 +732,7 @@ pub mod testing {
     /// Generate an arbitrary proposal type
     pub fn arb_proposal_type() -> impl Strategy<Value = ProposalType> {
         prop_oneof![
+            Just(ProposalType::Default),
             arb_hash().prop_map(ProposalType::DefaultWithWasm),
             collection::btree_set(
                 arb_add_remove(arb_non_internal_address()),
@@ -770,13 +771,13 @@ pub mod testing {
             id: u64,
             vote in arb_proposal_vote(),
             voter in arb_non_internal_address(),
-            delegations in collection::vec(arb_non_internal_address(), 0..10),
+            delegation_validators in collection::vec(arb_non_internal_address(), 0..10),
         ) -> VoteProposalData {
             VoteProposalData {
                 id,
                 vote,
                 voter,
-                delegations,
+                delegation_validators,
             }
         }
     }

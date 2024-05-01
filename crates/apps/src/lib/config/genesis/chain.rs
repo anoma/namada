@@ -152,10 +152,10 @@ impl Finalized {
                 .map(|tx| Address::Established(tx.tx.data.address.raw.clone()))
                 .expect("Validator alias not found in genesis transactions.");
             wallet.extend_from_pre_genesis_validator(
-                address,
-                alias,
+                address.clone(),
+                alias.clone(),
                 validator_wallet,
-            )
+            );
         }
 
         // Add some internal addresses to the wallet
@@ -403,6 +403,7 @@ impl Finalized {
             max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
+            max_proposal_latency,
         } = self.parameters.gov_params.clone();
         namada::governance::parameters::GovernanceParameters {
             min_proposal_fund: Amount::native_whole(min_proposal_fund),
@@ -411,6 +412,7 @@ impl Finalized {
             max_proposal_content_size,
             min_proposal_grace_epochs,
             min_proposal_voting_period,
+            max_proposal_latency,
         }
     }
 

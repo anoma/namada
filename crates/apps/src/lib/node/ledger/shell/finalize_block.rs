@@ -3,7 +3,7 @@
 use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada::core::storage::{BlockHash, BlockResults, Epoch, Header};
+use namada::core::storage::{BlockResults, Epoch, Header};
 use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
@@ -19,6 +19,7 @@ use namada::proof_of_stake::storage::{
 };
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
+use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
 use namada::tx::event::{Batch, Code};
@@ -62,7 +63,7 @@ where
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
-        let (height, new_epoch) = self.update_state(req.header, req.hash);
+        let (height, new_epoch) = self.update_state(req.header);
 
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let update_for_tendermint = matches!(
@@ -87,16 +88,6 @@ where
              {:?}",
             self.state.in_mem().update_epoch_blocks_delay
         );
-
-        // Finalize the transactions' hashes from the previous block. Also cache
-        // "last" hashes from the previous block in case of a rollback
-        let (write_log, _in_mem, db) = self.state.split_borrow();
-        for (raw_key, _, _) in db.iter_replay_protection() {
-            let hash = raw_key.parse().expect("Failed hash conversion");
-            write_log
-                .finalize_tx_hash(hash)
-                .expect("Failed tx hashes finalization")
-        }
 
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
@@ -416,21 +407,16 @@ where
         Ok(response)
     }
 
-    /// Sets the metadata necessary for a new block, including
-    /// the hash, height, validator changes, and evidence of
-    /// byzantine behavior. Applies slashes if necessary.
-    /// Returns a bool indicating if a new epoch began and
-    /// the height of the new block.
-    fn update_state(
-        &mut self,
-        header: Header,
-        hash: BlockHash,
-    ) -> (BlockHeight, bool) {
+    /// Sets the metadata necessary for a new block, including the height,
+    /// validator changes, and evidence of byzantine behavior. Applies slashes
+    /// if necessary. Returns a bool indicating if a new epoch began and the
+    /// height of the new block.
+    fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
         let height = self.state.in_mem().get_last_block_height() + 1;
 
         self.state
             .in_mem_mut()
-            .begin_block(hash, height)
+            .begin_block(height)
             .expect("Beginning a block shouldn't fail");
 
         let header_time = header.time;
@@ -514,8 +500,8 @@ where
         Ok(())
     }
 
-    // Write the batch hash to storage and remove the corresponding wrapper
-    // hash since it's redundant (we check the batch hash too when validating
+    // Write the batch hash to storage and mark the corresponding wrapper
+    // hash as redundant (we check the batch hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
     fn commit_batch_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
@@ -528,7 +514,9 @@ where
                 .write_tx_hash(raw_header_hash)
                 .expect("Error while writing tx hash to storage");
 
-            self.state.delete_tx_hash(header_hash)
+            self.state
+                .redundant_tx_hash(&header_hash)
+                .expect("Error while marking tx hash as redundant");
         }
     }
 
@@ -611,11 +599,7 @@ where
                         match batched_result {
                             Ok(result) => {
                                 if result.is_accepted() {
-                                    if result.vps_result.accepted_vps.contains(
-                                        &Address::Internal(
-                                            address::InternalAddress::Masp,
-                                        ),
-                                    ) {
+                                    if is_masp_tx(&result.changed_keys) {
                                         tx_event.extend(ValidMaspTx((
                                             tx_index,
                                             Some(*cmt_hash),
@@ -778,7 +762,9 @@ where
                         let header_hash = replay_protection_hashes
                             .expect("This cannot fail")
                             .header_hash;
-                        self.state.delete_tx_hash(header_hash);
+                        self.state
+                            .redundant_tx_hash(&header_hash)
+                            .expect("Error while marking tx hash as redundant");
                     }
                 }
 
@@ -938,6 +924,7 @@ mod test_finalize_block {
     use namada::tx::data::Fee;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
+    use namada_sdk::eth_bridge::storage::vote_tallies::BridgePoolRoot;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
     use namada_sdk::proof_of_stake::storage::{
@@ -1314,7 +1301,7 @@ mod test_finalize_block {
         };
         let root = shell
             .state
-            .read_bytes(&get_signed_root_key())
+            .read::<(BridgePoolRoot, BlockHeight)>(&get_signed_root_key())
             .expect("Reading signed Bridge pool root shouldn't fail.");
         assert!(root.is_none());
         _ = shell.finalize_block(req).expect("Test failed");
@@ -1482,7 +1469,7 @@ mod test_finalize_block {
             namada::governance::init_proposal(
                 &mut shell.state,
                 proposal,
-                vec![],
+                Vec::<u8>::new(),
                 None,
             )
             .unwrap();
@@ -1491,7 +1478,7 @@ mod test_finalize_block {
                 id: proposal_id,
                 vote,
                 voter: validator,
-                delegations: vec![],
+                delegation_validators: vec![],
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)
@@ -2644,7 +2631,7 @@ mod test_finalize_block {
             mk_wrapper_tx(&shell, &crate::wallet::defaults::albert_keypair());
 
         let wrapper_hash_key =
-            replay_protection::last_key(&wrapper_tx.header_hash());
+            replay_protection::current_key(&wrapper_tx.header_hash());
 
         // merkle tree root before finalize_block
         let root_pre = shell.shell.state.in_mem().block.tree.root();
@@ -2670,9 +2657,9 @@ mod test_finalize_block {
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-                .unwrap_or_default()
         );
-        // Check that the hash is present in the merkle tree
+        // Check that the hash is not present in the merkle tree
+        shell.state.commit_block().unwrap();
         assert!(
             !shell
                 .shell
@@ -2685,11 +2672,68 @@ mod test_finalize_block {
         );
     }
 
+    /// Test that masp anchor keys are added to the merkle tree
+    #[test]
+    fn test_masp_anchors_merklized() {
+        let (mut shell, _, _, _) = setup();
+
+        let convert_key = namada::token::storage_key::masp_convert_anchor_key();
+        let commitment_key =
+            namada::token::storage_key::masp_commitment_anchor_key(0);
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+        // Manually change the anchors
+        shell
+            .state
+            .write_log_mut()
+            .protocol_write(&convert_key, "random_data".serialize_to_vec())
+            .unwrap();
+        shell
+            .state
+            .write_log_mut()
+            .protocol_write(&commitment_key, "random_data".serialize_to_vec())
+            .unwrap();
+        shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // the merkle tree root should change after finalize_block
+        let root_post = shell.shell.state.in_mem().block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+        // Check that the hashes are present in the merkle tree
+        shell.state.commit_block().unwrap();
+        assert!(
+            shell
+                .shell
+                .state
+                .in_mem()
+                .block
+                .tree
+                .has_key(&convert_key)
+                .unwrap()
+        );
+        assert!(
+            shell
+                .shell
+                .state
+                .in_mem()
+                .block
+                .tree
+                .has_key(&commitment_key)
+                .unwrap()
+        );
+    }
+
     /// Test that a tx that has already been applied in the same block
     /// doesn't get reapplied
     #[test]
     fn test_duplicated_tx_same_block() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::albert_keypair();
         let keypair_2 = crate::wallet::defaults::bertha_keypair();
 
@@ -2769,16 +2813,134 @@ mod test_finalize_block {
                     .state
                     .write_log()
                     .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap_or_default()
             );
             assert!(
                 !shell
                     .state
                     .write_log()
                     .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap_or_default()
             );
         }
+        // Commit to check the hashes from storage
+        shell.commit();
+        for wrapper in [&wrapper, &new_wrapper] {
+            assert!(
+                shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.raw_header_hash())
+                    .unwrap()
+            );
+            assert!(
+                !shell
+                    .state
+                    .has_replay_protection_entry(&wrapper.header_hash())
+                    .unwrap()
+            );
+        }
+    }
+
+    // Test two identical txs in the same block. The first one fails but doesn't
+    // write the hash (because of invalid signature). The second one must be
+    // able to execute and pass
+    #[test]
+    fn test_duplicated_tx_same_block_with_failure() {
+        let (mut shell, _, _, _) = setup();
+        let keypair = crate::wallet::defaults::albert_keypair();
+        let keypair_2 = crate::wallet::defaults::bertha_keypair();
+
+        let tx_code = TestWasms::TxWriteStorageKey.read_bytes();
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                keypair.ref_to(),
+                Epoch(0),
+                WRAPPER_GAS_LIMIT.into(),
+                None,
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new(tx_code, None));
+        let key = Key::from(Address::from(&keypair_2.ref_to()).to_db_key())
+            .push(&"test".to_string())
+            .unwrap();
+        wrapper.set_data(Data::new(
+            TxWriteData {
+                key,
+                value: "test".as_bytes().to_vec(),
+            }
+            .serialize_to_vec(),
+        ));
+
+        let mut new_wrapper = wrapper.clone();
+        new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            keypair_2.ref_to(),
+            Epoch(0),
+            WRAPPER_GAS_LIMIT.into(),
+            None,
+        ))));
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
+            vec![new_wrapper.raw_header_hash()],
+            [(0, keypair_2.clone())].into_iter().collect(),
+            None,
+        )));
+        // This is a signature coming from the wrong signer which will be
+        // rejected by the vp
+        wrapper.add_section(Section::Authorization(Authorization::new(
+            vec![wrapper.raw_header_hash()],
+            [(0, keypair.clone())].into_iter().collect(),
+            None,
+        )));
+        new_wrapper.add_section(Section::Authorization(Authorization::new(
+            new_wrapper.sechashes(),
+            [(0, keypair_2)].into_iter().collect(),
+            None,
+        )));
+        wrapper.add_section(Section::Authorization(Authorization::new(
+            wrapper.sechashes(),
+            [(0, keypair)].into_iter().collect(),
+            None,
+        )));
+
+        let mut processed_txs: Vec<ProcessedTx> = vec![];
+        for tx in [&wrapper, &new_wrapper] {
+            processed_txs.push(ProcessedTx {
+                tx: tx.to_bytes().into(),
+                result: TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "".into(),
+                },
+            })
+        }
+
+        // merkle tree root before finalize_block
+        let root_pre = shell.shell.state.in_mem().block.tree.root();
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // the merkle tree root should not change after finalize_block
+        let root_post = shell.shell.state.in_mem().block.tree.root();
+        assert_eq!(root_pre.0, root_post.0);
+
+        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
+        let code = event[1].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+
+        // This hash must be present as succesfully added by the second
+        // transaction
     }
 
     /// Test that if a transaction fails because of out-of-gas,
@@ -2787,7 +2949,7 @@ mod test_finalize_block {
     /// reason has its hash written to storage.
     #[test]
     fn test_tx_hash_handling() {
-        let (mut shell, _, _, _) = setup();
+        let (mut shell, _broadcaster, _, _) = setup();
         let keypair = crate::wallet::defaults::bertha_keypair();
         let mut out_of_gas_wrapper = {
             let tx_code = TestWasms::TxNoOp.read_bytes();
@@ -2962,6 +3124,37 @@ mod test_finalize_block {
         assert!(inner_result.is_err());
 
         for valid_wrapper in [
+            &out_of_gas_wrapper,
+            &unsigned_wrapper,
+            &wrong_commitment_wrapper,
+        ] {
+            assert!(
+                !shell.state.write_log().has_replay_protection_entry(
+                    &valid_wrapper.raw_header_hash()
+                )
+            );
+            assert!(
+                shell
+                    .state
+                    .write_log()
+                    .has_replay_protection_entry(&valid_wrapper.header_hash())
+            );
+        }
+        assert!(
+            shell.state.write_log().has_replay_protection_entry(
+                &failing_wrapper.raw_header_hash()
+            )
+        );
+        assert!(
+            !shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&failing_wrapper.header_hash())
+        );
+
+        // Commit to check the hashes from storage
+        shell.commit();
+        for valid_wrapper in [
             out_of_gas_wrapper,
             unsigned_wrapper,
             wrong_commitment_wrapper,
@@ -2969,33 +3162,29 @@ mod test_finalize_block {
             assert!(
                 !shell
                     .state
-                    .write_log()
                     .has_replay_protection_entry(
                         &valid_wrapper.raw_header_hash()
                     )
-                    .unwrap_or_default()
+                    .unwrap()
             );
             assert!(
                 shell
                     .state
-                    .write_log()
                     .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap_or_default()
+                    .unwrap()
             );
         }
         assert!(
             shell
                 .state
-                .write_log()
                 .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .expect("test failed")
+                .unwrap()
         );
         assert!(
             !shell
                 .state
-                .write_log()
                 .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap_or_default()
+                .unwrap()
         );
     }
 
@@ -3067,14 +3256,12 @@ mod test_finalize_block {
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper_hash)
-                .unwrap_or_default()
         );
         assert!(
             !shell
                 .state
                 .write_log()
                 .has_replay_protection_entry(&wrapper.raw_header_hash())
-                .unwrap_or_default()
         );
     }
 

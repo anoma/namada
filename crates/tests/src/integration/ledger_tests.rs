@@ -359,7 +359,7 @@ fn pos_rewards() -> Result<()> {
     let tx_args = vec![
         "rewards",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &validator_one_rpc,
     ];
@@ -384,7 +384,7 @@ fn pos_rewards() -> Result<()> {
         let tx_args = vec![
             "rewards",
             "--validator",
-            "validator-0",
+            "validator-0-validator",
             "--node",
             &validator_one_rpc,
         ];
@@ -410,7 +410,7 @@ fn pos_rewards() -> Result<()> {
     let query_balance_args = vec![
         "balance",
         "--owner",
-        "validator-0",
+        "validator-0-validator",
         "--token",
         NAM,
         "--node",
@@ -430,7 +430,7 @@ fn pos_rewards() -> Result<()> {
     let tx_args = vec![
         "claim-rewards",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--signing-keys",
         "validator-0-account-key",
         "--node",
@@ -446,7 +446,7 @@ fn pos_rewards() -> Result<()> {
     let query_balance_args = vec![
         "balance",
         "--owner",
-        "validator-0",
+        "validator-0-validator",
         "--token",
         NAM,
         "--node",
@@ -482,7 +482,7 @@ fn test_bond_queries() -> Result<()> {
     // 1. start the ledger node
     let (mut node, _services) = setup::setup()?;
 
-    let validator_alias = "validator-0";
+    let validator_alias = "validator-0-validator";
     // 2. Submit a delegation to the genesis validator
     let tx_args = vec![
         "bond",
@@ -501,7 +501,7 @@ fn test_bond_queries() -> Result<()> {
     let tx_args = vec![
         "bond",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--source",
         BERTHA,
         "--amount",
@@ -619,7 +619,7 @@ fn proposal_submission() -> Result<()> {
     let tx_args = vec![
         "bond",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--source",
         BERTHA,
         "--amount",
@@ -766,7 +766,7 @@ fn proposal_submission() -> Result<()> {
         "--vote",
         "yay",
         "--address",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &validator_one_rpc,
     ];
@@ -953,7 +953,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let tx_args = vec![
         "bond",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--source",
         BERTHA,
         "--amount",
@@ -1047,7 +1047,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "--vote",
         "yay",
         "--address",
-        "validator-0",
+        "validator-0-validator",
         "--ledger-address",
         &validator_one_rpc,
     ];
@@ -1342,7 +1342,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             vec![
                 "bond",
                 "--validator",
-                "validator-0",
+                "validator-0-validator",
                 "--source",
                 source,
                 "--amount",
@@ -1428,11 +1428,13 @@ fn change_validator_metadata() -> Result<()> {
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
 
+    println!("\ndbg0\n");
+
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
         "validator-metadata",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--node",
         &validator_one_rpc,
     ];
@@ -1451,7 +1453,7 @@ fn change_validator_metadata() -> Result<()> {
     let metadata_change_args = vec![
         "change-metadata",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--email",
         "theokayestvalidator@namada.net",
         "--description",
@@ -1485,7 +1487,7 @@ fn change_validator_metadata() -> Result<()> {
     let metadata_change_args = vec![
         "change-metadata",
         "--validator",
-        "validator-0",
+        "validator-0-validator",
         "--website",
         "",
         "--node",

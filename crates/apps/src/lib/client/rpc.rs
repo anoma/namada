@@ -1,13 +1,11 @@
 //! Client RPC queries
 
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
-use itertools::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::{Node, ViewingKey};
@@ -19,7 +17,7 @@ use namada::core::hash::Hash;
 use namada::core::key::*;
 use namada::core::masp::{BalanceOwner, ExtendedViewingKey, PaymentAddress};
 use namada::core::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
-use namada::core::token::{Change, MaspDigitPos};
+use namada::core::token::MaspDigitPos;
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
 use namada::governance::pgf::storage::steward::StewardDetail;
@@ -36,13 +34,14 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
-use namada::proof_of_stake::types::{ValidatorState, WeightedValidator};
-use namada::tx::IndexedTx;
+use namada::proof_of_stake::types::{
+    ValidatorState, ValidatorStateInfo, WeightedValidator,
+};
 use namada::{state as storage, token};
 use namada_sdk::error::{
     is_pinned_error, Error, PinnedBalanceError, QueryError,
 };
-use namada_sdk::masp::{Conversions, MaspChange, MaspTokenRewardData};
+use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::{
@@ -132,8 +131,7 @@ pub async fn query_block(context: &impl Namada) {
         Some(block) => {
             display_line!(
                 context.io(),
-                "Last committed block ID: {}, height: {}, time: {}",
-                block.hash,
+                "Last committed block height: {}, time: {}",
                 block.height,
                 block.time
             );
@@ -152,165 +150,6 @@ pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
     unwrap_client_response::<C, Vec<BlockResults>>(
         RPC.shell().read_results(client).await,
     )
-}
-
-/// Query the specified accepted transfers from the ledger
-pub async fn query_transfers(
-    context: &impl Namada,
-    args: args::QueryTransfers,
-) {
-    let query_token = args.token;
-    let wallet = context.wallet().await;
-    let query_owner = args.owner.map_or_else(
-        || Either::Right(wallet.get_addresses().into_values().collect()),
-        Either::Left,
-    );
-    let mut shielded = context.shielded_mut().await;
-    let _ = shielded.load().await;
-    // Precompute asset types to increase chances of success in decoding
-    let token_map =
-        query_tokens(context, query_token.as_ref(), None, true).await;
-    let tokens = token_map.values().collect();
-    let _ = shielded
-        .precompute_asset_types(context.client(), tokens)
-        .await;
-    // Obtain the effects of all shielded and transparent transactions
-    let transfers = shielded
-        .query_tx_deltas(
-            context.client(),
-            context.io(),
-            &query_owner,
-            &query_token,
-            &wallet.get_viewing_keys(),
-        )
-        .await
-        .unwrap();
-    // To facilitate lookups of human-readable token names
-    let vks = wallet.get_viewing_keys();
-    // To enable ExtendedFullViewingKeys to be displayed instead of ViewingKeys
-    let fvk_map: HashMap<_, _> = vks
-        .values()
-        .map(|fvk| (ExtendedFullViewingKey::from(*fvk).fvk.vk, fvk))
-        .collect();
-    // Now display historical shielded and transparent transactions
-    for (
-        IndexedTx {
-            height, index: idx, ..
-        },
-        (epoch, tfer_delta, tx_delta),
-    ) in transfers
-    {
-        // Check if this transfer pertains to the supplied owner
-        let mut relevant = match &query_owner {
-            Either::Left(BalanceOwner::FullViewingKey(fvk)) => tx_delta
-                .contains_key(&ExtendedFullViewingKey::from(*fvk).fvk.vk),
-            Either::Left(BalanceOwner::Address(owner)) => {
-                tfer_delta.contains_key(owner)
-            }
-            Either::Left(BalanceOwner::PaymentAddress(_owner)) => false,
-            Either::Right(_) => true,
-        };
-        // Realize and decode the shielded changes to enable relevance check
-        let mut shielded_accounts = HashMap::new();
-        for (acc, amt) in tx_delta {
-            // Realize the rewards that would have been attained upon the
-            // transaction's reception
-            let amt = shielded
-                .compute_exchanged_amount(
-                    context.client(),
-                    context.io(),
-                    amt,
-                    epoch,
-                    Conversions::new(),
-                )
-                .await
-                .unwrap()
-                .0;
-            let dec = shielded
-                .decode_combine_sum_to_epoch(context.client(), amt, epoch)
-                .await;
-            shielded_accounts.insert(acc, dec);
-        }
-        // Check if this transfer pertains to the supplied token
-        relevant &= match &query_token {
-            Some(token) => {
-                let check = |(tok, chg): (&Address, &Change)| {
-                    tok == token && !chg.is_zero()
-                };
-                tfer_delta.values().cloned().any(
-                    |MaspChange { ref asset, change }| check((asset, &change)),
-                ) || shielded_accounts
-                    .values()
-                    .cloned()
-                    .any(|x| !x.0.get(token).is_zero())
-            }
-            None => true,
-        };
-        // Filter out those entries that do not satisfy user query
-        if !relevant {
-            continue;
-        }
-        display_line!(
-            context.io(),
-            "Height: {}, Index: {}, Transparent Transfer:",
-            height,
-            idx
-        );
-        // Display the transparent changes first
-        for (account, MaspChange { ref asset, change }) in tfer_delta {
-            if account != MASP {
-                display!(context.io(), "  {}:", account);
-                let token_alias =
-                    lookup_token_alias(context, asset, &account).await;
-                let sign = match change.cmp(&Change::zero()) {
-                    Ordering::Greater => "+",
-                    Ordering::Less => "-",
-                    Ordering::Equal => "",
-                };
-                display!(
-                    context.io(),
-                    " {}{} {}",
-                    sign,
-                    context.format_amount(asset, change.into()).await,
-                    token_alias
-                );
-            }
-            display_line!(context.io(), "");
-        }
-        // Then display the shielded changes afterwards
-        // TODO: turn this to a display impl
-        // (account, amt)
-        for (account, masp_change) in shielded_accounts {
-            if fvk_map.contains_key(&account) {
-                display!(context.io(), "  {}:", fvk_map[&account]);
-                for (token_addr, val) in masp_change.0.components() {
-                    let token_alias =
-                        lookup_token_alias(context, token_addr, &MASP).await;
-                    let sign = match val.cmp(&Change::zero()) {
-                        Ordering::Greater => "+",
-                        Ordering::Less => "-",
-                        Ordering::Equal => "",
-                    };
-                    display!(
-                        context.io(),
-                        " {}{} {}",
-                        sign,
-                        context.format_amount(token_addr, (*val).into()).await,
-                        token_alias,
-                    );
-                }
-                for (asset_type, val) in masp_change.1.components() {
-                    let sign = match val.cmp(&0) {
-                        Ordering::Greater => "+",
-                        Ordering::Less => "-",
-                        Ordering::Equal => "",
-                    };
-                    display!(context.io(), " {}{} {}", sign, val, asset_type,);
-                }
-                display_line!(context.io(), "");
-            }
-        }
-    }
 }
 
 /// Query the raw bytes of given storage key
@@ -1313,12 +1152,12 @@ pub async fn query_proposal_result(
         (proposal_result, proposal_query)
     {
         display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-        if current_epoch > proposal_query.voting_end_epoch {
+        if current_epoch >= proposal_query.voting_end_epoch {
             display_line!(context.io(), "{:4}{}", "", proposal_result);
         } else {
             display_line!(
                 context.io(),
-                "{:4}Still voting until epoch {}",
+                "{:4}Still voting until epoch {} begins.",
                 "",
                 proposal_query.voting_end_epoch
             );
@@ -2007,8 +1846,8 @@ pub async fn query_commission_rate<
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<CommissionPair> {
-    unwrap_client_response::<C, Option<CommissionPair>>(
+) -> CommissionPair {
+    unwrap_client_response::<C, CommissionPair>(
         RPC.vp()
             .pos()
             .validator_commission(client, validator, &epoch)
@@ -2033,8 +1872,8 @@ pub async fn query_validator_state<
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Option<ValidatorState> {
-    unwrap_client_response::<C, Option<ValidatorState>>(
+) -> ValidatorStateInfo {
+    unwrap_client_response::<C, ValidatorStateInfo>(
         RPC.vp()
             .pos()
             .validator_state(client, validator, &epoch)
@@ -2059,7 +1898,7 @@ pub async fn query_and_print_validator_state(
     args: args::QueryValidatorState,
 ) {
     let validator = args.validator;
-    let state: Option<ValidatorState> =
+    let (state, epoch): ValidatorStateInfo =
         query_validator_state(context.client(), &validator, args.epoch).await;
 
     match state {
@@ -2067,33 +1906,44 @@ pub async fn query_and_print_validator_state(
             ValidatorState::Consensus => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the consensus set"
+                    "Validator {validator} is in the consensus set in epoch \
+                     {epoch}"
                 )
             }
             ValidatorState::BelowCapacity => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-capacity set"
+                    "Validator {validator} is in the below-capacity set in \
+                     epoch {epoch}"
                 )
             }
             ValidatorState::BelowThreshold => {
                 display_line!(
                     context.io(),
-                    "Validator {validator} is in the below-threshold set"
+                    "Validator {validator} is in the below-threshold set in \
+                     epoch {epoch}"
                 )
             }
             ValidatorState::Inactive => {
-                display_line!(context.io(), "Validator {validator} is inactive")
+                display_line!(
+                    context.io(),
+                    "Validator {validator} is inactive in epoch {epoch}"
+                )
             }
             ValidatorState::Jailed => {
-                display_line!(context.io(), "Validator {validator} is jailed")
+                display_line!(
+                    context.io(),
+                    "Validator {validator} is jailed in epoch {epoch}"
+                )
             }
         },
         None => display_line!(
             context.io(),
-            "Validator {validator} is either not a validator, or an epoch \
-             before the current epoch has been queried (and the validator \
-             state information is no longer stored)"
+            "Validator {validator} not found in epoch {epoch}. This account \
+             may not be a validator, or the validator account has been \
+             recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
         ),
     }
 }
@@ -2105,29 +1955,34 @@ pub async fn query_and_print_commission_rate(
 ) {
     let validator = args.validator;
 
-    let info: Option<CommissionPair> =
-        query_commission_rate(context.client(), &validator, args.epoch).await;
-    match info {
-        Some(CommissionPair {
-            commission_rate: rate,
-            max_commission_change_per_epoch: change,
-        }) => {
+    let CommissionPair {
+        commission_rate,
+        max_commission_change_per_epoch,
+        epoch: query_epoch,
+    } = query_commission_rate(context.client(), &validator, args.epoch).await;
+    match (commission_rate, max_commission_change_per_epoch) {
+        (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
             display_line!(
                 context.io(),
-                "Validator {} commission rate: {}, max change per epoch: {}",
-                validator.encode(),
-                rate,
-                change
-            );
+                "Validator {validator} commission rate: {commission_rate}, \
+                 max change per epoch: {max_commission_change_per_epoch} in \
+                 epoch {query_epoch}"
+            )
         }
-        None => {
-            display_line!(
-                context.io(),
-                "Address {} is not a validator (did not find commission rate \
-                 and max change)",
-                validator.encode(),
-            );
-        }
+        (None, None) => display_line!(
+            context.io(),
+            "Validator {validator} not found in epoch {query_epoch}. This \
+             account may not be a validator, or the validator account has \
+             been recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
+        ),
+        _ => display_line!(
+            context.io(),
+            "Only one of the commission rate and max commission change per \
+             epoch was found for validator {validator} in epoch \
+             {query_epoch}. This is a bug and should be reported."
+        ),
     }
 }
 
@@ -2188,29 +2043,34 @@ pub async fn query_and_print_metadata(
     }
 
     // Get commission rate info for the current epoch
-    let info: Option<CommissionPair> =
-        query_commission_rate(context.client(), &validator, None).await;
-    match info {
-        Some(CommissionPair {
-            commission_rate: rate,
-            max_commission_change_per_epoch: change,
-        }) => {
+    let CommissionPair {
+        commission_rate,
+        max_commission_change_per_epoch,
+        epoch: query_epoch,
+    } = query_commission_rate(context.client(), &validator, None).await;
+    match (commission_rate, max_commission_change_per_epoch) {
+        (Some(commission_rate), Some(max_commission_change_per_epoch)) => {
             display_line!(
                 context.io(),
-                "Validator {} commission rate: {}, max change per epoch: {}",
-                validator.encode(),
-                rate,
-                change
-            );
+                "Validator {validator} commission rate: {commission_rate}, \
+                 max change per epoch: {max_commission_change_per_epoch} in \
+                 epoch {query_epoch}"
+            )
         }
-        None => {
-            display_line!(
-                context.io(),
-                "Address {} is not a validator (did not find commission rate \
-                 and max change)",
-                validator.encode(),
-            );
-        }
+        (None, None) => display_line!(
+            context.io(),
+            "Validator {validator} not found in epoch {query_epoch}. This \
+             account may not be a validator, or the validator account has \
+             been recently initialized and may not be active yet. It is also \
+             possible that this data is no longer available in storage if an \
+             epoch before the current epoch has been queried."
+        ),
+        _ => display_line!(
+            context.io(),
+            "Only one of the commission rate and max commission change per \
+             epoch was found for validator {validator} in epoch \
+             {query_epoch}. This is a bug and should be reported."
+        ),
     }
 }
 
@@ -2388,13 +2248,19 @@ pub async fn query_delegations<N: Namada>(
     let delegations: HashSet<Address> = unwrap_client_response::<N::Client, _>(
         RPC.vp()
             .pos()
-            .delegation_validators(context.client(), &owner)
+            .delegation_validators(context.client(), &owner, &None)
             .await,
     );
     if delegations.is_empty() {
-        display_line!(context.io(), "No delegations found");
+        display_line!(
+            context.io(),
+            "No delegations found active in the current epoch"
+        );
     } else {
-        display_line!(context.io(), "Found delegations to:");
+        display_line!(
+            context.io(),
+            "Found delegations in the current epoch to:"
+        );
         for delegation in delegations {
             display_line!(context.io(), "  {delegation}");
         }
@@ -2799,25 +2665,26 @@ async fn get_validator_stake<C: namada::ledger::queries::Client + Sync>(
     )
 }
 
-pub async fn get_delegators_delegation<
+pub async fn get_delegation_validators<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
 ) -> HashSet<Address> {
-    namada_sdk::rpc::get_delegators_delegation(client, address)
+    let epoch = namada_sdk::rpc::query_epoch(client).await.unwrap();
+    namada_sdk::rpc::get_delegation_validators(client, address, epoch)
         .await
         .unwrap()
 }
 
-pub async fn get_delegators_delegation_at<
+pub async fn get_delegations_of_delegator_at<
     C: namada::ledger::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
     epoch: Epoch,
 ) -> HashMap<Address, token::Amount> {
-    namada_sdk::rpc::get_delegators_delegation_at(client, address, epoch)
+    namada_sdk::rpc::get_delegations_of_delegator_at(client, address, epoch)
         .await
         .unwrap()
 }

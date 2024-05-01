@@ -547,7 +547,7 @@ fn vote_proposal(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Yay,
             voter: defaults::albert_address(),
-            delegations: vec![defaults::validator_address()],
+            delegation_validators: vec![defaults::validator_address()],
         },
         None,
         None,
@@ -560,7 +560,7 @@ fn vote_proposal(c: &mut Criterion) {
             id: 0,
             vote: ProposalVote::Nay,
             voter: defaults::validator_address(),
-            delegations: vec![],
+            delegation_validators: vec![],
         },
         None,
         None,
@@ -645,11 +645,11 @@ fn become_validator(c: &mut Criterion) {
                 // Initialize the account to be able to use it
                 shell
                     .state
-                    .write_bytes(
+                    .write(
                         &namada::core::storage::Key::validity_predicate(
                             &address,
                         ),
-                        vec![],
+                        Vec::<u8>::new(),
                     )
                     .unwrap();
                 shell

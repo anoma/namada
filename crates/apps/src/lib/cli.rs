@@ -246,7 +246,6 @@ pub mod cmds {
                 .subcommand(QueryNextEpochInfo::def().display_order(5))
                 .subcommand(QueryStatus::def().display_order(5))
                 .subcommand(QueryAccount::def().display_order(5))
-                .subcommand(QueryTransfers::def().display_order(5))
                 .subcommand(QueryConversions::def().display_order(5))
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
@@ -318,7 +317,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryNextEpochInfo);
             let query_status = Self::parse_with_ctx(matches, QueryStatus);
             let query_account = Self::parse_with_ctx(matches, QueryAccount);
-            let query_transfers = Self::parse_with_ctx(matches, QueryTransfers);
             let query_conversions =
                 Self::parse_with_ctx(matches, QueryConversions);
             let query_masp_reward_tokens =
@@ -382,7 +380,6 @@ pub mod cmds {
                 .or(query_epoch)
                 .or(query_next_epoch_info)
                 .or(query_status)
-                .or(query_transfers)
                 .or(query_conversions)
                 .or(query_masp_reward_tokens)
                 .or(query_block)
@@ -473,7 +470,6 @@ pub mod cmds {
         QueryNextEpochInfo(QueryNextEpochInfo),
         QueryStatus(QueryStatus),
         QueryAccount(QueryAccount),
-        QueryTransfers(QueryTransfers),
         QueryConversions(QueryConversions),
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
@@ -1820,25 +1816,6 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryTransfers(pub args::QueryTransfers<args::CliTypes>);
-
-    impl SubCmd for QueryTransfers {
-        const CMD: &'static str = "show-transfers";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryTransfers(args::QueryTransfers::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Query the accepted transfers to date.")
-                .add_args::<args::QueryTransfers<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct QueryCommissionRate(
         pub args::QueryCommissionRate<args::CliTypes>,
     );
@@ -3029,6 +3006,7 @@ pub mod args {
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
     };
+    use namada_sdk::DEFAULT_GAS_LIMIT;
 
     use super::context::*;
     use super::utils::*;
@@ -3139,8 +3117,10 @@ pub mod args {
     pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
     pub const FILE_PATH: Arg<String> = arg("file");
     pub const FORCE: ArgFlag = flag("force");
-    pub const GAS_LIMIT: ArgDefault<GasLimit> =
-        arg_default("gas-limit", DefaultFn(|| GasLimit::from(25_000)));
+    pub const GAS_LIMIT: ArgDefault<GasLimit> = arg_default(
+        "gas-limit",
+        DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
+    );
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -3193,6 +3173,7 @@ pub mod args {
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
+    pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
     pub const NUT: ArgFlag = flag("nut");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
@@ -5397,41 +5378,6 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<QueryTransfers<SdkTypes>> for QueryTransfers<CliTypes> {
-        fn to_sdk(self, ctx: &mut Context) -> QueryTransfers<SdkTypes> {
-            let query = self.query.to_sdk(ctx);
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            QueryTransfers::<SdkTypes> {
-                query,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
-                token: self.token.map(|x| chain_ctx.get(&x)),
-            }
-        }
-    }
-
-    impl Args for QueryTransfers<CliTypes> {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let owner = BALANCE_OWNER.parse(matches);
-            let token = TOKEN_OPT.parse(matches);
-            Self {
-                query,
-                owner,
-                token,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
-                .arg(BALANCE_OWNER.def().help(
-                    "The account address that queried transfers must involve.",
-                ))
-                .arg(TOKEN_OPT.def().help(
-                    "The token address that queried transfers must involve.",
-                ))
-        }
-    }
-
     impl CliToSdk<QueryBonds<SdkTypes>> for QueryBonds<CliTypes> {
         fn to_sdk(self, ctx: &mut Context) -> QueryBonds<SdkTypes> {
             let query = self.query.to_sdk(ctx);
@@ -6285,12 +6231,28 @@ pub mod args {
             .arg(WALLET_ALIAS_FORCE.def().help(
                 "Override the alias without confirmation if it already exists.",
             ))
-            .arg(EXPIRATION_OPT.def().help(
-                "The expiration datetime of the transaction, after which the \
-                 tx won't be accepted anymore. All of these examples are \
-                 equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
-                 12:12:12Z\n2012-  12-12T12:  12:12Z",
-            ))
+            .arg(
+                EXPIRATION_OPT
+                    .def()
+                    .help(
+                        "The expiration datetime of the transaction, after \
+                         which the tx won't be accepted anymore. If not \
+                         provided, a default will be set. All of these \
+                         examples are \
+                         equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                         12:12:12Z\n2012-  12-12T12:  12:12Z",
+                    )
+                    .conflicts_with_all([NO_EXPIRATION.name]),
+            )
+            .arg(
+                NO_EXPIRATION
+                    .def()
+                    .help(
+                        "Force the construction of the transaction without an \
+                         expiration (highly discouraged).",
+                    )
+                    .conflicts_with_all([EXPIRATION_OPT.name]),
+            )
             .arg(
                 DISPOSABLE_SIGNING_KEY
                     .def()
@@ -6373,6 +6335,15 @@ pub mod args {
             let wrapper_fee_payer = FEE_PAYER_OPT.parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
+            let no_expiration = NO_EXPIRATION.parse(matches);
+            let expiration = if no_expiration {
+                TxExpiration::NoExpiration
+            } else {
+                match expiration {
+                    Some(exp) => TxExpiration::Custom(exp),
+                    None => TxExpiration::Default,
+                }
+            };
             Self {
                 dry_run,
                 dry_run_wrapper,

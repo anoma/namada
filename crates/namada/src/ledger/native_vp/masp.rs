@@ -70,29 +70,20 @@ where
     S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
-    // Check that the transaction correctly revealed the nullifiers
+    // Check that the transaction correctly revealed the nullifiers, if needed
     fn valid_nullifiers_reveal(
         &self,
         keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<()> {
+        // Support set to check that a nullifier was not revealed more
+        // than once in the same tx
         let mut revealed_nullifiers = HashSet::new();
-        let shielded_spends = match transaction.sapling_bundle() {
-            Some(bundle) if !bundle.shielded_spends.is_empty() => {
-                &bundle.shielded_spends
-            }
-            _ => {
-                let error = native_vp::Error::new_const(
-                    "Missing expected spend descriptions in shielded \
-                     transaction",
-                )
-                .into();
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-        };
 
-        for description in shielded_spends {
+        for description in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |bundle| &bundle.shielded_spends)
+        {
             let nullifier_key = masp_nullifier_key(&description.nullifier);
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
@@ -124,6 +115,7 @@ where
             revealed_nullifiers.insert(nullifier_key);
         }
 
+        // Check that no unneeded nullifier has been revealed
         for nullifier_key in
             keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
         {
@@ -611,32 +603,46 @@ where
             // Handle shielded input
             // The following boundary conditions must be satisfied
             // 1. Zero transparent input
-            // 2. The spend descriptions' anchors are valid
-            // 3. The convert descriptions's anchors are valid
-            // 4. The nullifiers provided by the transaction have not been
-            // revealed previously (even in the same tx) and no unneeded
-            // nullifier is being revealed by the tx
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vin.is_empty() {
-                    let error = native_vp::Error::new_alloc(format!(
-                        "Transparent input to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vin.len()
-                    ))
-                    .into();
-                    tracing::debug!("{error}");
-                    return Err(error);
-                }
+            // 2. At least one shielded input
+            // 3. The spend descriptions' anchors are valid
+            // 4. The convert descriptions's anchors are valid
+            if shielded_tx
+                .transparent_bundle()
+                .is_some_and(|bundle| !bundle.vin.is_empty())
+            {
+                let error = native_vp::Error::new_const(
+                    "Transparent input to a transaction from the masp must be \
+                     0",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+
+            if !shielded_tx
+                .sapling_bundle()
+                .is_some_and(|bundle| !bundle.shielded_spends.is_empty())
+            {
+                return Err(Error::NativeVpError(
+                    native_vp::Error::SimpleMessage(
+                        "Missing expected shielded spends",
+                    ),
+                ));
             }
 
             self.valid_spend_descriptions_anchor(&shielded_tx)?;
             self.valid_convert_descriptions_anchor(&shielded_tx)?;
-            self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
         }
 
         // The transaction must correctly update the note commitment tree
-        // in storage with the new output descriptions
+        // in storage with the new output descriptions and also reveal the
+        // nullifiers correctly (only if needed) NOTE: these two checks
+        // validate the keys that the transaction write in storage and therefore
+        // must be done regardless of the type of transaction (shielding,
+        // shielded, unshielding) since a malicious tx could try to write keys
+        // in an invalid way
         self.valid_note_commitment_update(&shielded_tx)?;
+        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
 
         if transfer.target != Address::Internal(Masp) {
             // Handle transparent output
@@ -754,28 +760,23 @@ where
             // 2. At least one shielded output
 
             // Satisfies 1.
-            if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                if !transp_bundle.vout.is_empty() {
-                    let error = native_vp::Error::new_alloc(format!(
-                        "Transparent output to a transaction from the masp \
-                         must be 0 but is {}",
-                        transp_bundle.vout.len()
-                    ))
-                    .into();
-                    tracing::debug!("{error}");
-                    return Err(error);
-                }
+            if shielded_tx
+                .transparent_bundle()
+                .is_some_and(|bundle| !bundle.vout.is_empty())
+            {
+                let error = native_vp::Error::new_const(
+                    "Transparent output to a transaction from the masp must \
+                     be 0",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
             }
 
             // Staisfies 2.
-            if shielded_tx
+            if !shielded_tx
                 .sapling_bundle()
-                // NOTE: when resolving git merge conflicts (you will, trust
-                // me), do **NOT** take this branch, because it
-                // is buggy. if the sapling bundle is empty,
-                // this branch is not executed, and in that case
-                // there were no shielded outputs.
-                .is_some_and(|bundle| bundle.shielded_outputs.is_empty())
+                .is_some_and(|bundle| !bundle.shielded_outputs.is_empty())
             {
                 let error = native_vp::Error::new_const(
                     "There were no shielded outputs in the sapling bundle",

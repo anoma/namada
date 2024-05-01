@@ -262,7 +262,10 @@ mod test {
         let tx_hash = Hash::sha256(&tx_no_op);
         let key = Key::wasm_code(&tx_hash);
         let len_key = Key::wasm_code_len(&tx_hash);
-        client.state.db_write(&key, &tx_no_op).unwrap();
+        client
+            .state
+            .db_write(&key, &tx_no_op.serialize_to_vec())
+            .unwrap();
         client
             .state
             .db_write(&len_key, (tx_no_op.len() as u64).serialize_to_vec())

@@ -67,8 +67,6 @@ pub enum TxRuntimeError {
     StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::storage::Error),
-    #[error("Trying to read a permanent value with read_temp")]
-    ReadPermanentValueError,
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Address error: {0}")]
@@ -728,23 +726,16 @@ where
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (log_val, gas) = write_log.read(&key);
+    let (log_val, gas) = write_log.read_temp(&key);
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let value = match log_val {
-        Some(write_log::StorageModification::Temp { ref value }) => {
-            Ok(Some(value.clone()))
-        }
-        None => Ok(None),
-        _ => Err(TxRuntimeError::ReadPermanentValueError),
-    }?;
-    match value {
+    match log_val {
         Some(value) => {
             let len: i64 = value
                 .len()
                 .try_into()
                 .map_err(TxRuntimeError::NumConversionError)?;
             let result_buffer = unsafe { env.ctx.result_buffer.get() };
-            result_buffer.replace(value);
+            result_buffer.replace(value.clone());
             Ok(len)
         }
         None => Ok(HostEnvResult::Fail.to_i64()),
@@ -862,10 +853,6 @@ where
             }
             Some(write_log::StorageModification::InitAccount { .. }) => {
                 // a VP of a new account doesn't need to be iterated
-                continue;
-            }
-            Some(write_log::StorageModification::Temp { .. }) => {
-                // temporary values are not returned by the iterator
                 continue;
             }
             None => {
@@ -1659,28 +1646,6 @@ where
     Ok(tx_idx.0)
 }
 
-/// Getting the block hash function exposed to the wasm VM Tx environment. The
-/// hash is that of the block to which the current transaction is being applied.
-pub fn tx_get_block_hash<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
-    result_ptr: u64,
-) -> TxResult<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    let state = env.state();
-    let (hash, gas) = state.in_mem().get_block_hash();
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let gas = env
-        .memory
-        .write_bytes(result_ptr, hash.0)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)
-}
-
 /// Getting the block epoch function exposed to the wasm VM Tx
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
@@ -1855,29 +1820,6 @@ where
         }
         None => HostEnvResult::Fail.to_i64(),
     })
-}
-
-/// Getting the block hash function exposed to the wasm VM VP environment. The
-/// hash is that of the block to which the current transaction is being applied.
-pub fn vp_get_block_hash<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
-    result_ptr: u64,
-) -> vp_host_fns::EnvResult<()>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
-{
-    let gas_meter = env.ctx.gas_meter();
-    let state = env.state();
-    let hash = vp_host_fns::get_block_hash(gas_meter, &state)?;
-    let gas = env
-        .memory
-        .write_bytes(result_ptr, hash.0)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)
 }
 
 /// Getting the transaction hash function exposed to the wasm VM VP environment.

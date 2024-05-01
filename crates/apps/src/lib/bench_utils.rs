@@ -15,9 +15,9 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
+use namada::address::MASP;
 use namada::core::address::{self, Address, InternalAddress};
 use namada::core::chain::ChainId;
-use namada::core::hash::Hash;
 use namada::core::key::common::SecretKey;
 use namada::core::masp::{
     ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
@@ -396,7 +396,7 @@ impl BenchShell {
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
     }
 
-    /// Execute the tx and retur a set of verifiers inserted by the tx.
+    /// Execute the tx and return a set of verifiers inserted by the tx.
     pub fn execute_tx(
         &mut self,
         batched_tx: &BatchedTxRef,
@@ -584,7 +584,7 @@ impl BenchShell {
         self.inner
             .state
             .in_mem_mut()
-            .begin_block(Hash::default().into(), last_height + 1)
+            .begin_block(last_height + 1)
             .unwrap();
 
         self.inner.commit();
@@ -1107,7 +1107,13 @@ impl BenchShieldedCtx {
                 source: source.effective_address(),
                 target: target.effective_address(),
                 token: address::testing::nam(),
-                amount: DenominatedAmount::native(amount),
+                amount: if source.effective_address().eq(&MASP)
+                    && target.effective_address().eq(&MASP)
+                {
+                    DenominatedAmount::native(0.into())
+                } else {
+                    DenominatedAmount::native(amount)
+                },
                 key: None,
                 shielded: shielded_section_hash,
             },

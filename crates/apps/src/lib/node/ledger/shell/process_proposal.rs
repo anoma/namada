@@ -476,9 +476,12 @@ where
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
-                    temp_state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
+                    &mut ShellParams::new(
+                        &RefCell::new(tx_gas_meter),
+                        temp_state,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    ),
                 ) {
                     return TxResult {
                         code: ResultCode::FeeError.into(),
@@ -521,9 +524,7 @@ fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
-    temp_state: &mut TempWlState<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -531,7 +532,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        temp_state,
+        shell_params.state,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -544,12 +545,10 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_state,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
 
-    protocol::transfer_fee(temp_state, proposer, wrapper)
+    protocol::transfer_fee(shell_params.state, proposer, wrapper)
         .map_err(Error::TxApply)
 }
 
@@ -1180,7 +1179,7 @@ mod test_process_proposal {
         // Write wrapper hash to storage
         let mut batch = namada::state::testing::TestState::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
+        let hash_key = replay_protection::current_key(&wrapper_unsigned_hash);
         shell
             .state
             .write_replay_protection_entry(&mut batch, &hash_key)
@@ -1303,7 +1302,8 @@ mod test_process_proposal {
 
         // Write inner hash to storage
         let mut batch = namada::state::testing::TestState::batch();
-        let hash_key = replay_protection::last_key(&wrapper.raw_header_hash());
+        let hash_key =
+            replay_protection::current_key(&wrapper.raw_header_hash());
         shell
             .state
             .write_replay_protection_entry(&mut batch, &hash_key)

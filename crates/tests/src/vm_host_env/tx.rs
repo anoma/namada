@@ -510,7 +510,6 @@ mod native_tx_host_env {
     native_host_fn!(tx_get_block_height() -> u64);
     native_host_fn!(tx_get_tx_index() -> u32);
     native_host_fn!(tx_get_block_header(height: u64) -> i64);
-    native_host_fn!(tx_get_block_hash(result_ptr: u64));
     native_host_fn!(tx_get_block_epoch() -> u64);
     native_host_fn!(tx_get_pred_epochs() -> i64);
     native_host_fn!(tx_get_native_token(result_ptr: u64));

@@ -78,7 +78,7 @@ pub trait StateRead: StorageRead + Debug {
 
     /// Returns a value from the specified subspace and the gas cost
     fn db_read(&self, key: &storage::Key) -> Result<(Option<Vec<u8>>, u64)> {
-        tracing::debug!("storage read key {}", key);
+        tracing::trace!("storage read key {}", key);
 
         match self.db().read_subspace_val(key)? {
             Some(v) => {
@@ -194,14 +194,14 @@ macro_rules! impl_storage_read {
                 key: &storage::Key,
             ) -> namada_storage::Result<Option<Vec<u8>>> {
                 // try to read from the write log first
-                let (log_val, gas) = self.write_log().read_persistent(key);
+                let (log_val, gas) = self.write_log().read(key);
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
-                    Some(write_log::PersistentStorageModification::Write { value }) => {
+                    Some(write_log::StorageModification::Write { value }) => {
                         Ok(Some(value.clone()))
                     }
-                    Some(write_log::PersistentStorageModification::Delete) => Ok(None),
-                    Some(write_log::PersistentStorageModification::InitAccount {
+                    Some(write_log::StorageModification::Delete) => Ok(None),
+                    Some(write_log::StorageModification::InitAccount {
                         ref vp_code_hash,
                     }) => Ok(Some(vp_code_hash.to_vec())),
                     None => {
@@ -224,8 +224,8 @@ macro_rules! impl_storage_read {
                         // the given key has been deleted
                         Ok(false)
                     }
-                    Some(&write_log::StorageModification::Temp { .. }) | None => {
-                        // when not found in write log or only found a temporary value, try to check the storage
+                    None => {
+                        // when not found in write log try to check the storage
                         let (present, gas) = self.db_has_key(key).into_storage_result()?;
                         self.charge_gas(gas).into_storage_result()?;
                         Ok(present)
@@ -278,14 +278,6 @@ macro_rules! impl_storage_read {
                     StateRead::get_block_header(self, Some(height)).into_storage_result()?;
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(header)
-            }
-
-            fn get_block_hash(
-                &self,
-            ) -> std::result::Result<storage::BlockHash, namada_storage::Error> {
-                let (hash, gas) = self.in_mem().get_block_hash();
-                self.charge_gas(gas).into_storage_result()?;
-                Ok(hash)
             }
 
             fn get_block_epoch(
@@ -407,8 +399,6 @@ pub fn merklize_all_keys(_key: &storage::Key) -> bool {
 pub enum Error {
     #[error("TEMPORARY error: {error}")]
     Temporary { error: String },
-    #[error("Found an unknown key: {key}")]
-    UnknownKey { key: String },
     #[error("Storage key error {0}")]
     KeyError(namada_core::storage::Error),
     #[error("Coding error: {0}")]
@@ -554,8 +544,7 @@ where
                                 let gas = vp_code_hash.len() as u64;
                                 return Some((key, vp_code_hash.to_vec(), gas));
                             }
-                            write_log::StorageModification::Delete
-                            | write_log::StorageModification::Temp { .. } => {
+                            write_log::StorageModification::Delete => {
                                 continue;
                             }
                         }
@@ -607,7 +596,6 @@ pub mod testing {
             let tree = MerkleTree::default();
             let block = BlockStorage {
                 tree,
-                hash: BlockHash::default(),
                 height: BlockHeight::default(),
                 epoch: Epoch::default(),
                 pred_epochs: Epochs::default(),

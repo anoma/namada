@@ -1,10 +1,12 @@
 //! Implementation of the [`RequestPrepareProposal`] ABCI++ method for the Shell
 
+use std::cell::RefCell;
+
 use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::TxGasMeter;
-use namada::ledger::protocol;
+use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
 use namada::tx::data::{TxType, WrapperTx};
@@ -296,9 +298,12 @@ where
             protocol::get_fee_unshielding_transaction(&tx, &wrapper),
             block_proposer,
             proposer_local_config,
-            temp_state,
-            vp_wasm_cache,
-            tx_wasm_cache,
+            &mut ShellParams::new(
+                &RefCell::new(tx_gas_meter),
+                temp_state,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            ),
         ) {
             Ok(()) => Ok(u64::from(wrapper.gas_limit)),
             Err(_) => Err(()),
@@ -313,9 +318,7 @@ fn prepare_proposal_fee_check<D, H, CA>(
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_state: &mut TempWlState<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<(), Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -336,7 +339,7 @@ where
                 ))))?
                 .to_owned(),
             None => namada::ledger::parameters::read_gas_cost(
-                temp_state,
+                shell_params.state,
                 &wrapper.fee.token,
             )
             .expect("Must be able to read gas cost parameter")
@@ -351,12 +354,10 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_state,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
 
-    protocol::transfer_fee(temp_state, proposer, wrapper)
+    protocol::transfer_fee(shell_params.state, proposer, wrapper)
         .map_err(Error::TxApply)
 }
 
@@ -444,7 +445,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -721,7 +722,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -735,10 +736,10 @@ mod test_prepare_proposal {
 
         // Write wrapper hash to storage
         let wrapper_unsigned_hash = wrapper.header_hash();
-        let hash_key = replay_protection::last_key(&wrapper_unsigned_hash);
+        let hash_key = replay_protection::current_key(&wrapper_unsigned_hash);
         shell
             .state
-            .write_bytes(&hash_key, vec![])
+            .write(&hash_key, Vec::<u8>::new())
             .expect("Test failed");
 
         let req = RequestPrepareProposal {
@@ -802,7 +803,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -816,10 +817,10 @@ mod test_prepare_proposal {
         let inner_unsigned_hash = wrapper.raw_header_hash();
 
         // Write inner hash to storage
-        let hash_key = replay_protection::last_key(&inner_unsigned_hash);
+        let hash_key = replay_protection::current_key(&inner_unsigned_hash);
         shell
             .state
-            .write_bytes(&hash_key, vec![])
+            .write(&hash_key, Vec::<u8>::new())
             .expect("Test failed");
 
         let req = RequestPrepareProposal {
@@ -899,7 +900,7 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();

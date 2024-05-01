@@ -8,9 +8,7 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
-use namada_core::storage::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, Key, TxIndex,
-};
+use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_core::token::Transfer;
 use namada_ibc::{decode_message, IbcEvent, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
@@ -65,10 +63,6 @@ where
         &self,
         height: BlockHeight,
     ) -> Result<Option<Header>, namada_storage::Error>;
-
-    /// Getting the block hash. The height is that of the block to which the
-    /// current transaction is being applied.
-    fn get_block_hash(&self) -> Result<BlockHash, namada_storage::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.

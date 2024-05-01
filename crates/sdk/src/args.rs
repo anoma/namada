@@ -1952,6 +1952,34 @@ pub struct QueryRawBytes<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
 }
 
+/// The possible values for the tx expiration
+#[derive(Clone, Debug, Default)]
+pub enum TxExpiration {
+    /// Force the tx to have no expiration
+    NoExpiration,
+    /// Request the default expiration
+    #[default]
+    Default,
+    /// User-provided custom expiration
+    Custom(DateTimeUtc),
+}
+
+impl TxExpiration {
+    /// Converts the expiration argument into an optional [`DateTimeUtc`]
+    pub fn to_datetime(&self) -> Option<DateTimeUtc> {
+        match self {
+            TxExpiration::NoExpiration => None,
+            // Default to 1 hour
+            TxExpiration::Default =>
+            {
+                #[allow(clippy::disallowed_methods)]
+                Some(DateTimeUtc::now() + namada_core::time::Duration::hours(1))
+            }
+            TxExpiration::Custom(exp) => Some(exp.to_owned()),
+        }
+    }
+}
+
 /// Common transaction arguments
 #[derive(Clone, Debug)]
 pub struct Tx<C: NamadaTypes = SdkTypes> {
@@ -1986,7 +2014,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
-    pub expiration: Option<DateTimeUtc>,
+    pub expiration: TxExpiration,
     /// Generate an ephimeral signing key to be used only once to sign a
     /// wrapper tx
     pub disposable_signing_key: bool,
@@ -2104,11 +2132,8 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
         self.tx(|x| Tx { gas_limit, ..x })
     }
     /// The optional expiration of the transaction
-    fn expiration(self, expiration: DateTimeUtc) -> Self {
-        self.tx(|x| Tx {
-            expiration: Some(expiration),
-            ..x
-        })
+    fn expiration(self, expiration: TxExpiration) -> Self {
+        self.tx(|x| Tx { expiration, ..x })
     }
     /// Generate an ephimeral signing key to be used only once to sign a
     /// wrapper tx

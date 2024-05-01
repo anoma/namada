@@ -464,18 +464,6 @@ impl CliApi {
                         rpc::query_and_print_validator_state(&namada, args)
                             .await;
                     }
-                    Sub::QueryTransfers(QueryTransfers(args)) => {
-                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                        let ledger_address =
-                            chain_ctx.get(&args.query.ledger_address);
-                        let client = client.unwrap_or_else(|| {
-                            C::from_tendermint_address(&ledger_address)
-                        });
-                        client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx);
-                        let namada = ctx.to_sdk(client, io);
-                        rpc::query_transfers(&namada, args).await;
-                    }
                     Sub::QueryConversions(QueryConversions(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =

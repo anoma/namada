@@ -59,11 +59,9 @@ mod tests {
 
         super::value(&mut state, &key, |v: &mut i32| *v *= 2)?;
 
-        let new_val = state.read_bytes(&key)?;
-        let new_val = match new_val {
-            Some(new_val) => <i32>::try_from_slice(&new_val)?,
-            None => return Err(eyre!("no value found")),
-        };
+        let new_val = state
+            .read::<i32>(&key)?
+            .ok_or_else(|| eyre!("no value found"))?;
         assert_eq!(new_val, 42);
         Ok(())
     }

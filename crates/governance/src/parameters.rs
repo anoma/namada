@@ -33,6 +33,8 @@ pub struct GovernanceParameters {
     pub max_proposal_content_size: u64,
     /// Minimum number of epochs between the end and activation epochs
     pub min_proposal_grace_epochs: u64,
+    /// Maximum number of epochs between current epoch and start epoch
+    pub max_proposal_latency: u64,
 }
 
 impl Default for GovernanceParameters {
@@ -44,6 +46,7 @@ impl Default for GovernanceParameters {
             max_proposal_period: 27,
             max_proposal_content_size: 10_000,
             min_proposal_grace_epochs: 6,
+            max_proposal_latency: 30,
         }
     }
 }
@@ -61,6 +64,7 @@ impl GovernanceParameters {
             max_proposal_period,
             max_proposal_content_size,
             min_proposal_grace_epochs,
+            max_proposal_latency,
         } = self;
 
         let min_proposal_fund_key =
@@ -91,6 +95,10 @@ impl GovernanceParameters {
             goverance_storage::get_min_proposal_grace_epochs_key();
         storage
             .write(&min_proposal_grace_epochs_key, min_proposal_grace_epochs)?;
+
+        let max_proposal_latency_key =
+            goverance_storage::get_max_proposal_latency_key();
+        storage.write(&max_proposal_latency_key, max_proposal_latency)?;
 
         let counter_key = goverance_storage::get_counter_key();
         storage.write(&counter_key, u64::MIN)

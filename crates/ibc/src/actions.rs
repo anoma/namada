@@ -21,6 +21,7 @@ use namada_state::{
 };
 use namada_token as token;
 use namada_tx::TxCommitments;
+use token::DenominatedAmount;
 
 use crate::{IbcActions, IbcCommonContext, IbcStorageContext};
 
@@ -77,10 +78,6 @@ where
         height: namada_storage::BlockHeight,
     ) -> StorageResult<Option<namada_storage::Header>> {
         StorageRead::get_block_header(self.state, height)
-    }
-
-    fn get_block_hash(&self) -> StorageResult<namada_storage::BlockHash> {
-        self.state.get_block_hash()
     }
 
     fn get_block_epoch(&self) -> StorageResult<namada_storage::Epoch> {
@@ -277,9 +274,18 @@ where
     D: DB + for<'iter> DBIter<'iter> + 'static,
     H: StorageHasher + 'static,
 {
+    let denom = token::read_denom(state, token)?.ok_or_else(|| {
+        StorageError::new_alloc(format!("No denomination for {token}"))
+    })?;
+    let amount = DenominatedAmount::new(target.amount, denom).canonical();
+    if amount.denom().0 != 0 {
+        return Err(StorageError::new_alloc(format!(
+            "The amount for the IBC transfer should be an integer: {amount}"
+        )));
+    }
     let token = PrefixedCoin {
         denom: token.to_string().parse().expect("invalid token"),
-        amount: target.amount.into(),
+        amount: amount.amount().into(),
     };
     let packet_data = PacketData {
         token,

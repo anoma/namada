@@ -270,11 +270,24 @@ pub trait IbcCommonContext: IbcStorageContext {
     /// Get the timestamp on this chain
     fn host_timestamp(&self) -> Result<Timestamp> {
         let height = self.get_block_height()?;
-        let header = self.get_block_header(height)?.ok_or_else(|| {
-            ContextError::from(ClientError::Other {
-                description: "No host header".to_string(),
+        let header = self
+            .get_block_header(height)?
+            .or({
+                if height > BlockHeight::first() {
+                    // When the latest header doesn't exist before
+                    // `FinalizeBlock` phase, e.g. dry-run, use the previous
+                    // header's time. It should be OK though the constraints
+                    // become a bit stricter when checking timeouts.
+                    self.get_block_header(height.prev_height())?
+                } else {
+                    None
+                }
             })
-        })?;
+            .ok_or_else(|| {
+                ContextError::from(ClientError::Other {
+                    description: "No host block header".to_string(),
+                })
+            })?;
         let time = TmTime::try_from(header.time).map_err(|_| {
             ContextError::ClientError(ClientError::Other {
                 description: "Converting to Tendermint time failed".to_string(),

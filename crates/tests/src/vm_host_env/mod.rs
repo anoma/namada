@@ -28,7 +28,7 @@ mod tests {
     use namada::account::pks_handle;
     use namada::core::hash::Hash;
     use namada::core::key::*;
-    use namada::core::storage::{self, BlockHash, BlockHeight, Key, KeySeg};
+    use namada::core::storage::{self, BlockHeight, Key, KeySeg};
     use namada::core::time::DateTimeUtc;
     use namada::core::{address, key};
     use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
@@ -230,7 +230,7 @@ mod tests {
         tx_host_env::with(|env| {
             // store wasm code
             let key = Key::wasm_code(&code_hash);
-            env.state.write_bytes(&key, &code).unwrap();
+            env.state.write(&key, &code).unwrap();
         });
         tx::ctx().init_account(code_hash, &None, &[]).unwrap();
     }
@@ -300,7 +300,7 @@ mod tests {
 
         // Writing the VP to storage directly should fail
         let vp_key = Key::validity_predicate(&vp_owner);
-        tx::ctx().write_bytes(&vp_key, vp_hash).unwrap();
+        tx::ctx().write(&vp_key, vp_hash).unwrap();
     }
 
     /// Test that a tx initializing a new account with validity predicate that
@@ -347,10 +347,6 @@ mod tests {
         assert_eq!(
             tx::ctx().get_block_height().unwrap(),
             tx_host_env::with(|env| env.state.in_mem().get_block_height().0)
-        );
-        assert_eq!(
-            tx::ctx().get_block_hash().unwrap(),
-            tx_host_env::with(|env| env.state.in_mem().get_block_hash().0)
         );
         assert_eq!(
             tx::ctx().get_block_epoch().unwrap(),
@@ -613,10 +609,6 @@ mod tests {
             vp_host_env::with(|env| env.state.in_mem().get_block_height().0)
         );
         assert_eq!(
-            vp::CTX.get_block_hash().unwrap(),
-            vp_host_env::with(|env| env.state.in_mem().get_block_hash().0)
-        );
-        assert_eq!(
             vp::CTX.get_block_epoch().unwrap(),
             vp_host_env::with(|env| env.state.in_mem().get_current_epoch().0)
         );
@@ -651,13 +643,13 @@ mod tests {
         // evaluating the VP template which always returns `true` should pass
         let code = TestWasms::VpAlwaysTrue.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).serialize_to_vec();
+        let code_len = code.len() as u64;
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
             let len_key = Key::wasm_code_len(&code_hash);
-            env.state.write_bytes(&key, &code).unwrap();
-            env.state.write_bytes(&len_key, &code_len).unwrap();
+            env.state.write(&key, &code).unwrap();
+            env.state.write(&len_key, code_len).unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash, None)
@@ -671,13 +663,13 @@ mod tests {
         // pass
         let code = TestWasms::VpAlwaysFalse.read_bytes();
         let code_hash = Hash::sha256(&code);
-        let code_len = (code.len() as u64).serialize_to_vec();
+        let code_len = code.len() as u64;
         vp_host_env::with(|env| {
             // store wasm codes
             let key = Key::wasm_code(&code_hash);
             let len_key = Key::wasm_code_len(&code_hash);
             env.state.write(&key, &code).unwrap();
-            env.state.write(&len_key, &code_len).unwrap();
+            env.state.write(&len_key, code_len).unwrap();
         });
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code_from_hash(code_hash, None)
@@ -725,10 +717,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // update the block height for the following client update
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -802,10 +791,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -880,10 +866,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -960,10 +943,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1040,10 +1020,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1242,10 +1219,7 @@ mod tests {
         // Commit
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1799,10 +1773,7 @@ mod tests {
         let mut env = tx_host_env::take();
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())
@@ -1888,10 +1859,7 @@ mod tests {
         let mut env = tx_host_env::take();
         env.commit_tx_and_block();
         // for the next block
-        env.state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
             .set_header(tm_dummy_header())

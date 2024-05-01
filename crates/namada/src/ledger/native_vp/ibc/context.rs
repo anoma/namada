@@ -17,7 +17,7 @@ use crate::ledger::ibc::storage::is_ibc_key;
 use crate::ledger::native_vp::CtxPreStorageRead;
 use crate::state::write_log::StorageModification;
 use crate::state::PrefixIter;
-use crate::storage::{BlockHash, BlockHeight, Epoch, Header, Key, TxIndex};
+use crate::storage::{BlockHeight, Epoch, Header, Key, TxIndex};
 use crate::token::{
     self as token, burn_tokens, credit_tokens, transfer, Amount,
 };
@@ -91,11 +91,6 @@ where
                 )?;
                 Ok(None)
             }
-            Some(StorageModification::Temp { .. }) => {
-                Err(StorageError::new_const(
-                    "Temp shouldn't be inserted in an IBC transaction",
-                ))
-            }
             Some(StorageModification::InitAccount { .. }) => Err(
                 StorageError::new_const("InitAccount shouldn't be inserted"),
             ),
@@ -138,10 +133,6 @@ where
 
     fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
         self.ctx.get_block_header(height)
-    }
-
-    fn get_block_hash(&self) -> Result<BlockHash> {
-        self.ctx.get_block_hash()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch> {
@@ -328,10 +319,6 @@ where
 
     fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
         self.ctx.get_block_header(height)
-    }
-
-    fn get_block_hash(&self) -> Result<BlockHash> {
-        self.ctx.get_block_hash()
     }
 
     fn get_block_epoch(&self) -> Result<Epoch> {

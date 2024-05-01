@@ -168,17 +168,6 @@ impl StorageRead for Ctx {
         }
     }
 
-    fn get_block_hash(&self) -> Result<namada_core::storage::BlockHash, Error> {
-        let result = Vec::with_capacity(BLOCK_HASH_LENGTH);
-        unsafe {
-            namada_tx_get_block_hash(result.as_ptr() as _);
-        }
-        let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), BLOCK_HASH_LENGTH)
-        };
-        Ok(BlockHash::try_from(slice).expect("Cannot convert the hash"))
-    }
-
     fn get_block_epoch(&self) -> Result<namada_core::storage::Epoch, Error> {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }

@@ -484,7 +484,7 @@ dependencies = [
  "bitflags 2.5.0",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "proc-macro2",
@@ -1695,9 +1695,9 @@ checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.16"
+version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d"
+checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
 
 [[package]]
 name = "dynasm"
@@ -2844,9 +2844,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b32afd38673a8016f7c9ae69e5af41a58f81b1d31689040f2f1959594ce194ea"
+checksum = "21b9ddb458710bc376481b842f5da65cdf31522de232c1ca8146abce2a358258"
 dependencies = [
  "bytes",
  "fnv",
@@ -2997,7 +2997,7 @@ dependencies = [
  "borsh 0.10.3",
  "derive_more",
  "displaydoc",
- "http 1.0.0",
+ "http 1.1.0",
  "ibc-core",
  "ibc-proto",
  "mime",
@@ -3692,6 +3692,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3963,18 +3972,18 @@ dependencies = [
 
 [[package]]
 name = "linkme"
-version = "0.3.24"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ca16377a6dae364fb00769699ba440899f1a720d4f5abf2667d0a8a95f933dd"
+checksum = "bb2cfee0de9bd869589fb9a015e155946d1be5ff415cb844c2caccc6cc4b5db9"
 dependencies = [
  "linkme-impl",
 ]
 
 [[package]]
 name = "linkme-impl"
-version = "0.3.24"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e5ac81de04bf8215501c50a436632c3789b22ef1625fe0bf8927dd4ba3696c5"
+checksum = "adf157a4dc5a29b7b464aa8fe7edeff30076e07e13646a1c3874f58477dc99f8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4275,7 +4284,7 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4363,7 +4372,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "linkme",
@@ -4377,7 +4386,7 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -4472,7 +4481,7 @@ dependencies = [
 
 [[package]]
 name = "namada_benchmarks"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
@@ -4494,14 +4503,14 @@ dependencies = [
 
 [[package]]
 name = "namada_controller"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_core"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "bech32 0.8.1",
  "borsh 1.2.1",
@@ -4552,7 +4561,7 @@ dependencies = [
 
 [[package]]
 name = "namada_encoding_spec"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -4563,7 +4572,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4597,7 +4606,7 @@ dependencies = [
 
 [[package]]
 name = "namada_examples"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
@@ -4617,7 +4626,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4632,7 +4641,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -4652,7 +4661,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "ibc",
@@ -4679,7 +4688,7 @@ dependencies = [
 
 [[package]]
 name = "namada_light_sdk"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
@@ -4693,7 +4702,7 @@ dependencies = [
 
 [[package]]
 name = "namada_macros"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "data-encoding",
  "lazy_static",
@@ -4707,7 +4716,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4726,7 +4735,7 @@ dependencies = [
 
 [[package]]
 name = "namada_migrations"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
@@ -4738,7 +4747,7 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4749,7 +4758,7 @@ dependencies = [
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4782,14 +4791,14 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_sdk"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "async-trait",
@@ -4859,7 +4868,7 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -4878,7 +4887,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
@@ -4908,7 +4917,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "itertools 0.10.5",
@@ -4928,7 +4937,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_core",
@@ -4937,7 +4946,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "assert_cmd",
  "assert_matches",
@@ -4990,7 +4999,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
  "namada_shielded_token",
@@ -5000,7 +5009,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "linkme",
  "namada_core",
@@ -5009,7 +5018,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "ark-bls12-381",
  "assert_matches",
@@ -5037,7 +5046,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "namada_core",
  "namada_storage",
@@ -5045,7 +5054,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -5067,7 +5076,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "masp_primitives",
@@ -5076,7 +5085,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
@@ -5090,7 +5099,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -5103,7 +5112,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.33.0"
+version = "0.34.0"
 dependencies = [
  "borsh 1.2.1",
  "namada_account",
@@ -7199,12 +7208,13 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=515687fe7884cb365067ac86c66ac3613de176bb#515687fe7884cb365067ac86c66ac3613de176bb"
+source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=bab8cb96872db22cc9a139b2d3dfc4e00521d097#bab8cb96872db22cc9a139b2d3dfc4e00521d097"
 dependencies = [
  "blake2b-rs",
  "borsh 1.2.1",
  "cfg-if 1.0.0",
  "ics23",
+ "itertools 0.12.1",
  "sha2 0.9.9",
 ]
 
@@ -7987,7 +7997,8 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.11.1"
-source = "git+https://github.com/heliaxdev/tower-abci.git?rev=a41ab4b336875084e04f4803868adf41ef62a67c#a41ab4b336875084e04f4803868adf41ef62a67c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d4826f3df3e9a37083d978cae73f020bcdf6143956b7dfc1bd6050b4e16367c"
 dependencies = [
  "bytes",
  "futures",

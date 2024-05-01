@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, DbColFam, Epoch, Epochs,
-    EthEventsQueue, Header, Key,
+    BlockHeight, BlockResults, DbColFam, Epoch, Epochs, EthEventsQueue, Header,
+    Key,
 };
 use namada_core::time::DateTimeUtc;
 use namada_core::{ethereum_events, ethereum_structs};
@@ -46,10 +46,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// The block's state as stored in the database.
 pub struct BlockStateRead {
-    /// Merkle tree stores
-    pub merkle_tree_stores: MerkleTreeStoresRead,
-    /// Hash of the block
-    pub hash: BlockHash,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block
@@ -85,8 +81,6 @@ pub struct BlockStateWrite<'a> {
     pub merkle_tree_stores: MerkleTreeStoresWrite<'a>,
     /// Header of the block
     pub header: Option<&'a Header>,
-    /// Hash of the block
-    pub hash: &'a BlockHash,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block
@@ -208,7 +202,7 @@ pub trait DB: Debug {
     fn batch() -> Self::WriteBatch;
 
     /// Execute write batch.
-    fn exec_batch(&mut self, batch: Self::WriteBatch) -> Result<()>;
+    fn exec_batch(&self, batch: Self::WriteBatch) -> Result<()>;
 
     /// Batch write the value with the given height and account subspace key to
     /// the DB. Returns the size difference from previous value, if any, or
@@ -255,15 +249,8 @@ pub trait DB: Debug {
         key: &Key,
     ) -> Result<()>;
 
-    /// Delete a replay protection entry
-    fn delete_replay_protection_entry(
-        &mut self,
-        batch: &mut Self::WriteBatch,
-        key: &Key,
-    ) -> Result<()>;
-
-    /// Delete the entire replay protection buffer
-    fn prune_replay_protection_buffer(
+    /// Move the current replay protection bucket to the general one
+    fn move_current_replay_protection_entries(
         &mut self,
         batch: &mut Self::WriteBatch,
     ) -> Result<()>;
@@ -330,11 +317,8 @@ pub trait DBIter<'iter> {
         prefix: Option<&'iter Key>,
     ) -> Self::PrefixIter;
 
-    /// Read replay protection storage from the last block
-    fn iter_replay_protection(&'iter self) -> Self::PrefixIter;
-
-    /// Read replay protection storage from the the buffer
-    fn iter_replay_protection_buffer(&'iter self) -> Self::PrefixIter;
+    /// Read replay protection storage from the current bucket
+    fn iter_current_replay_protection(&'iter self) -> Self::PrefixIter;
 }
 
 /// Atomic batch write.

@@ -1,0 +1,1 @@
+ - Previously on startup, the merkle root persisted was trusted to agree with the persisted db. Now a flag can be see to remerkelize storage and check against the saved root. ([\#2778](https://github.com/anoma/namada/pull/2778))

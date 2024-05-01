@@ -3,7 +3,8 @@ use std::collections::BTreeSet;
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::key::common;
 use namada_sdk::proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData, ValidatorState,
+    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
+    ValidatorStateInfo,
 };
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::vp::pos::EnrichedBondsAndUnbondsDetails;
@@ -143,7 +144,7 @@ pub async fn get_validator_state(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<ValidatorState>, Error> {
+) -> Result<ValidatorStateInfo, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -153,7 +154,7 @@ pub async fn get_validator_state(
 }
 
 /// Get the delegator's delegation
-pub async fn get_delegators_delegation(
+pub async fn get_delegation_validators(
     tendermint_addr: &str,
     address: &Address,
 ) -> Result<HashSet<Address>, Error> {
@@ -162,11 +163,12 @@ pub async fn get_delegators_delegation(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    rpc::get_delegators_delegation(&client, address).await
+    let epoch = rpc::query_epoch(&client).await?;
+    rpc::get_delegation_validators(&client, address, epoch).await
 }
 
 /// Get the delegator's delegation at some epoh
-pub async fn get_delegators_delegation_at(
+pub async fn get_delegations_of_delegator_at(
     tendermint_addr: &str,
     address: &Address,
     epoch: Epoch,
@@ -176,7 +178,7 @@ pub async fn get_delegators_delegation_at(
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    rpc::get_delegators_delegation_at(&client, address, epoch).await
+    rpc::get_delegations_of_delegator_at(&client, address, epoch).await
 }
 
 /// Query and return validator's commission rate and max commission rate
@@ -185,7 +187,7 @@ pub async fn query_commission_rate(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<Option<CommissionPair>, Error> {
+) -> Result<CommissionPair, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
@@ -200,7 +202,7 @@ pub async fn query_metadata(
     tendermint_addr: &str,
     validator: &Address,
     epoch: Option<Epoch>,
-) -> Result<(Option<ValidatorMetaData>, Option<CommissionPair>), Error> {
+) -> Result<(Option<ValidatorMetaData>, CommissionPair), Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,

@@ -12,7 +12,6 @@ mod init_chain;
 pub use init_chain::InitChainValidation;
 use namada::vm::wasm::run::check_tx_allowed;
 use namada_sdk::state::StateRead;
-use namada_sdk::tx::data::GasLimit;
 pub mod prepare_proposal;
 use namada::state::State;
 pub mod process_proposal;
@@ -49,10 +48,7 @@ use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::{
-    apply_wasm_tx, get_fee_unshielding_transaction,
-    get_transfer_hash_from_storage, ShellParams,
-};
+use namada::ledger::protocol::{get_fee_unshielding_transaction, ShellParams};
 use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::read_pos_params;
@@ -361,7 +357,9 @@ pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
         && *key != token::storage_key::masp_convert_anchor_key()
         && *key != token::storage_key::masp_token_map_key()
         && *key != token::storage_key::masp_assets_hash_key()
-        || namada::ibc::storage::is_ibc_counter_key(key))
+        && !token::storage_key::is_masp_commitment_anchor_key(key)
+        || namada::ibc::storage::is_ibc_counter_key(key)
+        || namada::proof_of_stake::storage_key::is_delegation_targets_key(key))
 }
 
 /// Channels for communicating with an Ethereum oracle.
@@ -1116,9 +1114,12 @@ where
                 if let Err(e) = mempool_fee_check(
                     &wrapper,
                     get_fee_unshielding_transaction(&tx, &wrapper),
-                    &mut self.state.with_temp_write_log(),
-                    &mut self.vp_wasm_cache.clone(),
-                    &mut self.tx_wasm_cache.clone(),
+                    &mut ShellParams::new(
+                        &RefCell::new(gas_meter),
+                        &mut self.state.with_temp_write_log(),
+                        &mut self.vp_wasm_cache.clone(),
+                        &mut self.tx_wasm_cache.clone(),
+                    ),
                 ) {
                     response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
@@ -1282,9 +1283,7 @@ where
 fn mempool_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    temp_state: &mut TempWlState<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1292,7 +1291,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        temp_state,
+        shell_params.state,
         &wrapper.fee.token,
     )
     .expect("Must be able to read gas cost parameter")
@@ -1305,11 +1304,9 @@ where
         wrapper,
         masp_transaction,
         minimum_gas_price,
-        temp_state,
-        vp_wasm_cache,
-        tx_wasm_cache,
+        shell_params,
     )?;
-    protocol::check_fees(temp_state, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
 }
 
 /// Check the validity of the fee payment, including the minimum amounts
@@ -1318,9 +1315,7 @@ pub fn wrapper_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     minimum_gas_price: token::Amount,
-    temp_state: &mut TempWlState<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1330,7 +1325,7 @@ where
     match token::denom_to_amount(
         wrapper.fee.amount_per_gas_unit,
         &wrapper.fee.token,
-        temp_state,
+        shell_params.state,
     ) {
         Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
             // The fees do not match the minimum required
@@ -1353,13 +1348,7 @@ where
     }
 
     if let Some(transaction) = masp_transaction {
-        fee_unshielding_validation(
-            wrapper,
-            transaction,
-            temp_state,
-            vp_wasm_cache,
-            tx_wasm_cache,
-        )?;
+        fee_unshielding_validation(wrapper, transaction, shell_params)?;
     }
 
     Ok(())
@@ -1369,9 +1358,7 @@ where
 fn fee_unshielding_validation<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Transaction,
-    temp_state: &mut TempWlState<D, H>,
-    vp_wasm_cache: &mut VpCache<CA>,
-    tx_wasm_cache: &mut TxCache<CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1383,7 +1370,70 @@ where
     // further validation
 
     // Validate data and generate unshielding tx
-    let transfer_code_hash = get_transfer_hash_from_storage(temp_state);
+    check_fee_unshielding(shell_params.state, &masp_transaction)?;
+
+    if namada::ledger::protocol::run_fee_unshielding(
+        wrapper,
+        shell_params,
+        masp_transaction,
+    )
+    .map_err(|e| {
+        Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(format!(
+                "Fee unshielding went out of gas: {}",
+                e
+            )),
+        ))
+    })? {
+        Ok(())
+    } else {
+        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(
+                "Error while applying fee unshielding wasm transaction"
+                    .to_string(),
+            ),
+        )))
+    }
+}
+
+// Performs validation on the optional fee unshielding data carried by
+// the wrapper.
+fn check_fee_unshielding<D, H>(
+    temp_state: &TempWlState<D, H>,
+    unshield: &Transaction,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    // Check that the number of descriptions is within a certain limit
+    // to avoid a possible DoS vector
+    let sapling_bundle = unshield.sapling_bundle().ok_or(Error::TxApply(
+        protocol::Error::FeeUnshieldingError(WrapperTxErr::InvalidUnshield(
+            "Missing required sapling bundle".to_string(),
+        )),
+    ))?;
+    let spends = sapling_bundle.shielded_spends.len();
+    let converts = sapling_bundle.shielded_converts.len();
+    let outs = sapling_bundle.shielded_outputs.len();
+
+    let descriptions = spends
+        .checked_add(converts)
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeUnshieldingError(
+                WrapperTxErr::InvalidUnshield(
+                    "Descriptions overflow".to_string(),
+                ),
+            ))
+        })?
+        .checked_add(outs)
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeUnshieldingError(
+                WrapperTxErr::InvalidUnshield(
+                    "Descriptions overflow".to_string(),
+                ),
+            ))
+        })?;
 
     let descriptions_limit = temp_state
         .read(
@@ -1392,57 +1442,20 @@ where
         .expect("Error reading the storage")
         .expect("Missing fee unshielding descriptions limit param in storage");
 
-    let unshield = wrapper
-        .check_and_generate_fee_unshielding(
-            transfer_code_hash,
-            Some(namada_sdk::tx::TX_TRANSFER_WASM.to_string()),
-            descriptions_limit,
-            masp_transaction,
-        )
-        .map_err(|e| Error::TxApply(protocol::Error::FeeUnshieldingError(e)))?;
-
-    let fee_unshielding_gas_limit: GasLimit = temp_state
-        .read(&parameters::storage::get_fee_unshielding_gas_limit_key())
-        .expect("Error reading from storage")
-        .expect("Missing fee unshielding gas limit in storage");
-
-    // Runtime check
-    // NOTE: A clean tx write log must be provided to this call for a
-    // correct vp validation. Block write log, instead, should contain
-    // any prior changes (if any). This is to simulate the
-    // unshielding tx (to prevent the already written keys
-    // from being passed/triggering VPs) but we cannot
-    // commit the tx write log yet cause the tx could still
-    // be invalid.
-    temp_state.write_log_mut().precommit_tx();
-
-    let result = apply_wasm_tx(
-        // Ok to unwrap cause tx is built in protocol
-        unshield.batch_ref_tx(unshield.first_commitments().unwrap()),
-        &TxIndex::default(),
-        ShellParams::new(
-            &RefCell::new(TxGasMeter::new(fee_unshielding_gas_limit)),
-            temp_state,
-            vp_wasm_cache,
-            tx_wasm_cache,
-        ),
-    )
-    .map_err(|e| {
+    if u64::try_from(descriptions).map_err(|e| {
         Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(format!("Wasm run failed: {}", e)),
+            WrapperTxErr::InvalidUnshield(e.to_string()),
         ))
-    })?;
-
-    if result.is_accepted() {
-        Ok(())
-    } else {
-        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(format!(
-                "Some VPs rejected fee unshielding: {:#?}",
-                result.vps_result.rejected_vps
-            )),
-        )))
+    })? > descriptions_limit
+    {
+        return Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
+            WrapperTxErr::InvalidUnshield(
+                "Descriptions exceed the maximum amount allowed".to_string(),
+            ),
+        )));
     }
+
+    Ok(())
 }
 
 /// for the shell
@@ -1455,7 +1468,7 @@ mod test_utils {
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
-    use namada::core::storage::{BlockHash, Epoch, Header};
+    use namada::core::storage::{Epoch, Header};
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
@@ -1905,7 +1918,6 @@ mod test_utils {
     impl Default for FinalizeBlock {
         fn default() -> Self {
             FinalizeBlock {
-                hash: BlockHash([0u8; 32]),
                 header: Header {
                     hash: Hash([0; 32]),
                     #[allow(clippy::disallowed_methods)]
@@ -2337,7 +2349,7 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2376,7 +2388,7 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 Epoch(0),
-                Default::default(),
+                0.into(),
                 None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
@@ -2465,7 +2477,7 @@ mod shell_tests {
         // Write wrapper hash to storage
         let mut batch = namada::state::testing::TestState::batch();
         let wrapper_hash = wrapper.header_hash();
-        let wrapper_hash_key = replay_protection::last_key(&wrapper_hash);
+        let wrapper_hash_key = replay_protection::current_key(&wrapper_hash);
         shell
             .state
             .write_replay_protection_entry(&mut batch, &wrapper_hash_key)
@@ -2501,15 +2513,11 @@ mod shell_tests {
         );
 
         let batch_hash = wrapper.raw_header_hash();
-        // Write batch hash in storage and remove the wrapper one
-        let batch_hash_key = replay_protection::last_key(&batch_hash);
+        // Write batch hash in storage
+        let batch_hash_key = replay_protection::current_key(&batch_hash);
         shell
             .state
             .write_replay_protection_entry(&mut batch, &batch_hash_key)
-            .expect("Test failed");
-        shell
-            .state
-            .delete_replay_protection_entry(&mut batch, &wrapper_hash_key)
             .expect("Test failed");
 
         // Try batch replay attack

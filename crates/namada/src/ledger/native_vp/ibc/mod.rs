@@ -493,7 +493,7 @@ mod tests {
     };
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
-    use crate::storage::{BlockHash, BlockHeight, TxIndex};
+    use crate::storage::{BlockHeight, TxIndex};
     use crate::tendermint::time::Time as TmTime;
     use crate::time::DurationSecs;
     use crate::token::storage_key::balance_key;
@@ -549,10 +549,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
 
         state
     }
@@ -936,10 +933,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
 
         let height = Height::new(0, 1).unwrap();
         let header = MockHeader {
@@ -1015,10 +1009,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // update the client
         let client_id = get_client_id();
@@ -1141,10 +1132,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare a message
         let mut counterparty = get_conn_counterparty();
@@ -1253,10 +1241,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(1))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
 
         // prepare data
         let mut counterparty = get_conn_counterparty();
@@ -1350,10 +1335,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let height = Height::new(0, 1).unwrap();
@@ -1482,10 +1464,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
@@ -1594,10 +1573,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
@@ -1693,10 +1669,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let msg = MsgChannelOpenInit {
@@ -1818,10 +1791,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let proof_height = Height::new(0, 1).unwrap();
@@ -1951,10 +1921,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let proof_height = Height::new(0, 1).unwrap();
@@ -2061,10 +2028,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let proof_height = Height::new(0, 1).unwrap();
@@ -2177,10 +2141,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let msg = IbcMsgTransfer {
@@ -2325,10 +2286,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let sender = established_address_1();
@@ -2573,10 +2531,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let transfer_ack = AcknowledgementStatus::success(ack_success_b64());
@@ -2729,10 +2684,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let msg = MsgTimeout {
@@ -2894,10 +2846,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let msg = MsgTimeoutOnClose {
@@ -3044,10 +2993,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let msg = IbcMsgNftTransfer {
@@ -3193,10 +3139,7 @@ mod tests {
             .in_mem_mut()
             .set_header(get_dummy_header())
             .expect("Setting a dummy header shouldn't fail");
-        state
-            .in_mem_mut()
-            .begin_block(BlockHash::default(), BlockHeight(2))
-            .unwrap();
+        state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
 
         // prepare data
         let sender = established_address_1();

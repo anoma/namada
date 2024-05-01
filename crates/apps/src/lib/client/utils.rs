@@ -756,11 +756,16 @@ pub fn init_genesis_established_account(
     });
 
     println!(
-        "{}: {}",
+        "{}: {}\n",
         "Derived established account address".bold(),
         address.green(),
     );
-    println!("{}: {toml_path_str}", "Wrote genesis tx to".bold());
+    println!(
+        "{}: keep a note of this address, especially if you plan to use it \
+         for a validator account in the future!\n",
+        "IMPORTANT".bold().yellow()
+    );
+    println!("{}: {toml_path_str}\n", "Wrote genesis tx to".bold());
 }
 
 /// Bond to a validator at pre-genesis.

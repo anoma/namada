@@ -621,7 +621,7 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             Epoch(0),
-            Default::default(),
+            0.into(),
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
@@ -650,7 +650,7 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             Epoch(0),
-            Default::default(),
+            0.into(),
             None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));

@@ -54,14 +54,14 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.33.0"
+version = "0.34.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
-# branch = "bat/arse-merkle-tree"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "515687fe7884cb365067ac86c66ac3613de176bb", default-features = false, features = ["std", "borsh"]}
+# branch = "bat/feat/validate-root"
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "bab8cb96872db22cc9a139b2d3dfc4e00521d097", default-features = false, features = ["std", "borsh"]}
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
 async-trait = {version = "0.1.51"}
@@ -175,8 +175,7 @@ tonic = "0.8.3"
 tonic-build = "0.8.4"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
-# https://github.com/penumbra-zone/tower-abci/pull/40 based on 0.11.1
-tower-abci = {git = "https://github.com/heliaxdev/tower-abci.git", rev = "a41ab4b336875084e04f4803868adf41ef62a67c"}
+tower-abci = "0.11.1"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.1.2"
