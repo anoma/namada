@@ -29,6 +29,9 @@ impl Commission {
 
         let mut sum = Dec::zero();
         for percentage in self.reward_distribution.values() {
+            if *percentage < Dec::zero() {
+                return false;
+            }
             sum = sum.add(percentage);
             if sum > Dec::one() {
                 return false;
