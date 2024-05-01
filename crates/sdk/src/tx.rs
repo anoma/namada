@@ -3272,7 +3272,7 @@ pub async fn build_update_account(
 
         Some(threshold)
     } else {
-        let invalid_too_few_pks: bool = (public_keys.is_empty()
+        let invalid_too_few_pks = (!public_keys.is_empty()
             && public_keys.len() < account.threshold as usize)
             || (account.get_all_public_keys().len()
                 < account.threshold as usize);
