@@ -988,6 +988,7 @@ mod test_finalize_block {
 
     // Make a transaction batch from the provided list. Signs both the batch and
     // the wrapper with the provided secret key
+    #[allow(dead_code)]
     fn mk_tx_batch(
         shell: &TestShell,
         mut txs: Vec<Tx>,
