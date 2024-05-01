@@ -384,30 +384,33 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Unshield funds if requested
+    // Unshield funds if requested. If fee unshielding failed for non-gas
+    // reasons but the fees can still be paid we'll continue with the
+    // execution (this is a different logic from the one we apply in
+    // process_proposal)
     let valid_fee_unshielding = if let Some(transaction) = masp_transaction {
         run_fee_unshielding(wrapper, shell_params, transaction)
     } else {
         Ok(false)
     };
 
-    // Charge or check fees before propagating any possible error coming from
-    // the fee unshielding. If fee unshielding failed for non-gas reasons but
-    // the fees can still be paid we'll continue with the execution (this is a
-    // different logic from the one we apply in process_proposal)
-    match wrapper_args {
+    // Charge or check fees before propagating any possible error
+    let payment_result = match wrapper_args {
         Some(WrapperArgs {
             block_proposer,
             is_committed_fee_unshield: _,
-        }) => transfer_fee(shell_params.state, block_proposer, wrapper)?,
-        None => check_fees(shell_params.state, wrapper)?,
-    }
-
-    changed_keys
-        .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
+        }) => transfer_fee(shell_params.state, block_proposer, wrapper),
+        None => {
+            check_fees(shell_params.state, wrapper)?;
+            Ok(())
+        }
+    };
 
     // Commit tx write log even in case of subsequent errors
     shell_params.state.write_log_mut().commit_tx();
+
+    changed_keys
+        .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
 
     // Update the flag only after the valid fee payment has been committed. If
     // fee unshielding went out of gas propagate the error
@@ -415,7 +418,7 @@ where
         args.is_committed_fee_unshield = valid_fee_unshielding?;
     }
 
-    Ok(())
+    payment_result
 }
 
 /// Executes the masp fee unshielding transaction. Returns `true if the unshield
@@ -564,13 +567,11 @@ where
             } else {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
-                // the fee payer. This shouldn't happen as it should be
-                // prevented from mempool/process_proposal.
+                // the fee payer.
                 tracing::error!(
                     "Transfer of tx fee cannot be applied to due to \
                      insufficient funds. Falling back to transferring the \
-                     available balance which is less than the fee. This \
-                     shouldn't happen."
+                     available balance which is less than the fee."
                 );
                 token_transfer(
                     state,

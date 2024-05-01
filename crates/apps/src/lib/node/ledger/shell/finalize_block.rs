@@ -2935,7 +2935,17 @@ mod test_finalize_block {
 
         assert_eq!(event[0].event_type.to_string(), String::from("applied"));
         let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let first_tx_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&wrapper.first_commitments().unwrap().get_hash())
+            .unwrap();
+        assert!(first_tx_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(event[1].event_type.to_string(), String::from("applied"));
         let code = event[1].attributes.get("code").unwrap().as_str();
         assert_eq!(code, String::from(ResultCode::Ok).as_str());
@@ -3351,8 +3361,7 @@ mod test_finalize_block {
     }
 
     // Test that if the fee payer doesn't have enough funds for fee payment the
-    // ledger drains their balance. Note that because of the checks in process
-    // proposal this scenario should never happen
+    // ledger drains their balance
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();

@@ -1097,6 +1097,7 @@ where
                     return response;
                 }
 
+                // Replay protection
                 let wrapper_hash = &tx.header_hash();
                 if self.state.has_replay_protection_entry(wrapper_hash).expect(
                     "Error while checking wrapper tx hash key in storage",
@@ -1106,6 +1107,20 @@ where
                         "{INVALID_MSG}: Wrapper transaction hash {} already \
                          in storage, replay attempt",
                         wrapper_hash
+                    );
+                    return response;
+                }
+                let batch_tx_hash = &tx.raw_header_hash();
+                if self
+                    .state
+                    .has_replay_protection_entry(batch_tx_hash)
+                    .expect("Error while checking batch tx hash key in storage")
+                {
+                    response.code = ResultCode::ReplayTx.into();
+                    response.log = format!(
+                        "{INVALID_MSG}: Batch transaction hash {} already in \
+                         storage, replay attempt",
+                        batch_tx_hash
                     );
                     return response;
                 }
@@ -1139,25 +1154,6 @@ where
                             "{INVALID_MSG}: Wrapper transaction code didn't \
                              pass the allowlist checks {}",
                             err
-                        );
-                        return response;
-                    }
-
-                    // Replay protection check at the batch level (no single
-                    // inner-tx hash)
-                    let inner_tx_hash = tx.raw_header_hash();
-                    if self
-                        .state
-                        .has_replay_protection_entry(&tx.raw_header_hash())
-                        .expect(
-                            "Error while checking inner tx hash key in storage",
-                        )
-                    {
-                        response.code = ResultCode::ReplayTx.into();
-                        response.log = format!(
-                            "{INVALID_MSG}: Batch transaction hash {} already \
-                             in storage, replay attempt",
-                            inner_tx_hash
                         );
                         return response;
                     }
@@ -1249,16 +1245,16 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
-    let inner_tx_hash = wrapper.raw_header_hash();
+    let batch_tx_hash = wrapper.raw_header_hash();
     // Check the inner tx hash only against the storage, skip the write
     // log
     if temp_state
-        .has_committed_replay_protection_entry(&inner_tx_hash)
+        .has_committed_replay_protection_entry(&batch_tx_hash)
         .expect("Error while checking inner tx hash key in storage")
     {
         return Err(Error::ReplayAttempt(format!(
             "Batch transaction hash {} already in storage",
-            &inner_tx_hash,
+            &batch_tx_hash,
         )));
     }
 
@@ -2512,6 +2508,26 @@ mod shell_tests {
             )
         );
 
+        // Modify wrapper to avoid a replay of it
+        wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::native(
+                    token::Amount::from_uint(100, 0).expect("This can't fail"),
+                ),
+                token: shell.state.in_mem().native_token.clone(),
+            },
+            crate::wallet::defaults::bertha_keypair().ref_to(),
+            Epoch(0),
+            GAS_LIMIT_MULTIPLIER.into(),
+            None,
+        ))));
+        wrapper.add_section(Section::Authorization(Authorization::new(
+            wrapper.sechashes(),
+            [(0, crate::wallet::defaults::bertha_keypair())]
+                .into_iter()
+                .collect(),
+            None,
+        )));
         let batch_hash = wrapper.raw_header_hash();
         // Write batch hash in storage
         let batch_hash_key = replay_protection::current_key(&batch_hash);
