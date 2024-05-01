@@ -269,6 +269,9 @@ pub enum TxSubmitError {
     /// Account threshold is not set
     #[error("Account threshold must be set.")]
     MissingAccountThreshold,
+    /// Account threshold is not set
+    #[error("Account threshold is invalid.")]
+    InvalidAccountThreshold,
     /// Not enough signature
     #[error("Account threshold is {0} but the valid signatures are {1}.")]
     MissingSigningKeys(u8, u8),

@@ -61,6 +61,7 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{pos, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
+use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
@@ -3136,7 +3137,27 @@ pub async fn build_init_account(
     let vp_code_hash = query_wasm_code_hash_buf(context, vp_code_path).await?;
 
     let threshold = match threshold {
-        Some(threshold) => *threshold,
+        Some(threshold) => {
+            let threshold = *threshold;
+            if (threshold > 0 && public_keys.len() as u8 >= threshold)
+                || tx_args.force
+            {
+                threshold
+            } else {
+                edisplay_line!(
+                    context.io(),
+                    "Invalid account threshold: either the provided threshold \
+                     is zero or the number of public keys is less than the \
+                     threshold."
+                );
+                if !tx_args.force {
+                    return Err(Error::from(
+                        TxSubmitError::InvalidAccountThreshold,
+                    ));
+                }
+                threshold
+            }
+        }
         None => {
             if public_keys.len() == 1 {
                 1u8
@@ -3204,16 +3225,49 @@ pub async fn build_update_account(
     )
     .await?;
 
-    let addr = if let Some(account) =
+    let account = if let Some(account) =
         rpc::get_account_info(context.client(), addr).await?
     {
-        account.address
-    } else if tx_args.force {
-        addr.clone()
+        account
     } else {
         return Err(Error::from(TxSubmitError::LocationDoesNotExist(
             addr.clone(),
         )));
+    };
+
+    let threshold = if let Some(threshold) = threshold {
+        let threshold = *threshold;
+
+        let invalid_threshold = threshold.is_zero();
+        let invalid_too_few_pks: bool = (public_keys.is_empty()
+            && public_keys.len() < threshold as usize)
+            || (account.get_all_public_keys().len() < threshold as usize);
+
+        if invalid_threshold || invalid_too_few_pks {
+            edisplay_line!(
+                context.io(),
+                "Invalid account threshold: either the provided threshold is \
+                 zero or the number of public keys is less than the threshold."
+            );
+            if !tx_args.force {
+                return Err(Error::from(
+                    TxSubmitError::InvalidAccountThreshold,
+                ));
+            }
+        }
+
+        Some(threshold)
+    } else {
+        let invalid_too_few_pks: bool = (public_keys.is_empty()
+            && public_keys.len() < account.threshold as usize)
+            || (account.get_all_public_keys().len()
+                < account.threshold as usize);
+
+        if invalid_too_few_pks {
+            return Err(Error::from(TxSubmitError::InvalidAccountThreshold));
+        }
+
+        None
     };
 
     let vp_code_hash = match vp_code_path {
@@ -3239,10 +3293,10 @@ pub async fn build_update_account(
     );
 
     let data = UpdateAccount {
-        addr,
+        addr: account.address,
         vp_code_hash: extra_section_hash,
         public_keys: public_keys.clone(),
-        threshold: *threshold,
+        threshold,
     };
 
     let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
