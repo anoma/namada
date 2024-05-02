@@ -1901,7 +1901,7 @@ mod tests {
             .expect("unexpected error converting wat2wasm").into_owned();
 
         let mut outer_tx = Tx::from_type(TxType::Raw);
-        outer_tx.push_default_commitments();
+        outer_tx.push_default_inner_tx();
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");

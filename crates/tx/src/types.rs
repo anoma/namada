@@ -1094,14 +1094,8 @@ impl Tx {
 
     /// Add new default commitments to the transaction. Returns false if the
     /// commitment is already contained in the set
-    pub fn init_new_commitments(&mut self) -> bool {
-        self.header.batch.insert(TxCommitments::default())
-    }
-
-    /// Add new default commitments to the transaction. Returns false if the
-    /// commitment is already contained in the set
     #[cfg(any(test, feature = "testing"))]
-    pub fn push_default_commitments(&mut self) -> bool {
+    pub fn push_default_inner_tx(&mut self) -> bool {
         self.header.batch.insert(TxCommitments::default())
     }
 

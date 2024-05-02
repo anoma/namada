@@ -944,6 +944,7 @@ mod test_finalize_block {
     };
 
     const WRAPPER_GAS_LIMIT: u64 = 20_000;
+    const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
@@ -986,34 +987,53 @@ mod test_finalize_block {
         )
     }
 
-    // Make a transaction batch from the provided list. Signs both the batch and
-    // the wrapper with the provided secret key
-    #[allow(dead_code)]
+    // Make a transaction batch with two transactions. Optionally make the batch
+    // atomic and request the failure of the first transaction
     fn mk_tx_batch(
         shell: &TestShell,
-        mut txs: Vec<Tx>,
         sk: &common::SecretKey,
         set_atomic: bool,
+        should_fail: bool,
     ) -> (Tx, ProcessedTx) {
-        let mut batch = txs.pop().unwrap();
-        for tx in txs {
-            let cmt = tx.first_commitments().unwrap().to_owned();
-            batch.add_inner_tx(tx, cmt);
-        }
-
-        batch.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
-            Fee {
-                amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                token: shell.state.in_mem().native_token.clone(),
-            },
-            sk.ref_to(),
-            Epoch(0),
-            // FIXME: maybe need to raise this for the batch?
-            WRAPPER_GAS_LIMIT.into(),
-            None,
-        ))));
+        let mut batch =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                sk.ref_to(),
+                Epoch(0),
+                WRAPPER_GAS_LIMIT.into(),
+                None,
+            ))));
         batch.header.chain_id = shell.chain_id.clone();
         batch.header.atomic = set_atomic;
+
+        // append first inner tx to batch
+        let tx_code = if should_fail {
+            TestWasms::TxFail.read_bytes()
+        } else {
+            TestWasms::TxWriteStorageKey.read_bytes()
+        };
+        let data = TxWriteData {
+            key: "random_key".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(tx_code, None));
+
+        // append second inner tx to batch
+        batch.push_default_inner_tx();
+        let data = TxWriteData {
+            key: "another_random_key".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(
+            TestWasms::TxWriteStorageKey.read_bytes(),
+            None,
+        ));
+
         batch.add_section(Section::Authorization(Authorization::new(
             vec![batch.raw_header_hash()],
             [(0, sk.clone())].into_iter().collect(),
@@ -5249,8 +5269,145 @@ mod test_finalize_block {
         assert_eq!(u64::from(cmd.min_confirmations), 42);
     }
 
-    // TODO (@brentstone):
-    //    - a real valid batch (2 txs)
-    //    - a failing atomic batch (using a failing tx)
-    //    - a failing non-atomic batch (using a failing tx)
+    // Test a successful tx batch containing two valid transactions
+    #[test]
+    fn test_successful_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, false, false);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        for cmt in batch.commitments() {
+            assert!(
+                inner_results
+                    .get(&cmt.get_hash())
+                    .unwrap()
+                    .clone()
+                    .is_ok_and(|res| res.is_accepted())
+            );
+        }
+
+        // Check storage modifications
+        for key in ["random_key", "another_random_key"] {
+            assert_eq!(
+                shell
+                    .state
+                    .read::<String>(&key.parse().unwrap())
+                    .unwrap()
+                    .unwrap(),
+                STORAGE_VALUE
+            );
+        }
+    }
+
+    // Test a failing atomic batch with one successful tx and a failing one.
+    // Verify that also the changes applied by the valid tx are dropped
+    #[test]
+    fn test_failing_atomic_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+
+        // Check storage modifications are missing
+        for key in ["random_key", "another_random_key"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
+    }
+
+    // Test a failing non-atomic batch with one successful tx and a failing one.
+    // Verify that only the changes applied by the valid tx are committed
+    #[test]
+    fn test_failing_non_atomic_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, false, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+
+        // Check storage modifications
+        assert!(!shell.state.has_key(&"random_key".parse().unwrap()).unwrap());
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"another_random_key".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+    }
 }

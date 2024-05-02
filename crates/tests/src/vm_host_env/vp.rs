@@ -68,7 +68,7 @@ impl Default for TestVpEnv {
         let state = TestState::default();
         let mut tx = Tx::from_type(TxType::Raw);
         tx.header.chain_id = state.in_mem().chain_id.clone();
-        tx.push_default_commitments();
+        tx.push_default_inner_tx();
         let batched_tx = tx.batch_first_tx();
         Self {
             addr: address::testing::established_address_1(),
