@@ -421,6 +421,7 @@ where
                 data: value,
                 proof,
                 info: Default::default(),
+                height: ctx.state.in_mem().get_last_block_height(),
             })
         }
         (None, _gas) => {
@@ -437,6 +438,7 @@ where
                 data: vec![],
                 proof,
                 info: format!("No value found for key: {}", storage_key),
+                height: ctx.state.in_mem().get_last_block_height(),
             })
         }
     }
@@ -461,11 +463,9 @@ where
         })
         .collect();
     let data = data?;
+    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let proof = if request.prove {
         let queried_height = {
-            let last_committed_height =
-                ctx.state.in_mem().get_last_block_height();
-
             let height: BlockHeight = request.height.into();
             let is_last_height_query = height.0 == 0;
 
@@ -493,6 +493,7 @@ where
     Ok(EncodedResponseQuery {
         data,
         proof,
+        height: last_committed_height,
         ..Default::default()
     })
 }

@@ -86,6 +86,7 @@ macro_rules! handle_match {
         $crate::queries::require_no_proof($request)?;
         $crate::queries::require_no_data($request)?;
 
+        let last_committed_height = $ctx.state.in_mem().get_last_block_height();
         // If you get a compile error from here with `expected function, found
         // queries::Storage`, you're probably missing the marker `(sub _)`
         let data = $handle($ctx, $( $matched_args ),* )?;
@@ -95,6 +96,7 @@ macro_rules! handle_match {
             data,
             info: Default::default(),
             proof: None,
+            height: last_committed_height,
         });
     };
 }
@@ -417,13 +419,14 @@ macro_rules! pattern_and_handler_to_method {
                     let path = self.storage_value_path( $( $param ),* );
 
                     let $crate::queries::ResponseQuery {
-                        data, info, proof
+                        data, info, proof, height,
                     } = client.request(path, data, height, prove).await?;
 
                     Ok($crate::queries::ResponseQuery {
                         data,
                         info,
                         proof,
+                        height,
                     })
             }
         }
@@ -469,7 +472,7 @@ macro_rules! pattern_and_handler_to_method {
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let $crate::queries::ResponseQuery {
-                        data, info, proof
+                        data, info, proof, height
                     } = client.request(path, data, height, prove).await?;
 
                     let decoded: $return_type =
@@ -479,6 +482,7 @@ macro_rules! pattern_and_handler_to_method {
                         data: decoded,
                         info,
                         proof,
+                        height,
                     })
             }
         }

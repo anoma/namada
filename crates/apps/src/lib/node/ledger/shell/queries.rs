@@ -30,10 +30,16 @@ where
             namada::ledger::queries::handle_path(ctx, &query)
         };
         match result {
-            Ok(ResponseQuery { data, info, proof }) => response::Query {
+            Ok(ResponseQuery {
+                data,
+                info,
+                proof,
+                height,
+            }) => response::Query {
                 value: data.into(),
                 info,
                 proof: proof.map(Into::into),
+                height: height.0.try_into().expect("Height should be parsable"),
                 ..Default::default()
             },
             Err(err) => response::Query {

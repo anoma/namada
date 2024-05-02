@@ -254,12 +254,10 @@ where
     };
 
     // check which transfers in the Bridge pool match the requested hashes
+    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let merkle_tree = ctx
         .state
-        .get_merkle_tree(
-            ctx.state.in_mem().get_last_block_height(),
-            Some(StoreType::BridgePool),
-        )
+        .get_merkle_tree(last_committed_height, Some(StoreType::BridgePool))
         .expect("We should always be able to read the database");
     let stores = merkle_tree.stores();
     let store = match stores.store(&StoreType::BridgePool) {
@@ -289,6 +287,7 @@ where
         let data = status.serialize_to_vec();
         return Ok(EncodedResponseQuery {
             data,
+            height: last_committed_height,
             ..Default::default()
         });
     }
@@ -330,6 +329,7 @@ where
     };
     Ok(EncodedResponseQuery {
         data: status.serialize_to_vec(),
+        height: last_committed_height,
         ..Default::default()
     })
 }
@@ -594,6 +594,7 @@ where
                 let data = rsp.serialize_to_vec();
                 Ok(EncodedResponseQuery {
                     data,
+                    height: ctx.state.in_mem().get_last_block_height(),
                     ..Default::default()
                 })
             }
