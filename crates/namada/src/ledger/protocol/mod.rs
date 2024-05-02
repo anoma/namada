@@ -406,11 +406,11 @@ where
         }
     };
 
-    // Commit tx write log even in case of subsequent errors
-    shell_params.state.write_log_mut().commit_tx();
-
     changed_keys
         .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
+
+    // Commit tx write log even in case of subsequent errors
+    shell_params.state.write_log_mut().commit_tx();
 
     // Update the flag only after the valid fee payment has been committed. If
     // fee unshielding went out of gas propagate the error

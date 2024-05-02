@@ -792,7 +792,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let _ = self.save().await;
 
         let txs = logger.scan(self.unscanned.clone());
-        for (indexed_tx, (epoch, tx, stx)) in txs {
+        for (indexed_tx, (epoch, changed_keys, stx)) in txs {
             if Some(&indexed_tx) > last_witnessed_tx.as_ref() {
                 self.update_witness_map(indexed_tx.clone(), &stx)?;
             }
@@ -805,7 +805,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 self.scan_tx(
                     indexed_tx.clone(),
                     epoch,
-                    &tx,
+                    &changed_keys,
                     &stx,
                     vk,
                     native_token.clone(),
