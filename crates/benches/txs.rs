@@ -862,7 +862,7 @@ fn unjail_validator(c: &mut Criterion) {
                 // Jail the validator
                 let pos_params = read_pos_params(&shell.state).unwrap();
                 let current_epoch = shell.state.in_mem().block.epoch;
-                let evidence_epoch = current_epoch.prev();
+                let evidence_epoch = current_epoch.prev().unwrap();
                 proof_of_stake::slashing::slash(
                     &mut shell.state,
                     &pos_params,

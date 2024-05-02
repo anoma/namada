@@ -134,8 +134,10 @@ fn governance(c: &mut Criterion) {
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default,
                         voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch + 3_u64,
-                        activation_epoch: voting_start_epoch + 9_u64,
+                        voting_end_epoch: voting_start_epoch
+                            .unchecked_add(3_u64),
+                        activation_epoch: voting_start_epoch
+                            .unchecked_add(9_u64),
                     },
                     None,
                     Some(vec![content_section]),
@@ -187,8 +189,10 @@ fn governance(c: &mut Criterion) {
                             wasm_code_section.get_hash(),
                         ),
                         voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch + 3_u64,
-                        activation_epoch: voting_start_epoch + 9_u64,
+                        voting_end_epoch: voting_start_epoch
+                            .unchecked_add(3_u64),
+                        activation_epoch: voting_start_epoch
+                            .unchecked_add(9_u64),
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
