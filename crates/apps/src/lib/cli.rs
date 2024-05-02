@@ -4588,6 +4588,7 @@ pub mod args {
                 .arg(WEBSITE_OPT.def().help("The validator's website."))
                 .arg(DISCORD_OPT.def().help("The validator's discord handle."))
                 .arg(AVATAR_OPT.def().help("The validator's avatar."))
+                .arg(VALIDATOR_ALIAS_OPT.def().help("The validator's alias."))
                 .arg(VALIDATOR_CODE_PATH.def().help(
                     "The path to the validity predicate WASM code to be used \
                      for the validator account. Uses the default validator VP \
