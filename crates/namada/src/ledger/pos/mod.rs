@@ -31,7 +31,9 @@ pub fn into_tm_voting_power(
     tokens: token::Amount,
 ) -> i64 {
     let tokens = tokens.change();
-    let prod = votes_per_token * tokens;
+    let prod = tokens
+        .mul_ceil(votes_per_token)
+        .expect("Must be able to convert tokens to TM votes");
     let res = i128::try_from(prod).expect("Failed conversion to i128");
     i64::try_from(res).expect("Invalid validator voting power (i64)")
 }

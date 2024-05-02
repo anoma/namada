@@ -5,6 +5,7 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
+use namada_core::arith::checked;
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
 use namada_governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
@@ -687,7 +688,10 @@ where
         }
 
         let is_valid_activation_epoch = end_epoch < activation_epoch
-            && (activation_epoch - end_epoch).0 >= min_grace_epochs;
+            && checked!(activation_epoch - end_epoch)
+                .map_err(|e| Error::NativeVpError(e.into()))?
+                .0
+                >= min_grace_epochs;
         if !is_valid_activation_epoch {
             let error = native_vp::Error::new_alloc(format!(
                 "Expected min duration between the end and grace epoch \
@@ -787,7 +791,10 @@ where
         }
 
         let proposal_period_multiple_of_min_period =
-            (end_epoch - start_epoch) % min_period == 0;
+            checked!((end_epoch - start_epoch) % min_period)
+                .map_err(|e| Error::NativeVpError(e.into()))?
+                .0
+                == 0;
         if !proposal_period_multiple_of_min_period {
             return Err(native_vp::Error::new_alloc(format!(
                 "Proposal with id {proposal_id} does not have a voting period \
@@ -798,8 +805,10 @@ where
             .into());
         }
 
-        let proposal_meets_min_period =
-            (end_epoch - start_epoch).0 >= min_period;
+        let proposal_meets_min_period = checked!(end_epoch - start_epoch)
+            .map_err(|e| Error::NativeVpError(e.into()))?
+            .0
+            >= min_period;
         if !proposal_meets_min_period {
             return Err(native_vp::Error::new_alloc(format!(
                 "Proposal with id {proposal_id} does not meet the required \
@@ -867,7 +876,10 @@ where
         }
 
         let proposal_period_multiple_of_min_period =
-            (end_epoch - start_epoch) % min_period == 0;
+            checked!((end_epoch - start_epoch) % min_period)
+                .map_err(|e| Error::NativeVpError(e.into()))?
+                .0
+                == 0;
         if !proposal_period_multiple_of_min_period {
             return Err(native_vp::Error::new_alloc(format!(
                 "Proposal with id {proposal_id} does not have a voting period \
@@ -878,8 +890,9 @@ where
             .into());
         }
 
-        let valid_voting_period = (end_epoch - start_epoch).0 >= min_period
-            && (end_epoch - start_epoch).0 <= max_period;
+        let diff = checked!(end_epoch - start_epoch)
+            .map_err(|e| Error::NativeVpError(e.into()))?;
+        let valid_voting_period = diff.0 >= min_period && diff.0 <= max_period;
 
         valid_voting_period.ok_or_else(|| {
             native_vp::Error::new_alloc(format!(
@@ -950,7 +963,9 @@ where
                 })?;
 
                 let is_valid_funds = post_balance >= pre_balance
-                    && post_balance - pre_balance == post_funds;
+                    && checked!(post_balance - pre_balance)
+                        .map_err(|e| Error::NativeVpError(e.into()))?
+                        == post_funds;
                 is_valid_funds.ok_or_else(|| {
                     native_vp::Error::new_alloc(format!(
                         "Invalid funds {} have been written to storage",
@@ -980,7 +995,9 @@ where
 
         let balance_is_valid = if let Some(pre_balance) = pre_balance {
             post_balance > pre_balance
-                && post_balance - pre_balance >= min_funds_parameter
+                && checked!(post_balance - pre_balance)
+                    .map_err(|e| Error::NativeVpError(e.into()))?
+                    >= min_funds_parameter
         } else {
             post_balance >= min_funds_parameter
         };

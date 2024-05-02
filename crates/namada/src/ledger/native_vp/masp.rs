@@ -11,6 +11,7 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::address::InternalAddress::Masp;
+use namada_core::arith::checked;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::encode_asset_type;
@@ -376,12 +377,14 @@ where
                     ));
                 }
                 Ordering::Less => (
-                    post_masp_balance - pre_masp_balance,
+                    checked!(post_masp_balance - pre_masp_balance)
+                        .map_err(|e| Error::NativeVpError(e.into()))?,
                     counterpart,
                     Address::Internal(Masp),
                 ),
                 Ordering::Greater => (
-                    pre_masp_balance - post_masp_balance,
+                    checked!(pre_masp_balance - post_masp_balance)
+                        .map_err(|e| Error::NativeVpError(e.into()))?,
                     Address::Internal(Masp),
                     counterpart,
                 ),

@@ -4347,6 +4347,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "smooth-operator",
  "tempfile",
  "tendermint-rpc",
  "test-log",
