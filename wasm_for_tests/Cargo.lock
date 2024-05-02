@@ -3529,6 +3529,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "smooth-operator",
  "tempfile",
  "thiserror",
  "tiny-bip39",
@@ -3566,6 +3567,8 @@ name = "namada_controller"
 version = "0.34.0"
 dependencies = [
  "namada_core",
+ "smooth-operator",
+ "thiserror",
 ]
 
 [[package]]
@@ -3668,6 +3671,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -3755,6 +3759,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "serde",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -3818,6 +3823,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "smooth-operator",
  "tendermint-config",
  "tendermint-rpc",
  "thiserror",
