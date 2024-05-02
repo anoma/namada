@@ -183,9 +183,15 @@ where
                 // Take events that could have been emitted by PGF
                 // over IBC, governance proposal execution, etc
                 for event in shell.state.write_log_mut().take_ibc_events() {
-                    events.emit(event.with(Height(
-                        shell.state.in_mem().get_last_block_height() + 1,
-                    )));
+                    events.emit(
+                        event.with(Height(
+                            shell
+                                .state
+                                .in_mem()
+                                .get_last_block_height()
+                                .next_height(),
+                        )),
+                    );
                 }
 
                 gov_api::get_proposal_author(&shell.state, id)?

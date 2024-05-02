@@ -452,7 +452,7 @@ async fn run_oracle_aux<C: RpcClient>(mut oracle: Oracle<C>) {
         if !config.active {
             config = oracle.wait_on_reactivation().await;
         }
-        next_block_to_process += 1.into();
+        next_block_to_process = next_block_to_process.next();
     }
 }
 
@@ -481,8 +481,9 @@ async fn process_events_in_block<C: RpcClient>(
         SyncStatus::Syncing => return Err(Error::FallenBehind),
     }
     .into();
-    let minimum_latest_block =
-        block_to_process.clone() + config.min_confirmations.into();
+    let minimum_latest_block = block_to_process.clone().unchecked_add(
+        ethereum_structs::BlockHeight::from(config.min_confirmations),
+    );
     if minimum_latest_block > latest_block {
         tracing::debug!(
             ?block_to_process,

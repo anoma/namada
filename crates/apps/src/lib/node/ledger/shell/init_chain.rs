@@ -535,7 +535,9 @@ where
                     balance.amount(),
                 )
                 .expect("Couldn't credit initial balance");
-                total_token_balance += balance.amount();
+                total_token_balance = total_token_balance
+                    .checked_add(balance.amount())
+                    .expect("token total balance must not overflow");
             }
             // Write the total amount of tokens for the ratio
             self.state

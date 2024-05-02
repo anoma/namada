@@ -254,8 +254,8 @@ impl Default for BenchShell {
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default,
                 voting_start_epoch,
-                voting_end_epoch: voting_start_epoch + 3_u64,
-                activation_epoch: voting_start_epoch + 9_u64,
+                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
+                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
             },
             None,
             Some(vec![content_section]),
@@ -414,7 +414,7 @@ impl BenchShell {
             &mut self.state,
             &params,
             current_epoch,
-            current_epoch + params.pipeline_len,
+            current_epoch.unchecked_add(params.pipeline_len),
         )
         .unwrap();
 
@@ -570,7 +570,7 @@ impl BenchShell {
         self.inner
             .state
             .in_mem_mut()
-            .begin_block(last_height + 1)
+            .begin_block(last_height.next_height())
             .unwrap();
 
         self.inner.commit();

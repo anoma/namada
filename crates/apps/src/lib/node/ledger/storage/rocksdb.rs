@@ -501,7 +501,8 @@ impl RocksDB {
         }
 
         let mut batch = RocksDB::batch();
-        let previous_height = last_block.height.prev_height();
+        let previous_height =
+            last_block.height.prev_height().expect("Must have a pred");
 
         let state_cf = self.get_column_family(STATE_CF)?;
         // Revert the non-height-prepended metadata storage keys which get
