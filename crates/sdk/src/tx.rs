@@ -2947,7 +2947,10 @@ pub fn build_batch(
                 cmt.get_hash()
             )));
         }
-        signing_data.push(sig_data);
+        // Avoid redundant signing data
+        if signing_data.iter().filter(|sig| sig == &&sig_data).count() == 0 {
+            signing_data.push(sig_data);
+        }
     }
 
     Ok((batched_tx, signing_data))

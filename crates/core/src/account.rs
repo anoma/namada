@@ -21,6 +21,7 @@ use crate::hints;
     Serialize,
     Deserialize,
     Default,
+    PartialEq,
 )]
 /// Holds the public key map data as a bimap for efficient querying
 pub struct AccountPublicKeysMap {

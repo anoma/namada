@@ -223,11 +223,16 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub struct Data {
     pub salt: [u8; 8],
     pub data: Vec<u8>,
+}
+
+impl PartialEq for Data {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
 }
 
 impl Data {
@@ -265,13 +270,18 @@ pub struct CommitmentError;
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub enum Commitment {
     /// Result of applying hash function to bytes
     Hash(namada_core::hash::Hash),
     /// Result of applying identity function to bytes
     Id(Vec<u8>),
+}
+
+impl PartialEq for Commitment {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash() == other.hash()
+    }
 }
 
 impl Commitment {
@@ -326,7 +336,6 @@ impl Commitment {
     BorshSchema,
     Serialize,
     Deserialize,
-    PartialEq,
 )]
 pub struct Code {
     /// Additional random data
@@ -335,6 +344,12 @@ pub struct Code {
     pub code: Commitment,
     /// The tag for the transaction code
     pub tag: Option<String>,
+}
+
+impl PartialEq for Code {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
 }
 
 impl Code {

@@ -63,7 +63,7 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
