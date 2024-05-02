@@ -459,6 +459,7 @@ impl<C: tendermint_rpc::client::Client + std::marker::Sync> Client for C {
                 data: response.value,
                 info: response.info,
                 proof: response.proof,
+                height: response.height.value().into(),
             }),
             Code::Err(code) => Err(Error::Query(response.info, code.into())),
         }
