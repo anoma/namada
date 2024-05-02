@@ -3,25 +3,8 @@ use eyre::Result;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::StorageHasher;
 use namada_core::storage;
-use namada_core::token::{Amount, AmountError};
 use namada_state::{DBIter, WlState, DB};
 use namada_storage::StorageWrite;
-
-/// Reads the `Amount` from key, applies update then writes it back
-pub fn amount<D, H>(
-    state: &mut WlState<D, H>,
-    key: &storage::Key,
-    update: impl FnOnce(&mut Amount) -> Result<(), AmountError>,
-) -> Result<Amount>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-{
-    let mut amount = super::read::amount_or_default(state, key)?;
-    update(&mut amount)?;
-    state.write(key, amount)?;
-    Ok(amount)
-}
 
 #[allow(dead_code)]
 /// Reads an arbitrary value, applies update then writes it back
