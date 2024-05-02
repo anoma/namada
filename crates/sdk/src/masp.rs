@@ -51,6 +51,7 @@ use masp_proofs::prover::LocalTxProver;
 #[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::{Address, MASP};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
@@ -1173,12 +1174,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                     )
                                 })?;
 
-                            let amount = transp_bundle
-                                .vin
-                                .iter()
-                                .fold(Amount::zero(), |acc, vin| {
-                                    acc + Amount::from_u64(vin.value)
-                                });
+                            let amount = transp_bundle.vin.iter().try_fold(
+                                Amount::zero(),
+                                |acc, vin| {
+                                    checked!(acc + Amount::from_u64(vin.value))
+                                },
+                            )?;
 
                             (
                                 addresses[1].to_owned(),
@@ -1224,12 +1225,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 )
                             })?[0];
 
-                        let amount = transp_bundle
-                            .vout
-                            .iter()
-                            .fold(Amount::zero(), |acc, vout| {
-                                acc + Amount::from_u64(vout.value)
-                            });
+                        let amount = transp_bundle.vout.iter().try_fold(
+                            Amount::zero(),
+                            |acc, vout| {
+                                checked!(acc + Amount::from_u64(vout.value))
+                            },
+                        )?;
                         (MASP, token.to_owned(), amount)
                     }
                     (_, _) => {
@@ -1251,7 +1252,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             source,
             MaspChange {
                 asset: token,
-                change: -amount.change(),
+                change: checked!(-amount.change())?,
             },
         );
         self.delta_map
@@ -2375,7 +2376,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             },
             |indexed| IndexedTx {
                 height: indexed.height,
-                index: indexed.index + 1,
+                index: indexed
+                    .index
+                    .checked_add(1)
+                    .expect("Tx index shouldn't overflow"),
                 is_wrapper: false,
             },
         );
@@ -2500,11 +2504,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             // Describe how a Transfer simply subtracts from one
                             // account and adds the same to another
 
+                            let change = transfer.amount.amount().change();
                             let delta = TransferDelta::from([(
                                 transfer.source.clone(),
                                 MaspChange {
                                     asset: transfer.token.clone(),
-                                    change: -transfer.amount.amount().change(),
+                                    change: checked!(-change)?,
                                 },
                             )]);
 

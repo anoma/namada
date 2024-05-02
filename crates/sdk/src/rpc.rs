@@ -11,6 +11,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
@@ -1015,8 +1016,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                 proposal_votes,
                 total_staked_token,
                 tally_type,
-            )
-            .expect("Proposal result calculation must not over/underflow");
+            )?
         }
     };
     Ok(Some(proposal_result))
@@ -1036,11 +1036,11 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable += amount;
+            total_withdrawable = checked!(total_withdrawable + amount)?;
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();
-            *withdrawable_amount += amount;
+            *withdrawable_amount = checked!(withdrawable_amount + amount)?;
         }
     }
     if !total_withdrawable.is_zero() {
