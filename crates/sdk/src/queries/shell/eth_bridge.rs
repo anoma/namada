@@ -248,13 +248,13 @@ where
         return Ok(Default::default());
     }
 
+    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let mut status = TransferToEthereumStatus {
-        queried_height: ctx.state.in_mem().get_last_block_height(),
+        queried_height: last_committed_height,
         ..Default::default()
     };
 
     // check which transfers in the Bridge pool match the requested hashes
-    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let merkle_tree = ctx
         .state
         .get_merkle_tree(last_committed_height, Some(StoreType::BridgePool))
@@ -606,7 +606,7 @@ where
                 let data = rsp.serialize_to_vec();
                 Ok(EncodedResponseQuery {
                     data,
-                    height: ctx.state.in_mem().get_last_block_height(),
+                    height,
                     ..Default::default()
                 })
             }
