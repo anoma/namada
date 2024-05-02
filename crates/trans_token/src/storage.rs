@@ -50,6 +50,42 @@ where
     storage.write(&key, new_balance)
 }
 
+/// Increment the balance of a given token and owner.
+pub fn increment_balance<S>(
+    storage: &mut S,
+    token: &Address,
+    owner: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    update_balance(storage, token, owner, |cur_amount| {
+        cur_amount
+            .checked_add(amount)
+            .ok_or(AmountError::Overflow)
+            .into_storage_result()
+    })
+}
+
+/// Decrement the balance of a given token and owner.
+pub fn decrement_balance<S>(
+    storage: &mut S,
+    token: &Address,
+    owner: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    update_balance(storage, token, owner, |cur_amount| {
+        cur_amount
+            .checked_sub(amount)
+            .ok_or(AmountError::Insufficient)
+            .into_storage_result()
+    })
+}
+
 /// Read the total network supply of a given token.
 pub fn read_total_supply<S>(
     storage: &S,
@@ -77,6 +113,40 @@ where
     let total_supply = storage.read::<token::Amount>(&key)?.unwrap_or_default();
     let new_supply = f(total_supply)?;
     storage.write(&key, new_supply)
+}
+
+/// Increment the total network supply of a given token.
+pub fn increment_total_supply<S>(
+    storage: &mut S,
+    token: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    update_total_supply(storage, token, |cur_supply| {
+        cur_supply
+            .checked_add(amount)
+            .ok_or(AmountError::Overflow)
+            .into_storage_result()
+    })
+}
+
+/// Decrement the total network supply of a given token.
+pub fn decrement_total_supply<S>(
+    storage: &mut S,
+    token: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    update_total_supply(storage, token, |cur_supply| {
+        cur_supply
+            .checked_sub(amount)
+            .ok_or(AmountError::Insufficient)
+            .into_storage_result()
+    })
 }
 
 /// Get the effective circulating total supply of native tokens.
@@ -197,21 +267,11 @@ pub fn credit_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    // Update the destination balance
-    update_balance(storage, token, dest, |cur_amount| {
-        cur_amount
-            .checked_add(amount)
-            .ok_or(AmountError::Overflow)
-            .into_storage_result()
-    })?;
+    // Increment the destination balance
+    increment_balance(storage, token, dest, amount)?;
 
-    // Update the total supply
-    update_total_supply(storage, token, |cur_supply| {
-        cur_supply
-            .checked_add(amount)
-            .ok_or(AmountError::Overflow)
-            .into_storage_result()
-    })
+    // Increment the total supply
+    increment_total_supply(storage, token, amount)
 }
 
 /// Burn a specified amount of tokens from some address. If the burn amount is
@@ -238,13 +298,8 @@ where
             source_balance
         };
 
-    // Update total supply
-    update_total_supply(storage, token, |cur_supply| {
-        cur_supply
-            .checked_sub(amount_to_burn)
-            .ok_or(AmountError::Insufficient)
-            .into_storage_result()
-    })
+    // Decrement the total supply
+    decrement_total_supply(storage, token, amount_to_burn)
 }
 
 /// Add denomination info if it exists in storage.
