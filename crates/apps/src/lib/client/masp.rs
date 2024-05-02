@@ -233,10 +233,8 @@ where
         }
     }
 
-    fn advance_index(&self) -> Result<(), Error> {
-        let mut locked = self.drawer
-            .lock()
-            .map_err(|_| Error::Other("Error acquiring mutex".into()))?;
+    fn advance_index(&self) {
+        let mut locked = self.drawer.lock().unwrap();
         match self.r#type {
             ProgressType::Fetch => {
                 locked.fetch.index += 1;
@@ -246,15 +244,11 @@ where
                 locked.scan.length = self.items.size_hint().0;
             }
         }
-        Ok(())
     }
 
-    fn draw(&self) -> Result<(), Error> {
-        let locked =  self.drawer
-            .lock()
-            .map_err(|_| Error::Other("Error acquiring mutex".into()))?;
+    fn draw(&self) {
+        let locked = self.drawer.lock().unwrap();
         locked.draw();
-        Ok(())
     }
 }
 
@@ -274,8 +268,8 @@ where
     fn next(&mut self) -> Option<T> {
         self.peek();
         let next_item = self.peeked.take()?;
-        self.advance_index().ok()?;
-        self.draw().ok()?;
+        self.advance_index();
+        self.draw();
         Some(next_item)
     }
 }
