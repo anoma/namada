@@ -1420,6 +1420,7 @@ where
         (Epoch, Epoch),
         (token::Amount, EagerRedelegatedBondsMap),
     > = BTreeMap::new();
+    let mut raw_withdrawable_unbond_total = token::Amount::zero();
 
     for unbond in unbond_handle.iter(storage)? {
         let (
@@ -1442,6 +1443,7 @@ where
             );
             continue;
         }
+        raw_withdrawable_unbond_total += amount;
 
         let mut eager_redelegated_unbonds = EagerRedelegatedBondsMap::default();
         let matching_redelegated_unbonds =
@@ -1513,15 +1515,15 @@ where
         withdrawable_amount,
     )?;
 
-    // TODO: Transfer the slashed tokens from the PoS address to the Slash Pool
+    // Transfer the slashed tokens from the PoS address to the Slash Pool
     // address
-    // token::transfer(
-    //     storage,
-    //     &staking_token,
-    //     &ADDRESS,
-    //     &SLASH_POOL_ADDRESS,
-    //     total_slashed,
-    // )?;
+    token::transfer(
+        storage,
+        &staking_token,
+        &ADDRESS,
+        &SLASH_POOL_ADDRESS,
+        raw_withdrawable_unbond_total - withdrawable_amount,
+    )?;
 
     Ok(withdrawable_amount)
 }

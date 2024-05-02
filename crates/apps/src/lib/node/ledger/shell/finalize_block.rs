@@ -766,7 +766,9 @@ mod test_finalize_block {
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
     use namada::replay_protection;
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
-    use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::token::{
+        read_balance, Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES,
+    };
     use namada::tx::data::Fee;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
@@ -1743,7 +1745,7 @@ mod test_finalize_block {
 
         let (current_epoch, inflation) =
             advance_epoch(&mut shell, &pkh1, &votes, None);
-        total_rewards += inflation;
+        total_rewards += token::Amount::from(inflation);
 
         // Query the available rewards
         let query_rewards = namada_proof_of_stake::query_reward_tokens(
@@ -1796,7 +1798,7 @@ mod test_finalize_block {
         // Go to the next epoch
         let (current_epoch, inflation) =
             advance_epoch(&mut shell, &pkh1, &votes, None);
-        total_rewards += inflation;
+        total_rewards += token::Amount::from(inflation);
 
         // Unbond some tokens
         let unbond_amount = token::Amount::native_whole(50_000);
@@ -1873,9 +1875,9 @@ mod test_finalize_block {
                 advance_epoch(&mut shell, &pkh1, &votes, None);
             current_epoch = new_epoch;
 
-            total_rewards += inflation;
+            total_rewards += token::Amount::from(inflation);
             if current_epoch <= pipeline_epoch_from_unbond {
-                missed_rewards += inflation;
+                missed_rewards += token::Amount::from(inflation);
             }
         }
 
@@ -2020,7 +2022,7 @@ mod test_finalize_block {
             let (new_epoch, inflation) =
                 advance_epoch(&mut shell, &pkh1, &votes, None);
             current_epoch = new_epoch;
-            total_rewards += inflation;
+            total_rewards += token::Amount::from(inflation);
         }
 
         // Claim the rewards for the validator for the first two epochs
@@ -2046,6 +2048,7 @@ mod test_finalize_block {
         );
         let (new_epoch, inflation_3) =
             advance_epoch(&mut shell, &pkh1, &votes, None);
+        let inflation_3 = token::Amount::from(inflation_3);
         current_epoch = new_epoch;
         total_rewards += inflation_3;
 
@@ -3675,7 +3678,7 @@ mod test_finalize_block {
     }
 
     /// Current test procedure (prefixed by epoch in which the event occurs):
-    /// 0) Validator initial stake of 00_000
+    /// 0) Validator initial stake of 100_000
     /// 1) Delegate 37_231 to validator
     /// 1) Self-unbond 84_654
     /// 2) Unbond delegation of 18_000
@@ -3683,12 +3686,13 @@ mod test_finalize_block {
     /// 4) Self-unbond 15_000
     /// 5) Delegate 8_144 to validator
     /// 6) Discover misbehavior in epoch 3
-    /// 7) Discover misbehavior in epoch 4
+    /// 7) Discover one misbehavior in epoch 3 and one in epoch 4
+    /// 9) Process slashes from epoch 3
+    /// 10) Process slashes from epoch 4
     fn test_multiple_misbehaviors_by_num_vals(
         num_validators: u64,
     ) -> namada::state::StorageResult<()> {
         // Setup the network with pipeline_len = 2, unbonding_len = 4
-        // let num_validators = 8_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
             num_validators,
@@ -3701,15 +3705,12 @@ mod test_finalize_block {
 
         // Slash pool balance
         let nam_address = shell.state.in_mem().native_token.clone();
-        let slash_balance_key = token::storage_key::balance_key(
+        let slash_pool_balance_init = read_balance(
+            &shell.state,
             &nam_address,
             &namada_proof_of_stake::SLASH_POOL_ADDRESS,
-        );
-        let slash_pool_balance_init: token::Amount = shell
-            .state
-            .read(&slash_balance_key)
-            .expect("must be able to read")
-            .unwrap_or_default();
+        )
+        .unwrap();
         debug_assert_eq!(slash_pool_balance_init, token::Amount::zero());
 
         let consensus_set: Vec<WeightedValidator> =
@@ -3738,12 +3739,6 @@ mod test_finalize_block {
         let votes = get_default_true_votes(&shell.state, Epoch::default());
         assert!(!votes.is_empty());
 
-        // Advance to epoch 1 and
-        // 1. Delegate 67231 NAM to validator
-        // 2. Validator self-unbond 154654 NAM
-        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
-        assert_eq!(shell.state.in_mem().block.epoch.0, 1_u64);
-
         // Make an account with balance and delegate some tokens
         let delegator = address::testing::gen_implicit_address();
         let del_1_amount = token::Amount::native_whole(37_231);
@@ -3755,6 +3750,14 @@ mod test_finalize_block {
             token::Amount::native_whole(200_000),
         )
         .unwrap();
+
+        // Advance to epoch 1 and
+        // 1. Delegate 37_231 NAM to validator
+        // 2. Validator self-unbond 84_654 NAM
+        let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
+        assert_eq!(shell.state.in_mem().block.epoch.0, 1_u64);
+
+        // Delegate
         namada_proof_of_stake::bond_tokens(
             &mut shell.state,
             Some(&delegator),
@@ -3777,6 +3780,7 @@ mod test_finalize_block {
         )
         .unwrap();
 
+        // Check stakes
         let val_stake = namada_proof_of_stake::storage::read_validator_stake(
             &shell.state,
             &params,
@@ -3802,7 +3806,7 @@ mod test_finalize_block {
         );
 
         // Advance to epoch 2 and
-        // 1. Unbond 18000 NAM from delegation
+        // 1. Unbond 18_000 NAM from delegation
         let votes = get_default_true_votes(
             &shell.state,
             shell.state.in_mem().block.epoch,
@@ -3820,6 +3824,7 @@ mod test_finalize_block {
         )
         .unwrap();
 
+        // Check stakes
         let val_stake = namada_proof_of_stake::storage::read_validator_stake(
             &shell.state,
             &params,
@@ -3847,7 +3852,7 @@ mod test_finalize_block {
         );
 
         // Advance to epoch 3 and
-        // 1. Validator self-bond 9123 NAM
+        // 1. Validator self-bond 9_123 NAM
         let votes = get_default_true_votes(
             &shell.state,
             shell.state.in_mem().block.epoch,
@@ -3855,6 +3860,7 @@ mod test_finalize_block {
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         tracing::debug!("\nBonding in epoch 3");
 
+        // Self-bond
         let self_bond_1_amount = token::Amount::native_whole(9_123);
         namada_proof_of_stake::bond_tokens(
             &mut shell.state,
@@ -3867,7 +3873,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Advance to epoch 4
-        // 1. Validator self-unbond 15000 NAM
+        // 1. Validator self-unbond 15_000 NAM
         let votes = get_default_true_votes(
             &shell.state,
             shell.state.in_mem().block.epoch,
@@ -3875,6 +3881,7 @@ mod test_finalize_block {
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         assert_eq!(current_epoch.0, 4_u64);
 
+        // Self-unbond
         let self_unbond_2_amount = token::Amount::native_whole(15_000);
         namada_proof_of_stake::unbond_tokens(
             &mut shell.state,
@@ -3887,7 +3894,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Advance to epoch 5 and
-        // Delegate 8144 NAM to validator
+        // Delegate 8_144 NAM to validator
         let votes = get_default_true_votes(
             &shell.state,
             shell.state.in_mem().block.epoch,
@@ -3910,7 +3917,7 @@ mod test_finalize_block {
 
         tracing::debug!("Advancing to epoch 6");
 
-        // Advance to epoch 6
+        // Advance to epoch 6 and discover a misbehavior
         let votes = get_default_true_votes(
             &shell.state,
             shell.state.in_mem().block.epoch,
@@ -3947,10 +3954,8 @@ mod test_finalize_block {
 
         // Assertions
         assert_eq!(current_epoch.0, 6_u64);
-        let processing_epoch = misbehavior_epoch
-            + params.unbonding_len
-            + 1_u64
-            + params.cubic_slashing_window_length;
+        let processing_epoch =
+            misbehavior_epoch + params.slash_processing_epoch_offset();
         let enqueued_slash = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(&val1.address)
@@ -4017,20 +4022,20 @@ mod test_finalize_block {
             Some(misbehaviors),
         );
         assert_eq!(current_epoch.0, 7_u64);
-        let enqueued_slashes_8 = enqueued_slashes_handle()
+        let enqueued_slashes_9 = enqueued_slashes_handle()
             .at(&processing_epoch)
             .at(&val1.address);
-        let enqueued_slashes_9 = enqueued_slashes_handle()
+        let enqueued_slashes_10 = enqueued_slashes_handle()
             .at(&processing_epoch.next())
             .at(&val1.address);
 
-        let num_enqueued_8 =
-            enqueued_slashes_8.iter(&shell.state).unwrap().count();
         let num_enqueued_9 =
             enqueued_slashes_9.iter(&shell.state).unwrap().count();
+        let num_enqueued_10 =
+            enqueued_slashes_10.iter(&shell.state).unwrap().count();
 
-        assert_eq!(num_enqueued_8, 2);
-        assert_eq!(num_enqueued_9, 1);
+        assert_eq!(num_enqueued_9, 2);
+        assert_eq!(num_enqueued_10, 1);
         let last_slash =
             namada_proof_of_stake::storage::read_validator_last_slash_epoch(
                 &shell.state,
@@ -4055,16 +4060,15 @@ mod test_finalize_block {
             .unwrap()
         );
 
-        let pre_stake_10 =
-            namada_proof_of_stake::storage::read_validator_stake(
-                &shell.state,
-                &params,
-                &val1.address,
-                Epoch(10),
-            )
-            .unwrap();
+        let pre_stake_9 = namada_proof_of_stake::storage::read_validator_stake(
+            &shell.state,
+            &params,
+            &val1.address,
+            Epoch(9),
+        )
+        .unwrap();
         assert_eq!(
-            pre_stake_10,
+            pre_stake_9,
             initial_stake + del_1_amount
                 - self_unbond_1_amount
                 - del_unbond_1_amount
@@ -4073,7 +4077,7 @@ mod test_finalize_block {
                 + del_2_amount
         );
 
-        tracing::debug!("\nNow processing the infractions\n");
+        tracing::debug!("\nNow processing the infractions from epoch 3\n");
 
         // Advance to epoch 9, where the infractions committed in epoch 3 will
         // be processed
@@ -4124,7 +4128,10 @@ mod test_finalize_block {
             Dec::one(),
             Dec::new(9, 0).unwrap() * tot_frac * tot_frac,
         );
-        dbg!(cubic_rate);
+        println!(
+            "\nThe cubic slash rate for epoch 3 infractions is {}\n",
+            cubic_rate
+        );
 
         let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
             let tolerance = Dec::new(1, 9).unwrap();
@@ -4146,13 +4153,14 @@ mod test_finalize_block {
 
         // Check the amount of stake deducted from the futuremost epoch while
         // processing the slashes
-        let post_stake_10 = read_validator_stake(
+        let post_stake_9 = read_validator_stake(
             &shell.state,
             &params,
             &val1.address,
-            Epoch(10),
+            Epoch(9),
         )
         .unwrap();
+
         // The amount unbonded after the infraction that affected the deltas
         // before processing is `del_unbond_1_amount + self_bond_1_amount -
         // self_unbond_2_amount` (since this self-bond was enacted then unbonded
@@ -4165,18 +4173,24 @@ mod test_finalize_block {
             + self_bond_1_amount
             - self_unbond_2_amount)
             .mul_ceil(slash_rate_3);
+
+        println!("Slash rate for epoch 3 infractions: {}", slash_rate_3);
+        println!(
+            "Pre Val stake at epoch 10: {}\nPost Val stake at epoch 10: {}",
+            pre_stake_9.to_string_native(),
+            post_stake_9.to_string_native()
+        );
         assert!(
-            ((pre_stake_10 - post_stake_10).change()
+            ((pre_stake_9 - post_stake_9).change()
                 - exp_slashed_during_processing_9.change())
             .abs()
-                < Uint::from(1000),
+                < Uint::from(2),
             "Expected {}, got {} (with less than 1000 err)",
             exp_slashed_during_processing_9.to_string_native(),
-            (pre_stake_10 - post_stake_10).to_string_native(),
+            (pre_stake_9 - post_stake_9).to_string_native(),
         );
 
         // Check that we can compute the stake at the pipeline epoch
-        // NOTE: may be off. by 1 namnam due to rounding;
         let exp_pipeline_stake = (Dec::one() - slash_rate_3)
             * Dec::from(
                 initial_stake + del_1_amount
@@ -4188,27 +4202,30 @@ mod test_finalize_block {
             + Dec::from(del_2_amount);
 
         assert!(
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
+            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_9))
                 <= Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap(),
             "Expected {}, got {} (with less than 2 err), diff {}",
             exp_pipeline_stake,
-            post_stake_10.to_string_native(),
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10)),
+            post_stake_9.to_string_native(),
+            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_9)),
         );
 
         // Check the balance of the Slash Pool
-        // TODO: finish once implemented
-        // let slash_pool_balance: token::Amount = shell
-        //     .state
-        //     .read(&slash_balance_key)
-        //     .expect("must be able to read")
-        //     .unwrap_or_default();
-        // let exp_slashed_3 = decimal_mult_amount(
-        //     std::cmp::min(Decimal::TWO * cubic_rate, Decimal::ONE),
-        //     val_stake_3 - del_unbond_1_amount + self_bond_1_amount
-        //         - self_unbond_2_amount,
-        // );
-        // assert_eq!(slash_pool_balance, exp_slashed_3);
+        let slash_pool_balance = read_balance(
+            &shell.state,
+            &staking_token,
+            &namada_proof_of_stake::SLASH_POOL_ADDRESS,
+        )
+        .unwrap();
+        let exp_slashed_3 = exp_slashed_during_processing_9;
+        assert!(slash_pool_balance - exp_slashed_3 <= 1.into());
+
+        let pre_stake_10 = read_validator_stake(
+            &shell.state,
+            &params,
+            &val1.address,
+            Epoch(10),
+        )?;
 
         // Advance to epoch 10, where the infraction committed in epoch 4 will
         // be processed
@@ -4220,33 +4237,30 @@ mod test_finalize_block {
         assert_eq!(current_epoch.0, 10_u64);
 
         // Check the balance of the Slash Pool
-        // TODO: finish once implemented
-        // let slash_pool_balance: token::Amount = shell
-        //     .state
-        //     .read(&slash_balance_key)
-        //     .expect("must be able to read")
-        //     .unwrap_or_default();
+        let slash_pool_balance = read_balance(
+            &shell.state,
+            &staking_token,
+            &namada_proof_of_stake::SLASH_POOL_ADDRESS,
+        )
+        .unwrap();
 
-        // let exp_slashed_4 = if dec!(2) * cubic_rate >= Decimal::ONE {
-        //     token::Amount::zero()
-        // } else if dec!(3) * cubic_rate >= Decimal::ONE {
-        //     decimal_mult_amount(
-        //         Decimal::ONE - dec!(2) * cubic_rate,
-        //         val_stake_4 + self_bond_1_amount - self_unbond_2_amount,
-        //     )
-        // } else {
-        //     decimal_mult_amount(
-        //         std::cmp::min(cubic_rate, Decimal::ONE),
-        //         val_stake_4 + self_bond_1_amount - self_unbond_2_amount,
-        //     )
-        // };
-        // dbg!(slash_pool_balance, exp_slashed_3 + exp_slashed_4);
-        // assert!(
-        //     (slash_pool_balance.change()
-        //         - (exp_slashed_3 + exp_slashed_4).change())
-        //     .abs()
-        //         <= 1
-        // );
+        let exp_slashed_4 = if Dec::two() * cubic_rate >= Dec::one() {
+            token::Amount::zero()
+        } else if Dec::from(3u64) * cubic_rate >= Dec::one() {
+            dbg!(val_stake_4 + self_bond_1_amount - self_unbond_2_amount)
+                .mul_ceil(Dec::one() - Dec::two() * cubic_rate)
+        } else {
+            dbg!(val_stake_4 + self_bond_1_amount - self_unbond_2_amount)
+                .mul_ceil(std::cmp::min(cubic_rate, Dec::one()))
+        };
+
+        dbg!(slash_pool_balance, exp_slashed_3, exp_slashed_4);
+        assert!(
+            (slash_pool_balance.change()
+                - (exp_slashed_3 + exp_slashed_4).change())
+            .abs()
+                <= Uint::one() * 2u64
+        );
 
         let val_stake = read_validator_stake(
             &shell.state,
@@ -4274,33 +4288,27 @@ mod test_finalize_block {
             post_stake_10.to_string_native()
         );
 
-        // dbg!(&val_stake);
-        // dbg!(pre_stake_10 - post_stake_10);
+        dbg!(&val_stake, &post_stake_10, &pre_stake_10, &exp_slashed_4);
 
-        // dbg!(&exp_slashed_during_processing_9);
-        // TODO: finish once implemented
-        // assert!(
-        //     ((pre_stake_11 - post_stake_11).change() -
-        // exp_slashed_4.change())         .abs()
-        //         <= 1
-        // );
+        assert!(
+            (dbg!(
+                (pre_stake_10 - post_stake_10).change()
+                    - exp_slashed_4.change()
+            ))
+            .abs()
+                <= Uint::one() * 3u64
+        );
 
-        // dbg!(&val_stake, &exp_stake);
-        // dbg!(exp_slashed_during_processing_8 +
-        // exp_slashed_during_processing_9); dbg!(
-        //     val_stake_3
-        //         - (exp_slashed_during_processing_8 +
-        //           exp_slashed_during_processing_9)
-        // );
+        let exp_stake = val_stake_3 - del_unbond_1_amount + self_bond_1_amount
+            - self_unbond_2_amount
+            + del_2_amount
+            - exp_slashed_3
+            - exp_slashed_4;
 
-        // let exp_stake = val_stake_3 - del_unbond_1_amount +
-        // self_bond_1_amount
-        //     - self_unbond_2_amount
-        //     + del_2_amount
-        //     - exp_slashed_3
-        //     - exp_slashed_4;
-
-        // assert!((exp_stake.change() - post_stake_11.change()).abs() <= 1);
+        assert!(
+            (exp_stake.change() - post_stake_10.change()).abs()
+                <= Uint::one() * 3u64
+        );
 
         for _ in 0..2 {
             let votes = get_default_true_votes(
@@ -4439,6 +4447,8 @@ mod test_finalize_block {
         )
         .unwrap();
 
+        println!("\nDBG0\n");
+
         let exp_del_withdraw_slashed_amount =
             del_unbond_1_amount.mul_ceil(slash_rate_3);
         assert!(
@@ -4447,6 +4457,8 @@ mod test_finalize_block {
                 .raw_amount()
                 <= Uint::one()
         );
+
+        println!("\nDBG1\n");
 
         // TODO: finish once implemented
         // Check the balance of the Slash Pool
@@ -4850,7 +4862,7 @@ mod test_finalize_block {
         proposer_address: &[u8],
         consensus_votes: &[VoteInfo],
         misbehaviors: Option<Vec<Misbehavior>>,
-    ) -> (Epoch, token::Amount) {
+    ) -> (Epoch, token::Change) {
         let current_epoch = shell.state.in_mem().block.epoch;
         let staking_token =
             namada_proof_of_stake::staking_token_address(&shell.state);
@@ -4888,7 +4900,7 @@ mod test_finalize_block {
 
         (
             shell.state.in_mem().block.epoch,
-            pos_balance_post - pos_balance_pre,
+            pos_balance_post.change() - pos_balance_pre.change(),
         )
     }
 

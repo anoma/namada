@@ -167,6 +167,7 @@ impl Finalized {
             InternalAddress::EthBridgePool,
             InternalAddress::Governance,
             InternalAddress::Pgf,
+            InternalAddress::PosSlashPool,
         ] {
             wallet.insert_address(
                 int_add.to_string().to_lowercase(),
