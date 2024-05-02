@@ -13,7 +13,6 @@ use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
 use namada_governance::utils::is_valid_validator_voting_period;
 use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
-use namada_proof_of_stake::queries::find_delegations;
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::Tx;
@@ -303,37 +302,65 @@ where
             .into());
         }
 
-        // TODO: We should refactor this by modifying the vote proposal tx
-        let all_delegations_are_valid = if let Ok(delegations) =
-            find_delegations(&self.ctx.pre(), voter, &current_epoch)
-        {
-            if delegations.is_empty() {
-                return Err(native_vp::Error::new_alloc(format!(
-                    "No delegations found for {voter}"
-                ))
-                .into());
-            } else {
-                delegations.iter().all(|(val_address, _)| {
-                    let vote_key = gov_storage::get_vote_proposal_key(
-                        proposal_id,
-                        voter.clone(),
-                        val_address.clone(),
-                    );
-                    self.ctx.post().has_key(&vote_key).unwrap_or(false)
-                })
-            }
-        } else {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Failed to query delegations for {voter}"
-            ))
-            .into());
-        };
-        if !all_delegations_are_valid {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Not all delegations of {voter} were deemed valid"
-            ))
-            .into());
-        }
+        // TODO: should any checks happen in the VP for the target validators?
+        // Not sure, since ultimately whether the vote counts or not is
+        // determined by the validator state at the end epoch, which likely has
+        // not occurred yet during VP execution
+
+        // // Check the target validator of the bond used to vote
+        // let delegations_targets = find_delegation_validators(
+        //     &self.ctx.pre(),
+        //     voter,
+        //     &pre_voting_end_epoch,
+        // )
+        // .unwrap_or_default();
+
+        // if delegations_targets.is_empty() {
+        //     return Err(native_vp::Error::new_alloc(format!(
+        //         "No delegations found for {voter}"
+        //     ))
+        //     .into());
+        // }
+
+        // if !delegations_targets.contains(validator) {
+        //     return Err(native_vp::Error::new_alloc(format!(
+        //         "The vote key is not valid due to {voter} not having \
+        //          delegations to {validator}"
+        //     ))
+        //     .into());
+        // }
+
+        // let validator_state = read_validator_state(&self.ctx.pre(),
+        // validator, &pre_voting_end_epoch)?; if !matches!
+        // (validator_state, ValidatorState::Consensus |
+        // ValidatorState::BelowCapacity | ValidatorState::BelowThreshold) {
+        //     if validator_state.is_none() {
+        //         return Err(native_vp::Error::new_alloc(format!(
+        //             "The vote key is invalid because the validator
+        // {validator} is not in \              the active set (jailed
+        // or inactive)"         ))
+        //         .into());
+        //     } else {
+        //         return Err(native_vp::Error::new_alloc(format!(
+        //             "The vote key is invalid because the validator
+        // {validator} is not in \              the active set (jailed
+        // or inactive)"         ))
+        //         .into());
+        //     }
+
+        // }
+
+        // // this is safe as we check above that validator is part of the
+        // hashmap if !matches!(
+        //     delegations_targets.get(validator).unwrap(),
+        //     ValidatorState::Consensus
+        // ) {
+        //     return Err(native_vp::Error::new_alloc(format!(
+        //         "The vote key is not valid due to {validator} being not in \
+        //          the active set"
+        //     ))
+        //     .into());
+        // }
 
         // Voted outside of voting window. We dont check for validator because
         // if the proposal type is validator, we need to let

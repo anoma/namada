@@ -1281,11 +1281,15 @@ mod test_finalize_block {
                 id: proposal_id,
                 vote,
                 voter: validator,
-                delegation_validators: vec![],
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)
-            namada::governance::vote_proposal(&mut shell.state, vote).unwrap();
+            namada::governance::vote_proposal(
+                &mut shell.state,
+                vote,
+                HashSet::new(),
+            )
+            .unwrap();
         };
 
         // Add a proposal to be accepted and one to be rejected.
