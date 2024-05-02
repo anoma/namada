@@ -180,7 +180,7 @@ test-e2e:
 # Run integration tests
 test-integration:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test --lib $(jobs) integration::masp::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER)  --features integration \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
