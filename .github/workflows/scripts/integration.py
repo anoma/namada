@@ -30,7 +30,7 @@ for task in TESTS:
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
         test_results[task] = {
             'status': 'ok',
-            'time': round(end - start),
+            'time': round(end - start, 2),
             'command': command
         }
     except:
