@@ -1,4 +1,4 @@
-name: Test
+name: Rerun Integration Tests
 
 on: 
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
     runs-on: 
       group: namada-runners
       labels: ubuntu-22-big
-      timeout-minutes: 30
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
