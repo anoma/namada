@@ -25,7 +25,7 @@ jobs:
   test:
     runs-on: 
       group: namada-runners
-      labels: ubuntu-22-small
+      labels: ubuntu-22-big
       timeout-minutes: 30
     strategy:
       fail-fast: false
