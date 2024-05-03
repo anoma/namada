@@ -252,23 +252,6 @@ async fn lookup_token_alias(
     }
 }
 
-pub async fn query_ibc_token(context: &impl Namada, args: args::QueryIbcToken) {
-    let args::QueryIbcToken { token, owner, .. } = args;
-    let owner = owner.address().unwrap_or(MASP);
-    match rpc::query_ibc_tokens(context, Some(token), Some(&owner)).await {
-        Ok(ibc_tokens) => {
-            for (trace, addr) in ibc_tokens {
-                let alias =
-                    context.wallet().await.lookup_ibc_token_alias(trace);
-                display_line!(context.io(), "{}: {}", alias, addr);
-            }
-        }
-        Err(e) => {
-            edisplay_line!(context.io(), "IBC token query failed: {}", e);
-        }
-    }
-}
-
 /// Query votes for the given proposal
 pub async fn query_proposal_votes(
     context: &impl Namada,

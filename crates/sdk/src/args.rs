@@ -1328,17 +1328,6 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub no_conversions: bool,
 }
 
-/// Query IBC token(s)
-#[derive(Clone, Debug)]
-pub struct QueryIbcToken<C: NamadaTypes = SdkTypes> {
-    /// Common query args
-    pub query: Query<C>,
-    /// The token address which could be a non-namada address
-    pub token: String,
-    /// Address of an owner
-    pub owner: C::BalanceOwner,
-}
-
 /// Query historical transfer(s)
 #[derive(Clone, Debug)]
 pub struct QueryTransfers<C: NamadaTypes = SdkTypes> {
