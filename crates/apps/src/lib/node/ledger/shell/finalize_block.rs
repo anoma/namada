@@ -299,7 +299,7 @@ where
             let tx_gas_meter = RefCell::new(tx_gas_meter);
             let mut tx_event = new_tx_event(&tx, height.0);
             let is_atomic_batch = tx.header.atomic;
-            let commitments_len = tx.commitments().len();
+            let commitments_len = tx.commitments().len() as u64;
             let tx_hash = tx.header_hash();
 
             let tx_result = protocol::dispatch_tx(
@@ -566,9 +566,7 @@ where
                     })
                 {
                     // TODO: need to increment the rejected txs too
-                    for _ in 0..commitments_len {
-                        stats.increment_errored_txs();
-                    }
+                    stats.increment_errored_txs_by(commitments_len);
                     self.state.write_log_mut().drop_batch();
                     tx_event.extend(Code(ResultCode::InvalidTx));
                 } else {
@@ -670,7 +668,7 @@ where
                                     commit_batch_hash = true;
                                 }
 
-                                stats.increment_rejected_txs();
+                                stats.increment_errored_txs();
                             }
                         }
                     }
@@ -746,9 +744,7 @@ where
                     }
                 }
 
-                for _ in 0..commitments_len {
-                    stats.increment_errored_txs();
-                }
+                stats.increment_errored_txs_by(commitments_len);
                 self.state.write_log_mut().drop_batch();
 
                 tx_event
@@ -772,7 +768,7 @@ where
 struct TxData<'tx> {
     is_atomic_batch: bool,
     tx_header: &'tx namada::tx::Header,
-    commitments_len: usize,
+    commitments_len: u64,
     tx_index: usize,
     replay_protection_hashes: Option<ReplayProtectionHashes>,
     consumed_gas: Gas,

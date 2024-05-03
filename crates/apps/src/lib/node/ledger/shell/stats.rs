@@ -26,6 +26,10 @@ impl InternalStats {
         self.errored_txs += 1;
     }
 
+    pub fn increment_errored_txs_by(&mut self, amt: u64) {
+        self.errored_txs += amt;
+    }
+
     pub fn increment_tx_type(&mut self, tx_hash: String) {
         match self.tx_executed.get(&tx_hash) {
             Some(value) => self.tx_executed.insert(tx_hash, value + 1),
