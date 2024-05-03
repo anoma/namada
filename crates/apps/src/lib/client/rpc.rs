@@ -382,11 +382,7 @@ async fn query_shielded_balance(
     let mut shielded = context.shielded_mut().await;
 
     let no_balance = || {
-        display_line!(
-            context.io(),
-            "No shielded {} balance found for given key",
-            token_alias
-        );
+        display_line!(context.io(), "{token_alias}: 0");
     };
 
     let balance = if no_conversions {
