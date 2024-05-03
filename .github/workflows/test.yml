@@ -90,7 +90,7 @@ jobs:
           curl -o /home/runner/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
           curl -o /home/runner/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
       - name: Build wasm 
-        run: make build-wasm-scripts
+        run: npm install -g wasm-opt && make build-wasm-scripts
       - name: Run command ${{ inputs.command }}
         run: ${{ inputs.command }}
         env:
