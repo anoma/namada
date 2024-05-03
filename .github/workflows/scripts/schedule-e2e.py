@@ -47,10 +47,10 @@ has_failures = False
 
 for task in tasks:
     try:
-        start = time.time()
         command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task['name'])
-        end = time.time()
+        start = time.time()
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
+        end = time.time()
         test_results[task['name']] = {
             'status': 'ok',
             'time': round(end - start),

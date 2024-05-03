@@ -5,6 +5,15 @@ import sys
 import time
 
 TESTS = [
+    "integration::ledger_tests::change_validator_metadata",
+    "integration::ledger_tests::implicit_account_reveal_pk",
+    "integration::ledger_tests::invalid_transactions",
+    "integration::ledger_tests::ledger_txs_and_queries",
+    "integration::ledger_tests::pgf_governance_proposal",
+    "integration::ledger_tests::pgf_steward_change_commission",
+    "integration::ledger_tests::pos_rewards",
+    "integration::ledger_tests::proposal_submission",
+    "integration::ledger_tests::test_bond_queries",
     "integration::masp::cross_epoch_unshield",
     "integration::masp::dynamic_assets",
     "integration::masp::masp_incentives",
@@ -24,10 +33,10 @@ has_failures = False
 
 for task in TESTS:
     try:
-        start = time.time()
         command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task)
-        end = time.time()
+        start = time.time()
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
+        end = time.time()
         test_results[task] = {
             'status': 'ok',
             'time': round(end - start, 2),
