@@ -521,7 +521,7 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx);
                         let namada = ctx.to_sdk(client, io);
-                        rpc::query_ibc_tokens(&namada, args).await;
+                        rpc::query_ibc_token(&namada, args).await;
                     }
                     Sub::QueryBonds(QueryBonds(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();

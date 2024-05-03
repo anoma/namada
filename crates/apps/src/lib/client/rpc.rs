@@ -10,12 +10,12 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::address::{Address, InternalAddress, MASP, MULTITOKEN};
+use namada::core::address::{Address, InternalAddress, MASP};
 use namada::core::collections::{HashMap, HashSet};
 use namada::core::hash::Hash;
 use namada::core::key::*;
 use namada::core::masp::BalanceOwner;
-use namada::core::storage::{BlockHeight, BlockResults, Epoch, Key, KeySeg};
+use namada::core::storage::{BlockHeight, BlockResults, Epoch};
 use namada::core::token::MaspDigitPos;
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
@@ -28,7 +28,6 @@ use namada::governance::utils::{ProposalVotes, VotePower};
 use namada::governance::ProposalVote;
 use namada::io::Io;
 use namada::ledger::events::Event;
-use namada::ledger::ibc::storage::ibc_trace_key;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
@@ -37,7 +36,6 @@ use namada::proof_of_stake::types::{
     ValidatorState, ValidatorStateInfo, WeightedValidator,
 };
 use namada::{state as storage, token};
-use namada_sdk::error::QueryError;
 use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::queries::Client;
@@ -182,302 +180,82 @@ pub async fn query_raw_bytes<N: Namada>(
 
 /// Query token balance(s)
 pub async fn query_balance(context: &impl Namada, args: args::QueryBalance) {
-    // Query the balances of shielded or transparent account types depending on
-    // the CLI arguments
     match &args.owner {
-        Some(BalanceOwner::FullViewingKey(_viewing_key)) => {
-            query_shielded_balance(context, args).await
-        }
-        Some(BalanceOwner::Address(_owner)) => {
+        BalanceOwner::Address(_) => {
             query_transparent_balance(context, args).await
         }
-        None => {
-            // Print shielded balance
-            query_shielded_balance(context, args.clone()).await;
-            // Then print transparent balance
-            query_transparent_balance(context, args).await;
+        BalanceOwner::FullViewingKey(_) => {
+            query_shielded_balance(context, args).await
         }
-    };
+    }
 }
 
 /// Query token balance(s)
-pub async fn query_transparent_balance(
+async fn query_transparent_balance(
     context: &impl Namada,
     args: args::QueryBalance,
 ) {
-    match (args.token, args.owner) {
-        (Some(base_token), Some(owner)) => {
-            let owner = owner.address().unwrap();
-            let tokens = query_tokens(
-                context,
-                Some(&base_token),
-                Some(&owner),
-                args.show_ibc_tokens,
-            )
+    let args::QueryBalance {
+        // Token owner (needs to be a transparent address)
+        owner,
+        // The token to query
+        token,
+        ..
+    } = args;
+
+    let owner = owner
+        .address()
+        .expect("Balance owner should have been a transparent address");
+
+    let token_alias = lookup_token_alias(context, &token, &owner).await;
+    let token_balance_result =
+        namada_sdk::rpc::get_token_balance(context.client(), &token, &owner)
             .await;
-            for (token_alias, token) in tokens {
-                let balance_key =
-                    token::storage_key::balance_key(&token, &owner);
-                match query_storage_value::<_, token::Amount>(
-                    context.client(),
-                    &balance_key,
-                )
-                .await
-                {
-                    Ok(balance) => {
-                        let balance =
-                            context.format_amount(&token, balance).await;
-                        display_line!(
-                            context.io(),
-                            "{}: {}",
-                            token_alias,
-                            balance
-                        );
-                    }
-                    Err(namada_sdk::error::Error::Query(
-                        QueryError::NoSuchKey(_),
-                    )) => {
-                        display_line!(
-                            context.io(),
-                            "No {token_alias} balance found for {owner}",
-                        )
-                    }
-                    Err(e) => {
-                        display_line!(
-                            context.io(),
-                            "Error querying balance of {token_alias}: {e}"
-                        );
-                    }
-                }
-            }
-        }
-        (None, Some(owner)) => {
-            let owner = owner.address().unwrap();
-            let tokens =
-                query_tokens(context, None, Some(&owner), args.show_ibc_tokens)
-                    .await;
-            for (token_alias, token) in tokens {
-                let balance =
-                    get_token_balance(context.client(), &token, &owner).await;
-                if !balance.is_zero() {
-                    let balance = context.format_amount(&token, balance).await;
-                    display_line!(context.io(), "{}: {}", token_alias, balance);
-                }
-            }
-        }
-        (Some(base_token), None) => {
-            let tokens = query_tokens(
-                context,
-                Some(&base_token),
-                None,
-                args.show_ibc_tokens,
-            )
-            .await;
-            for (_, token) in tokens {
-                let prefix = token::storage_key::balance_prefix(&token);
-                let balances =
-                    query_storage_prefix::<token::Amount>(context, &prefix)
-                        .await;
-                if let Some(balances) = balances {
-                    print_balances(context, balances, Some(&token), None).await;
-                }
-            }
-        }
-        (None, None) => {
-            let prefix = Key::from(MULTITOKEN.to_db_key());
-            let balances = query_storage_prefix(context, &prefix).await;
-            if let Some(balances) = balances {
-                print_balances(context, balances, None, None).await;
-            }
-        }
-    }
-}
 
-async fn print_balances(
-    context: &impl Namada,
-    balances: impl Iterator<Item = (storage::Key, token::Amount)>,
-    token: Option<&Address>,
-    target: Option<&Address>,
-) {
-    let stdout = io::stdout();
-    let mut w = stdout.lock();
-    let wallet = context.wallet().await;
-
-    let mut print_num = 0;
-    let mut print_token = None;
-    for (key, balance) in balances {
-        // Get the token, the owner, and the balance with the token and the
-        // owner
-        let (t, o, s) = match token::storage_key::is_any_token_balance_key(&key)
-        {
-            Some([tok, owner]) => (
-                tok.clone(),
-                owner.clone(),
-                format!(
-                    ": {}, owned by {}",
-                    context.format_amount(tok, balance).await,
-                    wallet.lookup_alias(owner)
-                ),
-            ),
-            None => continue,
-        };
-        let token_alias = lookup_token_alias(context, &t, &o).await;
-        // Get the token and the balance
-        let (t, s) = match (token, target) {
-            // the given token and the given target are the same as the
-            // retrieved ones
-            (Some(token), Some(target)) if t == *token && o == *target => {
-                (t, s)
-            }
-            // the given token is the same as the retrieved one
-            (Some(token), None) if t == *token => (t, s),
-            // the given target is the same as the retrieved one
-            (None, Some(target)) if o == *target => (t, s),
-            // no specified token or target
-            (None, None) => (t, s),
-            // otherwise, this balance will not be printed
-            _ => continue,
-        };
-        // Print the token if it isn't printed yet
-        match &print_token {
-            Some(token) if *token == t => {
-                // the token has been already printed
-            }
-            _ => {
-                display_line!(context.io(), &mut w; "Token {}", token_alias)
-                    .unwrap();
-                print_token = Some(t);
-            }
+    match token_balance_result {
+        Ok(balance) => {
+            let balance = context.format_amount(&token, balance).await;
+            display_line!(context.io(), "{token_alias}: {balance}");
         }
-        // Print the balance
-        display_line!(context.io(), &mut w; "{}", s).unwrap();
-        print_num += 1;
-    }
-
-    if print_num == 0 {
-        match (token, target) {
-            (Some(_), Some(target)) | (None, Some(target)) => display_line!(
+        Err(e) => {
+            display_line!(
                 context.io(),
-                &mut w;
-                "No balances owned by {}",
-                wallet.lookup_alias(target)
-            )
-            .unwrap(),
-            (Some(token), None) => {
-                let token_alias = wallet.lookup_alias(token);
-                display_line!(context.io(), &mut w; "No balances for token {}", token_alias).unwrap()
-            }
-            (None, None) => {
-                display_line!(context.io(), &mut w; "No balances").unwrap()
-            }
+                "Error querying balance of {token_alias}: {e}"
+            );
         }
     }
 }
 
+/// Return the token alias of the given `token`.
 async fn lookup_token_alias(
     context: &impl Namada,
     token: &Address,
     owner: &Address,
 ) -> String {
     match token {
-        Address::Internal(InternalAddress::IbcToken(trace_hash)) => {
-            let ibc_trace_key =
-                ibc_trace_key(owner.to_string(), trace_hash.to_string());
-            match query_storage_value::<_, String>(
-                context.client(),
-                &ibc_trace_key,
-            )
-            .await
-            {
-                Ok(ibc_trace) => {
-                    context.wallet().await.lookup_ibc_token_alias(ibc_trace)
-                }
-                Err(_) => token.to_string(),
-            }
-        }
         Address::Internal(InternalAddress::Erc20(eth_addr)) => {
             eth_addr.to_canonical()
         }
-        _ => context.wallet().await.lookup_alias(token),
-    }
-}
-
-/// Returns pairs of token alias and token address
-async fn query_tokens(
-    context: &impl Namada,
-    base_token: Option<&Address>,
-    owner: Option<&Address>,
-    show_ibc_tokens: bool,
-) -> BTreeMap<String, Address> {
-    let wallet = context.wallet().await;
-    let mut tokens = BTreeMap::new();
-    match base_token {
-        Some(token)
-            if matches!(
-                token,
-                Address::Internal(InternalAddress::IbcToken(_))
-            ) =>
-        {
+        Address::Internal(InternalAddress::IbcToken(_)) => {
             let ibc_denom =
-                rpc::query_ibc_denom(context, token.to_string(), owner).await;
-            let alias =
-                context.wallet().await.lookup_ibc_token_alias(ibc_denom);
-            tokens.insert(alias, token.clone());
-            // we don't need to check other IBC prefixes
-            return tokens;
-        }
-        Some(token) => {
-            if let Address::Internal(InternalAddress::Erc20(eth_addr)) = token {
-                tokens.insert(eth_addr.to_string(), token.clone());
-            } else {
-                let alias = wallet
-                    .find_alias(token)
-                    .map(|alias| alias.to_string())
-                    .unwrap_or(token.to_string());
-                tokens.insert(alias, token.clone());
-            }
-        }
-        None => tokens = wallet.tokens_with_aliases(),
-    }
+                rpc::query_ibc_denom(context, token.to_string(), Some(owner))
+                    .await;
 
-    if !show_ibc_tokens {
-        return tokens;
-    }
-
-    match rpc::query_ibc_tokens(
-        context,
-        base_token.map(|t| t.to_string()),
-        owner,
-    )
-    .await
-    {
-        Ok(ibc_tokens) => {
-            for (trace, addr) in ibc_tokens {
-                let ibc_trace_alias =
-                    context.wallet().await.lookup_ibc_token_alias(trace);
-                tokens.insert(ibc_trace_alias, addr);
-            }
+            context.wallet().await.lookup_ibc_token_alias(ibc_denom)
         }
-        Err(e) => {
-            edisplay_line!(context.io(), "IBC token query failed: {}", e);
-        }
+        _ => context
+            .wallet()
+            .await
+            .find_alias(token)
+            .map(|alias| alias.to_string())
+            .unwrap_or(token.to_string()),
     }
-    tokens
 }
 
-pub async fn query_ibc_tokens(
-    context: &impl Namada,
-    args: args::QueryIbcToken,
-) {
-    let wallet = context.wallet().await;
-    let token = args.token.map(|t| {
-        wallet
-            .find_address(&t)
-            .map(|addr| addr.to_string())
-            .unwrap_or(t)
-    });
-    let owner = args.owner.map(|o| o.address().unwrap_or(MASP));
-    match rpc::query_ibc_tokens(context, token, owner.as_ref()).await {
+pub async fn query_ibc_token(context: &impl Namada, args: args::QueryIbcToken) {
+    let args::QueryIbcToken { token, owner, .. } = args;
+    let owner = owner.address().unwrap_or(MASP);
+    match rpc::query_ibc_tokens(context, Some(token), Some(&owner)).await {
         Ok(ibc_tokens) => {
             for (trace, addr) in ibc_tokens {
                 let alias =
@@ -578,350 +356,98 @@ pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query token shielded balance(s)
-pub async fn query_shielded_balance(
+async fn query_shielded_balance(
     context: &impl Namada,
     args: args::QueryBalance,
 ) {
-    // Used to control whether balances for all keys or a specific key are
-    // printed
-    let owner = args.owner.and_then(|x| x.full_viewing_key());
-    // Used to control whether conversions are automatically performed
-    let no_conversions = args.no_conversions;
-    // Viewing keys are used to query shielded balances. If a spending key is
-    // provided, then convert to a viewing key first.
-    let viewing_keys = match owner {
-        Some(viewing_key) => vec![viewing_key],
-        None => context
-            .wallet()
-            .await
-            .get_viewing_keys()
-            .values()
-            .copied()
-            .collect(),
-    };
+    let args::QueryBalance {
+        // Token owner (needs to be a viewing key)
+        owner,
+        // The token to query
+        token,
+        // Used to control whether conversions are automatically performed
+        no_conversions,
+        ..
+    } = args;
+
+    let viewing_key = ExtendedFullViewingKey::from(
+        owner
+            .full_viewing_key()
+            .expect("Balance owner should have been a masp full viewing key"),
+    )
+    .fvk
+    .vk;
+
+    // Pre-compute the masp asset types of `token`
     {
         let mut shielded = context.shielded_mut().await;
         let _ = shielded.load().await;
-        // Precompute asset types to increase chances of success in decoding
-        let token_map = query_tokens(
-            context,
-            args.token.as_ref(),
-            None,
-            args.show_ibc_tokens,
-        )
-        .await;
-        let tokens = token_map.values().collect();
         let _ = shielded
-            .precompute_asset_types(context.client(), tokens)
+            .precompute_asset_types(context.client(), vec![&token])
             .await;
         // Save the update state so that future fetches can be short-circuited
         let _ = shielded.save().await;
     }
+
     // The epoch is required to identify timestamped tokens
     let epoch = query_and_print_epoch(context).await;
-    // Map addresses to token names
-    match (args.token, owner.is_some()) {
-        // Here the user wants to know the balance for a specific token
-        (Some(base_token), true) => {
-            let tokens = query_tokens(
-                context,
-                Some(&base_token),
-                Some(&MASP),
-                args.show_ibc_tokens,
-            )
-            .await;
-            for (token_alias, token) in tokens {
-                // Query the multi-asset balance at the given spending key
-                let viewing_key =
-                    ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-                let mut shielded = context.shielded_mut().await;
-                let balance = if no_conversions {
-                    shielded
-                        .compute_shielded_balance(&viewing_key)
-                        .await
-                        .unwrap()
-                        .expect("context should contain viewing key")
-                } else {
-                    shielded
-                        .compute_exchanged_balance(
-                            context.client(),
-                            context.io(),
-                            &viewing_key,
-                            epoch,
-                        )
-                        .await
-                        .unwrap()
-                        .expect("context should contain viewing key")
-                };
 
-                let total_balance = shielded
-                    .decode_combine_sum_to_epoch(
-                        context.client(),
-                        balance,
-                        epoch,
-                    )
-                    .await
-                    .0
-                    .get(&token);
-                if total_balance.is_zero() {
-                    display_line!(
-                        context.io(),
-                        "No shielded {} balance found for given key",
-                        token_alias
-                    );
-                } else {
-                    display_line!(
-                        context.io(),
-                        "{}: {}",
-                        token_alias,
-                        context
-                            .format_amount(&token, total_balance.into())
-                            .await
-                    );
-                }
-            }
-        }
-        // Here the user wants to know the balance of all tokens across users
-        (None, false) => {
-            // Maps asset types to balances divided by viewing key
-            let mut balances = HashMap::new();
-            for fvk in viewing_keys {
-                // Query the multi-asset balance at the given spending key
-                let viewing_key = ExtendedFullViewingKey::from(fvk).fvk.vk;
-                let mut shielded = context.shielded_mut().await;
-                let balance = if no_conversions {
-                    shielded
-                        .compute_shielded_balance(&viewing_key)
-                        .await
-                        .unwrap()
-                        .expect("context should contain viewing key")
-                } else {
-                    shielded
-                        .compute_exchanged_balance(
-                            context.client(),
-                            context.io(),
-                            &viewing_key,
-                            epoch,
-                        )
-                        .await
-                        .unwrap()
-                        .expect("context should contain viewing key")
-                };
-                let balance = shielded
-                    .decode_combine_sum_to_epoch(
-                        context.client(),
-                        balance,
-                        epoch,
-                    )
-                    .await;
-                for (key, value) in balance.0.components() {
-                    balances
-                        .entry(key.clone())
-                        .or_insert(Vec::new())
-                        .push((fvk, *value));
-                }
-            }
+    // Query the token alias in the wallet for pretty printing token balances
+    let token_alias = lookup_token_alias(context, &token, &MASP).await;
 
-            // Print non-zero balances whose asset types can be decoded
-            // TODO Implement a function for this
+    // Query the multi-asset balance at the given spending key
+    let mut shielded = context.shielded_mut().await;
 
-            let mut balance_map = HashMap::new();
-            for (token_addr, balances) in balances {
-                if balances.is_empty() {
-                    display_line!(
-                        context.io(),
-                        "No shielded {} balance found for any wallet key",
-                        &token_addr
-                    );
-                }
-                for (fvk, value) in balances {
-                    balance_map.insert((fvk, token_addr.clone()), value);
-                }
-            }
-            for ((fvk, token), token_balance) in balance_map {
-                // Only assets with the current timestamp count
-                let alias = lookup_token_alias(context, &token, &MASP).await;
-                display_line!(context.io(), "Shielded Token {}:", alias);
-                let formatted =
-                    context.format_amount(&token, token_balance.into()).await;
-                display_line!(
-                    context.io(),
-                    "  {}, owned by {}",
-                    formatted,
-                    fvk
-                );
-            }
-        }
-        // Here the user wants to know the balance for a specific token across
-        // users
-        (Some(base_token), false) => {
-            let tokens = query_tokens(
-                context,
-                Some(&base_token),
-                None,
-                args.show_ibc_tokens,
-            )
-            .await;
-            for (token_alias, token) in tokens {
-                let mut found_any = false;
-                display_line!(context.io(), "Shielded Token {}:", token_alias);
-                for fvk in &viewing_keys {
-                    // Query the multi-asset balance at the given spending key
-                    let viewing_key = ExtendedFullViewingKey::from(*fvk).fvk.vk;
-                    let mut shielded = context.shielded_mut().await;
-                    let balance = if no_conversions {
-                        shielded
-                            .compute_shielded_balance(&viewing_key)
-                            .await
-                            .unwrap()
-                            .expect("context should contain viewing key")
-                    } else {
-                        shielded
-                            .compute_exchanged_balance(
-                                context.client(),
-                                context.io(),
-                                &viewing_key,
-                                epoch,
-                            )
-                            .await
-                            .unwrap()
-                            .expect("context should contain viewing key")
-                    };
+    let no_balance = || {
+        display_line!(
+            context.io(),
+            "No shielded {} balance found for given key",
+            token_alias
+        );
+    };
 
-                    let total_balance = shielded
-                        .decode_combine_sum_to_epoch(
-                            context.client(),
-                            balance,
-                            epoch,
-                        )
-                        .await
-                        .0
-                        .get(&token);
-                    if !total_balance.is_zero() {
-                        found_any = true;
-                    }
-                    let formatted = context
-                        .format_amount(&token, total_balance.into())
-                        .await;
-                    display_line!(
-                        context.io(),
-                        "  {}, owned by {}",
-                        formatted,
-                        fvk
-                    );
-                }
-                if !found_any {
-                    display_line!(
-                        context.io(),
-                        "No shielded {} balance found for any wallet key",
-                        token_alias,
-                    );
-                }
-            }
-        }
-        // Here the user wants to know all possible token balances for a key
-        (None, true) => {
-            // Query the multi-asset balance at the given spending key
-            let viewing_key =
-                ExtendedFullViewingKey::from(viewing_keys[0]).fvk.vk;
-            if no_conversions {
-                let balance = context
-                    .shielded_mut()
-                    .await
-                    .compute_shielded_balance(&viewing_key)
-                    .await
-                    .unwrap()
-                    .expect("context should contain viewing key");
-                // Print balances by human-readable token names
-                print_decoded_balance_with_epoch(context, balance).await;
-            } else {
-                let balance = context
-                    .shielded_mut()
-                    .await
-                    .compute_exchanged_balance(
-                        context.client(),
-                        context.io(),
-                        &viewing_key,
-                        epoch,
-                    )
-                    .await
-                    .unwrap()
-                    .expect("context should contain viewing key");
-                // Print balances by human-readable token names
-                print_decoded_balance(context, balance, epoch).await;
-            }
-        }
-    }
-}
-
-pub async fn print_decoded_balance(
-    context: &impl Namada,
-    balance: I128Sum,
-    epoch: Epoch,
-) {
-    if balance.is_zero() {
-        display_line!(context.io(), "No shielded balance found for given key");
-    } else {
-        let decoded_balance = context
-            .shielded_mut()
+    let balance = if no_conversions {
+        let Some(bal) = shielded
+            .compute_shielded_balance(&viewing_key)
             .await
-            .decode_combine_sum_to_epoch(context.client(), balance, epoch)
-            .await;
-        for (token_addr, amount) in decoded_balance.0.components() {
-            display_line!(
+            .unwrap()
+        else {
+            no_balance();
+            return;
+        };
+        bal
+    } else {
+        let Some(bal) = shielded
+            .compute_exchanged_balance(
+                context.client(),
                 context.io(),
-                "{} : {}",
-                lookup_token_alias(context, token_addr, &MASP).await,
-                context.format_amount(token_addr, (*amount).into()).await,
-            );
-        }
-        for (asset_type, amount) in decoded_balance.1.components() {
-            display_line!(context.io(), "{} : {}", asset_type, amount,);
-        }
-    }
-}
-
-pub async fn print_decoded_balance_with_epoch(
-    context: &impl Namada,
-    balance: I128Sum,
-) {
-    let tokens = context
-        .wallet()
-        .await
-        .get_addresses_with_vp_type(AddressVpType::Token);
-    if balance.is_zero() {
-        display_line!(context.io(), "No shielded balance found for given key");
-    }
-    let decoded_balance = context
-        .shielded_mut()
-        .await
-        .decode_combine_sum(context.client(), balance)
-        .await;
-    for ((epoch, token_addr), value) in decoded_balance.0.components() {
-        let asset_value = (*value).into();
-        let alias = tokens
-            .get(token_addr)
-            .map(|a| a.to_string())
-            .unwrap_or_else(|| token_addr.to_string());
-        if let Some(epoch) = epoch {
-            display_line!(
-                context.io(),
-                "{} | {} : {}",
-                alias,
+                &viewing_key,
                 epoch,
-                context.format_amount(token_addr, asset_value).await,
-            );
-        } else {
-            display_line!(
-                context.io(),
-                "{} : {}",
-                alias,
-                context.format_amount(token_addr, asset_value).await,
-            );
-        }
-    }
-    for (asset_type, value) in decoded_balance.1.components() {
-        display_line!(context.io(), "{} : {}", asset_type, value,);
+            )
+            .await
+            .unwrap()
+        else {
+            no_balance();
+            return;
+        };
+        bal
+    };
+
+    let total_balance = shielded
+        .decode_combine_sum_to_epoch(context.client(), balance, epoch)
+        .await
+        .0
+        .get(&token);
+
+    if total_balance.is_zero() {
+        no_balance();
+    } else {
+        display_line!(
+            context.io(),
+            "{}: {}",
+            token_alias,
+            context.format_amount(&token, total_balance.into()).await
+        );
     }
 }
 
@@ -2270,7 +1796,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     token::Denomination,
     MaspDigitPos,
     Epoch,
-    masp_primitives::transaction::components::I128Sum,
+    I128Sum,
     MerklePath<Node>,
 )> {
     namada_sdk::rpc::query_conversion(client, asset_type).await

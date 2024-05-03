@@ -1713,7 +1713,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query balance(s) of tokens.")
+                .about("Query the token balance of some account.")
                 .add_args::<args::QueryBalance<args::CliTypes>>()
         }
     }
@@ -3026,7 +3026,7 @@ pub mod args {
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     pub const AVATAR_OPT: ArgOpt<String> = arg_opt("avatar");
-    pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
+    pub const BALANCE_OWNER: Arg<WalletBalanceOwner> = arg("owner");
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
@@ -5296,10 +5296,9 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             QueryBalance::<SdkTypes> {
                 query,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
-                token: self.token.map(|x| chain_ctx.get(&x)),
+                owner: chain_ctx.get_cached(&self.owner),
+                token: chain_ctx.get(&self.token),
                 no_conversions: self.no_conversions,
-                show_ibc_tokens: self.show_ibc_tokens,
             }
         }
     }
@@ -5308,15 +5307,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
-            let token = TOKEN_OPT.parse(matches);
+            let token = TOKEN.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
-            let show_ibc_tokens = SHOW_IBC_TOKENS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
-                show_ibc_tokens,
             }
         }
 
@@ -5328,7 +5325,7 @@ pub mod args {
                         .help("The account address whose balance to query."),
                 )
                 .arg(
-                    TOKEN_OPT
+                    TOKEN
                         .def()
                         .help("The token's address whose balance to query."),
                 )
@@ -5337,10 +5334,6 @@ pub mod args {
                         "Whether not to automatically perform conversions.",
                     ),
                 )
-                .arg(SHOW_IBC_TOKENS.def().help(
-                    "Show IBC tokens. When the given token is an IBC denom, \
-                     IBC tokens will be shown even if this flag is false.",
-                ))
         }
     }
 
@@ -5351,7 +5344,7 @@ pub mod args {
             QueryIbcToken::<SdkTypes> {
                 query,
                 token: self.token,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
+                owner: chain_ctx.get_cached(&self.owner),
             }
         }
     }
@@ -5359,7 +5352,7 @@ pub mod args {
     impl Args for QueryIbcToken<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let token = TOKEN_STR_OPT.parse(matches);
+            let token = TOKEN_STR.parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
             Self {
                 query,
@@ -5370,7 +5363,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(TOKEN_STR_OPT.def().help("The base token to query."))
+                .arg(TOKEN_STR.def().help("The base token to query."))
                 .arg(
                     BALANCE_OWNER
                         .def()

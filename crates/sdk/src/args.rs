@@ -1321,13 +1321,11 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Address of an owner
-    pub owner: Option<C::BalanceOwner>,
+    pub owner: C::BalanceOwner,
     /// Address of a token
-    pub token: Option<C::Address>,
+    pub token: C::Address,
     /// Whether not to convert balances
     pub no_conversions: bool,
-    /// Show IBC tokens
-    pub show_ibc_tokens: bool,
 }
 
 /// Query IBC token(s)
@@ -1336,9 +1334,9 @@ pub struct QueryIbcToken<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// The token address which could be a non-namada address
-    pub token: Option<String>,
+    pub token: String,
     /// Address of an owner
-    pub owner: Option<C::BalanceOwner>,
+    pub owner: C::BalanceOwner,
 }
 
 /// Query historical transfer(s)
