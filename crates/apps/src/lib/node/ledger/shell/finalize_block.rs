@@ -244,20 +244,9 @@ where
                         (TxGasMeter::new_from_sub_limit(0.into()), None)
                     }
                     ProtocolTxType::EthEventsVext => {
-                        let cmt = match tx.first_commitments() {
-                            Some(cmt) => cmt,
-                            None => {
-                                tracing::error!(
-                                    "Internal logic error: FinalizeBlock \
-                                     received an empty TxType::Protocol \
-                                     transaction"
-                                );
-                                continue;
-                            }
-                        };
                         let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
-                                tx.batch_ref_tx(cmt),
+                                &tx,
                             )
                             .unwrap();
                         if self
@@ -275,20 +264,9 @@ where
                         (TxGasMeter::new_from_sub_limit(0.into()), None)
                     }
                     ProtocolTxType::EthereumEvents => {
-                        let cmt = match tx.first_commitments() {
-                            Some(cmt) => cmt,
-                            None => {
-                                tracing::error!(
-                                    "Internal logic error: FinalizeBlock \
-                                     received an empty TxType::Protocol \
-                                     transaction"
-                                );
-                                continue;
-                            }
-                        };
                         let digest =
                             ethereum_tx_data_variants::EthereumEvents::try_from(
-                                tx.batch_ref_tx(cmt),
+                                &tx
                             ).unwrap();
                         if let Some(address) =
                             self.mode.get_validator_address().cloned()
@@ -557,7 +535,7 @@ where
                                 // If an inner tx failed for any reason but
                                 // invalid signature, commit its hash to
                                 // storage,
-                                // otherwis allow for a replay
+                                // otherwise allow for a replay
                                 if !res
                                     .vps_result
                                     .status_flags
@@ -587,7 +565,7 @@ where
                         }
                     })
                 {
-                    // TODO: nee to increment the rejected txs too
+                    // TODO: need to increment the rejected txs too
                     for _ in 0..commitments_len {
                         stats.increment_errored_txs();
                     }

@@ -962,107 +962,78 @@ where
         match tx_type.tx_type {
             TxType::Protocol(protocol_tx) => match protocol_tx.tx {
                 ProtocolTxType::EthEventsVext => {
-                    if let Some(cmt) = tx.first_commitments() {
-                        let ext = try_vote_extension!(
-                            "Ethereum events",
-                            response,
-                            ethereum_tx_data_variants::EthEventsVext::try_from(
-                                tx.batch_ref_tx(cmt)
-                            ),
-                        );
-                        if let Err(err) = validate_eth_events_vext(
-                            &self.state,
-                            &ext.0,
-                            self.state.in_mem().get_last_block_height(),
-                        ) {
-                            response.code =
-                                ResultCode::InvalidVoteExtension.into();
-                            response.log = format!(
-                                "{INVALID_MSG}: Invalid Ethereum events vote \
-                                 extension: {err}",
-                            );
-                        } else {
-                            response.log = String::from(VALID_MSG);
-                        }
-                    } else {
+                    let ext = try_vote_extension!(
+                        "Ethereum events",
+                        response,
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
+                    );
+                    if let Err(err) = validate_eth_events_vext(
+                        &self.state,
+                        &ext.0,
+                        self.state.in_mem().get_last_block_height(),
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Ethereum events vote \
-                             extension: Missing inner protocol transaction",
+                             extension: {err}",
                         );
+                    } else {
+                        response.log = String::from(VALID_MSG);
                     }
                 }
                 ProtocolTxType::BridgePoolVext => {
-                    if let Some(cmt) = tx.first_commitments() {
-                        let ext = try_vote_extension!(
-                            "Bridge pool roots",
-                            response,
-                            ethereum_tx_data_variants::BridgePoolVext::try_from(
-                                tx.batch_ref_tx(cmt)
-                            ),
-                        );
-                        if let Err(err) = validate_bp_roots_vext(
-                            &self.state,
-                            &ext.0,
-                            self.state.in_mem().get_last_block_height(),
-                        ) {
-                            response.code =
-                                ResultCode::InvalidVoteExtension.into();
-                            response.log = format!(
-                                "{INVALID_MSG}: Invalid Bridge pool roots \
-                                 vote extension: {err}",
-                            );
-                        } else {
-                            response.log = String::from(VALID_MSG);
-                        }
-                    } else {
+                    let ext = try_vote_extension!(
+                        "Bridge pool roots",
+                        response,
+                        ethereum_tx_data_variants::BridgePoolVext::try_from(
+                            &tx
+                        ),
+                    );
+                    if let Err(err) = validate_bp_roots_vext(
+                        &self.state,
+                        &ext.0,
+                        self.state.in_mem().get_last_block_height(),
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Bridge pool roots vote \
-                             extension: Missing inner protocol transaction",
+                             extension: {err}",
                         );
+                    } else {
+                        response.log = String::from(VALID_MSG);
                     }
                 }
                 ProtocolTxType::ValSetUpdateVext => {
-                    if let Some(cmt) = tx.first_commitments() {
-                        let ext = try_vote_extension!(
+                    let ext = try_vote_extension!(
                         "validator set update",
                         response,
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            tx.batch_ref_tx(cmt)
+                            &tx
                         ),
                     );
-                        if let Err(err) = validate_valset_upd_vext(
-                            &self.state,
-                            &ext,
-                            // n.b. only accept validator set updates
-                            // issued at the last committed epoch
-                            // (signing off on the validators of the
-                            // next epoch). at the second height
-                            // within an epoch, the new epoch is
-                            // committed to storage, so `last_epoch`
-                            // reflects the current value of the
-                            // epoch.
-                            self.state.in_mem().last_epoch,
-                        ) {
-                            response.code =
-                                ResultCode::InvalidVoteExtension.into();
-                            response.log = format!(
-                                "{INVALID_MSG}: Invalid validator set update \
-                                 vote extension: {err}",
-                            );
-                        } else {
-                            response.log = String::from(VALID_MSG);
-                            // validator set update votes should be decided
-                            // as soon as possible
-                            response.priority = i64::MAX;
-                        }
-                    } else {
+                    if let Err(err) = validate_valset_upd_vext(
+                        &self.state,
+                        &ext,
+                        // n.b. only accept validator set updates
+                        // issued at the last committed epoch
+                        // (signing off on the validators of the
+                        // next epoch). at the second height
+                        // within an epoch, the new epoch is
+                        // committed to storage, so `last_epoch`
+                        // reflects the current value of the
+                        // epoch.
+                        self.state.in_mem().last_epoch,
+                    ) {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid validator set update vote \
-                             extension: Missing inner protocol transaction",
+                             extension: {err}",
                         );
+                    } else {
+                        response.log = String::from(VALID_MSG);
+                        // validator set update votes should be decided
+                        // as soon as possible
+                        response.priority = i64::MAX;
                     }
                 }
                 _ => {
@@ -2042,9 +2013,7 @@ mod shell_tests {
             .unwrap();
             let tx = Tx::try_from(&serialized_tx[..]).unwrap();
 
-            match ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                tx.batch_ref_first_tx(),
-            ) {
+            match ethereum_tx_data_variants::ValSetUpdateVext::try_from(&tx) {
                 Ok(signed_valset_upd) => break signed_valset_upd,
                 Err(_) => continue,
             }
@@ -2096,10 +2065,7 @@ mod shell_tests {
 
         // check data inside tx
         let vote_extension =
-            ethereum_tx_data_variants::EthEventsVext::try_from(
-                tx.batch_ref_first_tx(),
-            )
-            .unwrap();
+            ethereum_tx_data_variants::EthEventsVext::try_from(&tx).unwrap();
         assert_eq!(
             vote_extension.data.ethereum_events,
             vec![ethereum_event_0, ethereum_event_1]

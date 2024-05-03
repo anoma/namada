@@ -302,80 +302,62 @@ where
                     }
                 }
 
-                let cmt = match tx.first_commitments() {
-                    Some(cmt) => cmt,
-                    None => {
-                        return TxResult {
-                            code: ResultCode::InvalidTx.into(),
-                            info: "Missing inner protocol tx".to_string(),
-                        };
-                    }
-                };
-
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
-                        ethereum_tx_data_variants::EthEventsVext::try_from(
-                            tx.batch_ref_tx(cmt),
-                        )
-                        .map_err(|err| err.to_string())
-                        .and_then(|ext| {
-                            validate_eth_events_vext(
-                                &self.state,
-                                &ext.0,
-                                self.state.in_mem().get_last_block_height(),
-                            )
-                            .map(|_| TxResult {
-                                code: ResultCode::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            })
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
                             .map_err(|err| err.to_string())
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
+                            .and_then(|ext| {
+                                validate_eth_events_vext(
+                                    &self.state,
+                                    &ext.0,
+                                    self.state.in_mem().get_last_block_height(),
+                                )
+                                .map(|_| TxResult {
+                                    code: ResultCode::Ok.into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                })
+                                .map_err(|err| err.to_string())
+                            })
+                            .unwrap_or_else(|err| TxResult {
                                 code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Ethereum \
                                      events vote extensions was invalid: {err}"
                                 ),
-                            }
-                        })
+                            })
                     }
                     ProtocolTxType::BridgePoolVext => {
-                        ethereum_tx_data_variants::BridgePoolVext::try_from(
-                            tx.batch_ref_tx(cmt),
-                        )
-                        .map_err(|err| err.to_string())
-                        .and_then(|ext| {
-                            validate_bp_roots_vext(
-                                &self.state,
-                                &ext.0,
-                                self.state.in_mem().get_last_block_height(),
-                            )
-                            .map(|_| TxResult {
-                                code: ResultCode::Ok.into(),
-                                info: "Process Proposal accepted this \
-                                       transaction"
-                                    .into(),
-                            })
+                        ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
                             .map_err(|err| err.to_string())
-                        })
-                        .unwrap_or_else(|err| {
-                            TxResult {
+                            .and_then(|ext| {
+                                validate_bp_roots_vext(
+                                    &self.state,
+                                    &ext.0,
+                                    self.state.in_mem().get_last_block_height(),
+                                )
+                                .map(|_| TxResult {
+                                    code: ResultCode::Ok.into(),
+                                    info: "Process Proposal accepted this \
+                                           transaction"
+                                        .into(),
+                                })
+                                .map_err(|err| err.to_string())
+                            })
+                            .unwrap_or_else(|err| TxResult {
                                 code: ResultCode::InvalidVoteExtension.into(),
                                 info: format!(
                                     "Process proposal rejected this proposal \
                                      because one of the included Bridge pool \
                                      root's vote extensions was invalid: {err}"
                                 ),
-                            }
-                        })
+                            })
                     }
                     ProtocolTxType::ValSetUpdateVext => {
                         ethereum_tx_data_variants::ValSetUpdateVext::try_from(
-                            tx.batch_ref_tx(cmt),
+                            &tx,
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {

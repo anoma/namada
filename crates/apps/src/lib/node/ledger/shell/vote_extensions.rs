@@ -131,17 +131,7 @@ where
                     return false;
                 }
             };
-            let cmt = match tx.first_commitments() {
-                Some(cmt) => cmt,
-                None => {
-                    tracing::warn!(
-                        "Missing inner protocol transaction in batch"
-                    );
-                    return false;
-                }
-            };
-
-            match tx.batch_ref_tx(cmt).try_into().ok() {
+            match (&tx).try_into().ok() {
                 Some(EthereumTxData::BridgePoolVext(_)) => true,
                 Some(EthereumTxData::EthEventsVext(ext)) => {
                     // NB: only propose events with at least
