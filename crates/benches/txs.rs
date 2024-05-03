@@ -1,19 +1,8 @@
 use std::str::FromStr;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
-use namada::core::address::{Address};
-
-
-
-
+use namada::core::address::Address;
 use namada::core::masp::{TransferSource, TransferTarget};
-
-
-
-
-
-
 use namada::ibc::core::channel::types::channel::Order;
 use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada::ibc::core::channel::types::Version as ChannelVersion;
@@ -25,19 +14,12 @@ use namada::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, PortId,
 };
 use namada::ibc::primitives::ToProto;
-
-
-
-use namada::proof_of_stake::{KeySeg};
-
+use namada::proof_of_stake::KeySeg;
 use namada::token::Amount;
-
-
 use namada_apps::bench_utils::{
     BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, TX_IBC_WASM,
 };
 use namada_apps::wallet::defaults;
-use sha2::Digest;
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("tx_ibc");
@@ -143,8 +125,5 @@ fn ibc(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    allowed_txs,
-    ibc
-);
+criterion_group!(allowed_txs, ibc);
 criterion_main!(allowed_txs);
