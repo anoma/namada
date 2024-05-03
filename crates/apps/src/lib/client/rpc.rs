@@ -434,17 +434,6 @@ async fn query_shielded_balance(
     }
 }
 
-/// Query token amount of owner.
-pub async fn get_token_balance<C: namada::ledger::queries::Client + Sync>(
-    client: &C,
-    token: &Address,
-    owner: &Address,
-) -> token::Amount {
-    namada_sdk::rpc::get_token_balance(client, token, owner)
-        .await
-        .unwrap()
-}
-
 pub async fn query_proposal_result(
     context: &impl Namada,
     args: args::QueryProposalResult,

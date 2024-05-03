@@ -851,12 +851,13 @@ where
                 e.to_string(),
             )
         })?;
-        let author_balance = rpc::get_token_balance(
+        let author_balance = namada_sdk::rpc::get_token_balance(
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
         )
-        .await;
+        .await
+        .unwrap();
         let proposal = proposal
             .validate(
                 &governance_parameters,
@@ -879,12 +880,13 @@ where
                 e.to_string(),
             )
         })?;
-        let author_balane = rpc::get_token_balance(
+        let author_balane = namada_sdk::rpc::get_token_balance(
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
         )
-        .await;
+        .await
+        .unwrap();
         let proposal = proposal
             .validate(
                 &governance_parameters,
