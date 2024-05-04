@@ -514,29 +514,84 @@ where
             height,
             wrapper_args,
         }: TxData,
-        TxLogs {
-            tx_event,
-            stats,
-            changed_keys,
-        }: TxLogs,
+        mut tx_logs: TxLogs,
     ) {
         match tx_result {
             Ok(tx_result) => {
-                // Track the need to commit the batch hash for replay
-                // protection. Hash must be written if at least one of the
-                // txs in the batch requires so
+                // FIXME: move this entire branch in another function. Also make
+                // two different functions one for atomic and one for
+                // non-atomic? Track the need to commit the
+                // batch hash for replay protection. Hash must
+                // be written if at least one of the txs in the
+                // batch requires so
                 let mut commit_batch_hash = false;
-                // Atomic batches need custom handling when even a single tx
-                // fails, since we need to drop everything
-                if is_atomic_batch
-                    && tx_result.batch_results.0.iter().any(|(_, result)| {
-                        match result {
-                            Ok(res) => {
-                                // If an inner tx failed for any reason but
-                                // invalid signature, commit its hash to
+                // FIXME: this should probably go with atomic batch?
+                // Track if any of the inner txs failed or was rejected
+                let mut is_any_tx_invalid = false;
+                let mut temp_log = TempTxLogs::default();
+
+                for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
+                    match batched_result {
+                        Ok(result) => {
+                            if result.is_accepted() {
+                                if is_masp_tx(&result.changed_keys) {
+                                    temp_log.tx_event.extend(ValidMaspTx((
+                                        tx_index,
+                                        Some(*cmt_hash),
+                                    )));
+                                }
+                                tracing::trace!(
+                                    "all VPs accepted inner tx {} storage \
+                                     modification {:#?}",
+                                    cmt_hash,
+                                    result
+                                );
+
+                                temp_log.changed_keys.extend(
+                                    result.changed_keys.iter().cloned(),
+                                );
+                                temp_log.stats.increment_successful_txs();
+                                commit_batch_hash = true;
+
+                                // events from other sources
+                                temp_log.other_events.extend(
+                                    // ibc events
+                                    result
+                                        .ibc_events
+                                        .iter()
+                                        .cloned()
+                                        .map(|ibc_event| {
+                                            ibc_event
+                                                .with(Height(height))
+                                                .into()
+                                        })
+                                        // eth bridge events
+                                        .chain(
+                                            result
+                                                .eth_bridge_events
+                                                .iter()
+                                                .map(Event::from),
+                                        ),
+                                );
+                            } else {
+                                // this branch can only be reached by
+                                // inner
+                                // txs
+                                tracing::trace!(
+                                    "some VPs rejected inner tx {} storage \
+                                     modification {:#?}",
+                                    cmt_hash,
+                                    result.vps_result.rejected_vps
+                                );
+
+                                // If an inner tx failed for any reason
+                                // but
+                                // invalid
+                                // signature, commit its hash to
                                 // storage,
-                                // otherwise allow for a replay
-                                if !res
+                                // otherwise
+                                // allow for a replay
+                                if !result
                                     .vps_result
                                     .status_flags
                                     .contains(VpStatusFlags::INVALID_SIGNATURE)
@@ -544,159 +599,79 @@ where
                                     commit_batch_hash = true;
                                 }
 
-                                !res.is_accepted()
-                            }
-                            Err(e) => {
-                                // If inner transaction didn't fail
-                                // because of invalid
-                                // section commitment, commit its hash to
-                                // prevent replays
-                                if matches!(
-                                    tx_header.tx_type,
-                                    TxType::Wrapper(_)
-                                ) && !matches!(
-                                    e,
-                                    protocol::Error::MissingSection(_)
-                                ) {
-                                    commit_batch_hash = true;
-                                }
-                                true
+                                temp_log.stats.increment_rejected_txs();
+                                is_any_tx_invalid = true;
                             }
                         }
-                    })
-                {
-                    // TODO: need to increment the rejected txs too
-                    stats.increment_errored_txs_by(commitments_len);
-                    self.state.write_log_mut().drop_batch();
-                    tx_event.extend(Code(ResultCode::InvalidTx));
-                } else {
-                    for (cmt_hash, batched_result) in &tx_result.batch_results.0
-                    {
-                        match batched_result {
-                            Ok(result) => {
-                                if result.is_accepted() {
-                                    if is_masp_tx(&result.changed_keys) {
-                                        tx_event.extend(ValidMaspTx((
-                                            tx_index,
-                                            Some(*cmt_hash),
-                                        )));
-                                    }
-                                    tracing::trace!(
-                                        "all VPs accepted inner tx {} storage \
-                                         modification {:#?}",
-                                        cmt_hash,
-                                        result
-                                    );
-
-                                    changed_keys.extend(
-                                        result.changed_keys.iter().cloned(),
-                                    );
-                                    stats.increment_successful_txs();
-                                    commit_batch_hash = true;
-                                    self.state
-                                        .in_mem_mut()
-                                        .block
-                                        .results
-                                        .accept(tx_index);
-                                    // events from other sources
-                                    response.events.extend(
-                                        // ibc events
-                                        result
-                                            .ibc_events
-                                            .iter()
-                                            .cloned()
-                                            .map(|ibc_event| {
-                                                ibc_event
-                                                    .with(Height(height))
-                                                    .into()
-                                            })
-                                            // eth bridge events
-                                            .chain(
-                                                result
-                                                    .eth_bridge_events
-                                                    .iter()
-                                                    .map(Event::from),
-                                            ),
-                                    );
-                                } else {
-                                    // this branch can only be reached by
-                                    // inner
-                                    // txs
-                                    tracing::trace!(
-                                        "some VPs rejected inner tx {} \
-                                         storage modification {:#?}",
-                                        cmt_hash,
-                                        result.vps_result.rejected_vps
-                                    );
-
-                                    // If an inner tx failed for any reason
-                                    // but
-                                    // invalid
-                                    // signature, commit its hash to
-                                    // storage,
-                                    // otherwise
-                                    // allow for a replay
-                                    if !result.vps_result.status_flags.contains(
-                                        VpStatusFlags::INVALID_SIGNATURE,
-                                    ) {
-                                        commit_batch_hash = true;
-                                    }
-
-                                    stats.increment_rejected_txs();
-                                }
-                            }
-                            Err(e) => {
-                                // this branch can only be reached by inner
-                                // txs
-                                tracing::trace!(
-                                    "Inner tx {} failed: {}",
-                                    cmt_hash,
-                                    e
-                                );
-                                // If inner transaction didn't fail
-                                // because of invalid
-                                // section commitment, commit its hash to
-                                // prevent replays
-                                if matches!(
-                                    tx_header.tx_type,
-                                    TxType::Wrapper(_)
-                                ) && !matches!(
+                        Err(e) => {
+                            // this branch can only be reached by inner
+                            // txs
+                            tracing::trace!(
+                                "Inner tx {} failed: {}",
+                                cmt_hash,
+                                e
+                            );
+                            // If inner transaction didn't fail
+                            // because of invalid
+                            // section commitment, commit its hash to
+                            // prevent replays
+                            if matches!(tx_header.tx_type, TxType::Wrapper(_))
+                                && !matches!(
                                     e,
                                     protocol::Error::MissingSection(_)
-                                ) {
-                                    commit_batch_hash = true;
-                                }
-
-                                stats.increment_errored_txs();
+                                )
+                            {
+                                commit_batch_hash = true;
                             }
+
+                            temp_log.stats.increment_errored_txs();
+                            is_any_tx_invalid = true;
                         }
                     }
-                    // Atomic successful batches or non-atomic batches (even
-                    // if the inner txs failed) are marked as Ok
-                    tx_event.extend(Code(ResultCode::Ok));
-                    self.state.write_log_mut().commit_batch();
                 }
 
-                if commit_batch_hash {
-                    // If at least one of the inner txs of the batch
-                    // requires its hash to be committed than commit the
-                    // hash of the entire batch
-                    self.commit_batch_hash(replay_protection_hashes);
+                if is_atomic_batch && is_any_tx_invalid {
+                    // Atomic batches need custom handling when even a single tx
+                    // fails, since we need to drop everything
+                    let unrun_txs = commitments_len
+                        - tx_result.batch_results.0.len() as u64;
+                    temp_log.stats.set_failing_atomic_batch(unrun_txs);
+                    temp_log.commit_stats_only(&mut tx_logs);
+                    self.state.write_log_mut().drop_batch();
+                    // FIXME: should this be WasmRuntimeError? Probably yes
+                    tx_logs.tx_event.extend(Code(ResultCode::InvalidTx));
+                } else {
+                    self.state.write_log_mut().commit_batch();
+                    self.state.in_mem_mut().block.results.accept(tx_index);
+                    if commit_batch_hash {
+                        // If at least one of the inner txs of the batch
+                        // requires its hash to be committed than commit the
+                        // hash of the entire batch
+                        self.commit_batch_hash(replay_protection_hashes);
+                    }
+
+                    // Atomic successful batches or non-atomic batches (even
+                    // if the inner txs failed) are marked as Ok
+                    tx_logs.tx_event.extend(Code(ResultCode::Ok));
+                    tx_logs
+                        .changed_keys
+                        .extend(tx_result.wrapper_changed_keys.iter().cloned());
+                    temp_log.commit(&mut tx_logs, response);
+                    tx_logs
+                        .tx_event
+                        .extend(WithGasUsed(tx_result.gas_used))
+                        .extend(Info("Check batch for result.".to_string()))
+                        .extend(Batch(&tx_result.to_result_string()));
                 }
-                changed_keys
-                    .extend(tx_result.wrapper_changed_keys.iter().cloned());
-                tx_event
-                    .extend(WithGasUsed(tx_result.gas_used))
-                    .extend(Info("Check batch for result.".to_string()))
-                    .extend(Batch(&tx_result.to_result_string()));
             }
             Err(Error::TxApply(protocol::Error::WrapperRunnerError(msg))) => {
                 tracing::info!(
                     "Wrapper transaction {} failed with: {}",
-                    tx_event["hash"],
+                    tx_logs.tx_event["hash"],
                     msg,
                 );
-                tx_event
+                tx_logs
+                    .tx_event
                     .extend(WithGasUsed(consumed_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
@@ -709,7 +684,7 @@ where
                 // batch
                 tracing::info!(
                     "Transaction {} failed with: {}",
-                    tx_event["hash"],
+                    tx_logs.tx_event["hash"],
                     msg
                 );
                 // TODO: instead of dropping everything, commit the successful
@@ -743,10 +718,11 @@ where
                     }
                 }
 
-                stats.increment_errored_txs_by(commitments_len);
+                tx_logs.stats.increment_errored_txs_by(commitments_len);
                 self.state.write_log_mut().drop_batch();
 
-                tx_event
+                tx_logs
+                    .tx_event
                     .extend(WithGasUsed(consumed_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
@@ -759,7 +735,7 @@ where
             .map(|args| args.is_committed_fee_unshield)
             .unwrap_or_default()
         {
-            tx_event.extend(ValidMaspTx((tx_index, None)));
+            tx_logs.tx_event.extend(ValidMaspTx((tx_index, None)));
         }
     }
 }
@@ -779,6 +755,47 @@ struct TxLogs<'finalize> {
     tx_event: &'finalize mut Event,
     stats: &'finalize mut InternalStats,
     changed_keys: &'finalize mut BTreeSet<Key>,
+}
+
+// Temporary support type to update the tx logs. If the tx is confirmed this
+// gets merged to the non-temporary type
+struct TempTxLogs {
+    tx_event: Event,
+    stats: InternalStats,
+    changed_keys: BTreeSet<Key>,
+    other_events: Vec<Event>,
+}
+
+impl Default for TempTxLogs {
+    fn default() -> Self {
+        Self {
+            tx_event: Event::applied_tx(),
+            stats: Default::default(),
+            changed_keys: Default::default(),
+            other_events: Default::default(),
+        }
+    }
+}
+
+impl<'finalize> TempTxLogs {
+    // Consumes the temporary logs and merges them to confirmed ones. Pushes ibc
+    // and eth events to the finalize block response
+    fn commit(
+        self,
+        logs: &mut TxLogs<'finalize>,
+        response: &mut shim::response::FinalizeBlock,
+    ) {
+        logs.tx_event.attributes.extend(self.tx_event.attributes);
+        logs.stats.merge(self.stats);
+        logs.changed_keys.extend(self.changed_keys);
+        response.events.extend(self.other_events);
+    }
+
+    // Consumes the temporary logs and merges the statistics to confirmed ones.
+    // This is useful for failing atomic batches
+    fn commit_stats_only(self, logs: &mut TxLogs<'finalize>) {
+        logs.stats.merge(self.stats);
+    }
 }
 
 struct ReplayProtectionHashes {
