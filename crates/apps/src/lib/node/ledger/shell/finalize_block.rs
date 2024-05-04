@@ -333,7 +333,7 @@ where
                 height,
                 wrapper_args,
             };
-            let tx_info = TxInfo {
+            let tx_info = TxLogs {
                 tx_event: &mut tx_event,
                 stats: &mut stats,
                 changed_keys: &mut changed_keys,
@@ -514,11 +514,11 @@ where
             height,
             wrapper_args,
         }: TxData,
-        TxInfo {
+        TxLogs {
             tx_event,
             stats,
             changed_keys,
-        }: TxInfo,
+        }: TxLogs,
     ) {
         match tx_result {
             Ok(tx_result) => {
@@ -657,7 +657,6 @@ where
                                 // because of invalid
                                 // section commitment, commit its hash to
                                 // prevent replays
-
                                 if matches!(
                                     tx_header.tx_type,
                                     TxType::Wrapper(_)
@@ -675,9 +674,9 @@ where
                     // Atomic successful batches or non-atomic batches (even
                     // if the inner txs failed) are marked as Ok
                     tx_event.extend(Code(ResultCode::Ok));
+                    self.state.write_log_mut().commit_batch();
                 }
 
-                self.state.write_log_mut().commit_batch();
                 if commit_batch_hash {
                     // If at least one of the inner txs of the batch
                     // requires its hash to be committed than commit the
@@ -776,7 +775,7 @@ struct TxData<'tx> {
     wrapper_args: Option<WrapperArgs<'tx>>,
 }
 
-struct TxInfo<'finalize> {
+struct TxLogs<'finalize> {
     tx_event: &'finalize mut Event,
     stats: &'finalize mut InternalStats,
     changed_keys: &'finalize mut BTreeSet<Key>,
