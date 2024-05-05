@@ -520,7 +520,9 @@ where
             Ok(tx_result) => {
                 // FIXME: move this entire branch in another function. Also make
                 // two different functions one for atomic and one for
-                // non-atomic? Track the need to commit the
+                // non-atomic?
+
+                // Track the need to commit the
                 // batch hash for replay protection. Hash must
                 // be written if at least one of the txs in the
                 // batch requires so
@@ -574,9 +576,7 @@ where
                                         ),
                                 );
                             } else {
-                                // this branch can only be reached by
-                                // inner
-                                // txs
+                                // this branch can only be reached by inner txs
                                 tracing::trace!(
                                     "some VPs rejected inner tx {} storage \
                                      modification {:#?}",
@@ -584,13 +584,9 @@ where
                                     result.vps_result.rejected_vps
                                 );
 
-                                // If an inner tx failed for any reason
-                                // but
-                                // invalid
-                                // signature, commit its hash to
-                                // storage,
-                                // otherwise
-                                // allow for a replay
+                                // If an inner tx failed for any reason but
+                                // invalid signature, commit its hash to
+                                // storage, otherwise allow for a replay
                                 if !result
                                     .vps_result
                                     .status_flags
@@ -604,16 +600,14 @@ where
                             }
                         }
                         Err(e) => {
-                            // this branch can only be reached by inner
-                            // txs
+                            // this branch can only be reached by inner txs
                             tracing::trace!(
                                 "Inner tx {} failed: {}",
                                 cmt_hash,
                                 e
                             );
-                            // If inner transaction didn't fail
-                            // because of invalid
-                            // section commitment, commit its hash to
+                            // If inner transaction didn't fail because of
+                            // invalid section commitment, commit its hash to
                             // prevent replays
                             if matches!(tx_header.tx_type, TxType::Wrapper(_))
                                 && !matches!(
@@ -638,8 +632,7 @@ where
                     temp_log.stats.set_failing_atomic_batch(unrun_txs);
                     temp_log.commit_stats_only(&mut tx_logs);
                     self.state.write_log_mut().drop_batch();
-                    // FIXME: should this be WasmRuntimeError? Probably yes
-                    tx_logs.tx_event.extend(Code(ResultCode::InvalidTx));
+                    tx_logs.tx_event.extend(Code(ResultCode::WasmRuntimeError));
                 } else {
                     self.state.write_log_mut().commit_batch();
                     self.state.in_mem_mut().block.results.accept(tx_index);
@@ -649,20 +642,20 @@ where
                         // hash of the entire batch
                         self.commit_batch_hash(replay_protection_hashes);
                     }
+                    temp_log.commit(&mut tx_logs, response);
 
                     // Atomic successful batches or non-atomic batches (even
                     // if the inner txs failed) are marked as Ok
                     tx_logs.tx_event.extend(Code(ResultCode::Ok));
-                    tx_logs
-                        .changed_keys
-                        .extend(tx_result.wrapper_changed_keys.iter().cloned());
-                    temp_log.commit(&mut tx_logs, response);
-                    tx_logs
-                        .tx_event
-                        .extend(WithGasUsed(tx_result.gas_used))
-                        .extend(Info("Check batch for result.".to_string()))
-                        .extend(Batch(&tx_result.to_result_string()));
                 }
+                tx_logs
+                    .changed_keys
+                    .extend(tx_result.wrapper_changed_keys.iter().cloned());
+                tx_logs
+                    .tx_event
+                    .extend(WithGasUsed(tx_result.gas_used))
+                    .extend(Info("Check batch for result.".to_string()))
+                    .extend(Batch(&tx_result.to_result_string()));
             }
             Err(Error::TxApply(protocol::Error::WrapperRunnerError(msg))) => {
                 tracing::info!(
@@ -677,7 +670,6 @@ where
                     .extend(Code(ResultCode::InvalidTx));
                 // Make sure to clean the write logs for the next transaction
                 self.state.write_log_mut().drop_tx();
-                self.state.write_log_mut().drop_batch();
             }
             Err(msg) => {
                 // This branch represents an error that affects the entire
@@ -689,7 +681,7 @@ where
                 );
                 // TODO: instead of dropping everything, commit the successful
                 // txs before the error (and emit their events) and adjust the
-                // replay protection handling
+                // replay protection handling. Only if the batch is non-atomic
 
                 // If user transaction didn't fail because of out of gas nor
                 // invalid section commitment, commit its hash to prevent
@@ -5322,7 +5314,7 @@ mod test_finalize_block {
             .expect("Test failed");
 
         let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
         let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
             event[0].attributes.get("batch").unwrap(),
         )
