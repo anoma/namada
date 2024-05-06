@@ -30,15 +30,17 @@ impl InternalStats {
         self.errored_txs += 1;
     }
 
-    pub fn increment_errored_txs_by(&mut self, amt: u64) {
-        self.errored_txs += amt;
-    }
-
     /// Set the current stats to a failing batch by invalidating the valid
     /// transactions and increasing the number of txs not run.
     pub fn set_failing_atomic_batch(&mut self, unrun_txs: u64) {
         let valid_txs = std::mem::take(&mut self.successful_tx);
         self.successful_tx_in_failed_batch = valid_txs;
+        self.unrun_txs = unrun_txs;
+    }
+
+    /// Set the current stats to a failing batch by increasing the number of txs
+    /// not run.
+    pub fn set_failing_batch(&mut self, unrun_txs: u64) {
         self.unrun_txs = unrun_txs;
     }
 
