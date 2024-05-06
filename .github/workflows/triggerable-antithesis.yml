@@ -1,4 +1,4 @@
-name: Triggerable Antithesis workflow
+name: Triggerable Antithesis
 
 on: 
   workflow_dispatch:
@@ -9,6 +9,10 @@ on:
         type: string
       scenario_tester_docker_tag:
         description: 'The docker tag of the scenario tester image'
+        required: true
+        type: string
+      chain_check_docker_tag:
+        description: 'The docker tag of the chain check image'
         required: true
         type: string
       workload_type:
@@ -30,4 +34,4 @@ jobs:
           username: ${{ secrets.ANTITHESIS_USER_NAME }}
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
+          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }},namada-chain-check:${{ github.event.inputs.chain_check_docker_tag }}
