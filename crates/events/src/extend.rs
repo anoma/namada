@@ -402,11 +402,11 @@ where
     where
         A: AttributesMap,
     {
-        Self::read_opt_from_event_attributes(attributes)?.ok_or(
+        Self::read_opt_from_event_attributes(attributes)?.ok_or_else(|| {
             EventError::MissingAttribute(
-                <Self as EventAttributeEntry<'value>>::KEY,
-            ),
-        )
+                <Self as EventAttributeEntry<'value>>::KEY.to_string(),
+            )
+        })
     }
 }
 
@@ -458,11 +458,11 @@ where
     where
         A: AttributesMap,
     {
-        Self::raw_read_opt_from_event_attributes(attributes).ok_or(
+        Self::raw_read_opt_from_event_attributes(attributes).ok_or_else(|| {
             EventError::MissingAttribute(
-                <Self as EventAttributeEntry<'value>>::KEY,
-            ),
-        )
+                <Self as EventAttributeEntry<'value>>::KEY.to_string(),
+            )
+        })
     }
 }
 
