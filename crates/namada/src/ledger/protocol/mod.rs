@@ -260,12 +260,16 @@ where
                         tx_wasm_cache,
                     },
                 ) {
-                    Err(e @ Error::GasError(_)) => {
+                    Err(Error::GasError(ref msg)) => {
                         // Gas error aborts the execution of the entire batch
                         tx_result.gas_used =
                             tx_gas_meter.borrow().get_tx_consumed_gas();
+                        tx_result.batch_results.0.insert(
+                            cmt.get_hash(),
+                            Err(Error::GasError(msg.to_owned())),
+                        );
                         state.write_log_mut().drop_tx();
-                        return Err(e);
+                        return Err(Error::GasError(msg.to_owned()));
                     }
                     res => {
                         let is_accepted =
