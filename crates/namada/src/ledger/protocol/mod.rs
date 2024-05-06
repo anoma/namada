@@ -174,11 +174,12 @@ pub fn dispatch_tx<'a, D, H, CA>(
     tx_bytes: &'a [u8],
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
+    tx_result: &'a mut TxResult<Error>,
     state: &'a mut WlState<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-) -> Result<TxResult<Error>>
+) -> Result<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -199,13 +200,14 @@ where
                     tx_wasm_cache,
                 },
             )?;
-            Ok(TxResult {
+            *tx_result = TxResult {
                 gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                 wrapper_changed_keys: Default::default(),
                 batch_results: BatchResults(
                     [(cmt.get_hash(), Ok(result))].into_iter().collect(),
                 ),
-            })
+            };
+            Ok(())
         }
         TxType::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
@@ -213,17 +215,18 @@ where
             let result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
-            Ok(TxResult {
+            *tx_result = TxResult {
                 batch_results: BatchResults(
                     [(cmt.get_hash(), Ok(result))].into_iter().collect(),
                 ),
                 ..Default::default()
-            })
+            };
+            Ok(())
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
-            let mut tx_result = apply_wrapper_tx(
+            *tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
@@ -259,6 +262,8 @@ where
                 ) {
                     Err(e @ Error::GasError(_)) => {
                         // Gas error aborts the execution of the entire batch
+                        tx_result.gas_used =
+                            tx_gas_meter.borrow().get_tx_consumed_gas();
                         state.write_log_mut().drop_tx();
                         return Err(e);
                     }
@@ -267,6 +272,8 @@ where
                             matches!(&res, Ok(result) if result.is_accepted());
 
                         tx_result.batch_results.0.insert(cmt.get_hash(), res);
+                        tx_result.gas_used =
+                            tx_gas_meter.borrow().get_tx_consumed_gas();
                         if is_accepted {
                             state.write_log_mut().commit_tx_to_batch();
                         } else {
@@ -275,7 +282,7 @@ where
                     }
                 };
             }
-            Ok(tx_result)
+            Ok(())
         }
     }
 }
