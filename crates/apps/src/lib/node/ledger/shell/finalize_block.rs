@@ -688,8 +688,6 @@ where
 
         tx_logs
             .tx_event
-            .extend(WithGasUsed(tx_result.gas_used))
-            .extend(Info("Check batch for result.".to_string()))
             .extend(Batch(&tx_result.to_result_string()));
     }
 
