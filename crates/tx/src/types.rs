@@ -1107,13 +1107,8 @@ impl Tx {
             return false;
         }
 
-        let new_sections: Vec<Section> = other
-            .sections
-            .into_iter()
-            // Avoid bloating the message with redundant sections
-            .filter(|sec| !self.sections.contains(sec))
-            .collect();
-        self.sections.extend(new_sections);
+        //TODO: avoid duplicated sections to reduce the size of the message
+        self.sections.extend(other.sections);
 
         true
     }
