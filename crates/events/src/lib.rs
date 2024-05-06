@@ -300,7 +300,7 @@ pub enum EventError {
     MissingDomain,
     /// Error resulting from a missing event attribute.
     #[error("Missing event attribute {0:?}")]
-    MissingAttribute(&'static str),
+    MissingAttribute(String),
     /// Error resulting from an invalid encoding of an event attribute.
     #[error("Failed to parse event attribute: {0}")]
     AttributeEncoding(String),
