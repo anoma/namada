@@ -4,6 +4,57 @@
 
 use super::*;
 
+impl Event {
+    /// Get the value corresponding to a given attribute.
+    #[inline]
+    pub fn dyn_read_attribute<'value, DATA>(
+        &self,
+        reader: &DATA,
+    ) -> Result<<DATA as DynReadFromEventAttributes<'value>>::Value, EventError>
+    where
+        DATA: DynReadFromEventAttributes<'value>,
+    {
+        reader.dyn_read_from_event_attributes(&self.attributes)
+    }
+
+    /// Get the value corresponding to a given attribute, if it exists.
+    #[inline]
+    pub fn dyn_read_attribute_opt<'value, DATA>(
+        &self,
+        reader: &DATA,
+    ) -> Result<
+        Option<<DATA as DynReadFromEventAttributes<'value>>::Value>,
+        EventError,
+    >
+    where
+        DATA: DynReadFromEventAttributes<'value>,
+    {
+        reader.dyn_read_opt_from_event_attributes(&self.attributes)
+    }
+
+    /// Check if a certain attribute is present in the event.
+    #[inline]
+    pub fn dyn_has_attribute<'value, DATA>(&self, reader: &DATA) -> bool
+    where
+        DATA: DynRawReadFromEventAttributes<'value>,
+    {
+        reader.dyn_check_if_present_in(&self.attributes)
+    }
+
+    /// Get the raw string value corresponding to a given attribute, if it
+    /// exists.
+    #[inline]
+    pub fn dyn_raw_read_attribute<'this, 'reader: 'this, 'value, DATA>(
+        &'this self,
+        reader: &'reader DATA,
+    ) -> Option<&'this str>
+    where
+        DATA: DynRawReadFromEventAttributes<'value>,
+    {
+        reader.dyn_raw_read_opt_from_event_attributes(&self.attributes)
+    }
+}
+
 /// Checks for the presence of an attribute in the
 /// provided attributes map.
 pub trait EventAttributeChecker<'value, A>
@@ -61,6 +112,53 @@ where
     {
         attributes.is_attribute(DATA::KEY)
     }
+}
+
+/// Read an attribute from an [event](Event)'s attributes.
+pub trait DynReadFromEventAttributes<'value> {
+    /// The attribute to be read.
+    type Value;
+
+    /// Read an attribute from the provided event attributes.
+    fn dyn_read_opt_from_event_attributes<A>(
+        &self,
+        attributes: &A,
+    ) -> Result<Option<Self::Value>, EventError>
+    where
+        A: AttributesMap;
+
+    /// Read an attribute from the provided event attributes.
+    fn dyn_read_from_event_attributes<A>(
+        &self,
+        attributes: &A,
+    ) -> Result<Self::Value, EventError>
+    where
+        A: AttributesMap;
+}
+
+/// Read a raw (string encoded) attribute from an [event](Event)'s attributes.
+pub trait DynRawReadFromEventAttributes<'value> {
+    /// Check if the associated attribute is present in the provided event
+    /// attributes.
+    fn dyn_check_if_present_in<A>(&self, attributes: &A) -> bool
+    where
+        A: AttributesMap;
+
+    /// Read a string encoded attribute from the provided event attributes.
+    fn dyn_raw_read_opt_from_event_attributes<A>(
+        &self,
+        attributes: &A,
+    ) -> Option<&str>
+    where
+        A: AttributesMap;
+
+    /// Read a string encoded attribute from the provided event attributes.
+    fn dyn_raw_read_from_event_attributes<A>(
+        &self,
+        attributes: &A,
+    ) -> Result<&str, EventError>
+    where
+        A: AttributesMap;
 }
 
 #[cfg(test)]
