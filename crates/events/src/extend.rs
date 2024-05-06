@@ -13,6 +13,74 @@ use namada_core::storage::{BlockHeight, TxIndex};
 
 use super::*;
 
+impl Event {
+    /// Check if this [`Event`] has a subset of the keys and values
+    /// in `attrs`.
+    #[inline]
+    pub fn has_subset_of_attrs<A: AttributesMap>(&self, attrs: &A) -> bool {
+        attrs.iter_attributes().all(|(key, value)| {
+            match self.attributes.get(key) {
+                Some(v) => v == value,
+                None => false,
+            }
+        })
+    }
+
+    /// Get the raw string value corresponding to a given attribute, if it
+    /// exists.
+    #[inline]
+    pub fn raw_read_attribute<'value, DATA>(&self) -> Option<&str>
+    where
+        DATA: RawReadFromEventAttributes<'value>,
+    {
+        DATA::raw_read_opt_from_event_attributes(&self.attributes)
+    }
+
+    /// Get the value corresponding to a given attribute.
+    #[inline]
+    pub fn read_attribute<'value, DATA>(
+        &self,
+    ) -> Result<<DATA as ReadFromEventAttributes<'value>>::Value, EventError>
+    where
+        DATA: ReadFromEventAttributes<'value>,
+    {
+        DATA::read_from_event_attributes(&self.attributes)
+    }
+
+    /// Get the value corresponding to a given attribute, if it exists.
+    #[inline]
+    pub fn read_attribute_opt<'value, DATA>(
+        &self,
+    ) -> Result<
+        Option<<DATA as ReadFromEventAttributes<'value>>::Value>,
+        EventError,
+    >
+    where
+        DATA: ReadFromEventAttributes<'value>,
+    {
+        DATA::read_opt_from_event_attributes(&self.attributes)
+    }
+
+    /// Check if a certain attribute is present in the event.
+    #[inline]
+    pub fn has_attribute<'value, DATA>(&self) -> bool
+    where
+        DATA: RawReadFromEventAttributes<'value>,
+    {
+        DATA::check_if_present_in(&self.attributes)
+    }
+
+    /// Extend this [`Event`] with additional data.
+    #[inline]
+    pub fn extend<DATA>(&mut self, data: DATA) -> &mut Self
+    where
+        DATA: ExtendEvent,
+    {
+        data.extend_event(self);
+        self
+    }
+}
+
 /// Map of event attributes.
 pub trait AttributesMap {
     /// Insert a new attribute.
