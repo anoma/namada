@@ -1107,7 +1107,7 @@ impl Tx {
             return false;
         }
 
-        //TODO: avoid duplicated sections to reduce the size of the message
+        // TODO: avoid duplicated sections to reduce the size of the message
         self.sections.extend(other.sections);
 
         true

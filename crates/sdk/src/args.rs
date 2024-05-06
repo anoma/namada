@@ -1873,6 +1873,8 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
 pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
     pub ledger_address: C::TendermintAddress,
+    /// The number of txs to fetch before caching
+    pub batch_size: u64,
     /// Height to start syncing from. Defaults to the correct one.
     pub start_query_height: Option<BlockHeight>,
     /// Height to sync up to. Defaults to most recent
