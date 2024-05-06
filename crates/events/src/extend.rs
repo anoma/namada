@@ -557,6 +557,41 @@ where
     }
 }
 
+/// Extend an [`Event`] with metadata pertaining to its origin
+/// in the source code.
+pub struct Origin {
+    #[doc(hidden)]
+    pub __origin: &'static str,
+}
+
+#[macro_export]
+macro_rules! event_origin {
+    () => {
+        $crate::extend::Origin {
+            __origin: ::konst::string::str_concat!(&[
+                ::core::env!("CARGO_CRATE_NAME"),
+                "-",
+                ::core::env!("CARGO_PKG_VERSION"),
+                ":",
+                ::core::file!(),
+                ":",
+                ::core::line!()
+            ]),
+        }
+    };
+}
+
+impl EventAttributeEntry<'static> for Origin {
+    type Value = &'static str;
+    type ValueOwned = String;
+
+    const KEY: &'static str = "event-origin";
+
+    fn into_value(self) -> Self::Value {
+        self.__origin
+    }
+}
+
 /// Checks for the presence of an attribute in the
 /// provided attributes map.
 pub trait EventAttributeChecker<'value, A>
