@@ -57,15 +57,10 @@ impl Event {
 
 /// Checks for the presence of an attribute in the
 /// provided attributes map.
-pub trait EventAttributeChecker<'value, A>
-where
-    A: AttributesMap,
-{
+pub trait EventAttributeChecker<'value, A: AttributesMap> {
     /// Check if the associated attribute is present in the provided event
     /// attributes.
-    fn is_present(&self, attributes: &A) -> bool
-    where
-        A: AttributesMap;
+    fn is_present(&self, attributes: &A) -> bool;
 }
 
 /// Return a new implementation of [`EventAttributeChecker`].
@@ -106,10 +101,7 @@ where
     DATA: EventAttributeEntry<'value>,
     A: AttributesMap,
 {
-    fn is_present(&self, attributes: &A) -> bool
-    where
-        A: AttributesMap,
-    {
+    fn is_present(&self, attributes: &A) -> bool {
         attributes.is_attribute(DATA::KEY)
     }
 }
