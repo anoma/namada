@@ -325,7 +325,7 @@ where
             // save the gas cost
             self.update_tx_gas(tx_hash, consumed_gas.into());
 
-            self.evalute_tx_result(
+            self.evaluate_tx_result(
                 &mut response,
                 &dispatch_result,
                 tx_result,
@@ -506,7 +506,7 @@ where
 
     // Evaluate the result of a batch. Commit or drop the storage changes,
     // update stats and event, manage replay protection.
-    fn evalute_tx_result(
+    fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         dispatch_result: &Result<()>,
@@ -566,7 +566,7 @@ where
                 self.handle_batch_error(
                     response,
                     msg,
-                    &tx_result,
+                    tx_result,
                     tx_data,
                     &mut tx_logs,
                 );
@@ -638,12 +638,11 @@ where
             .extend(Batch(&tx_result.to_result_string()));
     }
 
-    // FIXME: add unit test
     fn handle_batch_error(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        tx_result: &namada::tx::data::TxResult<protocol::Error>,
+        tx_result: namada::tx::data::TxResult<protocol::Error>,
         tx_data: TxData,
         tx_logs: &mut TxLogs,
     ) {
@@ -651,7 +650,7 @@ where
         let mut temp_log = TempTxLogs::default();
 
         temp_log.check_inner_results(
-            tx_result,
+            &tx_result,
             tx_data.tx_header,
             tx_data.tx_index,
             tx_data.height,
@@ -686,6 +685,12 @@ where
         } else {
             self.handle_batch_error_reprot(msg, tx_data);
         }
+
+        tx_logs
+            .tx_event
+            .extend(WithGasUsed(tx_result.gas_used))
+            .extend(Info("Check batch for result.".to_string()))
+            .extend(Batch(&tx_result.to_result_string()));
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData) {
@@ -1000,7 +1005,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 20_000;
+    const WRAPPER_GAS_LIMIT: u64 = 10_000;
     const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
@@ -1045,12 +1050,14 @@ mod test_finalize_block {
     }
 
     // Make a transaction batch with two transactions. Optionally make the batch
-    // atomic and request the failure of the first transaction
+    // atomic, request the failure of the first transaction and an out of gas of
+    // the second one
     fn mk_tx_batch(
         shell: &TestShell,
         sk: &common::SecretKey,
         set_atomic: bool,
         should_fail: bool,
+        should_run_out_of_gas: bool,
     ) -> (Tx, ProcessedTx) {
         let mut batch =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1080,16 +1087,18 @@ mod test_finalize_block {
         batch.set_code(Code::new(tx_code, None));
 
         // append second inner tx to batch
+        let tx_code = if should_run_out_of_gas {
+            TestWasms::TxInfiniteHostGas.read_bytes()
+        } else {
+            TestWasms::TxWriteStorageKey.read_bytes()
+        };
         batch.push_default_inner_tx();
         let data = TxWriteData {
             key: "another_random_key".parse().unwrap(),
             value: STORAGE_VALUE.serialize_to_vec(),
         };
         batch.set_data(Data::new(data.serialize_to_vec()));
-        batch.set_code(Code::new(
-            TestWasms::TxWriteStorageKey.read_bytes(),
-            None,
-        ));
+        batch.set_code(Code::new(tx_code, None));
 
         batch.add_section(Section::Authorization(Authorization::new(
             vec![batch.raw_header_hash()],
@@ -3465,7 +3474,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(200.into()),
                     token: native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -5332,7 +5341,8 @@ mod test_finalize_block {
         let (mut shell, _broadcaster, _, _) = setup();
         let sk = crate::wallet::defaults::bertha_keypair();
 
-        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, false, false);
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, false, false);
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -5379,7 +5389,7 @@ mod test_finalize_block {
         let (mut shell, _broadcaster, _, _) = setup();
         let sk = crate::wallet::defaults::bertha_keypair();
 
-        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, true);
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, true, false);
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -5424,7 +5434,8 @@ mod test_finalize_block {
         let (mut shell, _broadcaster, _, _) = setup();
         let sk = crate::wallet::defaults::bertha_keypair();
 
-        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, false, true);
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, true, false);
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -5465,6 +5476,108 @@ mod test_finalize_block {
                 .unwrap()
                 .unwrap(),
             STORAGE_VALUE
+        );
+    }
+
+    // Test a gas error on the second tx of an atomic batch with two successful
+    // txs. Verify that no changes are committed
+    #[test]
+    fn test_gas_error_atomic_batch() {
+        let (mut shell, _, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, false, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+
+        // Check storage modifications are missing
+        for key in ["random_key", "another_random_key"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
+    }
+
+    // Test a gas error on the second tx of a non-atomic batch with two
+    // successful txs. Verify that changes from the first tx are committed
+    #[test]
+    fn test_gas_error_non_atomic_batch() {
+        let (mut shell, _, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, false, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].attributes.get("code").unwrap().as_str();
+        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        let inner_tx_result = namada::tx::data::TxResult::<String>::from_str(
+            event[0].attributes.get("batch").unwrap(),
+        )
+        .unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+
+        // Check storage modifications
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"random_key".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+        assert!(
+            !shell
+                .state
+                .has_key(&"another_random_key".parse().unwrap())
+                .unwrap()
         );
     }
 }
