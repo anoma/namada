@@ -744,6 +744,7 @@ pub async fn build_validator_metadata_change(
         website,
         discord_handle,
         avatar,
+        name,
         commission_rate,
         tx_code_path,
     }: &args::MetaDataChange,
@@ -935,6 +936,7 @@ pub async fn build_validator_metadata_change(
         description: description.clone(),
         discord_handle: discord_handle.clone(),
         avatar: avatar.clone(),
+        name: name.clone(),
         commission_rate: *commission_rate,
     };
 
@@ -2255,6 +2257,7 @@ pub async fn build_become_validator(
         description,
         discord_handle,
         avatar,
+        name,
         unsafe_dont_encrypt: _,
         tx_code_path,
     }: &args::TxBecomeValidator,
@@ -2381,6 +2384,7 @@ pub async fn build_become_validator(
         website: website.clone(),
         discord_handle: discord_handle.clone(),
         avatar: avatar.clone(),
+        name: name.clone(),
     };
 
     // Put together all the PKs that we have to sign with to verify ownership

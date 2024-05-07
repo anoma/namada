@@ -16,6 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         website,
         discord_handle,
         avatar,
+        name,
         commission_rate,
     } = transaction::pos::MetaDataChange::try_from_slice(&data[..])
         .wrap_err("Failed to decode MetaDataChange value")?;
@@ -26,6 +27,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         website,
         discord_handle,
         avatar,
+        name,
         commission_rate,
     )
     .wrap_err("Failed to update validator's metadata")
