@@ -489,9 +489,14 @@ pub fn init_network(
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
         let file = base_wasm_path.join(&full_name);
-        if file.exists() {
-            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
+        if !file.exists() {
+            println!(
+                "Skipping nonexistent wasm artifact: {}",
+                file.to_string_lossy()
+            );
+            continue;
         }
+        fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
     }
 
     // Create release tarball
