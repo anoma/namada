@@ -197,7 +197,7 @@ impl Ctx {
             website,
             discord_handle,
             avatar,
-            validator_alias,
+            name,
         }: BecomeValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
@@ -230,7 +230,7 @@ impl Ctx {
                     website,
                     discord_handle,
                     avatar,
-                    validator_alias,
+                    name,
                 },
                 offset_opt: None,
             },
@@ -275,7 +275,7 @@ impl Ctx {
         website: Option<String>,
         discord_handle: Option<String>,
         avatar: Option<String>,
-        validator_alias: Option<String>,
+        name: Option<String>,
         commission_rate: Option<Dec>,
     ) -> TxResult {
         // The tx must be authorized by the source address
@@ -294,7 +294,7 @@ impl Ctx {
             website,
             discord_handle,
             avatar,
-            validator_alias,
+            name,
             commission_rate,
             current_epoch,
         )

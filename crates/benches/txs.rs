@@ -623,7 +623,7 @@ fn become_validator(c: &mut Criterion) {
         website: None,
         discord_handle: None,
         avatar: None,
-        validator_alias: None,
+        name: None,
     };
     let tx = shell.generate_tx(
         TX_BECOME_VALIDATOR_WASM,
@@ -720,7 +720,7 @@ fn change_validator_metadata(c: &mut Criterion) {
         website: None,
         discord_handle: None,
         avatar: None,
-        validator_alias: None,
+        name: None,
         commission_rate: None,
     };
 

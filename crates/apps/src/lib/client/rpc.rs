@@ -2003,14 +2003,19 @@ pub async fn query_and_print_metadata(
             website,
             discord_handle,
             avatar,
-            validator_alias,
+            name,
         }) => {
             display_line!(
                 context.io(),
-                "Validator {} metadata:\nEmail: {}",
-                validator.encode(),
-                email
+                "Validator {} metadata:",
+                validator.encode()
             );
+            if let Some(name) = name {
+                display_line!(context.io(), "Validator name: {}", name);
+            } else {
+                display_line!(context.io(), "No validator name");
+            }
+            display_line!(context.io(), "Email: {}", email);
             if let Some(description) = description {
                 display_line!(context.io(), "Description: {}", description);
             } else {
@@ -2034,15 +2039,6 @@ pub async fn query_and_print_metadata(
                 display_line!(context.io(), "Avatar: {}", avatar);
             } else {
                 display_line!(context.io(), "No avatar");
-            }
-            if let Some(validator_alias) = validator_alias {
-                display_line!(
-                    context.io(),
-                    "Validator alias: {}",
-                    validator_alias
-                );
-            } else {
-                display_line!(context.io(), "No validator alias");
             }
         }
         None => display_line!(

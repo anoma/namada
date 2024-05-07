@@ -156,7 +156,7 @@ impl BecomeValidator {
         website: Option<String>,
         discord_handle: Option<String>,
         avatar: Option<String>,
-        validator_alias: Option<String>,
+        name: Option<String>,
         args: GlobalArgs,
     ) -> Self {
         let update_account = namada_sdk::tx::data::pos::BecomeValidator {
@@ -172,7 +172,7 @@ impl BecomeValidator {
             website,
             discord_handle,
             avatar,
-            validator_alias,
+            name,
         };
 
         Self(transaction::build_tx(
@@ -466,7 +466,7 @@ impl ChangeMetaData {
         website: Option<String>,
         discord_handle: Option<String>,
         avatar: Option<String>,
-        validator_alias: Option<String>,
+        name: Option<String>,
         commission_rate: Option<Dec>,
         args: GlobalArgs,
     ) -> Self {
@@ -477,7 +477,7 @@ impl ChangeMetaData {
             website,
             discord_handle,
             avatar,
-            validator_alias,
+            name,
             commission_rate,
         };
 
