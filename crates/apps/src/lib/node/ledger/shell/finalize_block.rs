@@ -583,20 +583,16 @@ where
         tx_data: TxData,
         tx_logs: &mut TxLogs,
     ) {
-        // Track the need to commit the batch hash for replay protection. Hash
-        // must be written if at least one of the txs in the batch requires so
-        let mut commit_batch_hash = false;
-        // Track if any of the inner txs failed or was rejected
-        let mut is_any_tx_invalid = false;
         let mut temp_log = TempTxLogs::default();
 
-        temp_log.check_inner_results(
+        let ValidityFlags {
+            commit_batch_hash,
+            is_any_tx_invalid,
+        } = temp_log.check_inner_results(
             &tx_result,
             tx_data.tx_header,
             tx_data.tx_index,
             tx_data.height,
-            &mut commit_batch_hash,
-            &mut is_any_tx_invalid,
         );
 
         if tx_data.is_atomic_batch && is_any_tx_invalid {
@@ -646,16 +642,16 @@ where
         tx_data: TxData,
         tx_logs: &mut TxLogs,
     ) {
-        let mut commit_batch_hash = false;
         let mut temp_log = TempTxLogs::default();
 
-        temp_log.check_inner_results(
+        let ValidityFlags {
+            commit_batch_hash,
+            is_any_tx_invalid: _,
+        } = temp_log.check_inner_results(
             &tx_result,
             tx_data.tx_header,
             tx_data.tx_index,
             tx_data.height,
-            &mut commit_batch_hash,
-            &mut false,
         );
 
         let unrun_txs =
@@ -738,6 +734,15 @@ struct TxLogs<'finalize> {
     changed_keys: &'finalize mut BTreeSet<Key>,
 }
 
+#[derive(Default)]
+struct ValidityFlags {
+    // Track the need to commit the batch hash for replay protection. Hash
+    // must be written if at least one of the txs in the batch requires so
+    commit_batch_hash: bool,
+    // Track if any of the inner txs failed or was rejected
+    is_any_tx_invalid: bool,
+}
+
 // Temporary support type to update the tx logs. If the tx is confirmed this
 // gets merged to the non-temporary type
 struct TempTxLogs {
@@ -784,9 +789,9 @@ impl<'finalize> TempTxLogs {
         tx_header: &namada::tx::Header,
         tx_index: usize,
         height: BlockHeight,
-        commit_batch_hash: &mut bool,
-        is_any_tx_invalid: &mut bool,
-    ) {
+    ) -> ValidityFlags {
+        let mut flags = ValidityFlags::default();
+
         for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
             match batched_result {
                 Ok(result) => {
@@ -807,7 +812,7 @@ impl<'finalize> TempTxLogs {
                         self.changed_keys
                             .extend(result.changed_keys.iter().cloned());
                         self.stats.increment_successful_txs();
-                        *commit_batch_hash = true;
+                        flags.commit_batch_hash = true;
 
                         // events from other sources
                         self.other_events.extend(
@@ -845,11 +850,11 @@ impl<'finalize> TempTxLogs {
                             .status_flags
                             .contains(VpStatusFlags::INVALID_SIGNATURE)
                         {
-                            *commit_batch_hash = true;
+                            flags.commit_batch_hash = true;
                         }
 
                         self.stats.increment_rejected_txs();
-                        *is_any_tx_invalid = true;
+                        flags.is_any_tx_invalid = true;
                     }
                 }
                 Err(e) => {
@@ -860,14 +865,16 @@ impl<'finalize> TempTxLogs {
                     if matches!(tx_header.tx_type, TxType::Wrapper(_))
                         && !matches!(e, protocol::Error::MissingSection(_))
                     {
-                        *commit_batch_hash = true;
+                        flags.commit_batch_hash = true;
                     }
 
                     self.stats.increment_errored_txs();
-                    *is_any_tx_invalid = true;
+                    flags.is_any_tx_invalid = true;
                 }
             }
         }
+
+        flags
     }
 }
 
