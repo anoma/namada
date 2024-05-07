@@ -201,14 +201,14 @@ impl WriteLog {
         &self,
         key: &storage::Key,
     ) -> (Option<&StorageModification>, u64) {
-        let mut buckets = vec![];
-        for tx_log in self.batch_write_log.iter().rev() {
-            buckets.push(&tx_log.write_log);
-        }
-        buckets.push(&self.block_write_log);
-
-        for bucket in buckets {
-            if let Some(v) = &bucket.get(key) {
+        for bucket in self
+            .batch_write_log
+            .iter()
+            .rev()
+            .map(|batch_log| &batch_log.write_log)
+            .chain([&self.block_write_log])
+        {
+            if let Some(v) = bucket.get(key) {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
                         key.len() + value.len()
@@ -629,16 +629,14 @@ impl WriteLog {
     pub fn iter_prefix_pre(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        let mut buckets = vec![&self.block_write_log];
-        for tx_log in self.batch_write_log.iter().rev() {
-            buckets.push(&tx_log.write_log);
-        }
-
-        for bucket in buckets {
-            for (key, modification) in bucket {
-                if key.split_prefix(prefix).is_some() {
-                    matches.insert(key.to_string(), modification.clone());
-                }
+        for (key, modification) in self.block_write_log.iter().chain(
+            self.batch_write_log
+                .iter()
+                .rev()
+                .flat_map(|batch_log| batch_log.write_log.iter()),
+        ) {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.to_string(), modification.clone());
             }
         }
 
@@ -651,18 +649,20 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        let mut buckets = vec![&self.block_write_log];
-        for tx_log in self.batch_write_log.iter().rev() {
-            buckets.push(&tx_log.write_log);
-        }
-        buckets.push(&self.tx_write_log.precommit_write_log);
-        buckets.push(&self.tx_write_log.write_log);
-
-        for bucket in buckets {
-            for (key, modification) in bucket {
-                if key.split_prefix(prefix).is_some() {
-                    matches.insert(key.to_string(), modification.clone());
-                }
+        for (key, modification) in self.block_write_log.iter().chain(
+            self.batch_write_log
+                .iter()
+                .rev()
+                .flat_map(|batch_log| batch_log.write_log.iter())
+                .chain(
+                    self.tx_write_log
+                        .precommit_write_log
+                        .iter()
+                        .chain(self.tx_write_log.write_log.iter()),
+                ),
+        ) {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.to_string(), modification.clone());
             }
         }
 
