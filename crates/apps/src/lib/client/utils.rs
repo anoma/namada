@@ -521,7 +521,21 @@ pub fn init_network(
     println!("Derived chain ID: {}", chain_id);
     println!("Genesis files stored at {}", chain_dir.to_string_lossy());
 
-    // Create a release tarball for anoma-network-config
+    // Try to copy the built WASM, if they're present with the checksums
+    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
+        .unwrap_or_else(|_| safe_exit(1));
+    for (_, full_name) in checksums.0 {
+        // try to copy built file from the Namada WASM root dir
+        let file = std::env::current_dir()
+            .unwrap()
+            .join(crate::config::DEFAULT_WASM_DIR)
+            .join(&full_name);
+        if file.exists() {
+            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
+        }
+    }
+
+    // Create a release tarball
     if !dont_archive {
         // TODO: remove the `config::DEFAULT_BASE_DIR` and instead just archive
         // the chain dir
@@ -566,22 +580,6 @@ pub fn init_network(
             "Release archive created at {}",
             release_file.to_string_lossy()
         );
-    }
-
-    // After the archive is created, try to copy the built WASM, if they're
-    // present with the checksums. This is used for local network setup, so
-    // that we can use a local WASM build.
-    let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
-        .unwrap_or_else(|_| safe_exit(1));
-    for (_, full_name) in checksums.0 {
-        // try to copy built file from the Namada WASM root dir
-        let file = std::env::current_dir()
-            .unwrap()
-            .join(crate::config::DEFAULT_WASM_DIR)
-            .join(&full_name);
-        if file.exists() {
-            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
-        }
     }
 }
 
