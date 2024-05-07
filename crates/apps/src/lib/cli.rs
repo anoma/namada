@@ -250,7 +250,6 @@ pub mod cmds {
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
-                .subcommand(QueryIbcToken::def().display_order(5))
                 .subcommand(QueryBonds::def().display_order(5))
                 .subcommand(QueryBondedStake::def().display_order(5))
                 .subcommand(QuerySlashes::def().display_order(5))
@@ -323,7 +322,6 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryMaspRewardTokens);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
-            let query_ibc_token = Self::parse_with_ctx(matches, QueryIbcToken);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
@@ -384,7 +382,6 @@ pub mod cmds {
                 .or(query_masp_reward_tokens)
                 .or(query_block)
                 .or(query_balance)
-                .or(query_ibc_token)
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
@@ -474,7 +471,6 @@ pub mod cmds {
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
-        QueryIbcToken(QueryIbcToken),
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
@@ -1713,27 +1709,8 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about("Query balance(s) of tokens.")
+                .about("Query the token balance of some account.")
                 .add_args::<args::QueryBalance<args::CliTypes>>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct QueryIbcToken(pub args::QueryIbcToken<args::CliTypes>);
-
-    impl SubCmd for QueryIbcToken {
-        const CMD: &'static str = "ibc-token";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryIbcToken(args::QueryIbcToken::parse(matches))
-            })
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Query IBC token(s).")
-                .add_args::<args::QueryIbcToken<args::CliTypes>>()
         }
     }
 
@@ -3026,7 +3003,7 @@ pub mod args {
     pub const AMOUNT: Arg<token::DenominatedAmount> = arg("amount");
     pub const ARCHIVE_DIR: ArgOpt<PathBuf> = arg_opt("archive-dir");
     pub const AVATAR_OPT: ArgOpt<String> = arg_opt("avatar");
-    pub const BALANCE_OWNER: ArgOpt<WalletBalanceOwner> = arg_opt("owner");
+    pub const BALANCE_OWNER: Arg<WalletBalanceOwner> = arg("owner");
     pub const BASE_DIR: ArgDefault<PathBuf> = arg_default(
         "base-dir",
         DefaultFn(|| match env::var("NAMADA_BASE_DIR") {
@@ -5472,10 +5449,9 @@ pub mod args {
 
             Ok(QueryBalance::<SdkTypes> {
                 query,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
-                token: self.token.map(|x| chain_ctx.get(&x)),
+                owner: chain_ctx.get_cached(&self.owner),
+                token: chain_ctx.get(&self.token),
                 no_conversions: self.no_conversions,
-                show_ibc_tokens: self.show_ibc_tokens,
             })
         }
     }
@@ -5484,15 +5460,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = BALANCE_OWNER.parse(matches);
-            let token = TOKEN_OPT.parse(matches);
+            let token = TOKEN.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
-            let show_ibc_tokens = SHOW_IBC_TOKENS.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
-                show_ibc_tokens,
             }
         }
 
@@ -5504,7 +5478,7 @@ pub mod args {
                         .help("The account address whose balance to query."),
                 )
                 .arg(
-                    TOKEN_OPT
+                    TOKEN
                         .def()
                         .help("The token's address whose balance to query."),
                 )
@@ -5512,50 +5486,6 @@ pub mod args {
                     NO_CONVERSIONS.def().help(
                         "Whether not to automatically perform conversions.",
                     ),
-                )
-                .arg(SHOW_IBC_TOKENS.def().help(
-                    "Show IBC tokens. When the given token is an IBC denom, \
-                     IBC tokens will be shown even if this flag is false.",
-                ))
-        }
-    }
-
-    impl CliToSdk<QueryIbcToken<SdkTypes>> for QueryIbcToken<CliTypes> {
-        type Error = std::convert::Infallible;
-
-        fn to_sdk(
-            self,
-            ctx: &mut Context,
-        ) -> Result<QueryIbcToken<SdkTypes>, Self::Error> {
-            let query = self.query.to_sdk(ctx)?;
-            let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            Ok(QueryIbcToken::<SdkTypes> {
-                query,
-                token: self.token,
-                owner: self.owner.map(|x| chain_ctx.get_cached(&x)),
-            })
-        }
-    }
-
-    impl Args for QueryIbcToken<CliTypes> {
-        fn parse(matches: &ArgMatches) -> Self {
-            let query = Query::parse(matches);
-            let token = TOKEN_STR_OPT.parse(matches);
-            let owner = BALANCE_OWNER.parse(matches);
-            Self {
-                query,
-                owner,
-                token,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>()
-                .arg(TOKEN_STR_OPT.def().help("The base token to query."))
-                .arg(
-                    BALANCE_OWNER
-                        .def()
-                        .help("The account address whose token to query."),
                 )
         }
     }

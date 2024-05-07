@@ -109,7 +109,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -318,7 +318,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -439,7 +439,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded eth balance found"));
+    assert!(captured.contains("eth: 0"));
 
     node.next_epoch();
     // sync the shielded context
@@ -549,7 +549,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded btc balance found"));
+    assert!(captured.contains("btc: 0"));
 
     // Assert VK(A) retained the NAM rewards
     let captured = CapturedOutput::of(|| {
@@ -750,7 +750,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // sync the shielded context
     run(
@@ -776,7 +776,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Assert NAM balance at MASP pool is nearly 0
     let captured = CapturedOutput::of(|| {
@@ -1132,7 +1132,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("No shielded btc balance found"),
+            Response::Ok("btc: 0"),
         ),
         // 9. Assert ETH balance at VK(A) is 0
         (
@@ -1145,7 +1145,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("No shielded eth balance found"),
+            Response::Ok("eth: 0"),
         ),
         // 10. Assert balance at VK(B) is 20 BTC
         (
@@ -1153,10 +1153,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 "balance",
                 "--owner",
                 AB_VIEWING_KEY,
+                "--token",
+                BTC,
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("btc : 20"),
+            Response::Ok("btc: 20"),
         ),
         // 11. Send 20 BTC from SK(B) to Bertha
         (
@@ -2154,7 +2156,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     {
         // Start decoding and distributing shielded rewards for BTC in next
@@ -2223,7 +2225,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     // Send 1 BTC from Albert to PA
     run(
@@ -2288,7 +2290,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();
