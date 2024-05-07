@@ -7,18 +7,11 @@ const HASH_LEN: usize = hash::HASH_LENGTH;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let BatchedTx {
         tx: signed,
         ref cmt,
     } = tx_data;
-    let data =
-        signed
-            .data(cmt)
-            .ok_or_err_msg("Missing data")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
     let tx_data = account::InitAccount::try_from_slice(&data[..])
         .wrap_err("Failed to decode InitAccount tx data")?;
     debug_log!("apply_tx called to init a new established account");

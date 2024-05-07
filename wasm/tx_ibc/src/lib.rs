@@ -8,10 +8,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let BatchedTx { tx: signed, cmt } = tx_data;
-    // let data = signed.data().ok_or_err_msg("Missing data").or_else(|err| {
-    //                 ctx.set_commitment_sentinel();
-    //                 Err(err)
-    // })?;
+    // let data = ctx.get_tx_data(&tx_data)?;
 
     // let transfer =
     // ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;

@@ -5,11 +5,7 @@ use namada_tx_prelude::*;
 
 #[transaction] // TODO: needs to be benchmarked
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx {
-        tx: signed,
-        ref cmt,
-    } = tx_data;
-    let data = signed.data(cmt).ok_or_err_msg("Missing data")?;
+    let data = ctx.get_tx_data(&tx_data)?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("Failed to decode Withdraw value")?;
 

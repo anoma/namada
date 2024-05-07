@@ -5,18 +5,7 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx {
-        tx: signed,
-        ref cmt,
-    } = tx_data;
-    let data =
-        signed
-            .data(cmt)
-            .ok_or_err_msg("Missing data")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
+    let data = ctx.get_tx_data(&tx_data)?;
     let transaction::pos::Redelegation {
         src_validator,
         dest_validator,

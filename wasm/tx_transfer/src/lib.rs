@@ -6,15 +6,8 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let BatchedTx { tx: signed, cmt } = tx_data;
-    let data =
-        signed
-            .data(&cmt)
-            .ok_or_err_msg("Missing data")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
     let transfer = token::Transfer::try_from_slice(&data[..])
         .wrap_err("Failed to decode token::Transfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);

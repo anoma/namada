@@ -9,18 +9,7 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx {
-        tx: signed,
-        ref cmt,
-    } = tx_data;
-    let data =
-        signed
-            .data(cmt)
-            .ok_or_err_msg("Missing data")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
+    let data = ctx.get_tx_data(&tx_data)?;
     let transfer = PendingTransfer::try_from_slice(&data[..])
         .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     debug_log!("Received transfer to add to Bridge pool");

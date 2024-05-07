@@ -7,18 +7,7 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx {
-        tx: signed,
-        ref cmt,
-    } = tx_data;
-    let data =
-        signed
-            .data(cmt)
-            .ok_or_err_msg("Missing data")
-            .map_err(|err| {
-                ctx.set_commitment_sentinel();
-                err
-            })?;
+    let data = ctx.get_tx_data(&tx_data)?;
     let become_validator = BecomeValidator::try_from_slice(&data[..])
         .wrap_err("Failed to decode BecomeValidator tx data")?;
     debug_log!("apply_tx called to init a new validator account");
@@ -33,7 +22,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         key::common::PublicKey::Secp256k1(become_validator.eth_hot_key.clone()),
         become_validator.protocol_key.clone(),
     ];
-    verify_signatures_of_pks(ctx, &signed, all_pks).true_or_else(|| {
+    verify_signatures_of_pks(ctx, &tx_data.tx, all_pks).true_or_else(|| {
         const ERR_MSG: &str = "Keys ownership signature verification failed";
         debug_log!("{ERR_MSG}");
         Error::new_const(ERR_MSG)

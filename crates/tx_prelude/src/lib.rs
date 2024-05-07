@@ -110,6 +110,19 @@ impl Ctx {
             namada_tx_yield_value(value.as_ptr() as _, value.len() as _);
         }
     }
+
+    /// Get the transaction data for the specified inner tx
+    pub fn get_tx_data(
+        &mut self,
+        batched_tx: &BatchedTx,
+    ) -> EnvResult<Vec<u8>> {
+        let BatchedTx { tx, ref cmt } = batched_tx;
+
+        tx.data(cmt).ok_or_err_msg("Missing data").map_err(|err| {
+            self.set_commitment_sentinel();
+            err
+        })
+    }
 }
 
 /// Result of `TxEnv`, `namada_storage::StorageRead` or
