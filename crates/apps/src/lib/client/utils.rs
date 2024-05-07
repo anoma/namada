@@ -537,18 +537,12 @@ pub fn init_network(
 
     // Create a release tarball
     if !dont_archive {
-        // TODO: remove the `config::DEFAULT_BASE_DIR` and instead just archive
-        // the chain dir
         let mut release = tar::Builder::new(Vec::new());
         release
-            .append_dir_all(
-                PathBuf::from(config::DEFAULT_BASE_DIR).join(chain_id.as_str()),
-                &chain_dir,
-            )
+            .append_dir_all(PathBuf::from(chain_id.as_str()), &chain_dir)
             .unwrap();
         let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
-        let release_global_config_path =
-            GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
+        let release_global_config_path = GlobalConfig::file_path("");
         release
             .append_path_with_name(
                 global_config_path,
