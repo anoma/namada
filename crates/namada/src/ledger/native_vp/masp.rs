@@ -334,9 +334,9 @@ where
                 .decoder
                 .insert(address_hash, counterpart.to_address_ref().clone());
             *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
-                ValueSum::from_pair(token.clone(), pre_balance).unwrap();
+                ValueSum::from_pair(token.clone(), pre_balance);
             *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
-                ValueSum::from_pair(token.clone(), post_balance).unwrap();
+                ValueSum::from_pair(token.clone(), post_balance);
         }
 
         Ok(result)
@@ -397,9 +397,7 @@ fn validate_transparent_input<A: Authorization>(
             let amount =
                 token::Amount::from_masp_denominated(vin.value, *digit);
             *bal_ref = bal_ref
-                .checked_sub(
-                    &ValueSum::from_pair(address.clone(), amount).unwrap(),
-                )
+                .checked_sub(&ValueSum::from_pair(address.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
                         "Overflow in bundle balance",
@@ -429,9 +427,7 @@ fn validate_transparent_input<A: Authorization>(
                 let amount =
                     token::Amount::from_masp_denominated(vin.value, *digit);
                 *bal_ref = bal_ref
-                    .checked_sub(
-                        &ValueSum::from_pair(token.clone(), amount).unwrap(),
-                    )
+                    .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                     .ok_or_else(|| {
                         Error::NativeVpError(native_vp::Error::SimpleMessage(
                             "Overflow in bundle balance",
@@ -480,9 +476,7 @@ fn validate_transparent_output(
             let amount =
                 token::Amount::from_masp_denominated(out.value, *digit);
             *bal_ref = bal_ref
-                .checked_sub(
-                    &ValueSum::from_pair(address.clone(), amount).unwrap(),
-                )
+                .checked_sub(&ValueSum::from_pair(address.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
                         "Overflow in bundle balance",
@@ -497,9 +491,7 @@ fn validate_transparent_output(
             let amount =
                 token::Amount::from_masp_denominated(out.value, *digit);
             *bal_ref = bal_ref
-                .checked_sub(
-                    &ValueSum::from_pair(token.clone(), amount).unwrap(),
-                )
+                .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
                         "Overflow in bundle balance",
@@ -577,8 +569,7 @@ fn verify_sapling_balancing_value(
                     *digit,
                 );
                 let decoded_change =
-                    ValueSum::from_pair(address.clone(), decoded_change)
-                        .expect("expected this to fit");
+                    ValueSum::from_pair(address.clone(), decoded_change);
                 if *val < 0 {
                     acc += decoded_change;
                 } else {
@@ -592,8 +583,7 @@ fn verify_sapling_balancing_value(
                     *digit,
                 );
                 let decoded_change =
-                    ValueSum::from_pair(token.clone(), decoded_change)
-                        .expect("expected this to fit");
+                    ValueSum::from_pair(token.clone(), decoded_change);
                 if *val < 0 {
                     acc += decoded_change;
                 } else {
