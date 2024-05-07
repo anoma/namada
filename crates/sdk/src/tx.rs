@@ -2926,9 +2926,12 @@ async fn used_asset_types<P, R, K, N>(
 pub fn build_batch(
     mut txs: Vec<(Tx, SigningTxData)>,
 ) -> Result<(Tx, Vec<SigningTxData>)> {
-    let (mut batched_tx, sig_data) = txs.pop().ok_or_else(|| {
-        Error::Other("No transactions provided for the batch".to_string())
-    })?;
+    if txs.is_empty() {
+        return Err(Error::Other(
+            "No transactions provided for the batch".to_string(),
+        ));
+    }
+    let (mut batched_tx, sig_data) = txs.remove(0);
     let mut signing_data = vec![sig_data];
 
     for (tx, sig_data) in txs {
