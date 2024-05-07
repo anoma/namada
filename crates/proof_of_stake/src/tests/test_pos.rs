@@ -854,7 +854,12 @@ fn test_unjail_validator_aux(
     s.commit_block().unwrap();
 
     current_epoch = advance_epoch(&mut s, &params);
-    process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(
+        &mut s,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Discover first slash
     let slash_0_evidence_epoch = current_epoch;
@@ -914,7 +919,12 @@ fn test_unjail_validator_aux(
         slash_0_evidence_epoch + params.slash_processing_epoch_offset();
     while current_epoch < unfreeze_epoch + 4u64 {
         current_epoch = advance_epoch(&mut s, &params);
-        process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(
+            &mut s,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     // Unjail the validator
@@ -960,7 +970,12 @@ fn test_unjail_validator_aux(
 
     // Advance another epoch
     current_epoch = advance_epoch(&mut s, &params);
-    process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(
+        &mut s,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     let second_att = unjail_validator(&mut s, val_addr, current_epoch);
     assert!(second_att.is_err());
@@ -1040,7 +1055,12 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Bond to validator 1
     bond_tokens(
@@ -1088,7 +1108,12 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Bond to validator 1
     bond_tokens(
@@ -1630,7 +1655,12 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance to epoch 1
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Delegate in epoch 1 to validator1
     let del1_epoch = current_epoch;
@@ -1646,7 +1676,12 @@ fn test_is_delegator_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance to epoch 2
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Delegate in epoch 2 to validator2
     let del2_epoch = current_epoch;

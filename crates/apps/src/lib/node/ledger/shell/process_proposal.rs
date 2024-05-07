@@ -2,6 +2,7 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
+use namada::hash::Hash;
 use namada::ledger::pos::PosQueries;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::tx::data::protocol::ProtocolTxType;
@@ -465,6 +466,7 @@ where
                 // Check that the fee payer has sufficient balance.
                 match process_proposal_fee_check(
                     &wrapper,
+                    tx.header_hash(),
                     get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
                     &mut ShellParams::new(
@@ -498,6 +500,7 @@ where
 
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
@@ -524,8 +527,13 @@ where
         shell_params,
     )?;
 
-    protocol::transfer_fee(shell_params.state, proposer, wrapper)
-        .map_err(Error::TxApply)
+    protocol::transfer_fee(
+        shell_params.state,
+        proposer,
+        wrapper,
+        wrapper_tx_hash,
+    )
+    .map_err(Error::TxApply)
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows

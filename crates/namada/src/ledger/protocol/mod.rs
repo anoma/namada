@@ -9,9 +9,14 @@ use masp_primitives::transaction::Transaction;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
+use namada_events::extend::{
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
+};
+use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
+use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
@@ -82,7 +87,7 @@ pub enum Error {
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
     ParametersNativeVpError(parameters::Error),
-    #[error("IBC Token native VP: {0}")]
+    #[error("Multitoken native VP: {0}")]
     MultitokenNativeVpError(crate::ledger::native_vp::multitoken::Error),
     #[error("Governance native VP error: {0}")]
     GovernanceNativeVpError(crate::ledger::governance::Error),
@@ -272,16 +277,19 @@ where
 {
     let mut changed_keys = BTreeSet::default();
 
+    let wrapper_tx_hash = tx.header_hash();
+
     // Write wrapper tx hash to storage
     shell_params
         .state
         .write_log_mut()
-        .write_tx_hash(tx.header_hash())
+        .write_tx_hash(wrapper_tx_hash)
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
     charge_fee(
         wrapper,
+        wrapper_tx_hash,
         fee_unshield_transaction,
         &mut shell_params,
         &mut changed_keys,
@@ -325,6 +333,7 @@ pub fn get_fee_unshielding_transaction(
 /// - The accumulated fee amount to be credited to the block proposer overflows
 fn charge_fee<S, D, H, CA>(
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
@@ -351,7 +360,12 @@ where
         Some(WrapperArgs {
             block_proposer,
             is_committed_fee_unshield: _,
-        }) => transfer_fee(shell_params.state, block_proposer, wrapper)?,
+        }) => transfer_fee(
+            shell_params.state,
+            block_proposer,
+            wrapper,
+            wrapper_tx_hash,
+        )?,
         None => check_fees(shell_params.state, wrapper)?,
     }
 
@@ -482,6 +496,7 @@ pub fn transfer_fee<S>(
     state: &mut S,
     block_proposer: &Address,
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
 ) -> Result<()>
 where
     S: State + StorageRead + StorageWrite,
@@ -493,12 +508,19 @@ where
     )
     .unwrap();
 
+    const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
+        std::borrow::Cow::Borrowed("wrapper-fee-payment");
+
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             let fees =
                 crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
                     .map_err(|e| Error::FeeError(e.to_string()))?;
-            if balance.checked_sub(fees).is_some() {
+
+            let current_block_height =
+                state.in_mem().get_last_block_height() + 1;
+
+            if let Some(post_bal) = balance.checked_sub(fees) {
                 token_transfer(
                     state,
                     &wrapper.fee.token,
@@ -506,7 +528,38 @@ where
                     block_proposer,
                     fees,
                 )
-                .map_err(|e| Error::FeeError(e.to_string()))
+                .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                let target_post_balance = Some(
+                    namada_token::read_balance(
+                        state,
+                        &wrapper.fee.token,
+                        block_proposer,
+                    )
+                    .map_err(Error::StorageError)?
+                    .into(),
+                );
+
+                state.write_log_mut().emit_event(
+                    TokenEvent {
+                        descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        level: EventLevel::Tx,
+                        token: wrapper.fee.token.clone(),
+                        operation: TokenOperation::Transfer {
+                            amount: fees.into(),
+                            source: UserAccount::Internal(wrapper.fee_payer()),
+                            target: UserAccount::Internal(
+                                block_proposer.clone(),
+                            ),
+                            source_post_balance: post_bal.into(),
+                            target_post_balance,
+                        },
+                    }
+                    .with(HeightAttr(current_block_height))
+                    .with(TxHashAttr(wrapper_tx_hash)),
+                );
+
+                Ok(())
             } else {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
@@ -526,6 +579,35 @@ where
                     balance,
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                let target_post_balance = Some(
+                    namada_token::read_balance(
+                        state,
+                        &wrapper.fee.token,
+                        block_proposer,
+                    )
+                    .map_err(Error::StorageError)?
+                    .into(),
+                );
+
+                state.write_log_mut().emit_event(
+                    TokenEvent {
+                        descriptor: FEE_PAYMENT_DESCRIPTOR,
+                        level: EventLevel::Tx,
+                        token: wrapper.fee.token.clone(),
+                        operation: TokenOperation::Transfer {
+                            amount: balance.into(),
+                            source: UserAccount::Internal(wrapper.fee_payer()),
+                            target: UserAccount::Internal(
+                                block_proposer.clone(),
+                            ),
+                            source_post_balance: namada_core::uint::ZERO,
+                            target_post_balance,
+                        },
+                    }
+                    .with(HeightAttr(current_block_height))
+                    .with(TxHashAttr(wrapper_tx_hash)),
+                );
 
                 Err(Error::FeeError(
                     "Transparent balance of wrapper's signer was insufficient \

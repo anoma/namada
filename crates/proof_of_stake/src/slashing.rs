@@ -11,12 +11,14 @@ use namada_core::key::tm_raw_hash_to_string;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use namada_core::token;
+use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedMap, NestedSubKey, SubKey,
 };
 use namada_storage::collections::LazyMap;
 use namada_storage::{StorageRead, StorageWrite};
 
+use crate::event::PosEvent;
 use crate::storage::{
     enqueued_slashes_handle, read_pos_params, read_validator_last_slash_epoch,
     read_validator_stake, total_bonded_handle, total_unbonded_handle,
@@ -201,6 +203,7 @@ where
 /// validators.
 pub fn process_slashes<S>(
     storage: &mut S,
+    events: &mut impl EmitEvents,
     current_epoch: Epoch,
 ) -> namada_storage::Result<()>
 where
@@ -318,6 +321,11 @@ where
                     epoch,
                     Some(0),
                 )?;
+
+                events.emit(PosEvent::Slash {
+                    validator: validator.clone(),
+                    amount: slash_amount,
+                });
             }
         }
         // Then update validator and total deltas

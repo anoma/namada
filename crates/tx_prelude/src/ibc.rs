@@ -4,20 +4,20 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_core::address::{Address, InternalAddress};
+use namada_core::address::Address;
 use namada_core::token::Amount;
 use namada_events::EventTypeBuilder;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
-pub use namada_ibc::storage::{ibc_token, is_ibc_key};
+pub use namada_ibc::storage::{
+    burn_tokens, ibc_token, is_ibc_key, mint_tokens,
+};
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
-use namada_storage::StorageWrite;
-use namada_token::storage_key::minter_key;
 use namada_tx_env::TxEnv;
 
-use crate::token::{burn, mint, transfer};
+use crate::token::transfer;
 use crate::{Ctx, Error};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
@@ -82,10 +82,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        mint(self, target, token, amount)?;
-
-        let minter_key = minter_key(token);
-        self.write(&minter_key, &Address::Internal(InternalAddress::Ibc))
+        mint_tokens(self, target, token, amount)
     }
 
     fn burn_token(
@@ -94,7 +91,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        burn(self, target, token, amount)
+        burn_tokens(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {

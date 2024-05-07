@@ -3931,6 +3931,7 @@ dependencies = [
  "borsh 1.2.1",
  "data-encoding",
  "derivative",
+ "konst",
  "namada_account",
  "namada_controller",
  "namada_core",
@@ -4138,7 +4139,9 @@ dependencies = [
 name = "namada_trans_token"
 version = "0.34.0"
 dependencies = [
+ "konst",
  "namada_core",
+ "namada_events",
  "namada_storage",
 ]
 

@@ -211,7 +211,7 @@ impl Amount {
         let denom = denom.into();
         let uint = uint.into();
         if denom == 0 {
-            return Ok(Self { raw: uint });
+            return Ok(uint.into());
         }
         match Uint::from(10)
             .checked_pow(Uint::from(denom))
@@ -904,6 +904,12 @@ impl From<Change> for Amount {
 impl From<Amount> for Uint {
     fn from(amount: Amount) -> Self {
         amount.raw
+    }
+}
+
+impl From<Uint> for Amount {
+    fn from(raw: Uint) -> Self {
+        Self { raw }
     }
 }
 
