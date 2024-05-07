@@ -789,65 +789,68 @@ impl<'finalize> TempTxLogs {
     ) {
         for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
             match batched_result {
-                Ok(result) if result.is_accepted() => {
-                    if is_masp_tx(&result.changed_keys) {
-                        self.tx_event
-                            .extend(ValidMaspTx((tx_index, Some(*cmt_hash))));
-                    }
-                    tracing::trace!(
-                        "all VPs accepted inner tx {} storage modification \
-                         {:#?}",
-                        cmt_hash,
-                        result
-                    );
-
-                    self.changed_keys
-                        .extend(result.changed_keys.iter().cloned());
-                    self.stats.increment_successful_txs();
-                    *commit_batch_hash = true;
-
-                    // events from other sources
-                    self.other_events.extend(
-                        // ibc events
-                        result
-                            .ibc_events
-                            .iter()
-                            .cloned()
-                            .map(|ibc_event| {
-                                ibc_event.with(Height(height)).into()
-                            })
-                            // eth bridge events
-                            .chain(
-                                result
-                                    .eth_bridge_events
-                                    .iter()
-                                    .map(Event::from),
-                            ),
-                    );
-                }
                 Ok(result) => {
-                    // VPs rejected, this branch can only be reached by inner
-                    // txs
-                    tracing::trace!(
-                        "some VPs rejected inner tx {} storage modification \
-                         {:#?}",
-                        cmt_hash,
-                        result.vps_result.rejected_vps
-                    );
+                    if result.is_accepted() {
+                        if is_masp_tx(&result.changed_keys) {
+                            self.tx_event.extend(ValidMaspTx((
+                                tx_index,
+                                Some(*cmt_hash),
+                            )));
+                        }
+                        tracing::trace!(
+                            "all VPs accepted inner tx {} storage \
+                             modification {:#?}",
+                            cmt_hash,
+                            result
+                        );
 
-                    // If an inner tx failed for any reason but invalid
-                    // signature, commit its hash to storage, otherwise allow
-                    // for a replay
-                    if !result
-                        .vps_result
-                        .status_flags
-                        .contains(VpStatusFlags::INVALID_SIGNATURE)
-                    {
+                        self.changed_keys
+                            .extend(result.changed_keys.iter().cloned());
+                        self.stats.increment_successful_txs();
                         *commit_batch_hash = true;
-                    }
 
-                    self.stats.increment_rejected_txs();
-                    *is_any_tx_invalid = true;
+                        // events from other sources
+                        self.other_events.extend(
+                            // ibc events
+                            result
+                                .ibc_events
+                                .iter()
+                                .cloned()
+                                .map(|ibc_event| {
+                                    ibc_event.with(Height(height)).into()
+                                })
+                                // eth bridge events
+                                .chain(
+                                    result
+                                        .eth_bridge_events
+                                        .iter()
+                                        .map(Event::from),
+                                ),
+                        );
+                    } else {
+                        // VPs rejected, this branch can only be reached by
+                        // inner txs
+                        tracing::trace!(
+                            "some VPs rejected inner tx {} storage \
+                             modification {:#?}",
+                            cmt_hash,
+                            result.vps_result.rejected_vps
+                        );
+
+                        // If an inner tx failed for any reason but invalid
+                        // signature, commit its hash to storage, otherwise
+                        // allow for a replay
+                        if !result
+                            .vps_result
+                            .status_flags
+                            .contains(VpStatusFlags::INVALID_SIGNATURE)
+                        {
+                            *commit_batch_hash = true;
+                        }
+
+                        self.stats.increment_rejected_txs();
+                        *is_any_tx_invalid = true;
+                    }
                 }
                 Err(e) => {
                     // this branch can only be reached by inner txs
