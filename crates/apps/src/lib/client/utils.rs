@@ -389,23 +389,19 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 }
 
 /// Initialize a new test network from the given configuration.
-///
-/// For any public keys that are not specified in the genesis configuration,
-/// this command will generate them and place them in the "setup" directory
-/// inside the chain-dir, so it can be used for testing (we're using it in the
-/// e2e tests), dev/test-nets and public networks setup.
 pub fn init_network(
-    global_args: args::Global,
+    _: args::Global,
     args::InitNetwork {
         templates_path,
         wasm_checksums_path,
         chain_id_prefix,
         genesis_time,
         consensus_timeout_commit,
-        dont_archive,
         archive_dir,
     }: args::InitNetwork,
 ) {
+    let base_dir = tempfile::tempdir().unwrap();
+
     // Load and validate the templates
     let templates = genesis::templates::load_and_validate(&templates_path)
         .unwrap_or_else(|| {
@@ -454,46 +450,12 @@ pub fn init_network(
         genesis_time,
         consensus_timeout_commit,
     );
+
     let chain_id = &genesis.metadata.chain_id;
-    let chain_dir = global_args.base_dir.join(chain_id.as_str());
+    println!("Derived chain ID: {chain_id}");
 
     // Check that chain dir is empty
-    if chain_dir.exists() && chain_dir.read_dir().unwrap().next().is_some() {
-        println!(
-            "The target chain directory {} already exists and is not empty.",
-            chain_dir.to_string_lossy()
-        );
-        loop {
-            let mut buffer = String::new();
-            print!(
-                "Do you want to override the chain directory? Will exit \
-                 otherwise. [y/N]: "
-            );
-            std::io::stdout().flush().unwrap();
-            match std::io::stdin().read_line(&mut buffer) {
-                Ok(size) if size > 0 => {
-                    // Isolate the single character representing the choice
-                    let byte = buffer.chars().next().unwrap();
-                    buffer.clear();
-                    match byte {
-                        'y' | 'Y' => {
-                            fs::remove_dir_all(&chain_dir).unwrap();
-                            break;
-                        }
-                        'n' | 'N' => {
-                            println!("Exiting.");
-                            safe_exit(1)
-                        }
-                        // Input is senseless fall through to repeat prompt
-                        _ => {
-                            println!("Unrecognized input.");
-                        }
-                    };
-                }
-                _ => {}
-            }
-        }
-    }
+    let chain_dir = base_dir.path().join(chain_id.as_str());
     fs::create_dir_all(&chain_dir).unwrap();
 
     // Write the finalized genesis config to the chain dir
@@ -507,63 +469,54 @@ pub fn init_network(
 
     // Write the global config setting the default chain ID
     let global_config = GlobalConfig::new(chain_id.clone());
-    global_config.write(&global_args.base_dir).unwrap();
+    global_config.write(base_dir.path()).unwrap();
 
     // Copy the WASM checksums
     let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
-        &wasm_checksums_path,
+        wasm_checksums_path,
         wasm_dir_full.join(config::DEFAULT_WASM_CHECKSUMS_FILE),
     )
     .unwrap();
 
-    println!("Derived chain ID: {}", chain_id);
-    println!("Genesis files stored at {}", chain_dir.to_string_lossy());
-
     // Try to copy the built WASM, if they're present with the checksums
     let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
         .unwrap_or_else(|_| safe_exit(1));
+    let base_wasm_path = std::env::current_dir()
+        .unwrap()
+        .join(crate::config::DEFAULT_WASM_DIR);
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
-        let file = std::env::current_dir()
-            .unwrap()
-            .join(crate::config::DEFAULT_WASM_DIR)
-            .join(&full_name);
+        let file = base_wasm_path.join(&full_name);
         if file.exists() {
             fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
         }
     }
 
-    // Create a release tarball
-    if !dont_archive {
-        let mut release = tar::Builder::new(Vec::new());
-        release
-            .append_dir_all(PathBuf::from(chain_id.as_str()), &chain_dir)
-            .unwrap();
-        let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
-        let release_global_config_path = GlobalConfig::file_path("");
-        release
-            .append_path_with_name(
-                global_config_path,
-                release_global_config_path,
-            )
-            .unwrap();
+    // Create release tarball
+    let mut release = tar::Builder::new(Vec::new());
+    release
+        .append_dir_all(PathBuf::from(chain_id.as_str()), &chain_dir)
+        .unwrap();
+    let global_config_path = GlobalConfig::file_path(base_dir.path());
+    let release_global_config_path = GlobalConfig::file_path("");
+    release
+        .append_path_with_name(global_config_path, release_global_config_path)
+        .unwrap();
 
-        // Gzip tar release and write to file
-        let release_file = archive_dir
-            .unwrap_or_else(|| env::current_dir().unwrap())
-            .join(format!("{}.tar.gz", chain_id));
-        let compressed_file = File::create(&release_file).unwrap();
-        let mut encoder =
-            GzEncoder::new(compressed_file, Compression::default());
-        encoder.write_all(&release.into_inner().unwrap()).unwrap();
-        encoder.finish().unwrap();
-        println!(
-            "Release archive created at {}",
-            release_file.to_string_lossy()
-        );
-    }
+    // Gzip tar release and write to file
+    let release_file = archive_dir
+        .unwrap_or_else(|| env::current_dir().unwrap())
+        .join(format!("{}.tar.gz", chain_id));
+    let compressed_file = File::create(&release_file).unwrap();
+    let mut encoder = GzEncoder::new(compressed_file, Compression::default());
+    encoder.write_all(&release.into_inner().unwrap()).unwrap();
+    encoder.finish().unwrap();
+    println!(
+        "Release archive created at {}",
+        release_file.to_string_lossy()
+    );
 }
 
 pub fn test_genesis(args: TestGenesis) {

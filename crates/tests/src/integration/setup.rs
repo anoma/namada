@@ -99,7 +99,6 @@ pub fn initialize_genesis(
             wasm_checksums_path,
             chain_id_prefix,
             consensus_timeout_commit: Timeout::from_str("30s").unwrap(),
-            dont_archive: true,
             archive_dir: None,
             genesis_time,
         },

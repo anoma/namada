@@ -3069,7 +3069,6 @@ pub mod args {
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DO_IT: ArgFlag = flag("do-it");
-    pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
@@ -7273,7 +7272,6 @@ pub mod args {
         pub chain_id_prefix: ChainIdPrefix,
         pub genesis_time: DateTimeUtc,
         pub consensus_timeout_commit: Timeout,
-        pub dont_archive: bool,
         pub archive_dir: Option<PathBuf>,
     }
 
@@ -7285,7 +7283,6 @@ pub mod args {
             let genesis_time = GENESIS_TIME.parse(matches);
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
-            let dont_archive = DONT_ARCHIVE.parse(matches);
             let archive_dir = ARCHIVE_DIR.parse(matches);
             Self {
                 templates_path,
@@ -7293,7 +7290,6 @@ pub mod args {
                 chain_id_prefix,
                 genesis_time,
                 consensus_timeout_commit,
-                dont_archive,
                 archive_dir,
             }
         }
@@ -7320,11 +7316,6 @@ pub mod args {
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
             ))
-            .arg(
-                DONT_ARCHIVE
-                    .def()
-                    .help("Do NOT create the release archive."),
-            )
             .arg(ARCHIVE_DIR.def().help(
                 "Specify a directory into which to store the archive. Default \
                  is the current working directory.",
