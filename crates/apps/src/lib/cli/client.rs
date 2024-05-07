@@ -734,7 +734,7 @@ impl CliApi {
                     utils::validate_wasm(args)
                 }
                 Utils::InitNetwork(InitNetwork(args)) => {
-                    utils::init_network(global_args, args)
+                    utils::init_network(global_args, args);
                 }
                 Utils::GenesisBond(GenesisBond(args)) => {
                     utils::genesis_bond(args)

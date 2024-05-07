@@ -399,7 +399,7 @@ pub fn init_network(
         consensus_timeout_commit,
         archive_dir,
     }: args::InitNetwork,
-) {
+) -> PathBuf {
     let base_dir = tempfile::tempdir().unwrap();
 
     // Load and validate the templates
@@ -522,6 +522,8 @@ pub fn init_network(
         "Release archive created at {}",
         release_file.to_string_lossy()
     );
+
+    release_file
 }
 
 pub fn test_genesis(args: TestGenesis) {
