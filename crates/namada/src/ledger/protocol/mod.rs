@@ -61,6 +61,8 @@ pub enum Error {
     ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
+    #[error("The atomic batch failed at inner transaction {0}")]
+    FailingAtomicBatch(Hash),
     #[error("Fee ushielding error: {0}")]
     FeeUnshieldingError(namada_tx::data::WrapperTxErr),
     #[error("Gas error: {0}")]
@@ -282,6 +284,14 @@ where
                             state.write_log_mut().commit_tx_to_batch();
                         } else {
                             state.write_log_mut().drop_tx();
+
+                            if tx.header.atomic {
+                                // Stop the execution of an atomic batch at the
+                                // first failed transaction
+                                return Err(Error::FailingAtomicBatch(
+                                    cmt.get_hash(),
+                                ));
+                            }
                         }
                     }
                 };

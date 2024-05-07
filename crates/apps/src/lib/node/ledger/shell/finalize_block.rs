@@ -5402,7 +5402,8 @@ mod test_finalize_block {
     }
 
     // Test a failing atomic batch with two successful txs and a failing one.
-    // Verify that also the changes applied by the valid txs are dropped
+    // Verify that also the changes applied by the valid txs are dropped and
+    // that the last transaction is never executed (batch short-circuit)
     #[test]
     fn test_failing_atomic_batch() {
         let (mut shell, _broadcaster, _, _) = setup();
@@ -5439,12 +5440,11 @@ mod test_finalize_block {
                 .clone()
                 .is_err()
         );
+        // Assert that the last tx didn't run
         assert!(
             inner_results
                 .get(&batch.commitments()[2].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
+                .is_none()
         );
 
         // Check storage modifications are missing
@@ -5564,7 +5564,7 @@ mod test_finalize_block {
                 .clone()
                 .is_err()
         );
-        // Assert that the last tx was not run
+        // Assert that the last tx didn't run
         assert!(
             inner_results
                 .get(&batch.commitments()[2].get_hash())
@@ -5616,7 +5616,7 @@ mod test_finalize_block {
                 .clone()
                 .is_err()
         );
-        // Assert that the last tx was not run
+        // Assert that the last tx didn't run
         assert!(
             inner_results
                 .get(&batch.commitments()[2].get_hash())
