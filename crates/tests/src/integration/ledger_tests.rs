@@ -1428,8 +1428,6 @@ fn change_validator_metadata() -> Result<()> {
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
 
-    println!("\ndbg0\n");
-
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
         "validator-metadata",
@@ -1442,6 +1440,7 @@ fn change_validator_metadata() -> Result<()> {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("No validator name"));
     assert!(captured.contains("Email:"));
     assert!(captured.contains("No description"));
     assert!(captured.contains("No website"));
@@ -1454,6 +1453,8 @@ fn change_validator_metadata() -> Result<()> {
         "change-metadata",
         "--validator",
         "validator-0-validator",
+        "--name",
+        "theokayestvalidator",
         "--email",
         "theokayestvalidator@namada.net",
         "--description",
@@ -1474,6 +1475,7 @@ fn change_validator_metadata() -> Result<()> {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Validator name: theokayestvalidator"));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"
@@ -1502,6 +1504,7 @@ fn change_validator_metadata() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_query_args));
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Validator name: theokayestvalidator"));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"
