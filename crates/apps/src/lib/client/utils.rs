@@ -555,17 +555,6 @@ pub fn init_network(
                 release_global_config_path,
             )
             .unwrap();
-        let release_wasm_checksums_path =
-            PathBuf::from(config::DEFAULT_BASE_DIR)
-                .join(chain_id.as_str())
-                .join(config::DEFAULT_WASM_DIR)
-                .join(config::DEFAULT_WASM_CHECKSUMS_FILE);
-        release
-            .append_path_with_name(
-                &wasm_checksums_path,
-                release_wasm_checksums_path,
-            )
-            .unwrap();
 
         // Gzip tar release and write to file
         let release_file = archive_dir
