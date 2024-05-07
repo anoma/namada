@@ -2951,7 +2951,7 @@ pub fn build_batch(
             )));
         }
         // Avoid redundant signing data
-        if signing_data.iter().filter(|sig| sig == &&sig_data).count() == 0 {
+        if !signing_data.iter().any(|sig| sig == &sig_data) {
             signing_data.push(sig_data);
         }
     }

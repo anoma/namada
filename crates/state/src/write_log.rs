@@ -71,7 +71,7 @@ pub(crate) struct TxWriteLog {
     // validation when a clean `tx_write_log` is needed without committing any
     // modification already in there. These modifications can be temporarily
     // stored here and then discarded or committed to the `block_write_log`,
-    // together with th content of `tx_write_log`. No direct key
+    // together with the content of `tx_write_log`. No direct key
     // write/update/delete should ever happen on this field, this log should
     // only be populated through a dump of the `tx_write_log` and should be
     // cleaned either when committing or dumping the `tx_write_log`
