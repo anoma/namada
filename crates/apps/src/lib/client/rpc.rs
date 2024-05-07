@@ -1298,13 +1298,19 @@ pub async fn query_and_print_metadata(
             website,
             discord_handle,
             avatar,
+            name,
         }) => {
             display_line!(
                 context.io(),
-                "Validator {} metadata:\nEmail: {}",
-                validator.encode(),
-                email
+                "Validator {} metadata:",
+                validator.encode()
             );
+            if let Some(name) = name {
+                display_line!(context.io(), "Validator name: {}", name);
+            } else {
+                display_line!(context.io(), "No validator name");
+            }
+            display_line!(context.io(), "Email: {}", email);
             if let Some(description) = description {
                 display_line!(context.io(), "Description: {}", description);
             } else {
