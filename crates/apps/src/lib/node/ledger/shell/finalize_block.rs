@@ -1050,9 +1050,8 @@ mod test_finalize_block {
         )
     }
 
-    // Make a transaction batch with two transactions. Optionally make the batch
-    // atomic, request the failure of the first transaction and an out of gas of
-    // the second one
+    // Make a transaction batch with three transactions. Optionally make the
+    // batch atomic, request the failure or out of gas of the second transaction
     fn mk_tx_batch(
         shell: &TestShell,
         sk: &common::SecretKey,
@@ -1075,31 +1074,43 @@ mod test_finalize_block {
         batch.header.atomic = set_atomic;
 
         // append first inner tx to batch
+        let data = TxWriteData {
+            key: "random_key_1".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(
+            TestWasms::TxWriteStorageKey.read_bytes(),
+            None,
+        ));
+
+        // append second inner tx to batch
+        batch.push_default_inner_tx();
         let tx_code = if should_fail {
             TestWasms::TxFail.read_bytes()
+        } else if should_run_out_of_gas {
+            TestWasms::TxInfiniteHostGas.read_bytes()
         } else {
             TestWasms::TxWriteStorageKey.read_bytes()
         };
         let data = TxWriteData {
-            key: "random_key".parse().unwrap(),
+            key: "random_key_2".parse().unwrap(),
             value: STORAGE_VALUE.serialize_to_vec(),
         };
         batch.set_data(Data::new(data.serialize_to_vec()));
         batch.set_code(Code::new(tx_code, None));
 
-        // append second inner tx to batch
-        let tx_code = if should_run_out_of_gas {
-            TestWasms::TxInfiniteHostGas.read_bytes()
-        } else {
-            TestWasms::TxWriteStorageKey.read_bytes()
-        };
+        // append last inner tx to batch
         batch.push_default_inner_tx();
         let data = TxWriteData {
-            key: "another_random_key".parse().unwrap(),
+            key: "random_key_3".parse().unwrap(),
             value: STORAGE_VALUE.serialize_to_vec(),
         };
         batch.set_data(Data::new(data.serialize_to_vec()));
-        batch.set_code(Code::new(tx_code, None));
+        batch.set_code(Code::new(
+            TestWasms::TxWriteStorageKey.read_bytes(),
+            None,
+        ));
 
         batch.add_section(Section::Authorization(Authorization::new(
             vec![batch.raw_header_hash()],
@@ -5336,7 +5347,7 @@ mod test_finalize_block {
         assert_eq!(u64::from(cmd.min_confirmations), 42);
     }
 
-    // Test a successful tx batch containing two valid transactions
+    // Test a successful tx batch containing three valid transactions
     #[test]
     fn test_successful_batch() {
         let (mut shell, _broadcaster, _, _) = setup();
@@ -5371,7 +5382,7 @@ mod test_finalize_block {
         }
 
         // Check storage modifications
-        for key in ["random_key", "another_random_key"] {
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
             assert_eq!(
                 shell
                     .state
@@ -5383,8 +5394,8 @@ mod test_finalize_block {
         }
     }
 
-    // Test a failing atomic batch with one successful tx and a failing one.
-    // Verify that also the changes applied by the valid tx are dropped
+    // Test a failing atomic batch with two successful txs and a failing one.
+    // Verify that also the changes applied by the valid txs are dropped
     #[test]
     fn test_failing_atomic_batch() {
         let (mut shell, _broadcaster, _, _) = setup();
@@ -5412,24 +5423,32 @@ mod test_finalize_block {
                 .get(&batch.commitments()[0].get_hash())
                 .unwrap()
                 .clone()
-                .is_err()
+                .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
                 .get(&batch.commitments()[1].get_hash())
                 .unwrap()
                 .clone()
+                .is_err()
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .unwrap()
+                .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
 
         // Check storage modifications are missing
-        for key in ["random_key", "another_random_key"] {
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
             assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
         }
     }
 
-    // Test a failing non-atomic batch with one successful tx and a failing one.
-    // Verify that only the changes applied by the valid tx are committed
+    // Test a failing non-atomic batch with two successful txs and a failing
+    // one. Verify that only the changes applied by the valid txs are
+    // committed
     #[test]
     fn test_failing_non_atomic_batch() {
         let (mut shell, _broadcaster, _, _) = setup();
@@ -5458,30 +5477,50 @@ mod test_finalize_block {
                 .get(&batch.commitments()[0].get_hash())
                 .unwrap()
                 .clone()
-                .is_err()
+                .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
                 .get(&batch.commitments()[1].get_hash())
                 .unwrap()
                 .clone()
+                .is_err()
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .unwrap()
+                .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
 
         // Check storage modifications
-        assert!(!shell.state.has_key(&"random_key".parse().unwrap()).unwrap());
         assert_eq!(
             shell
                 .state
-                .read::<String>(&"another_random_key".parse().unwrap())
+                .read::<String>(&"random_key_1".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+        assert!(
+            !shell
+                .state
+                .has_key(&"random_key_2".parse().unwrap())
+                .unwrap()
+        );
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"random_key_3".parse().unwrap())
                 .unwrap()
                 .unwrap(),
             STORAGE_VALUE
         );
     }
 
-    // Test a gas error on the second tx of an atomic batch with two successful
-    // txs. Verify that no changes are committed
+    // Test a gas error on the second tx of an atomic batch with three
+    // successful txs. Verify that no changes are committed
     #[test]
     fn test_gas_error_atomic_batch() {
         let (mut shell, _, _, _) = setup();
@@ -5518,14 +5557,20 @@ mod test_finalize_block {
                 .clone()
                 .is_err()
         );
+        // Assert that the last tx was not run
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .is_none()
+        );
 
         // Check storage modifications are missing
-        for key in ["random_key", "another_random_key"] {
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
             assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
         }
     }
 
-    // Test a gas error on the second tx of a non-atomic batch with two
+    // Test a gas error on the second tx of a non-atomic batch with three
     // successful txs. Verify that changes from the first tx are committed
     #[test]
     fn test_gas_error_non_atomic_batch() {
@@ -5564,21 +5609,24 @@ mod test_finalize_block {
                 .clone()
                 .is_err()
         );
+        // Assert that the last tx was not run
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .is_none()
+        );
 
         // Check storage modifications
         assert_eq!(
             shell
                 .state
-                .read::<String>(&"random_key".parse().unwrap())
+                .read::<String>(&"random_key_1".parse().unwrap())
                 .unwrap()
                 .unwrap(),
             STORAGE_VALUE
         );
-        assert!(
-            !shell
-                .state
-                .has_key(&"another_random_key".parse().unwrap())
-                .unwrap()
-        );
+        for key in ["random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
     }
 }
