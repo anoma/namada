@@ -193,8 +193,7 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 #[allow(clippy::too_many_arguments)]
-pub async fn prepare_tx<C: crate::queries::Client + Sync>(
-    client: &C,
+pub async fn prepare_tx(
     args: &args::Tx,
     tx: &mut Tx,
     unshield: Option<masp_primitives::transaction::Transaction>,
@@ -202,9 +201,7 @@ pub async fn prepare_tx<C: crate::queries::Client + Sync>(
     fee_payer: common::PublicKey,
 ) -> Result<()> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(client).await?;
-
-        signing::wrap_tx(tx, args, epoch, unshield, fee_amount, fee_payer).await
+        signing::wrap_tx(tx, args, unshield, fee_amount, fee_payer).await
     } else {
         Ok(())
     }
@@ -2804,7 +2801,6 @@ pub async fn build_ibc_transfer(
     .add_serialized_data(data);
 
     prepare_tx(
-        context.client(),
         &args.tx,
         &mut tx,
         unshield,
@@ -2874,7 +2870,6 @@ where
         .add_data(data);
 
     prepare_tx(
-        context.client(),
         tx_args,
         &mut tx_builder,
         unshield,
@@ -3334,7 +3329,6 @@ pub async fn build_custom(
     };
 
     prepare_tx(
-        context.client(),
         tx_args,
         &mut tx,
         unshield,

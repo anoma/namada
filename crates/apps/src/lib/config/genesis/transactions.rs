@@ -130,7 +130,6 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
             token: genesis_fee_token_address(),
         },
         fee_payer,
-        Default::default(),
         0.into(),
         None,
     );

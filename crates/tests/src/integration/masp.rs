@@ -1978,7 +1978,6 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 token: native_token.clone(),
             },
             pk.clone(),
-            Default::default(),
             20000.into(),
             None,
         );

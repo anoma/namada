@@ -2483,8 +2483,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         let mut transfer = None;
                         extract_payload(tx, &mut wrapper, &mut transfer)?;
                         // Epoch data is not needed for transparent transactions
-                        let epoch =
-                            wrapper.map(|x| x.epoch).unwrap_or_default();
+                        let epoch = Epoch(0);
                         if let Some(transfer) = transfer {
                             // Skip MASP addresses as they are already handled
                             // by ShieldedContext
