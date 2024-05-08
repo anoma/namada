@@ -25,7 +25,7 @@ use tokio::sync::RwLock;
 
 use crate::cli::args;
 use crate::cli::args::TestGenesis;
-use crate::cli::context::ENV_VAR_WASM_DIR;
+use crate::cli::context::wasm_dir_from_env_or;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
@@ -124,15 +124,6 @@ pub async fn join_network(
                 }),
             )
         });
-
-    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
-        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-            let wasm_dir: PathBuf = wasm_dir.into();
-            Some(wasm_dir)
-        } else {
-            None
-        }
-    });
 
     let release_filename = format!("{}.tar.gz", chain_id);
     let net_config = if let Some(configs_dir) = network_configs_dir() {
@@ -246,21 +237,20 @@ pub async fn join_network(
     }
 
     // Move wasm-dir and update config if it's non-default
-    if let Some(wasm_dir) = wasm_dir.as_ref() {
-        if wasm_dir.to_string_lossy() != config::DEFAULT_WASM_DIR {
-            let wasm_dir_full = chain_dir.join(wasm_dir);
+    if let Some(wasm_dir) = wasm_dir_from_env_or(global_args.wasm_dir.as_ref())
+    {
+        let wasm_dir_full = chain_dir.join(wasm_dir);
 
-            tokio::fs::rename(
-                base_dir_full
-                    .join(chain_id.as_str())
-                    .join(config::DEFAULT_WASM_DIR),
-                &wasm_dir_full,
-            )
-            .await
-            .unwrap();
+        tokio::fs::rename(
+            base_dir_full
+                .join(chain_id.as_str())
+                .join(config::DEFAULT_WASM_DIR),
+            &wasm_dir_full,
+        )
+        .await
+        .unwrap();
 
-            config.wasm_dir = wasm_dir_full;
-        }
+        config.wasm_dir = wasm_dir_full;
     }
 
     if !dont_prefetch_wasm {
@@ -279,8 +269,12 @@ pub async fn fetch_wasms(global_args: args::Global) {
         "This command should only be called post-genesis, to fetch missing \
          wasms on a broken chain directory",
     );
-    let config = Config::load(&global_args.base_dir, &chain_id, None);
-    fetch_wasms_aux(&chain_id, &config.wasm_dir).await;
+    let wasm_dir = wasm_dir_from_env_or(global_args.wasm_dir.as_ref())
+        .unwrap_or_else(|| {
+            let config = Config::load(&global_args.base_dir, &chain_id, None);
+            config.wasm_dir
+        });
+    fetch_wasms_aux(&chain_id, &wasm_dir).await;
 }
 
 async fn fetch_wasms_aux(chain_id: &ChainId, wasm_dir: &Path) {
