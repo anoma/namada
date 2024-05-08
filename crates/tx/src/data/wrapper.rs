@@ -156,14 +156,11 @@ pub mod wrapper_tx {
         pub pk: common::PublicKey,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
-        /// The hash of the optional, unencrypted, unshielding transaction for
-        /// fee payment
-        pub unshield_section_hash: Option<Hash>,
     }
 
     impl WrapperTx {
         /// Create a new wrapper tx from unencrypted tx, the personal keypair,
-        /// an optional unshielding tx, and the metadata surrounding the
+        /// and the metadata surrounding the
         /// inclusion of the tx. This method constructs the signature of
         /// relevant data and encrypts the transaction
         #[allow(clippy::too_many_arguments)]
@@ -171,14 +168,8 @@ pub mod wrapper_tx {
             fee: Fee,
             pk: common::PublicKey,
             gas_limit: GasLimit,
-            unshield_hash: Option<Hash>,
         ) -> WrapperTx {
-            Self {
-                fee,
-                pk,
-                gas_limit,
-                unshield_section_hash: unshield_hash,
-            }
+            Self { fee, pk, gas_limit }
         }
 
         /// Get the address of the implicit account associated

@@ -1800,7 +1800,6 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
             },
             pk.clone(),
             20000.into(),
-            None,
         );
         tx.sign_wrapper(sk.clone());
 

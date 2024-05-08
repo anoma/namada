@@ -956,13 +956,11 @@ pub mod testing {
             fee in arb_fee(),
             pk in arb_common_pk(),
             gas_limit in arb_gas_limit(),
-            unshield_section_hash in option::of(arb_hash()),
         ) -> WrapperTx {
             WrapperTx {
                 fee,
                 pk,
                 gas_limit,
-                unshield_section_hash,
             }
         }
     }
