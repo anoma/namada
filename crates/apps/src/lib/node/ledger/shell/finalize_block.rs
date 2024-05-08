@@ -766,7 +766,10 @@ mod test_finalize_block {
     use namada::replay_protection;
     use namada::sdk::events::Event;
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
-    use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::token::{
+        read_balance, update_balance, Amount, DenominatedAmount,
+        NATIVE_MAX_DECIMAL_PLACES,
+    };
     use namada::tx::data::Fee;
     use namada::tx::event::types::APPLIED as APPLIED_TX;
     use namada::tx::event::Code as CodeAttr;
@@ -843,14 +846,14 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
 
         // Add unshielded balance for fee payment
-        let balance_key = token::storage_key::balance_key(
-            &shell.state.in_mem().native_token,
+        let native_token = shell.state.in_mem().native_token.clone();
+        update_balance(
+            &mut shell.state,
+            &native_token,
             &Address::from(&keypair.ref_to()),
-        );
-        shell
-            .state
-            .write(&balance_key, Amount::native_whole(1000))
-            .unwrap();
+            |_| Ok(Amount::native_whole(1000)),
+        )
+        .unwrap();
 
         // create some wrapper txs
         for i in 0u64..4 {
@@ -1147,14 +1150,14 @@ mod test_finalize_block {
             // add bertha's gas fees the pool
             {
                 let amt: Amount = 999_999_u64.into();
-                let pool_balance_key = token::storage_key::balance_key(
-                    &shell.state.in_mem().native_token,
+                let native_token = shell.state.in_mem().native_token.clone();
+                update_balance(
+                    &mut shell.state,
+                    &native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
-                );
-                shell
-                    .state
-                    .write(&pool_balance_key, amt)
-                    .expect("Test failed");
+                    |_| Ok(amt),
+                )
+                .expect("Test failed");
             }
             // write transfer to storage
             let transfer = {
@@ -3109,12 +3112,12 @@ mod test_finalize_block {
             initial_balance,
         )
         .unwrap();
-        let balance_key = token::storage_key::balance_key(
+        let balance = read_balance(
+            &shell.state,
             &native_token,
             &Address::from(&keypair.to_public()),
-        );
-        let balance: Amount =
-            shell.state.read(&balance_key).unwrap().unwrap_or_default();
+        )
+        .unwrap();
         assert_eq!(balance, initial_balance);
 
         let mut wrapper =
@@ -3169,8 +3172,12 @@ mod test_finalize_block {
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
-        let balance: Amount =
-            shell.state.read(&balance_key).unwrap().unwrap_or_default();
+        let balance = read_balance(
+            &shell.state,
+            &native_token,
+            &Address::from(&keypair.to_public()),
+        )
+        .unwrap();
 
         assert_eq!(balance, 0.into())
     }
@@ -3691,15 +3698,12 @@ mod test_finalize_block {
 
         // Slash pool balance
         let nam_address = shell.state.in_mem().native_token.clone();
-        let slash_balance_key = token::storage_key::balance_key(
+        let slash_pool_balance_init = read_balance(
+            &shell.state,
             &nam_address,
             &namada_proof_of_stake::SLASH_POOL_ADDRESS,
-        );
-        let slash_pool_balance_init: token::Amount = shell
-            .state
-            .read(&slash_balance_key)
-            .expect("must be able to read")
-            .unwrap_or_default();
+        )
+        .unwrap();
         debug_assert_eq!(slash_pool_balance_init, token::Amount::zero());
 
         let consensus_set: Vec<WeightedValidator> =
@@ -4848,14 +4852,8 @@ mod test_finalize_block {
         // NOTE: assumed that the only change in pos address balance by
         // advancing to the next epoch is minted inflation - no change occurs
         // due to slashing
-        let pos_balance_pre = shell
-            .state
-            .read::<token::Amount>(&token::storage_key::balance_key(
-                &staking_token,
-                &pos_address,
-            ))
-            .unwrap()
-            .unwrap_or_default();
+        let pos_balance_pre =
+            read_balance(&shell.state, &staking_token, &pos_address).unwrap();
         loop {
             next_block_for_inflation(
                 shell,
@@ -4867,14 +4865,8 @@ mod test_finalize_block {
                 break;
             }
         }
-        let pos_balance_post = shell
-            .state
-            .read::<token::Amount>(&token::storage_key::balance_key(
-                &staking_token,
-                &pos_address,
-            ))
-            .unwrap()
-            .unwrap_or_default();
+        let pos_balance_post =
+            read_balance(&shell.state, &staking_token, &pos_address).unwrap();
 
         (
             shell.state.in_mem().block.epoch,
