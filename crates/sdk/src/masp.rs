@@ -31,7 +31,9 @@ use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
 use masp_primitives::transaction::builder::{self, *};
-use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
+use masp_primitives::transaction::components::sapling::builder::{
+    RngBuildParams, SaplingMetadata,
+};
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
     ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
@@ -124,7 +126,7 @@ pub type IndexedNoteEntry = (
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct ShieldedTransfer {
     /// Shielded transfer builder
-    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    pub builder: Builder<(), ExtendedFullViewingKey, ()>,
     /// MASP transaction
     pub masp_tx: Transaction,
     /// Metadata
@@ -449,20 +451,10 @@ impl<P1>
     }
 }
 
-impl<P1, R1, N1>
-    MapBuilder<
-        P1,
-        R1,
-        ExtendedSpendingKey,
-        N1,
-        (),
-        (),
-        ExtendedFullViewingKey,
-        (),
-    > for WalletMap
+impl<P1, N1>
+    MapBuilder<P1, ExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
+    for WalletMap
 {
-    fn map_rng(&self, _s: R1) {}
-
     fn map_notifier(&self, _s: N1) {}
 }
 
@@ -1986,9 +1978,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let memo = MemoBytes::empty();
 
         // Try to get a seed from env var, if any.
-        let rng = StdRng::from_rng(OsRng).unwrap();
+        #[allow(unused_mut)]
+        let mut rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
-        let rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
+        let mut rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
                 let exp_str =
@@ -2053,13 +2046,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 u32::MAX - 20
             }
         };
-        let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+        let mut builder = Builder::<TestNetwork, _>::new(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
             // use from the masp crate to specify the expiration better
             expiration_height.into(),
-            rng,
         );
 
         // Convert transaction amount into MASP types
@@ -2311,8 +2303,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let prover = context.shielded().await.utils.local_tx_prover();
         #[cfg(feature = "testing")]
         let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
-        let (masp_tx, metadata) =
-            builder.build(&prover, &FeeRule::non_standard(U64Sum::zero()))?;
+        let (masp_tx, metadata) = builder.build(
+            &prover,
+            &FeeRule::non_standard(U64Sum::zero()),
+            &mut rng,
+            &mut RngBuildParams::new(OsRng),
+        )?;
 
         if update_ctx {
             // Cache the generated transfer
@@ -2910,7 +2906,6 @@ pub mod testing {
     use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
-    use masp_primitives::ff::Field;
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::Signature;
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
@@ -3116,16 +3111,11 @@ pub mod testing {
             value: u64,
             _anchor: bls12_381::Scalar,
             _merkle_path: MerklePath<Node>,
+            rcv: jubjub::Fr,
         ) -> Result<
             ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint, PublicKey),
             (),
         > {
-            // Initialize secure RNG
-            let mut rng = self.0.lock().unwrap();
-
-            // We create the randomness of the value commitment
-            let rcv = jubjub::Fr::random(&mut *rng);
-
             // Accumulate the value commitment randomness in the context
             {
                 let mut tmp = rcv;
@@ -3170,15 +3160,8 @@ pub mod testing {
             _rcm: jubjub::Fr,
             asset_type: AssetType,
             value: u64,
+            rcv: jubjub::Fr,
         ) -> ([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint) {
-            // Initialize secure RNG
-            let mut rng = self.0.lock().unwrap();
-
-            // We construct ephemeral randomness for the value commitment. This
-            // randomness is not given back to the caller, but the synthetic
-            // blinding factor `bsk` is accumulated in the context.
-            let rcv = jubjub::Fr::random(&mut *rng);
-
             // Accumulate the value commitment randomness in the context
             {
                 let mut tmp = rcv.neg(); // Outputs subtract from the total.
@@ -3219,14 +3202,9 @@ pub mod testing {
             value: u64,
             _anchor: bls12_381::Scalar,
             _merkle_path: MerklePath<Node>,
+            rcv: jubjub::Fr,
         ) -> Result<([u8; GROTH_PROOF_SIZE], jubjub::ExtendedPoint), ()>
         {
-            // Initialize secure RNG
-            let mut rng = self.0.lock().unwrap();
-
-            // We create the randomness of the value commitment
-            let rcv = jubjub::Fr::random(&mut *rng);
-
             // Accumulate the value commitment randomness in the context
             {
                 let mut tmp = rcv;
@@ -3380,6 +3358,7 @@ pub mod testing {
             address in arb_transparent_address(),
             expiration_height in arb_height(BranchId::MASP, &TestNetwork),
             mut rng in arb_rng().prop_map(TestCsprng),
+            bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
         ) -> (ExtendedSpendingKey, Diversifier, Note, Node) {
             let mut spending_key_seed = [0; 32];
@@ -3392,13 +3371,12 @@ pub mod testing {
                 .to_payment_address(div)
                 .expect("a PaymentAddress");
 
-            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+            let mut builder = Builder::<TestNetwork, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
                 // use from the masp crate to specify the expiration better
                 expiration_height.unwrap(),
-                rng,
             );
             // Add a transparent input to support our desired shielded output
             builder.add_transparent_input(TxOut { asset_type, value, address }).unwrap();
@@ -3408,6 +3386,8 @@ pub mod testing {
             let (transaction, metadata) = builder.build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
+                &mut rng,
+                &mut RngBuildParams::new(bparams_rng),
             ).unwrap();
             // Extract the shielded output from the transaction
             let shielded_output = &transaction
@@ -3538,7 +3518,6 @@ pub mod testing {
             ),
         )(
             expiration_height in arb_height(BranchId::MASP, &TestNetwork),
-            rng in arb_rng().prop_map(TestCsprng),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -3549,16 +3528,15 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            Builder::<TestNetwork>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+            let mut builder = Builder::<TestNetwork, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
                 // use from the masp crate to specify the expiration better
                 expiration_height.unwrap(),
-                rng,
             );
             let mut leaves = Vec::new();
             // First construct a Merkle tree containing all notes to be used
@@ -3607,7 +3585,6 @@ pub mod testing {
             ),
         )(
             expiration_height in arb_height(BranchId::MASP, &TestNetwork),
-            rng in arb_rng().prop_map(TestCsprng),
             txins in assets
                 .iter()
                 .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
@@ -3618,16 +3595,15 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            Builder::<TestNetwork>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+            let mut builder = Builder::<TestNetwork, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
                 // use from the masp crate to specify the expiration better
                 expiration_height.unwrap(),
-                rng,
             );
             for txin in txins.into_iter().flatten() {
                 builder.add_transparent_input(txin).unwrap();
@@ -3652,7 +3628,6 @@ pub mod testing {
             ),
         )(
             expiration_height in arb_height(BranchId::MASP, &TestNetwork),
-            rng in arb_rng().prop_map(TestCsprng),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -3663,16 +3638,15 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork, TestCsprng<TestRng>>,
+            Builder::<TestNetwork>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new_with_rng(
+            let mut builder = Builder::<TestNetwork, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
                 // use from the masp crate to specify the expiration better
                 expiration_height.unwrap(),
-                rng,
             );
             let mut leaves = Vec::new();
             // First construct a Merkle tree containing all notes to be used
@@ -3698,11 +3672,15 @@ pub mod testing {
         )(asset_range in Just(asset_range.into()))(
             (builder, asset_types) in arb_shielded_builder(asset_range),
             epoch in arb_epoch(),
-            rng in arb_rng().prop_map(TestCsprng),
+            prover_rng in arb_rng().prop_map(TestCsprng),
+            mut rng in arb_rng().prop_map(TestCsprng),
+            bparams_rng in arb_rng().prop_map(TestCsprng),
         ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
             let (masp_tx, metadata) = builder.clone().build(
-                &MockTxProver(Mutex::new(rng)),
+                &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
+                &mut rng,
+                &mut RngBuildParams::new(bparams_rng),
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
@@ -3724,11 +3702,15 @@ pub mod testing {
                 asset_range,
             ),
             epoch in arb_epoch(),
-            rng in arb_rng().prop_map(TestCsprng),
+            prover_rng in arb_rng().prop_map(TestCsprng),
+            mut rng in arb_rng().prop_map(TestCsprng),
+            bparams_rng in arb_rng().prop_map(TestCsprng),
         ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
             let (masp_tx, metadata) = builder.clone().build(
-                &MockTxProver(Mutex::new(rng)),
+                &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
+                &mut rng,
+                &mut RngBuildParams::new(bparams_rng),
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
@@ -3750,11 +3732,15 @@ pub mod testing {
                 asset_range,
             ),
             epoch in arb_epoch(),
-            rng in arb_rng().prop_map(TestCsprng),
+            prover_rng in arb_rng().prop_map(TestCsprng),
+            mut rng in arb_rng().prop_map(TestCsprng),
+            bparams_rng in arb_rng().prop_map(TestCsprng),
         ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
             let (masp_tx, metadata) = builder.clone().build(
-                &MockTxProver(Mutex::new(rng)),
+                &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
+                &mut rng,
+                &mut RngBuildParams::new(bparams_rng),
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),

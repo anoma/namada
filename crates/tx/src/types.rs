@@ -554,7 +554,7 @@ impl Authorization {
     Serialize,
     Deserialize,
 )]
-pub struct CompressedSignature {
+pub struct CompressedAuthorization {
     /// The hash of the section being signed
     pub targets: Vec<u8>,
     /// The public keys against which the signatures should be verified
@@ -563,7 +563,7 @@ pub struct CompressedSignature {
     pub signatures: BTreeMap<u8, common::Signature>,
 }
 
-impl CompressedSignature {
+impl CompressedAuthorization {
     /// Decompress this signature object with respect to the given transaction
     /// by looking up the necessary section hashes. Used by constrained hardware
     /// wallets.
@@ -688,7 +688,13 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 /// A section providing the auxiliary inputs used to construct a MASP
 /// transaction
 #[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Serialize,
+    Deserialize,
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
@@ -707,7 +713,7 @@ pub struct MaspBuilder {
         serialize_with = "borsh_serde::<BuilderSerde, _>",
         deserialize_with = "serde_borsh::<BuilderSerde, _, _>"
     )]
-    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    pub builder: Builder<(), ExtendedFullViewingKey, ()>,
 }
 
 impl MaspBuilder {
@@ -716,20 +722,6 @@ impl MaspBuilder {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
         hasher
-    }
-}
-
-impl borsh::BorshSchema for MaspBuilder {
-    fn add_definitions_recursively(
-        _definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        "Builder".into()
     }
 }
 
@@ -1596,15 +1588,28 @@ impl Tx {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
+    use std::collections::BTreeMap;
+
+    use borsh::schema::BorshSchema;
+
     use std::fs;
 
     use data_encoding::HEXLOWER;
 
     use super::*;
 
+    /// Test that the BorshSchema for Tx gets generated without any name
+    /// conflicts
     #[test]
+    fn test_tx_schema() {
+        let _declaration = super::Tx::declaration();
+        let mut definitions = BTreeMap::new();
+        super::Tx::add_definitions_recursively(&mut definitions);
+    }
+
     /// Tx encoding must not change
+    #[test]
     fn test_txs_fixture_decoding() {
         let file = fs::File::open("../tests/fixtures/txs.json")
             .expect("file should open read only");
