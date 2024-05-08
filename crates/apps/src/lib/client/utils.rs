@@ -31,9 +31,7 @@ use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{
-    self, genesis, get_default_namada_folder, Config, TendermintMode,
-};
+use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, CliWalletUtils};
@@ -167,63 +165,8 @@ pub async fn join_network(
     // Decode and unpack the archive
     let decoder = GzDecoder::new(&net_config[..]);
     let mut archive = tar::Archive::new(decoder);
-
-    // If the base-dir is non-default, unpack the archive into a temp dir inside
-    // first.
-    let cwd = env::current_dir().unwrap();
-    let (unpack_dir, non_default_dir) =
-        if base_dir_full != cwd.join(config::DEFAULT_BASE_DIR) {
-            (base_dir.clone(), true)
-        } else {
-            (PathBuf::from_str(".").unwrap(), false)
-        };
-    archive.unpack(&unpack_dir).unwrap();
-
-    // Rename the base-dir from the default and rename wasm-dir, if non-default.
-    if non_default_dir {
-        // For compatibility for networks released with Namada <= v0.4:
-        // The old releases include the WASM directory at root path of the
-        // archive. This has been moved into the chain directory, so if the
-        // WASM dir is found at the old path, we move it to the new path.
-        if let Ok(wasm_dir) =
-            fs::canonicalize(unpack_dir.join(config::DEFAULT_WASM_DIR)).await
-        {
-            fs::rename(
-                &wasm_dir,
-                unpack_dir
-                    .join(config::DEFAULT_BASE_DIR)
-                    .join(chain_id.as_str())
-                    .join(config::DEFAULT_WASM_DIR),
-            )
-            .await
-            .unwrap();
-        }
-
-        // Move the chain dir
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(chain_id.as_str()),
-            &chain_dir,
-        )
-        .await
-        .unwrap();
-
-        // Move the global config
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(config::global::FILENAME),
-            base_dir_full.join(config::global::FILENAME),
-        )
-        .await
-        .unwrap();
-
-        // Remove the default dir
-        fs::remove_dir_all(unpack_dir.join(config::DEFAULT_BASE_DIR))
-            .await
-            .unwrap();
-    }
+    archive.unpack(&base_dir_full).unwrap();
+    _ = archive;
 
     // Read the genesis files
     let genesis = genesis::chain::Finalized::read_toml_files(&chain_dir)
@@ -252,7 +195,7 @@ pub async fn join_network(
     };
 
     // Derive config from genesis
-    let config = genesis.derive_config(
+    let mut config = genesis.derive_config(
         &chain_dir,
         node_mode,
         validator_keys.as_ref().map(|(sk, _)| sk.ref_to()).as_ref(),
@@ -276,10 +219,6 @@ pub async fn join_network(
         pre_genesis_wallet,
         validator_alias_and_pre_genesis_wallet,
     );
-
-    // Save the config and the wallet
-    config.write(&base_dir, &chain_id, true).unwrap();
-    crate::wallet::save(&wallet).unwrap();
 
     // Setup the node for a genesis validator, if used
     if let Some((tendermint_node_key, consensus_key)) = validator_keys {
@@ -307,26 +246,18 @@ pub async fn join_network(
     // Move wasm-dir and update config if it's non-default
     if let Some(wasm_dir) = wasm_dir.as_ref() {
         if wasm_dir.to_string_lossy() != config::DEFAULT_WASM_DIR {
+            let wasm_dir_full = chain_dir.join(wasm_dir);
+
             tokio::fs::rename(
                 base_dir_full
                     .join(chain_id.as_str())
                     .join(config::DEFAULT_WASM_DIR),
-                chain_dir.join(wasm_dir),
+                &wasm_dir_full,
             )
             .await
             .unwrap();
 
-            // Update the config
-            let wasm_dir = wasm_dir.clone();
-            let base_dir = base_dir.clone();
-            let chain_id = chain_id.clone();
-            tokio::task::spawn_blocking(move || {
-                let mut config = Config::load(&base_dir, &chain_id, None);
-                config.wasm_dir = wasm_dir;
-                config.write(&base_dir, &chain_id, true).unwrap();
-            })
-            .await
-            .unwrap();
+            config.wasm_dir = wasm_dir_full;
         }
     }
 
@@ -334,7 +265,11 @@ pub async fn join_network(
         fetch_wasms_aux(&base_dir, &chain_id).await;
     }
 
-    println!("Successfully configured for chain ID {}", chain_id);
+    // Save the config and the wallet
+    config.write(&base_dir, &chain_id, true).unwrap();
+    crate::wallet::save(&wallet).unwrap();
+
+    println!("Successfully configured for chain ID {chain_id}");
 }
 
 pub async fn fetch_wasms(
