@@ -167,6 +167,23 @@ pub struct WrapperArgs<'a> {
     pub is_committed_fee_unshield: bool,
 }
 
+/// The result of a call to [`dispatch_tx`]
+pub struct DispatchError {
+    /// The result of the function call
+    pub error: Error,
+    /// The tx result produced. It could produced even in case of an error
+    pub tx_result: Option<TxResult<Error>>,
+}
+
+impl From<Error> for DispatchError {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            tx_result: None,
+        }
+    }
+}
+
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
@@ -176,12 +193,11 @@ pub fn dispatch_tx<'a, D, H, CA>(
     tx_bytes: &'a [u8],
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
-    tx_result: &'a mut TxResult<Error>,
     state: &'a mut WlState<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs>,
-) -> Result<()>
+) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -192,7 +208,7 @@ where
         TxType::Raw => {
             // No bundles of governance transactions, just take the first one
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
-            let result = apply_wasm_tx(
+            let batched_tx_result = apply_wasm_tx(
                 BatchedTxRef { tx: &tx, cmt },
                 &tx_index,
                 ShellParams {
@@ -202,33 +218,36 @@ where
                     tx_wasm_cache,
                 },
             )?;
-            *tx_result = TxResult {
+
+            Ok(TxResult {
                 gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                 wrapper_changed_keys: Default::default(),
                 batch_results: BatchResults(
-                    [(cmt.get_hash(), Ok(result))].into_iter().collect(),
+                    [(cmt.get_hash(), Ok(batched_tx_result))]
+                        .into_iter()
+                        .collect(),
                 ),
-            };
-            Ok(())
+            })
         }
         TxType::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
-            let result =
+            let batched_tx_result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
-            *tx_result = TxResult {
+            Ok(TxResult {
                 batch_results: BatchResults(
-                    [(cmt.get_hash(), Ok(result))].into_iter().collect(),
+                    [(cmt.get_hash(), Ok(batched_tx_result))]
+                        .into_iter()
+                        .collect(),
                 ),
                 ..Default::default()
-            };
-            Ok(())
+            })
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
-            *tx_result = apply_wrapper_tx(
+            let mut tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
@@ -248,7 +267,10 @@ where
             if state.write_log().has_replay_protection_entry(&tx_hash) {
                 // If the same batch has already been committed in
                 // this block, skip execution and return
-                return Err(Error::ReplayAttempt(tx_hash));
+                return Err(DispatchError {
+                    error: Error::ReplayAttempt(tx_hash),
+                    tx_result: None,
+                });
             }
 
             for cmt in tx.commitments() {
@@ -271,7 +293,10 @@ where
                             Err(Error::GasError(msg.to_owned())),
                         );
                         state.write_log_mut().drop_tx();
-                        return Err(Error::GasError(msg.to_owned()));
+                        return Err(DispatchError {
+                            error: Error::GasError(msg.to_owned()),
+                            tx_result: Some(tx_result),
+                        });
                     }
                     res => {
                         let is_accepted =
@@ -288,15 +313,18 @@ where
                             if tx.header.atomic {
                                 // Stop the execution of an atomic batch at the
                                 // first failed transaction
-                                return Err(Error::FailingAtomicBatch(
-                                    cmt.get_hash(),
-                                ));
+                                return Err(DispatchError {
+                                    error: Error::FailingAtomicBatch(
+                                        cmt.get_hash(),
+                                    ),
+                                    tx_result: Some(tx_result),
+                                });
                             }
                         }
                     }
                 };
             }
-            Ok(())
+            Ok(tx_result)
         }
     }
 }

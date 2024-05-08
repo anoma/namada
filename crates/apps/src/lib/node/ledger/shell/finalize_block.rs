@@ -14,7 +14,7 @@ use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::WrapperArgs;
+use namada::ledger::protocol::{DispatchError, WrapperArgs};
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -304,7 +304,6 @@ where
             let is_atomic_batch = tx.header.atomic;
             let commitments_len = tx.commitments().len() as u64;
             let tx_hash = tx.header_hash();
-            let mut tx_result = namada::tx::data::TxResult::default();
 
             let dispatch_result = protocol::dispatch_tx(
                 tx,
@@ -315,13 +314,11 @@ where
                         .expect("transaction index out of bounds"),
                 ),
                 &tx_gas_meter,
-                &mut tx_result,
                 &mut self.state,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
                 wrapper_args.as_mut(),
-            )
-            .map_err(Error::TxApply);
+            );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
 
@@ -330,8 +327,7 @@ where
 
             self.evaluate_tx_result(
                 &mut response,
-                &dispatch_result,
-                tx_result,
+                dispatch_result,
                 TxData {
                     is_atomic_batch,
                     tx_header: &tx_header,
@@ -512,8 +508,10 @@ where
     fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        dispatch_result: &Result<()>,
-        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        dispatch_result: std::result::Result<
+            namada::tx::data::TxResult<protocol::Error>,
+            DispatchError,
+        >,
         tx_data: TxData,
         mut tx_logs: TxLogs,
     ) {
@@ -530,13 +528,16 @@ where
         }
 
         match dispatch_result {
-            Ok(()) => self.handle_inner_tx_results(
+            Ok(tx_result) => self.handle_inner_tx_results(
                 response,
                 tx_result,
                 tx_data,
                 &mut tx_logs,
             ),
-            Err(Error::TxApply(protocol::Error::WrapperRunnerError(msg))) => {
+            Err(DispatchError {
+                error: protocol::Error::WrapperRunnerError(msg),
+                tx_result: _,
+            }) => {
                 tracing::info!(
                     "Wrapper transaction {} failed with: {}",
                     tx_logs.tx_event["hash"],
@@ -550,9 +551,14 @@ where
                 // Make sure to clean the write logs for the next transaction
                 self.state.write_log_mut().drop_tx();
             }
-            Err(msg) => {
+            Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
                 // batch
+                let (msg, tx_result) = (
+                    Error::TxApply(dispatch_error.error),
+                    // The tx result should always be present at this point
+                    dispatch_error.tx_result.unwrap_or_default(),
+                );
                 tracing::info!(
                     "Transaction {} failed with: {}",
                     tx_logs.tx_event["hash"],
@@ -567,7 +573,7 @@ where
 
                 self.handle_batch_error(
                     response,
-                    msg,
+                    &msg,
                     tx_result,
                     tx_data,
                     &mut tx_logs,

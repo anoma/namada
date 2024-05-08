@@ -334,7 +334,6 @@ where
     tx.set_code(Code::new(proposal_code, None));
     // Ok to unwrap cause we constructed the tx in protocol
     let cmt = tx.first_commitments().unwrap().to_owned();
-    let mut tx_result = namada::tx::data::TxResult::default();
 
     let dispatch_result = protocol::dispatch_tx(
         tx,
@@ -343,7 +342,6 @@ where
               * need it here. */
         TxIndex::default(),
         &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
-        &mut tx_result,
         &mut shell.state,
         &mut shell.vp_wasm_cache,
         &mut shell.tx_wasm_cache,
@@ -354,7 +352,7 @@ where
         .delete(&pending_execution_key)
         .expect("Should be able to delete the storage.");
     match dispatch_result {
-        Ok(()) => match tx_result.batch_results.0.get(&cmt.get_hash()) {
+        Ok(tx_result) => match tx_result.batch_results.0.get(&cmt.get_hash()) {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
                 shell.state.commit_tx();
                 Ok(true)
