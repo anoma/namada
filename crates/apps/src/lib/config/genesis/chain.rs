@@ -185,6 +185,7 @@ impl Finalized {
         node_mode: TendermintMode,
         tendermint_pk: Option<&common::PublicKey>,
         allow_duplicate_ip: bool,
+        add_persistent_peers: bool,
     ) -> Config {
         if node_mode != TendermintMode::Validator && tendermint_pk.is_some() {
             println!(
@@ -196,7 +197,8 @@ impl Finalized {
             Config::new(base_dir, self.metadata.chain_id.clone(), node_mode);
 
         // Derive persistent peers from genesis
-        let persistent_peers = self.derive_persistent_peers();
+        let persistent_peers =
+            self.derive_persistent_peers(add_persistent_peers);
         // If `tendermint_pk` is given, find its net_address
         let validator_net_and_tm_address =
             if let Some(tendermint_pk) = tendermint_pk {
@@ -263,16 +265,22 @@ impl Finalized {
     }
 
     /// Derive persistent peers from genesis validators
-    fn derive_persistent_peers(&self) -> Vec<TendermintAddress> {
-        self.transactions
-            .validator_account
-            .as_ref()
-            .map(|txs| {
-                txs.iter()
-                    .map(FinalizedValidatorAccountTx::derive_tendermint_address)
-                    .collect()
-            })
-            .unwrap_or_default()
+    fn derive_persistent_peers(
+        &self,
+        add_persistent_peers: bool,
+    ) -> Vec<TendermintAddress> {
+        add_persistent_peers.then(|| {
+            self.transactions
+                .validator_account
+                .as_ref()
+                .map(|txs| {
+                    txs.iter()
+                        .map(FinalizedValidatorAccountTx::derive_tendermint_address)
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default()
     }
 
     /// Get the chain parameters set in genesis

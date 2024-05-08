@@ -61,6 +61,7 @@ pub async fn join_network(
         pre_genesis_path,
         dont_prefetch_wasm,
         allow_duplicate_ip,
+        add_persistent_peers,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -193,6 +194,7 @@ pub async fn join_network(
         node_mode,
         validator_keys.as_ref().map(|(sk, _)| sk.ref_to()).as_ref(),
         allow_duplicate_ip,
+        add_persistent_peers,
     );
 
     // Try to load pre-genesis wallet, if any

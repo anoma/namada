@@ -2996,6 +2996,7 @@ pub mod args {
     use crate::facade::tendermint_rpc::Url;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
@@ -7165,6 +7166,7 @@ pub mod args {
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
         pub allow_duplicate_ip: bool,
+        pub add_persistent_peers: bool,
     }
 
     impl Args for JoinNetwork {
@@ -7174,12 +7176,14 @@ pub mod args {
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
+            let add_persistent_peers = ADD_PERSISTENT_PEERS.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
                 dont_prefetch_wasm,
                 allow_duplicate_ip,
+                add_persistent_peers,
             }
         }
 
@@ -7194,6 +7198,10 @@ pub mod args {
             .arg(ALLOW_DUPLICATE_IP.def().help(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.",
+            ))
+            .arg(ADD_PERSISTENT_PEERS.def().help(
+                "Whether to add persistent peers to the P2P config of CometBFT, \
+                 derived from the list of genesis validators.",
             ))
         }
     }
