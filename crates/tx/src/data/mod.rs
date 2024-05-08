@@ -384,7 +384,6 @@ mod test_process_tx {
     use assert_matches::assert_matches;
     use namada_core::address::testing::nam;
     use namada_core::key::*;
-    use namada_core::storage::Epoch;
     use namada_core::token::{Amount, DenominatedAmount};
 
     use super::*;
@@ -479,7 +478,6 @@ mod test_process_tx {
                 token: nam(),
             },
             keypair.ref_to(),
-            Epoch(0),
             0.into(),
             None,
         ))));
@@ -508,7 +506,6 @@ mod test_process_tx {
                 token: nam(),
             },
             keypair.ref_to(),
-            Epoch(0),
             0.into(),
             None,
         ))));

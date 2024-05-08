@@ -1566,7 +1566,6 @@ mod tests {
                 },
                 namada_core::key::testing::common_sk_from_simple_seed(0)
                     .to_public(),
-                namada_state::Epoch(0),
                 0.into(),
                 None,
             ),
