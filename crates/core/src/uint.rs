@@ -511,7 +511,13 @@ impl FromStr for I256 {
 
     fn from_str(num: &str) -> Result<Self, Self::Err> {
         if let Some(("", neg_num)) = num.split_once('-') {
-            let uint = neg_num.parse::<Uint>()?.negate();
+            let (uint, overflow) = neg_num.parse::<Uint>()?.negate();
+            if overflow {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "I256 overflow",
+                )));
+            }
             Ok(I256(uint))
         } else {
             let uint = num.parse::<Uint>()?;
@@ -522,8 +528,9 @@ impl FromStr for I256 {
 
 impl I256 {
     /// Compute the two's complement of a number.
-    pub fn negate(&self) -> Self {
-        Self(self.0.negate())
+    pub fn negate(&self) -> Option<Self> {
+        let (uint, overflow) = self.0.negate();
+        if overflow { None } else { Some(Self(uint)) }
     }
 
     /// Check if the amount is not negative (greater
@@ -1133,7 +1140,7 @@ mod test_uint {
 
     #[test]
     fn test_i256_str_roundtrip() {
-        let minus_one = I256::one().negate();
+        let minus_one = I256::one().negate().unwrap();
         let minus_one_str = minus_one.to_string();
         assert_eq!(minus_one_str, "-1");
 

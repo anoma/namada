@@ -51,7 +51,6 @@ use masp_proofs::prover::LocalTxProver;
 #[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::Address;
-use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{

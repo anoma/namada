@@ -1015,15 +1015,6 @@ pub mod testing {
         }
     }
 
-    impl std::ops::Mul<Uint> for Amount {
-        type Output = Amount;
-
-        fn mul(mut self, rhs: Uint) -> Self::Output {
-            self.raw *= rhs;
-            self
-        }
-    }
-
     impl std::ops::Div<u64> for Amount {
         type Output = Self;
 
