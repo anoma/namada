@@ -894,6 +894,34 @@ where
     }
 }
 
+/// Read PoS validator's name.
+pub fn read_validator_name<S>(
+    storage: &S,
+    validator: &Address,
+) -> namada_storage::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_name_key(validator))
+}
+
+/// Write PoS validator's name. If the provided arg is an empty
+/// string, remove the data.
+pub fn write_validator_name<S>(
+    storage: &mut S,
+    validator: &Address,
+    validator_name: &String,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_name_key(validator);
+    if validator_name.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, validator_name)
+    }
+}
 /// Write validator's metadata.
 pub fn write_validator_metadata<S>(
     storage: &mut S,
@@ -917,6 +945,9 @@ where
     }
     if let Some(avatar) = metadata.avatar.as_ref() {
         write_validator_avatar(storage, validator, avatar)?;
+    }
+    if let Some(name) = metadata.name.as_ref() {
+        write_validator_name(storage, validator, name)?;
     }
     Ok(())
 }
