@@ -3089,8 +3089,6 @@ pub mod args {
     pub const EXPIRATION_OPT: ArgOpt<DateTimeUtc> = arg_opt("expiration");
     pub const EMAIL: Arg<String> = arg("email");
     pub const EMAIL_OPT: ArgOpt<String> = EMAIL.opt();
-    pub const FEE_UNSHIELD_SPENDING_KEY: ArgOpt<WalletTransferSource> =
-        arg_opt("gas-spending-key");
     pub const FEE_AMOUNT_OPT: ArgOpt<token::DenominatedAmount> =
         arg_opt("gas-price");
     pub const FEE_PAYER_OPT: ArgOpt<WalletPublicKey> = arg_opt("gas-payer");
@@ -6409,9 +6407,6 @@ pub mod args {
                 wallet_alias_force: self.wallet_alias_force,
                 fee_amount: self.fee_amount,
                 fee_token: ctx.get(&self.fee_token).into(),
-                fee_unshield: self
-                    .fee_unshield
-                    .map(|ref fee_unshield| ctx.get_cached(fee_unshield)),
                 gas_limit: self.gas_limit,
                 signing_keys: self
                     .signing_keys
@@ -6487,10 +6482,6 @@ pub mod args {
                  this transaction",
             ))
             .arg(FEE_TOKEN.def().help("The token for paying the gas"))
-            .arg(FEE_UNSHIELD_SPENDING_KEY.def().help(
-                "The spending key to be used for fee unshielding. If none is \
-                 provided, fee will be paid from the unshielded balance only.",
-            ))
             .arg(GAS_LIMIT.def().help(
                 "The multiplier of the gas limit resolution defining the \
                  maximum amount of gas needed to run transaction.",
@@ -6520,16 +6511,11 @@ pub mod args {
                     )
                     .conflicts_with_all([EXPIRATION_OPT.name]),
             )
-            .arg(
-                DISPOSABLE_SIGNING_KEY
-                    .def()
-                    .help(
-                        "Generates an ephemeral, disposable keypair to sign \
-                         the wrapper transaction. This keypair will be \
-                         immediately discarded after use.",
-                    )
-                    .requires(FEE_UNSHIELD_SPENDING_KEY.name),
-            )
+            .arg(DISPOSABLE_SIGNING_KEY.def().help(
+                "Generates an ephemeral, disposable keypair to sign the \
+                 wrapper transaction. This keypair will be immediately \
+                 discarded after use.",
+            ))
             .arg(
                 SIGNING_KEYS
                     .def()
@@ -6587,7 +6573,6 @@ pub mod args {
             let fee_amount =
                 FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
             let fee_token = FEE_TOKEN.parse(matches);
-            let fee_unshield = FEE_UNSHIELD_SPENDING_KEY.parse(matches);
             let _wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
@@ -6622,7 +6607,6 @@ pub mod args {
                 wallet_alias_force,
                 fee_amount,
                 fee_token,
-                fee_unshield,
                 gas_limit,
                 expiration,
                 disposable_signing_key,
