@@ -198,6 +198,10 @@ impl StoragePgfFunding {
     BorshDeserializer,
     Serialize,
     Deserialize,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 pub enum ProposalType {
     /// Default governance proposal
@@ -256,6 +260,7 @@ where
     Ord,
     Eq,
     PartialOrd,
+    Hash,
 )]
 pub enum PGFTarget {
     /// Funding target on this chain
@@ -308,6 +313,7 @@ impl Display for PGFTarget {
     Ord,
     Eq,
     PartialOrd,
+    Hash,
 )]
 pub struct PGFInternalTarget {
     /// The target address
@@ -327,6 +333,7 @@ pub struct PGFInternalTarget {
     Eq,
     PartialOrd,
     BorshDeserializer,
+    Hash,
 )]
 pub struct PGFIbcTarget {
     /// The target address on the target chain
@@ -416,6 +423,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     Eq,
     Ord,
     PartialOrd,
+    Hash,
 )]
 pub enum PGFAction {
     /// A continuous payment

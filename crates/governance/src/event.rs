@@ -6,41 +6,35 @@ use namada_events::extend::{EventAttributeEntry, ExtendAttributesMap};
 use namada_events::{Event, EventLevel, EventToEmit};
 
 use crate::utils::TallyResult as GovTallyResult;
+use crate::ProposalType as GovProposalType;
 
 pub mod types {
     //! Governance event types.
 
     use namada_events::EventType;
 
-    use super::ProposalEvent;
+    use super::GovernanceEvent;
 
     /// Sub-domain of governance proposals.
     const PROPOSAL_SUBDOMAIN: &str = "proposal";
 
     /// Proposal rejected.
     pub const PROPOSAL_REJECTED: EventType = namada_events::event_type!(
-        ProposalEvent,
+        GovernanceEvent,
         PROPOSAL_SUBDOMAIN,
         "rejected"
     );
 
     /// Proposal passed.
-    pub const PROPOSAL_PASSED: EventType =
-        namada_events::event_type!(ProposalEvent, PROPOSAL_SUBDOMAIN, "passed");
-
-    /// PGF steward proposal.
-    pub const PROPOSAL_PGF_STEWARD: EventType = namada_events::event_type!(
-        ProposalEvent,
+    pub const PROPOSAL_PASSED: EventType = namada_events::event_type!(
+        GovernanceEvent,
         PROPOSAL_SUBDOMAIN,
-        "pgf-steward"
+        "passed"
     );
 
-    /// PGF payments proposal.
-    pub const PROPOSAL_PGF_PAYMENTS: EventType = namada_events::event_type!(
-        ProposalEvent,
-        PROPOSAL_SUBDOMAIN,
-        "pgf-payments"
-    );
+    /// New proposal.
+    pub const NEW_PROPOSAL: EventType =
+        namada_events::event_type!(GovernanceEvent, PROPOSAL_SUBDOMAIN, "new");
 
     #[cfg(test)]
     mod tests {
@@ -53,127 +47,109 @@ pub mod types {
     }
 }
 
-/// Governance proposal event.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ProposalEvent {
-    /// ID of the governance proposal.
-    pub id: u64,
-    /// Governance proposal kind.
-    pub kind: ProposalEventKind,
+/// Governance event.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum GovernanceEvent {
+    /// Governance proposal event.
+    Proposal {
+        /// ID of the governance proposal.
+        id: u64,
+        /// Governance proposal kind.
+        kind: ProposalEventKind,
+    },
 }
 
-impl ProposalEvent {
-    /// Create a new proposal event for rejected proposal
-    pub fn rejected_proposal_event(proposal_id: u64) -> Self {
-        Self {
+impl GovernanceEvent {
+    /// Create a new proposal event for default proposal
+    pub fn new_proposal(
+        proposal_id: u64,
+        proposal_type: GovProposalType,
+    ) -> Self {
+        Self::Proposal {
             id: proposal_id,
-            kind: ProposalEventKind::Rejected,
+            kind: ProposalEventKind::NewProposal { proposal_type },
         }
     }
 
-    /// Create a new proposal event for default proposal
-    pub fn default_proposal_event(
+    /// Create a new proposal event for defaultwithwasm proposal
+    pub fn passed_proposal(
         proposal_id: u64,
-        has_code: bool,
-        execution_status: bool,
+        has_proposal_code: bool,
+        is_proposal_code_successful: bool,
     ) -> Self {
-        Self {
+        Self::Proposal {
             id: proposal_id,
             kind: ProposalEventKind::Passed {
-                has_code,
-                execution_status,
+                has_proposal_code,
+                is_proposal_code_successful,
             },
         }
     }
 
-    /// Create a new proposal event for pgf stewards proposal
-    pub fn pgf_steward_proposal_event(proposal_id: u64, result: bool) -> Self {
-        Self {
+    pub fn rejected_proposal(
+        proposal_id: u64,
+        has_proposal_code: bool,
+    ) -> Self {
+        Self::Proposal {
             id: proposal_id,
-            kind: ProposalEventKind::PgfSteward { result },
-        }
-    }
-
-    /// Create a new proposal event for pgf payments proposal
-    pub fn pgf_payments_proposal_event(proposal_id: u64, result: bool) -> Self {
-        Self {
-            id: proposal_id,
-            kind: ProposalEventKind::PgfPayments { result },
+            kind: ProposalEventKind::Rejected { has_proposal_code },
         }
     }
 }
 
-/// Proposal event kinds.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// Proposal event kinds
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ProposalEventKind {
-    /// Governance proposal that has passed.
+    /// New proposal event
+    NewProposal { proposal_type: GovProposalType },
+    /// Passed proposal
     Passed {
-        /// Whether the proposal has WASM code to be executed or not.
-        has_code: bool,
-        /// The execution status of the proposal.
-        execution_status: bool,
+        has_proposal_code: bool,
+        is_proposal_code_successful: bool,
     },
-    /// Governance proposal that has been rejected.
-    Rejected,
-    /// PGF steward governance proposal.
-    PgfSteward {
-        /// The outcome of the proposal.
-        result: bool,
-    },
-    /// PGF payments governance proposal.
-    PgfPayments {
-        /// The outcome of the proposal.
-        result: bool,
-    },
+    /// Rejected proposal
+    Rejected { has_proposal_code: bool },
 }
 
-impl From<ProposalEvent> for Event {
-    fn from(proposal_event: ProposalEvent) -> Self {
-        let ProposalEvent {
+impl From<GovernanceEvent> for Event {
+    fn from(proposal_event: GovernanceEvent) -> Self {
+        let GovernanceEvent::Proposal {
             id: proposal_id,
             kind,
         } = proposal_event;
 
         let (event_type, attributes) = match kind {
+            ProposalEventKind::NewProposal { proposal_type } => {
+                let event_type = types::NEW_PROPOSAL;
+                let attributes = new_governance_proposal_attributes(
+                    proposal_id,
+                    proposal_type,
+                );
+                (event_type, attributes)
+            }
             ProposalEventKind::Passed {
-                has_code,
-                execution_status,
-            } => (
-                types::PROPOSAL_PASSED,
-                governance_proposal_attributes(
+                has_proposal_code,
+                is_proposal_code_successful,
+            } => {
+                let event_type = types::PROPOSAL_PASSED;
+                let attributes = ended_governance_proposal_attributes(
                     GovTallyResult::Passed,
                     proposal_id,
-                    has_code,
-                    execution_status,
-                ),
-            ),
-            ProposalEventKind::Rejected => (
-                types::PROPOSAL_REJECTED,
-                governance_proposal_attributes(
+                    has_proposal_code,
+                    is_proposal_code_successful,
+                );
+                (event_type, attributes)
+            }
+            ProposalEventKind::Rejected { has_proposal_code } => {
+                let event_type = types::PROPOSAL_REJECTED;
+                let attributes = ended_governance_proposal_attributes(
                     GovTallyResult::Rejected,
                     proposal_id,
+                    has_proposal_code,
                     false,
-                    false,
-                ),
-            ),
-            ProposalEventKind::PgfSteward { result } => (
-                types::PROPOSAL_PGF_STEWARD,
-                governance_proposal_attributes(
-                    GovTallyResult::Passed,
-                    proposal_id,
-                    false,
-                    result,
-                ),
-            ),
-            ProposalEventKind::PgfPayments { result } => (
-                types::PROPOSAL_PGF_PAYMENTS,
-                governance_proposal_attributes(
-                    GovTallyResult::Passed,
-                    proposal_id,
-                    false,
-                    result,
-                ),
-            ),
+                );
+                (event_type, attributes)
+            }
         };
 
         let mut event = Self::new(event_type, EventLevel::Block);
@@ -189,7 +165,7 @@ impl From<ProposalEvent> for Event {
 
 /// Return the attributes of a governance proposal.
 #[inline]
-fn governance_proposal_attributes(
+fn ended_governance_proposal_attributes(
     tally: GovTallyResult,
     id: u64,
     has_proposal_code: bool,
@@ -204,7 +180,19 @@ fn governance_proposal_attributes(
     attrs
 }
 
-impl EventToEmit for ProposalEvent {
+/// Return the attributes of a governance proposal.
+#[inline]
+fn new_governance_proposal_attributes(
+    id: u64,
+    proposal_type: GovProposalType,
+) -> BTreeMap<String, String> {
+    let mut attrs = BTreeMap::new();
+    attrs.with_attribute(ProposalId(id));
+    attrs.with_attribute(ProposalType(proposal_type));
+    attrs
+}
+
+impl EventToEmit for GovernanceEvent {
     const DOMAIN: &'static str = "governance";
 }
 
@@ -216,6 +204,20 @@ impl EventAttributeEntry<'static> for TallyResult {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "tally_result";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with tally result data.
+pub struct ProposalType(pub GovProposalType);
+
+impl EventAttributeEntry<'static> for ProposalType {
+    type Value = GovProposalType;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "proposal_type";
 
     fn into_value(self) -> Self::Value {
         self.0
