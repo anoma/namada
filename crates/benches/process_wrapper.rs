@@ -41,9 +41,6 @@ fn process_tx(c: &mut Criterion) {
                 },
                 defaults::albert_keypair().ref_to(),
                 1_000_000.into(),
-                // NOTE: The unshield operation has to be gas-free so don't
-                // include it here
-                None,
             ),
         )));
     batched_tx

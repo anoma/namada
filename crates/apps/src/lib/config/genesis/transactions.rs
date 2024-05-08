@@ -131,7 +131,6 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
         },
         fee_payer,
         0.into(),
-        None,
     );
     tx
 }

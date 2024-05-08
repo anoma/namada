@@ -624,7 +624,6 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             0.into(),
-            None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -652,7 +651,6 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             0.into(),
-            None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));

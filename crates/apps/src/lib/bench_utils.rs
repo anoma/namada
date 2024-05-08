@@ -609,7 +609,6 @@ impl BenchShell {
             },
             defaults::albert_keypair().ref_to(),
             0.into(),
-            None,
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));

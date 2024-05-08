@@ -15,16 +15,8 @@ impl Wrapper {
         fee: Fee,
         fee_payer: common::PublicKey,
         gas_limit: GasLimit,
-        // FIXME: fix masp unshielding
-        unshield_hash: Option<Hash>,
     ) -> Self {
-        tx.add_wrapper(
-            fee,
-            fee_payer,
-            Epoch::default(),
-            gas_limit,
-            unshield_hash,
-        );
+        tx.add_wrapper(fee, fee_payer, Epoch::default(), gas_limit);
 
         Self(tx)
     }

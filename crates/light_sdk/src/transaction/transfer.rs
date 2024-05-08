@@ -21,7 +21,7 @@ impl Transfer {
         target: Address,
         token: Address,
         amount: DenominatedAmount,
-        // FIXME: handle masp here
+        // TODO: handle masp here
         shielded: Option<Hash>,
         args: GlobalArgs,
     ) -> Self {

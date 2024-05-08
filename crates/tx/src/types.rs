@@ -1572,13 +1572,9 @@ impl Tx {
         fee: Fee,
         fee_payer: common::PublicKey,
         gas_limit: GasLimit,
-        fee_unshield_hash: Option<namada_core::hash::Hash>,
     ) -> &mut Self {
         self.header.tx_type = TxType::Wrapper(Box::new(WrapperTx::new(
-            fee,
-            fee_payer,
-            gas_limit,
-            fee_unshield_hash,
+            fee, fee_payer, gas_limit,
         )));
         self
     }
@@ -1695,8 +1691,7 @@ impl<'tx> Tx {
     }
 }
 
-/// The type of an indexed transaction, wrapper or inner. If the latter, then
-/// also carries the specific commitment in the bundle
+/// The specific inner transaction of a batch
 #[derive(
     Debug,
     Clone,
@@ -1709,10 +1704,8 @@ impl<'tx> Tx {
     PartialOrd,
     Hash,
 )]
-pub enum IndexedTxType {
-    Wrapper,
-    Inner(TxCommitments),
-}
+// FIXME: remove this struct?
+pub struct IndexedInnerTx(pub TxCommitments);
 
 /// Represents the pointers of an indexed tx, which are the block height, the
 /// index inside that block and the commitment inside the tx bundle (if inner
@@ -1734,8 +1727,8 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
-    /// This indicates if the tx is the wrapper or the inner
-    pub tx_type: IndexedTxType,
+    /// This is a pointer to the inner tx inside the batch
+    pub tx_type: IndexedInnerTx,
 }
 
 impl Default for IndexedTx {
@@ -1743,7 +1736,7 @@ impl Default for IndexedTx {
         Self {
             height: BlockHeight::first(),
             index: TxIndex(0),
-            tx_type: IndexedTxType::Wrapper,
+            tx_type: IndexedInnerTx(TxCommitments::default()),
         }
     }
 }
