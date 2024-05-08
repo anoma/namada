@@ -1,0 +1,1 @@
+- Make the internals of ValueSum (in the masp crate) private so we know that invariants of representation are maintained. ([\#3195](https://github.com/anoma/namada/pull/3195))
