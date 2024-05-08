@@ -42,6 +42,7 @@ num-traits.workspace = true
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

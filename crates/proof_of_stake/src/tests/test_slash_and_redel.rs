@@ -195,7 +195,7 @@ fn test_simple_redelegation_aux(
 
     let redelegated = validator_outgoing_redelegations_handle(&src_validator)
         .at(&dest_validator)
-        .at(&current_epoch.prev())
+        .at(&current_epoch.prev().unwrap())
         .get(&storage, &current_epoch)
         .unwrap()
         .unwrap();
@@ -473,16 +473,21 @@ fn test_slashes_with_unbonding_aux(
         .unwrap()
         .rate;
 
-    let expected_withdrawn_amount = Dec::from(
-        (Dec::one() - slash_rate_1)
-            * (Dec::one() - slash_rate_0)
-            * unbond_amount,
-    );
+    let expected_withdrawn_amount = Dec::try_from(
+        unbond_amount
+            .mul_floor(
+                (Dec::one() - slash_rate_1) * (Dec::one() - slash_rate_0),
+            )
+            .unwrap(),
+    )
+    .unwrap();
     // Allow some rounding error, 1 NAMNAM per each slash
     let rounding_error_tolerance =
         Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
     assert!(
-        expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens))
+        expected_withdrawn_amount
+            .abs_diff(Dec::try_from(withdrawn_tokens).unwrap())
+            .unwrap()
             <= rounding_error_tolerance
     );
 
@@ -625,7 +630,7 @@ fn test_redelegation_with_slashing_aux(
 
     let redelegated = validator_outgoing_redelegations_handle(&src_validator)
         .at(&dest_validator)
-        .at(&current_epoch.prev())
+        .at(&current_epoch.prev().unwrap())
         .get(&storage, &current_epoch)
         .unwrap()
         .unwrap();
@@ -975,7 +980,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to right before the redelegation can be redelegated again
     assert_eq!(redel_end, current_epoch);
     let epoch_can_redel =
-        redel_end.prev() + params.slash_processing_epoch_offset();
+        redel_end.prev().unwrap() + params.slash_processing_epoch_offset();
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
         process_slashes(
@@ -984,7 +989,7 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
             current_epoch,
         )
         .unwrap();
-        if current_epoch == epoch_can_redel.prev() {
+        if current_epoch == epoch_can_redel.prev().unwrap() {
             break;
         }
     }
@@ -1290,11 +1295,12 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         }
     }
 
-    let total_stake_1 = offending_stake + 3 * other_stake;
-    let stake_frac = Dec::from(offending_stake) / Dec::from(total_stake_1);
+    let total_stake_1 = offending_stake + other_stake * 3;
+    let stake_frac = Dec::try_from(offending_stake).unwrap()
+        / Dec::try_from(total_stake_1).unwrap();
     let slash_rate_1 = Dec::from_str("9.0").unwrap() * stake_frac * stake_frac;
 
-    let exp_slashed_1 = offending_stake.mul_ceil(slash_rate_1);
+    let exp_slashed_1 = offending_stake.mul_ceil(slash_rate_1).unwrap();
 
     // Check that the proper amount was slashed
     let epoch = current_epoch.next();
@@ -1305,7 +1311,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     let total_stake = read_total_stake(&storage, &params, epoch).unwrap();
     let exp_total_stake =
-        offending_stake - exp_slashed_1 + amount_del + 3 * other_stake;
+        offending_stake - exp_slashed_1 + amount_del + other_stake * 3;
     assert_eq!(total_stake, exp_total_stake);
 
     let self_bond_id = BondId {
@@ -1331,12 +1337,13 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         }
     }
 
-    let total_stake_2 = offending_stake + amount_del + 3 * other_stake;
-    let stake_frac =
-        Dec::from(offending_stake + amount_del) / Dec::from(total_stake_2);
+    let total_stake_2 = offending_stake + amount_del + other_stake * 3;
+    let stake_frac = Dec::try_from(offending_stake + amount_del).unwrap()
+        / Dec::try_from(total_stake_2).unwrap();
     let slash_rate_2 = Dec::from_str("9.0").unwrap() * stake_frac * stake_frac;
 
-    let exp_slashed_from_delegation = amount_del.mul_ceil(slash_rate_2);
+    let exp_slashed_from_delegation =
+        amount_del.mul_ceil(slash_rate_2).unwrap();
 
     // Check that the proper amount was slashed. We expect that all of the
     // validator self-bond has been slashed and some of the delegation has been
@@ -1350,7 +1357,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     let total_stake = read_total_stake(&storage, &params, epoch).unwrap();
     let exp_total_stake =
-        amount_del - exp_slashed_from_delegation + 3 * other_stake;
+        amount_del - exp_slashed_from_delegation + other_stake * 3;
     assert_eq!(total_stake, exp_total_stake);
 
     let delegation_id = BondId {

@@ -35,6 +35,7 @@ konst.workspace = true
 proptest = { workspace = true, optional = true }
 serde_json.workspace = true
 serde.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

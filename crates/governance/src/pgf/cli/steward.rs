@@ -32,7 +32,10 @@ impl Commission {
             if *percentage < Dec::zero() {
                 return false;
             }
-            sum = sum.add(percentage);
+            match sum.checked_add(*percentage) {
+                Some(new_sum) => sum = new_sum,
+                None => return false,
+            }
             if sum > Dec::one() {
                 return false;
             }

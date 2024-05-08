@@ -4504,6 +4504,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "smooth-operator",
  "tempfile",
  "tendermint-rpc",
  "test-log",
@@ -4663,12 +4664,15 @@ name = "namada_controller"
 version = "0.34.0"
 dependencies = [
  "namada_core",
+ "smooth-operator",
+ "thiserror",
 ]
 
 [[package]]
 name = "namada_core"
 version = "0.34.0"
 dependencies = [
+ "assert_matches",
  "bech32 0.8.1",
  "borsh 1.2.1",
  "borsh-ext",
@@ -4703,6 +4707,7 @@ dependencies = [
  "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
@@ -4830,6 +4835,7 @@ dependencies = [
  "proptest",
  "serde 1.0.193",
  "serde_json",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -4964,6 +4970,7 @@ dependencies = [
  "proptest",
  "proptest-state-machine",
  "serde 1.0.193",
+ "smooth-operator",
  "test-log",
  "thiserror",
  "tracing",
@@ -5037,6 +5044,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "slip10_ed25519",
+ "smooth-operator",
  "tempfile",
  "tendermint-config",
  "tendermint-rpc",
@@ -7385,6 +7393,24 @@ name = "smallvec"
 version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
+
+[[package]]
+name = "smooth-operator"
+version = "0.6.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+dependencies = [
+ "smooth-operator-impl",
+]
+
+[[package]]
+name = "smooth-operator-impl"
+version = "0.6.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]
 
 [[package]]
 name = "snafu"

@@ -3,8 +3,8 @@
 use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
-use namada_core::storage;
 use namada_core::storage::Epoch;
+use namada_core::{arith, storage};
 use namada_events::EventError;
 use namada_tx::Tx;
 use prost::EncodeError;
@@ -38,6 +38,8 @@ pub enum Error {
     /// Ethereum bridge related errors
     #[error("{0}")]
     EthereumBridge(#[from] EthereumBridgeError),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),

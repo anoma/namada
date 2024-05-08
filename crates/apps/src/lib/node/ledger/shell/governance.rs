@@ -115,7 +115,8 @@ where
             votes,
             total_active_voting_power,
             tally_type,
-        );
+        )
+        .expect("Proposal result calculation must not over/underflow");
         gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
@@ -193,7 +194,7 @@ where
                 // Take events that could have been emitted by PGF
                 // over IBC, governance proposal execution, etc
                 let current_height =
-                    shell.state.in_mem().get_last_block_height() + 1;
+                    shell.state.in_mem().get_last_block_height().next_height();
 
                 events.emit_many(
                     shell
