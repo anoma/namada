@@ -457,7 +457,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch.prev(),
+        pipeline_epoch.prev().unwrap(),
     )
     .unwrap();
     let val_stake_post =
@@ -471,7 +471,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
     let delegation = bond_handle(&delegator, &validator.address);
     assert_eq!(
         delegation
-            .get_sum(&s, pipeline_epoch.prev(), &params)
+            .get_sum(&s, pipeline_epoch.prev().unwrap(), &params)
             .unwrap()
             .unwrap_or_default(),
         token::Amount::zero()
@@ -584,7 +584,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch.prev(),
+        pipeline_epoch.prev().unwrap(),
     )
     .unwrap();
 
@@ -718,7 +718,7 @@ fn test_bonds_aux(params: OwnedPosParams, validators: Vec<GenesisValidator>) {
         &s,
         &params,
         &validator.address,
-        pipeline_epoch.prev(),
+        pipeline_epoch.prev().unwrap(),
     )
     .unwrap();
     let val_stake_post =
@@ -836,7 +836,7 @@ fn test_unjail_validator_aux(
     // cubic slash rate small
     let num_vals = validators.len();
     validators.sort_by_key(|a| a.tokens);
-    validators[num_vals - 1].tokens = 100 * validators[num_vals - 1].tokens;
+    validators[num_vals - 1].tokens = validators[num_vals - 1].tokens * 100;
 
     // Get second highest stake validator to misbehave
     let val_addr = &validators[num_vals - 2].address;
@@ -1224,7 +1224,8 @@ fn test_log_block_rewards_aux_aux(
         // A helper closure to prepare minimum required votes
         let prep_votes = |epoch| {
             // Ceil of 2/3 of total stake
-            let min_required_votes = total_stake.mul_ceil(Dec::two() / 3);
+            let min_required_votes =
+                total_stake.mul_ceil(Dec::two() / 3).unwrap();
 
             let mut total_votes = token::Amount::zero();
             let mut non_voters = HashSet::<Address>::default();
@@ -1286,8 +1287,8 @@ fn test_log_block_rewards_aux_aux(
                 .unwrap();
         let proposer_signing_reward = votes.iter().find_map(|vote| {
             if vote.validator_address == proposer_address {
-                let signing_fraction =
-                    Dec::from(stake) / Dec::from(signing_stake);
+                let signing_fraction = Dec::try_from(stake).unwrap()
+                    / Dec::try_from(signing_stake).unwrap();
                 Some(coeffs.signer_coeff * signing_fraction)
             } else {
                 None
@@ -1298,7 +1299,7 @@ fn test_log_block_rewards_aux_aux(
         coeffs.proposer_coeff
         // Consensus validator reward
         + (coeffs.active_val_coeff
-            * (Dec::from(stake) / Dec::from(total_stake)))
+                    * (Dec::try_from(stake).unwrap() / Dec::try_from(total_stake).unwrap()))
         // Signing reward (if proposer voted)
         + proposer_signing_reward
             .unwrap_or_default();
@@ -1329,14 +1330,16 @@ fn test_log_block_rewards_aux_aux(
                 current_epoch,
             )
             .unwrap();
-            let signing_fraction = Dec::from(stake) / Dec::from(signing_stake);
+            let signing_fraction = Dec::try_from(stake).unwrap()
+                / Dec::try_from(signing_stake).unwrap();
             let expected_signer_rewards = last_rewards
                 .get(validator_address)
                 .copied()
                 .unwrap_or_default()
                 + coeffs.signer_coeff * signing_fraction
                 + (coeffs.active_val_coeff
-                    * (Dec::from(stake) / Dec::from(total_stake)));
+                    * (Dec::try_from(stake).unwrap()
+                        / Dec::try_from(total_stake).unwrap()));
             tracing::info!(
                 "Expected signer {validator_address} rewards: \
                  {expected_signer_rewards}"
@@ -1361,7 +1364,8 @@ fn test_log_block_rewards_aux_aux(
                 let expected_non_signer_rewards =
                     last_rewards.get(&address).copied().unwrap_or_default()
                         + coeffs.active_val_coeff
-                            * (Dec::from(stake) / Dec::from(total_stake));
+                            * (Dec::try_from(stake).unwrap()
+                                / Dec::try_from(total_stake).unwrap());
                 tracing::info!(
                     "Expected non-signer {address} rewards: \
                      {expected_non_signer_rewards}"
@@ -1449,7 +1453,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     let total_native_tokens = get_effective_total_native_supply(&s).unwrap();
 
     // Distribute inflation into rewards
-    let last_epoch = current_epoch.prev();
+    let last_epoch = current_epoch.prev().unwrap();
     let inflation = token::Amount::native_whole(10_000_000);
     update_rewards_products_and_mint_inflation(
         &mut s,
@@ -1889,9 +1893,10 @@ fn test_delegation_targets() {
 
     // Check the delegation targets now
     let pipeline_epoch = current_epoch + params.pipeline_len;
-    for epoch in
-        Epoch::iter_bounds_inclusive(Epoch::default(), pipeline_epoch.prev())
-    {
+    for epoch in Epoch::iter_bounds_inclusive(
+        Epoch::default(),
+        pipeline_epoch.prev().unwrap(),
+    ) {
         let delegatees1 =
             find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =
@@ -1949,9 +1954,10 @@ fn test_delegation_targets() {
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
     // Up to epoch 2
-    for epoch in
-        Epoch::iter_bounds_inclusive(Epoch::default(), current_epoch.prev())
-    {
+    for epoch in Epoch::iter_bounds_inclusive(
+        Epoch::default(),
+        current_epoch.prev().unwrap(),
+    ) {
         let delegatees1 =
             find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =
@@ -1966,9 +1972,10 @@ fn test_delegation_targets() {
     }
 
     // Epochs 3-4
-    for epoch in
-        Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch.prev())
-    {
+    for epoch in Epoch::iter_bounds_inclusive(
+        current_epoch,
+        pipeline_epoch.prev().unwrap(),
+    ) {
         let delegatees1 =
             find_delegation_validators(&storage, &validator1, &epoch).unwrap();
         let delegatees2 =

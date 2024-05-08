@@ -21,6 +21,7 @@ use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -637,7 +638,8 @@ pub async fn build_validator_commission_change(
             )));
         }
 
-        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
+        let pipeline_epoch_minus_one =
+            epoch.unchecked_add(params.pipeline_len - 1);
 
         let CommissionPair {
             commission_rate,
@@ -664,7 +666,7 @@ pub async fn build_validator_commission_change(
                         ));
                     }
                 }
-                if rate.abs_diff(&commission_rate)
+                if rate.abs_diff(commission_rate)?
                     > max_commission_change_per_epoch
                 {
                     edisplay_line!(
@@ -862,7 +864,8 @@ pub async fn build_validator_metadata_change(
                 )));
             }
         }
-        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
+        let pipeline_epoch_minus_one =
+            epoch.unchecked_add(params.pipeline_len - 1);
 
         let CommissionPair {
             commission_rate,
@@ -889,7 +892,7 @@ pub async fn build_validator_metadata_change(
                         ));
                     }
                 }
-                if rate.abs_diff(&commission_rate)
+                if rate.abs_diff(commission_rate)?
                     > max_commission_change_per_epoch
                 {
                     edisplay_line!(
@@ -1116,7 +1119,7 @@ pub async fn build_unjail_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
@@ -1143,8 +1146,8 @@ pub async fn build_unjail_validator(
     match last_slash_epoch {
         Ok(Some(last_slash_epoch)) => {
             // Jailed due to slashing
-            let eligible_epoch =
-                last_slash_epoch + params.slash_processing_epoch_offset();
+            let eligible_epoch = last_slash_epoch
+                .unchecked_add(params.slash_processing_epoch_offset());
             if current_epoch < eligible_epoch {
                 edisplay_line!(
                     context.io(),
@@ -1224,7 +1227,7 @@ pub async fn build_deactivate_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
@@ -1302,7 +1305,7 @@ pub async fn build_reactivate_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
         let (validator_state, _) =
@@ -1410,8 +1413,9 @@ pub async fn build_redelegation(
     .await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
     let is_not_chained = if let Some(redel_end_epoch) = incoming_redel_epoch {
-        let last_contrib_epoch = redel_end_epoch.prev();
-        last_contrib_epoch + params.slash_processing_epoch_offset()
+        let last_contrib_epoch =
+            redel_end_epoch.prev().expect("End epoch must have a prev");
+        last_contrib_epoch.unchecked_add(params.slash_processing_epoch_offset())
             <= current_epoch
     } else {
         true
@@ -1437,7 +1441,7 @@ pub async fn build_redelegation(
 
     // Give a redelegation warning based on the pipeline state of the dest
     // validator
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
     let (dest_validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &dest_validator,
@@ -1718,8 +1722,8 @@ pub async fn build_unbond(
         let params = rpc::get_pos_params(context.client()).await?;
         let current_epoch = rpc::query_epoch(context.client()).await?;
 
-        let eligible_epoch =
-            infraction_epoch + params.slash_processing_epoch_offset();
+        let eligible_epoch = infraction_epoch
+            .unchecked_add(params.slash_processing_epoch_offset());
         if current_epoch < eligible_epoch {
             edisplay_line!(
                 context.io(),
@@ -1793,7 +1797,7 @@ pub async fn build_unbond(
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
-        *to_withdraw += amount;
+        *to_withdraw = checked!(to_withdraw + amount)?;
     }
     let latest_withdrawal_pre = withdrawable.into_iter().last();
 
@@ -1837,7 +1841,7 @@ pub async fn query_unbonds(
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
-        *to_withdraw += amount;
+        *to_withdraw = checked!(to_withdraw + amount)?;
     }
     let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
         withdrawable.into_iter().last().ok_or_else(|| {
@@ -1863,8 +1867,11 @@ pub async fn query_unbonds(
                 display_line!(
                     context.io(),
                     "Amount {} withdrawable starting from epoch {}",
-                    (latest_withdraw_amount_post - latest_withdraw_amount_pre)
-                        .to_string_native(),
+                    checked!(
+                        latest_withdraw_amount_post
+                            - latest_withdraw_amount_pre
+                    )?
+                    .to_string_native(),
                     latest_withdraw_epoch_post
                 );
             }
@@ -1948,7 +1955,7 @@ pub async fn build_bond(
     // Give a bonding warning based on the pipeline state
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &validator,

@@ -2003,7 +2003,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             },
             |indexed| IndexedTx {
                 height: indexed.height,
-                index: indexed.index + 1,
+                index: indexed
+                    .index
+                    .checked_add(1)
+                    .expect("Tx index shouldn't overflow"),
                 is_wrapper: false,
             },
         );

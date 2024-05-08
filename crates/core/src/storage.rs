@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::fmt::Display;
 use std::io::{Read, Write};
 use std::num::ParseIntError;
-use std::ops::{Add, AddAssign, Deref, Div, Mul, Rem, Sub};
+use std::ops::Deref;
 use std::str::FromStr;
 
 use arse_merkle_tree::InternalKey;
@@ -191,17 +191,25 @@ impl Display for TxIndex {
     }
 }
 
-impl Add<u32> for TxIndex {
-    type Output = TxIndex;
-
-    fn add(self, rhs: u32) -> Self::Output {
-        Self(self.0 + rhs)
-    }
-}
-
 impl From<TxIndex> for u32 {
     fn from(index: TxIndex) -> Self {
         index.0
+    }
+}
+
+impl From<u32> for TxIndex {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+impl TxIndex {
+    /// Checked index addition.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_add(self, rhs: impl Into<TxIndex>) -> Option<Self> {
+        let TxIndex(rhs) = rhs.into();
+        Some(Self(self.0.checked_add(rhs)?))
     }
 }
 
@@ -280,34 +288,6 @@ impl Default for BlockHeight {
 impl Display for BlockHeight {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl Add<u64> for BlockHeight {
-    type Output = BlockHeight;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + rhs)
-    }
-}
-
-impl Sub<u64> for BlockHeight {
-    type Output = Self;
-
-    fn sub(self, rhs: u64) -> Self::Output {
-        Self(self.0 - rhs)
-    }
-}
-
-impl AddAssign for BlockHeight {
-    fn add_assign(&mut self, other: Self) {
-        self.0 += other.0;
-    }
-}
-
-impl AddAssign<u64> for BlockHeight {
-    fn add_assign(&mut self, other: u64) {
-        self.0 += other;
     }
 }
 
@@ -398,17 +378,32 @@ impl BlockHeight {
 
     /// Get the height of the next block
     pub fn next_height(&self) -> BlockHeight {
-        BlockHeight(self.0 + 1)
+        BlockHeight(
+            self.0
+                .checked_add(1)
+                .expect("Block height must not overflow"),
+        )
     }
 
     /// Get the height of the previous block
-    pub fn prev_height(&self) -> BlockHeight {
-        BlockHeight(self.0 - 1)
+    pub fn prev_height(&self) -> Option<BlockHeight> {
+        Some(BlockHeight(self.0.checked_sub(1)?))
     }
 
-    /// Get the height of the previous block if it won't underflow
-    pub fn checked_prev(&self) -> Option<BlockHeight> {
-        Some(BlockHeight(self.0.checked_sub(1)?))
+    /// Checked block height addition.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_add(self, rhs: impl Into<BlockHeight>) -> Option<Self> {
+        let BlockHeight(rhs) = rhs.into();
+        Some(Self(self.0.checked_add(rhs)?))
+    }
+
+    /// Checked block height subtraction.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_sub(self, rhs: impl Into<BlockHeight>) -> Option<Self> {
+        let BlockHeight(rhs) = rhs.into();
+        Some(Self(self.0.checked_sub(rhs)?))
     }
 }
 
@@ -587,7 +582,11 @@ impl arse_merkle_tree::Key<IBC_KEY_LIMIT> for StringKey {
             }
             original[i] = *byte;
             tree_key[i] = byte.wrapping_add(1);
-            length += 1;
+            // There is no way the bytes.len() > u64::max
+            #[allow(clippy::arithmetic_side_effects)]
+            {
+                length += 1;
+            }
         }
         Ok(Self {
             original,
@@ -1186,20 +1185,19 @@ impl FromStr for Epoch {
 impl Epoch {
     /// Change to the next epoch
     pub fn next(&self) -> Self {
-        Self(self.0 + 1)
+        Self(self.0.checked_add(1).expect("Epoch shouldn't overflow"))
     }
 
-    /// Change to the previous epoch. This will underflow if the given epoch is
-    /// `0`.
-    pub fn prev(&self) -> Self {
-        Self(self.0 - 1)
+    /// Change to the previous epoch.
+    pub fn prev(&self) -> Option<Self> {
+        Some(Self(self.0.checked_sub(1)?))
     }
 
     /// Iterate a range of consecutive epochs starting from `self` of a given
     /// length. Work-around for `Step` implementation pending on stabilization of <https://github.com/rust-lang/rust/issues/42168>.
     pub fn iter_range(self, len: u64) -> impl Iterator<Item = Epoch> + Clone {
         let start_ix: u64 = self.into();
-        let end_ix: u64 = start_ix + len;
+        let end_ix: u64 = start_ix.checked_add(len).unwrap_or(u64::MAX);
         (start_ix..end_ix).map(Epoch::from)
     }
 
@@ -1213,17 +1211,57 @@ impl Epoch {
         (start_ix..=end_ix).map(Epoch::from)
     }
 
+    /// Checked epoch addition.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_add(self, rhs: impl Into<Epoch>) -> Option<Self> {
+        let Epoch(rhs) = rhs.into();
+        Some(Self(self.0.checked_add(rhs)?))
+    }
+
+    /// Unchecked epoch addition.
+    ///
+    /// # Panic
+    ///
+    /// Panics on overflow. Care must be taken to only use this with trusted
+    /// values that are known to be in a limited range (e.g. system parameters
+    /// but not e.g. transaction variables).
+    pub fn unchecked_add(self, rhs: impl Into<Epoch>) -> Self {
+        self.checked_add(rhs)
+            .expect("Epoch addition shouldn't overflow")
+    }
+
     /// Checked epoch subtraction. Computes self - rhs, returning None if
     /// overflow occurred.
     #[must_use = "this returns the result of the operation, without modifying \
                   the original"]
     pub fn checked_sub(self, rhs: impl Into<Epoch>) -> Option<Self> {
         let Epoch(rhs) = rhs.into();
-        if rhs > self.0 {
-            None
-        } else {
-            Some(Self(self.0 - rhs))
-        }
+        Some(Self(self.0.checked_sub(rhs)?))
+    }
+
+    /// Checked epoch division.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_div(self, rhs: impl Into<Epoch>) -> Option<Self> {
+        let Epoch(rhs) = rhs.into();
+        Some(Self(self.0.checked_div(rhs)?))
+    }
+
+    /// Checked epoch multiplication.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_mul(self, rhs: impl Into<Epoch>) -> Option<Self> {
+        let Epoch(rhs) = rhs.into();
+        Some(Self(self.0.checked_mul(rhs)?))
+    }
+
+    /// Checked epoch integral reminder.
+    #[must_use = "this returns the result of the operation, without modifying \
+                  the original"]
+    pub fn checked_rem(self, rhs: impl Into<Epoch>) -> Option<Self> {
+        let Epoch(rhs) = rhs.into();
+        Some(Self(self.0.checked_rem(rhs)?))
     }
 
     /// Checked epoch subtraction. Computes self - rhs, returning default
@@ -1244,94 +1282,6 @@ impl From<u64> for Epoch {
 impl From<Epoch> for u64 {
     fn from(epoch: Epoch) -> Self {
         epoch.0
-    }
-}
-
-// TODO remove this once it's not being used
-impl From<Epoch> for usize {
-    fn from(epoch: Epoch) -> Self {
-        epoch.0 as usize
-    }
-}
-
-impl Add<u64> for Epoch {
-    type Output = Epoch;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + rhs)
-    }
-}
-
-// TODO remove this once it's not being used
-impl Add<usize> for Epoch {
-    type Output = Self;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        Epoch(self.0 + rhs as u64)
-    }
-}
-
-impl Sub<u64> for Epoch {
-    type Output = Epoch;
-
-    fn sub(self, rhs: u64) -> Self::Output {
-        Self(self.0 - rhs)
-    }
-}
-
-impl Sub<Epoch> for Epoch {
-    type Output = Self;
-
-    fn sub(self, rhs: Epoch) -> Self::Output {
-        Epoch(self.0 - rhs.0)
-    }
-}
-
-impl Mul<u64> for Epoch {
-    type Output = Epoch;
-
-    fn mul(self, rhs: u64) -> Self::Output {
-        Self(self.0 * rhs)
-    }
-}
-
-impl Mul<Epoch> for u64 {
-    type Output = Epoch;
-
-    fn mul(self, rhs: Epoch) -> Self::Output {
-        Epoch(self * rhs.0)
-    }
-}
-
-impl Div<u64> for Epoch {
-    type Output = Epoch;
-
-    fn div(self, rhs: u64) -> Self::Output {
-        Self(self.0 / rhs)
-    }
-}
-
-impl Rem<u64> for Epoch {
-    type Output = u64;
-
-    fn rem(self, rhs: u64) -> Self::Output {
-        Self(self.0 % rhs).0
-    }
-}
-
-impl Add for Epoch {
-    type Output = Epoch;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl Mul for Epoch {
-    type Output = Epoch;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self(self.0 * rhs.0)
     }
 }
 
@@ -1403,7 +1353,8 @@ impl Epochs {
         if epoch.0 > self.first_block_heights.len() as u64 {
             return None;
         }
-        self.first_block_heights.get(epoch.0 as usize).copied()
+        let idx = usize::try_from(epoch.0).ok()?;
+        self.first_block_heights.get(idx).copied()
     }
 
     /// Return all starting block heights for each successive Epoch.
@@ -2047,11 +1998,55 @@ pub mod tests {
 /// Helpers for testing with storage types.
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use std::ops::{Add, AddAssign, Sub};
+
     use proptest::collection;
     use proptest::prelude::*;
 
     use super::*;
     use crate::address::testing::{arb_address, arb_non_internal_address};
+
+    impl<T> Add<T> for BlockHeight
+    where
+        T: Into<BlockHeight>,
+    {
+        type Output = BlockHeight;
+
+        fn add(self, rhs: T) -> Self::Output {
+            self.checked_add(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> AddAssign<T> for BlockHeight
+    where
+        T: Into<BlockHeight>,
+    {
+        fn add_assign(&mut self, rhs: T) {
+            *self = self.checked_add(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> Add<T> for Epoch
+    where
+        T: Into<Epoch>,
+    {
+        type Output = Epoch;
+
+        fn add(self, rhs: T) -> Self::Output {
+            self.checked_add(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> Sub<T> for Epoch
+    where
+        T: Into<Epoch>,
+    {
+        type Output = Epoch;
+
+        fn sub(self, rhs: T) -> Self::Output {
+            self.checked_sub(rhs.into()).unwrap()
+        }
+    }
 
     prop_compose! {
         /// Generate an arbitrary epoch

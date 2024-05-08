@@ -13,6 +13,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
@@ -486,7 +487,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
     .await
     .unwrap_or_default();
 
-    let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
+    let total_fee = checked!(fee_amount.amount() * u64::from(args.gas_limit))?;
     let mut updated_balance = TxSourcePostBalance {
         post_balance: balance,
         source: fee_payer_address.clone(),
@@ -621,7 +622,8 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                         .to_string(),
                 ));
             }
-            updated_balance.post_balance -= total_fee;
+            updated_balance.post_balance =
+                checked!(updated_balance.post_balance - total_fee)?;
             None
         }
     };

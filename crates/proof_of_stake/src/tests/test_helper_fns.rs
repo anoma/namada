@@ -499,7 +499,7 @@ fn test_compute_slash_bond_at_epoch() {
         .push(
             &mut storage,
             Slash {
-                epoch: infraction_epoch.prev(),
+                epoch: infraction_epoch.prev().unwrap(),
                 block_height: 0,
                 r#type: SlashType::DuplicateVote,
                 rate: Dec::one(),
@@ -735,19 +735,24 @@ fn test_apply_list_slashes() {
     let list3 = vec![slash1.clone(), slash1.clone()];
     let list4 = vec![slash1.clone(), slash1, slash2];
 
-    let res = apply_list_slashes(&params, &[], token::Amount::from(100));
+    let res =
+        apply_list_slashes(&params, &[], token::Amount::from(100)).unwrap();
     assert_eq!(res, token::Amount::from(100));
 
-    let res = apply_list_slashes(&params, &list1, token::Amount::from(100));
+    let res =
+        apply_list_slashes(&params, &list1, token::Amount::from(100)).unwrap();
     assert_eq!(res, token::Amount::zero());
 
-    let res = apply_list_slashes(&params, &list2, token::Amount::from(100));
+    let res =
+        apply_list_slashes(&params, &list2, token::Amount::from(100)).unwrap();
     assert_eq!(res, token::Amount::zero());
 
-    let res = apply_list_slashes(&params, &list3, token::Amount::from(100));
+    let res =
+        apply_list_slashes(&params, &list3, token::Amount::from(100)).unwrap();
     assert_eq!(res, token::Amount::zero());
 
-    let res = apply_list_slashes(&params, &list4, token::Amount::from(100));
+    let res =
+        apply_list_slashes(&params, &list4, token::Amount::from(100)).unwrap();
     assert_eq!(res, token::Amount::zero());
 }
 
@@ -788,7 +793,8 @@ fn test_compute_slashable_amount() {
         &slash1,
         token::Amount::from(100),
         &BTreeMap::new(),
-    );
+    )
+    .unwrap();
     assert_eq!(res, token::Amount::from(100));
 
     let res = compute_slashable_amount(
@@ -796,7 +802,8 @@ fn test_compute_slashable_amount() {
         &slash2,
         token::Amount::from(100),
         &test_map,
-    );
+    )
+    .unwrap();
     assert_eq!(res, token::Amount::from(50));
 
     let res = compute_slashable_amount(
@@ -804,7 +811,8 @@ fn test_compute_slashable_amount() {
         &slash1,
         token::Amount::from(100),
         &test_map,
-    );
+    )
+    .unwrap();
     assert_eq!(res, token::Amount::from(100));
 }
 
@@ -853,7 +861,8 @@ fn test_fold_and_slash_redelegated_bonds() {
         start_epoch,
         &[],
         |_| true,
-    );
+    )
+    .unwrap();
     assert_eq!(
         res,
         FoldRedelegatedBondsResult {
@@ -870,7 +879,8 @@ fn test_fold_and_slash_redelegated_bonds() {
         start_epoch,
         &[test_slash],
         |_| true,
-    );
+    )
+    .unwrap();
     assert_eq!(
         res,
         FoldRedelegatedBondsResult {
@@ -897,7 +907,8 @@ fn test_fold_and_slash_redelegated_bonds() {
         start_epoch,
         &[],
         |_| true,
-    );
+    )
+    .unwrap();
     assert_eq!(
         res,
         FoldRedelegatedBondsResult {
@@ -1353,12 +1364,12 @@ fn test_slash_validator() {
 
     // Test case 3
     total_redelegated_bonded
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .insert(&mut storage, Epoch(2), 5.into())
         .unwrap();
     total_redelegated_bonded
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .insert(&mut storage, Epoch(3), 1.into())
         .unwrap();
@@ -1385,13 +1396,13 @@ fn test_slash_validator() {
         .unwrap();
     total_redelegated_unbonded
         .at(&(current_epoch + params.pipeline_len))
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .insert(&mut storage, Epoch(2), 5.into())
         .unwrap();
     total_redelegated_unbonded
         .at(&(current_epoch + params.pipeline_len))
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .insert(&mut storage, Epoch(3), 1.into())
         .unwrap();
@@ -1421,13 +1432,13 @@ fn test_slash_validator() {
         .unwrap();
     total_redelegated_unbonded
         .at(&(current_epoch + params.pipeline_len))
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .remove(&mut storage, &Epoch(3))
         .unwrap();
     total_redelegated_unbonded
         .at(&(current_epoch + params.pipeline_len))
-        .at(&infraction_epoch.prev())
+        .at(&infraction_epoch.prev().unwrap())
         .at(&alice)
         .insert(&mut storage, Epoch(2), 4.into())
         .unwrap();
@@ -1645,7 +1656,7 @@ fn test_slash_validator() {
         .push(
             &mut storage,
             Slash {
-                epoch: infraction_epoch.prev(),
+                epoch: infraction_epoch.prev().unwrap(),
                 block_height: 0,
                 r#type: SlashType::DuplicateVote,
                 rate: Dec::one(),

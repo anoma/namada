@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::arith::{self, checked};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::Epoch;
@@ -164,13 +165,13 @@ pub type EnrichedBondsAndUnbondsDetail = Enriched<BondsAndUnbondsDetail>;
 
 impl<T> Enriched<T> {
     /// The bonds amount reduced by slashes
-    pub fn bonds_total_active(&self) -> token::Amount {
-        self.bonds_total - self.bonds_total_slashed
+    pub fn bonds_total_active(&self) -> Option<token::Amount> {
+        self.bonds_total.checked_sub(self.bonds_total_slashed)
     }
 
     /// The unbonds amount reduced by slashes
-    pub fn unbonds_total_active(&self) -> token::Amount {
-        self.unbonds_total - self.unbonds_total_slashed
+    pub fn unbonds_total_active(&self) -> Option<token::Amount> {
+        self.unbonds_total.checked_sub(self.unbonds_total_slashed)
     }
 }
 
@@ -431,8 +432,12 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let params = read_pos_params(ctx.state)?;
-    let epoch =
-        epoch.unwrap_or(ctx.state.in_mem().last_epoch + params.pipeline_len);
+    let epoch = epoch.unwrap_or(
+        ctx.state
+            .in_mem()
+            .last_epoch
+            .unchecked_add(params.pipeline_len),
+    );
 
     let handle = bond_handle(&source, &validator);
     handle
@@ -530,7 +535,7 @@ where
             amount,
         ) = result?;
         if epoch >= withdrawable {
-            total += amount;
+            total = checked!(total + amount)?;
         }
     }
     Ok(total)
@@ -691,7 +696,9 @@ pub mod client_only_methods {
                 .pos()
                 .bonds_and_unbonds(client, source, validator)
                 .await?;
-            Ok(enrich_bonds_and_unbonds(current_epoch, data))
+            Ok(enrich_bonds_and_unbonds(current_epoch, data).map_err(|e| {
+                std::io::Error::new(std::io::ErrorKind::Other, e)
+            })?)
         }
     }
 }
@@ -700,7 +707,7 @@ pub mod client_only_methods {
 fn enrich_bonds_and_unbonds(
     current_epoch: Epoch,
     bonds_and_unbonds: BondsAndUnbondsDetails,
-) -> EnrichedBondsAndUnbondsDetails {
+) -> Result<EnrichedBondsAndUnbondsDetails, arith::Error> {
     let mut bonds_total: token::Amount = 0.into();
     let mut bonds_total_slashed: token::Amount = 0.into();
     let mut unbonds_total: token::Amount = 0.into();
@@ -718,26 +725,33 @@ fn enrich_bonds_and_unbonds(
                 let mut withdrawable: token::Amount = 0.into();
 
                 for bond in &detail.bonds {
-                    bond_total += bond.amount;
-                    bond_total_slashed +=
-                        bond.slashed_amount.unwrap_or_default();
+                    let slashed_bond = bond.slashed_amount.unwrap_or_default();
+                    bond_total = checked!(bond_total + bond.amount)?;
+                    bond_total_slashed =
+                        checked!(bond_total_slashed + slashed_bond)?;
                 }
                 for unbond in &detail.unbonds {
-                    unbond_total += unbond.amount;
-                    unbond_total_slashed +=
+                    let slashed_unbond =
                         unbond.slashed_amount.unwrap_or_default();
+                    unbond_total = checked!(unbond_total + unbond.amount)?;
+                    unbond_total_slashed =
+                        checked!(unbond_total_slashed + slashed_unbond)?;
 
                     if current_epoch >= unbond.withdraw {
-                        withdrawable += unbond.amount
-                            - unbond.slashed_amount.unwrap_or_default()
+                        withdrawable = checked!(
+                            withdrawable + unbond.amount - slashed_unbond
+                        )?;
                     }
                 }
 
-                bonds_total += bond_total;
-                bonds_total_slashed += bond_total_slashed;
-                unbonds_total += unbond_total;
-                unbonds_total_slashed += unbond_total_slashed;
-                total_withdrawable += withdrawable;
+                bonds_total = checked!(bonds_total + bond_total)?;
+                bonds_total_slashed =
+                    checked!(bonds_total_slashed + bond_total_slashed)?;
+                unbonds_total = checked!(unbonds_total + unbond_total)?;
+                unbonds_total_slashed =
+                    checked!(unbonds_total_slashed + unbond_total_slashed)?;
+                total_withdrawable =
+                    checked!(total_withdrawable + withdrawable)?;
 
                 let enriched_detail = EnrichedBondsAndUnbondsDetail {
                     data: detail,
@@ -747,15 +761,18 @@ fn enrich_bonds_and_unbonds(
                     unbonds_total_slashed: unbond_total_slashed,
                     total_withdrawable: withdrawable,
                 };
-                (bond_id, enriched_detail)
+                Ok::<_, arith::Error>((bond_id, enriched_detail))
             })
-            .collect();
-    EnrichedBondsAndUnbondsDetails {
+            .collect::<Result<
+                HashMap<BondId, EnrichedBondsAndUnbondsDetail>,
+                arith::Error,
+            >>()?;
+    Ok(EnrichedBondsAndUnbondsDetails {
         data: enriched_details,
         bonds_total,
         bonds_total_slashed,
         unbonds_total,
         unbonds_total_slashed,
         total_withdrawable,
-    }
+    })
 }

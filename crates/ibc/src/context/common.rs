@@ -286,7 +286,7 @@ pub trait IbcCommonContext: IbcStorageContext {
                     // `FinalizeBlock` phase, e.g. dry-run, use the previous
                     // header's time. It should be OK though the constraints
                     // become a bit stricter when checking timeouts.
-                    self.get_block_header(height.prev_height())?
+                    self.get_block_header(height.prev_height().unwrap())?
                 } else {
                     None
                 }

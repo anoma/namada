@@ -327,6 +327,8 @@ impl Serialize for Signature {
         // TODO: implement the line below, currently cannot support [u8; 64]
         // serde::Serialize::serialize(&arr, serializer)
 
+        // There is no way the bytes len + 1 will overflow
+        #[allow(clippy::arithmetic_side_effects)]
         let mut seq = serializer.serialize_tuple(arr.len() + 1)?;
         for elem in &arr[..] {
             seq.serialize_element(elem)?;
@@ -346,7 +348,10 @@ impl<'de> Deserialize<'de> for Signature {
         impl<'de> Visitor<'de> for ByteArrayVisitor {
             type Value = [u8; SIGNATURE_SIZE];
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(
+                &self,
+                formatter: &mut fmt::Formatter<'_>,
+            ) -> fmt::Result {
                 formatter.write_str(&format!(
                     "an array of length {}",
                     SIGNATURE_SIZE,
@@ -472,7 +477,10 @@ impl Signature {
             (self.0.s(), v)
         };
         let r = self.0.r();
-        (r.to_bytes().into(), s.to_bytes().into(), v + Self::V_FIX)
+        // Cannot overflow as `v` is 0 or 1
+        #[allow(clippy::arithmetic_side_effects)]
+        let v = v + Self::V_FIX;
+        (r.to_bytes().into(), s.to_bytes().into(), v)
     }
 }
 

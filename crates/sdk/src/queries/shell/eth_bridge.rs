@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::{Encode, EncodeCell};
 use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
@@ -104,8 +105,11 @@ impl Erc20FlowControl {
     /// Check if the `transferred_amount` exceeds the token caps of some ERC20
     /// asset.
     #[inline]
-    pub fn exceeds_token_caps(&self, transferred_amount: Amount) -> bool {
-        self.supply + transferred_amount > self.cap
+    pub fn exceeds_token_caps(
+        &self,
+        transferred_amount: Amount,
+    ) -> crate::error::Result<bool> {
+        Ok(checked!(self.supply + transferred_amount)? > self.cap)
     }
 }
 
@@ -818,7 +822,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().get_current_epoch().0;
-    if epoch > current_epoch + 1u64 {
+    if epoch > checked!(current_epoch + 1u64)? {
         return Err(namada_storage::Error::SimpleMessage(
             "The requested epoch cannot be queried",
         ));
@@ -902,7 +906,8 @@ mod test_ethbridge_router {
                     let voting_power: EthBridgeVotingPower =
                         FractionalVotingPower::new(power.into(), total_power)
                             .expect("Fractional voting power should be >1")
-                            .into();
+                            .try_into()
+                            .unwrap();
                     (hot_key_addr, voting_power)
                 })
                 .unzip();

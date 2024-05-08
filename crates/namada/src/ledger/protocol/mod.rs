@@ -518,7 +518,7 @@ where
                     .map_err(|e| Error::FeeError(e.to_string()))?;
 
             let current_block_height =
-                state.in_mem().get_last_block_height() + 1;
+                state.in_mem().get_last_block_height().next_height();
 
             if let Some(post_bal) = balance.checked_sub(fees) {
                 token_transfer(

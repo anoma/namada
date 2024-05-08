@@ -15,6 +15,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// Check if the given `duration` has passed since the given `start.
+#[allow(clippy::arithmetic_side_effects)]
 pub fn duration_passed(
     current: DateTimeUtc,
     start: DateTimeUtc,
@@ -182,8 +183,9 @@ impl DateTimeUtc {
     }
 
     /// Returns the DateTimeUtc corresponding to one second in the future
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn next_second(&self) -> Self {
-        *self + DurationSecs(0)
+        *self + DurationSecs(1)
     }
 }
 
@@ -198,6 +200,7 @@ impl FromStr for DateTimeUtc {
 impl Add<DurationSecs> for DateTimeUtc {
     type Output = DateTimeUtc;
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn add(self, duration: DurationSecs) -> Self::Output {
         let duration_std = std::time::Duration::from_secs(duration.0);
         let duration_chrono = Duration::from_std(duration_std).expect(
@@ -211,6 +214,7 @@ impl Add<DurationSecs> for DateTimeUtc {
 impl Add<Duration> for DateTimeUtc {
     type Output = DateTimeUtc;
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn add(self, rhs: Duration) -> Self::Output {
         (self.0 + rhs).into()
     }
@@ -219,6 +223,7 @@ impl Add<Duration> for DateTimeUtc {
 impl Sub<Duration> for DateTimeUtc {
     type Output = DateTimeUtc;
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn sub(self, rhs: Duration) -> Self::Output {
         (self.0 - rhs).into()
     }
@@ -283,6 +288,8 @@ impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
 impl From<DateTimeUtc> for prost_types::Timestamp {
     fn from(dt: DateTimeUtc) -> Self {
         let seconds = dt.0.timestamp();
+        // The cast cannot wrap as the value is at most 1_999_999_999
+        #[allow(clippy::cast_possible_wrap)]
         let nanos = dt.0.timestamp_subsec_nanos() as i32;
         prost_types::Timestamp { seconds, nanos }
     }

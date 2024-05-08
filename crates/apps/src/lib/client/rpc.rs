@@ -859,11 +859,13 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable += amount;
+            total_withdrawable =
+                total_withdrawable.checked_add(amount).unwrap();
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();
-            *withdrawable_amount += amount;
+            *withdrawable_amount =
+                withdrawable_amount.checked_add(amount).unwrap();
         }
     }
     if !total_withdrawable.is_zero() {
@@ -948,7 +950,7 @@ pub async fn query_bonds(
                 context.io(),
                 &mut w;
                 "Active (slashable) bonds total: {}",
-                details.bonds_total_active().to_string_native()
+                details.bonds_total_active().unwrap().to_string_native()
             )?;
         }
         display_line!(context.io(), &mut w; "Bonds total: {}", details.bonds_total.to_string_native())?;
@@ -992,7 +994,7 @@ pub async fn query_bonds(
             context.io(),
             &mut w;
             "All bonds total active: {}",
-            bonds_and_unbonds.bonds_total_active().to_string_native()
+            bonds_and_unbonds.bonds_total_active().unwrap().to_string_native()
         )?;
     }
     display_line!(
@@ -1015,7 +1017,7 @@ pub async fn query_bonds(
             context.io(),
             &mut w;
             "All unbonds total active: {}",
-            bonds_and_unbonds.unbonds_total_active().to_string_native()
+            bonds_and_unbonds.unbonds_total_active().unwrap().to_string_native()
         )?;
     }
     display_line!(

@@ -163,8 +163,9 @@ where
                 min_num_of_blocks,
                 min_duration,
             } = parameters.epoch_duration;
-            self.in_mem.next_epoch_min_start_height =
-                height + min_num_of_blocks;
+            self.in_mem.next_epoch_min_start_height = height
+                .checked_add(min_num_of_blocks)
+                .expect("Next epoch min block height shouldn't overflow");
             self.in_mem.next_epoch_min_start_time = time + min_duration;
 
             self.in_mem.block.pred_epochs.new_epoch(height);
@@ -300,16 +301,11 @@ where
         &mut self,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
-        if self.in_mem.block.epoch.0 == 0 {
-            return Ok(());
-        }
         // Prune non-provable stores at the previous epoch
-        for st in StoreType::iter_non_provable() {
-            self.0.db.prune_merkle_tree_store(
-                batch,
-                st,
-                self.in_mem.block.epoch.prev(),
-            )?;
+        if let Some(prev_epoch) = self.in_mem.block.epoch.prev() {
+            for st in StoreType::iter_non_provable() {
+                self.0.db.prune_merkle_tree_store(batch, st, prev_epoch)?;
+            }
         }
         // Prune provable stores
         let oldest_epoch = self.in_mem.get_oldest_epoch();
@@ -321,7 +317,7 @@ where
                 self.db.prune_merkle_tree_store(
                     batch,
                     st,
-                    oldest_epoch.prev(),
+                    oldest_epoch.prev().unwrap(),
                 )?;
             }
 
@@ -331,7 +327,7 @@ where
                 None => return Ok(()),
             };
             while oldest_epoch < epoch {
-                epoch = epoch.prev();
+                epoch = epoch.prev().unwrap();
                 self.db.prune_merkle_tree_store(
                     batch,
                     &StoreType::BridgePool,
@@ -384,7 +380,7 @@ where
         // current one. It has the previous nonce, but it was
         // incremented during the epoch.
         while 0 < epoch.0 && oldest_epoch <= epoch {
-            epoch = epoch.prev();
+            epoch = epoch.prev().unwrap();
             let height = match self
                 .in_mem
                 .block
@@ -551,7 +547,7 @@ where
             self.prune_merkle_tree_stores(&mut batch)?;
         }
         // If there's a previous block, prune non-persisted diffs from it
-        if let Some(height) = self.in_mem.block.height.checked_prev() {
+        if let Some(height) = self.in_mem.block.height.prev_height() {
             self.db.prune_non_persisted_diffs(&mut batch, height)?;
         }
         self.db.exec_batch(batch)?;
@@ -617,7 +613,10 @@ where
 
     #[inline]
     pub fn get_current_decision_height(&self) -> BlockHeight {
-        self.in_mem.get_last_block_height() + 1
+        self.in_mem
+            .get_last_block_height()
+            .checked_add(1)
+            .expect("Next height shouldn't overflow")
     }
 
     /// Check if we are at a given [`BlockHeight`] offset, `height_offset`,
@@ -630,9 +629,10 @@ where
 
         fst_heights_of_each_epoch
             .last()
-            .map(|&h| {
-                let height_offset_within_epoch = h + height_offset;
-                current_decision_height == height_offset_within_epoch
+            .and_then(|&h| {
+                let height_offset_within_epoch =
+                    h.checked_add(height_offset)?;
+                Some(current_decision_height == height_offset_within_epoch)
             })
             .unwrap_or(false)
     }

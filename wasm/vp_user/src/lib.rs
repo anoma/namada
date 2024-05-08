@@ -112,7 +112,8 @@ fn validate_tx(
                         ctx.read_pre(key).into_vp_error()?.unwrap_or_default();
                     let post: token::Amount =
                         ctx.read_post(key).into_vp_error()?.unwrap_or_default();
-                    let change = post.change() - pre.change();
+                    let change =
+                        post.change().checked_sub(pre.change()).unwrap();
                     gadget.verify_signatures_when(
                         // NB: debit has to signed, credit doesn't
                         || change.is_negative(),

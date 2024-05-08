@@ -23,7 +23,9 @@ impl From<token::Amount> for ReverseOrdTokenAmount {
 
 /// Invert the token amount
 fn invert(amount: token::Amount) -> token::Amount {
-    token::Amount::max_signed() - amount
+    token::Amount::max_signed()
+        .checked_sub(amount)
+        .expect("Cannot underflow")
 }
 
 impl KeySeg for ReverseOrdTokenAmount {

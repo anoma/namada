@@ -4,8 +4,6 @@
 //! precision.
 
 use std::fmt::{Debug, Display, Formatter};
-use std::iter::Sum;
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -13,11 +11,11 @@ use eyre::eyre;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use num_traits::CheckedMul;
 use serde::{Deserialize, Serialize};
 
 use super::token::NATIVE_MAX_DECIMAL_PLACES;
-use crate::token::{Amount, Change};
+use crate::arith::{self, checked};
+use crate::token;
 use crate::uint::{Uint, I256};
 
 /// The number of Dec places for PoS rational calculations
@@ -99,7 +97,7 @@ impl Dec {
             Some(res) => {
                 let res = I256::try_from(res).ok()?;
                 if is_neg {
-                    Some(Self(-res))
+                    Some(Self(res.checked_neg()?))
                 } else {
                     Some(Self(res))
                 }
@@ -121,13 +119,27 @@ impl Dec {
     /// The representation of 1
     pub fn one() -> Self {
         Self(I256(
-            Uint::one() * Uint::exp10(POS_DECIMAL_PRECISION as usize),
+            Uint::one()
+                .checked_mul(Uint::exp10(usize::from(POS_DECIMAL_PRECISION)))
+                .expect("Cannot overflow"),
         ))
     }
 
     /// The representation of 2
     pub fn two() -> Self {
-        Self::one() + Self::one()
+        Self::one()
+            .checked_add(Self::one())
+            .expect("Cannot overflow")
+    }
+
+    /// The representation of 1 / 3
+    pub fn one_third() -> Self {
+        Self::one().checked_div(3).expect("Cannot fail")
+    }
+
+    /// The representation of 2 / 3
+    pub fn two_thirds() -> Self {
+        Self::two().checked_div(3).expect("Cannot fail")
     }
 
     /// Create a new [`Dec`] using a mantissa and a scale.
@@ -136,12 +148,15 @@ impl Dec {
             None
         } else {
             let abs = u64::try_from(mantissa.abs()).ok()?;
-            match Uint::exp10((POS_DECIMAL_PRECISION - scale) as usize)
+            // Cannot underflow
+            #[allow(clippy::arithmetic_side_effects)]
+            let scale_diff = POS_DECIMAL_PRECISION - scale;
+            match Uint::exp10((scale_diff) as usize)
                 .checked_mul(Uint::from(abs))
             {
                 Some(res) => {
                     if mantissa.is_negative() {
-                        Some(Self(-I256(res)))
+                        Some(Self(I256(res).checked_neg()?))
                     } else {
                         Some(Self(I256(res)))
                     }
@@ -152,11 +167,14 @@ impl Dec {
     }
 
     /// Get the non-negative difference between two [`Dec`]s.
-    pub fn abs_diff(&self, other: &Self) -> Self {
-        if self > other {
-            *self - *other
+    pub fn abs_diff(
+        &self,
+        other: Self,
+    ) -> std::result::Result<Self, arith::Error> {
+        if self > &other {
+            checked!(self - other)
         } else {
-            *other - *self
+            checked!(other - *self)
         }
     }
 
@@ -167,7 +185,9 @@ impl Dec {
 
     /// Convert the Dec type into a I256 with truncation
     pub fn to_i256(&self) -> I256 {
-        self.0 / Uint::exp10(POS_DECIMAL_PRECISION as usize)
+        self.0
+            .checked_div(I256(Uint::exp10(usize::from(POS_DECIMAL_PRECISION))))
+            .expect("Cannot panic as rhs > 0")
     }
 
     /// Convert the Dec type into a Uint with truncation
@@ -175,31 +195,45 @@ impl Dec {
         if self.is_negative() {
             None
         } else {
-            Some(self.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize))
+            Some(
+                self.0.abs().checked_div(Uint::exp10(usize::from(
+                    POS_DECIMAL_PRECISION,
+                )))?,
+            )
         }
     }
 
-    /// Do subtraction of two [`Dec`]s If and only if the value is
-    /// greater
-    pub fn checked_sub(&self, other: &Self) -> Option<Self> {
-        if self > other {
-            Some(*self - *other)
-        } else {
-            None
-        }
+    /// Do subtraction of two [`Dec`]s
+    pub fn checked_sub(&self, rhs: Self) -> Option<Self> {
+        Some(Self(self.0.checked_sub(rhs.0)?))
     }
 
     /// Do addition of two [`Dec`]s
-    pub fn add(&self, other: &Self) -> Self {
-        Dec(self.0 + other.0)
+    pub fn checked_add(&self, other: Self) -> Option<Self> {
+        Some(Dec(self.0.checked_add(other.0)?))
     }
 
-    /// Do multiply two [`Dec`]s. Return `None` if overflow.
+    /// Checked multiplication. Return `None` if overflow.
     /// This methods will overflow incorrectly if both arguments are greater
     /// than 128bit.
-    pub fn checked_mul(&self, other: &Self) -> Option<Self> {
-        let result = self.0.checked_mul(&other.0)?;
-        Some(Dec(result / Uint::exp10(POS_DECIMAL_PRECISION as usize)))
+    pub fn checked_mul(&self, other: impl Into<Self>) -> Option<Self> {
+        let other: Self = other.into();
+        let result = self.0.checked_mul(other.0)?;
+        let inner = result.checked_div(I256(Uint::exp10(usize::from(
+            POS_DECIMAL_PRECISION,
+        ))))?;
+        Some(Dec(inner))
+    }
+
+    /// Checked division
+    pub fn checked_div(self, rhs: impl Into<Self>) -> Option<Self> {
+        let rhs: Self = rhs.into();
+        self.trunc_div(&rhs)
+    }
+
+    /// Checked negation
+    pub fn checked_neg(&self) -> Option<Self> {
+        Some(Self(self.0.checked_neg()?))
     }
 
     /// Return if the [`Dec`] is negative
@@ -208,15 +242,20 @@ impl Dec {
     }
 
     /// Return the integer value of a [`Dec`] by rounding up.
-    pub fn ceil(&self) -> I256 {
+    pub fn ceil(&self) -> Option<I256> {
         if self.0.is_negative() {
-            self.to_i256()
+            Some(self.to_i256())
         } else {
             let floor = self.to_i256();
-            if (*self - Dec(floor)).is_zero() {
-                floor
+            if self
+                .checked_sub(Dec(floor))
+                .as_ref()
+                .map(Dec::is_zero)
+                .unwrap_or_default()
+            {
+                Some(floor)
             } else {
-                floor + I256::one()
+                floor.checked_add(I256::one())
             }
         }
     }
@@ -250,16 +289,22 @@ impl FromStr for Dec {
         let trimmed = small
             .trim_end_matches('0')
             .chars()
-            .take(POS_DECIMAL_PRECISION as usize)
+            .take(usize::from(POS_DECIMAL_PRECISION))
             .collect::<String>();
         let decimal_part = if trimmed.is_empty() {
             Uint::zero()
         } else {
-            Uint::from_str_radix(&trimmed, 10).map_err(|e| {
-                eyre!("Could not parse .{} as decimals: {}", small, e)
-            })? * Uint::exp10(POS_DECIMAL_PRECISION as usize - trimmed.len())
+            // `trimmed.len` <= `POS_DECIMAL_PRECISION`
+            #[allow(clippy::arithmetic_side_effects)]
+            let len_diff = usize::from(POS_DECIMAL_PRECISION) - trimmed.len();
+            Uint::from_str_radix(&trimmed, 10)
+                .map_err(|e| {
+                    eyre!("Could not parse .{} as decimals: {}", small, e)
+                })?
+                .checked_mul(Uint::exp10(len_diff))
+                .ok_or_else(|| eyre!("Decimal part overflow"))?
         };
-        let int_part = Uint::exp10(POS_DECIMAL_PRECISION as usize)
+        let int_part = Uint::exp10(usize::from(POS_DECIMAL_PRECISION))
             .checked_mul(num_large)
             .ok_or_else(|| {
                 eyre!(
@@ -267,10 +312,15 @@ impl FromStr for Dec {
                     num_large
                 )
             })?;
-        let inner = I256::try_from(int_part + decimal_part)
+        let inner =
+            I256::try_from(int_part.checked_add(decimal_part).ok_or_else(
+                || eyre!("Failed to add integral and decimal part"),
+            )?)
             .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
         if is_neg {
-            Ok(Dec(-inner))
+            Ok(Dec(inner
+                .checked_neg()
+                .ok_or_else(|| eyre!("Failed to negate"))?))
         } else {
             Ok(Dec(inner))
         }
@@ -285,17 +335,18 @@ impl TryFrom<String> for Dec {
     }
 }
 
-impl From<Amount> for Dec {
-    fn from(amt: Amount) -> Self {
-        match I256::try_from(amt.raw_amount()).ok() {
-            Some(raw) => Self(
-                raw * Uint::exp10(
-                    (POS_DECIMAL_PRECISION - NATIVE_MAX_DECIMAL_PLACES)
-                        as usize,
-                ),
-            ),
-            None => Self::zero(),
-        }
+impl TryFrom<token::Amount> for Dec {
+    type Error = Error;
+
+    fn try_from(amt: token::Amount) -> std::result::Result<Self, Self::Error> {
+        let raw = I256::try_from(amt.raw_amount())
+            .map_err(|e| eyre!("Invalid raw amount: {e}"))?;
+        let denom = I256(Uint::exp10(
+            (POS_DECIMAL_PRECISION - NATIVE_MAX_DECIMAL_PLACES) as usize,
+        ));
+        let inner = checked!(raw * denom).map_err(|e| eyre!("Arith: {e}"))?;
+
+        Ok(Self(inner))
     }
 }
 
@@ -304,14 +355,23 @@ impl TryFrom<Uint> for Dec {
 
     fn try_from(value: Uint) -> std::result::Result<Self, Self::Error> {
         let i256 = I256::try_from(value)
-            .map_err(|e| eyre!("Could not convert Uint to I256: {}", e))?;
-        Ok(Self(i256 * Uint::exp10(POS_DECIMAL_PRECISION as usize)))
+            .map_err(|e| eyre!("Could not convert Uint to I256: {e}"))?;
+        let inner = i256
+            .checked_mul(I256(Uint::exp10(usize::from(POS_DECIMAL_PRECISION))))
+            .ok_or_else(|| eyre!("Overflow"))?;
+        Ok(Self(inner))
     }
 }
 
 impl From<u64> for Dec {
     fn from(num: u64) -> Self {
-        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(
+            I256::from(num)
+                .checked_mul(I256(Uint::exp10(usize::from(
+                    POS_DECIMAL_PRECISION,
+                ))))
+                .expect("Cannot overflow as the value is in `u64` range"),
+        )
     }
 }
 
@@ -323,24 +383,31 @@ impl From<usize> for Dec {
 
 impl From<i128> for Dec {
     fn from(num: i128) -> Self {
-        Self(I256::from(num) * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+        Self(
+            I256::from(num)
+                .checked_mul(I256(Uint::exp10(usize::from(
+                    POS_DECIMAL_PRECISION,
+                ))))
+                .expect("Cannot overflow as the value is in `i128` range"),
+        )
     }
 }
 
 impl From<i32> for Dec {
     fn from(num: i32) -> Self {
-        Self::from(num as i128)
+        Self::from(i128::from(num))
     }
 }
 
 impl TryFrom<u128> for Dec {
-    type Error = Box<dyn 'static + std::error::Error>;
+    type Error = arith::Error;
 
     fn try_from(num: u128) -> std::result::Result<Self, Self::Error> {
-        Ok(Self(
-            I256::try_from(Uint::from(num))?
-                * Uint::exp10(POS_DECIMAL_PRECISION as usize),
-        ))
+        let denom = I256(Uint::exp10(usize::from(POS_DECIMAL_PRECISION)));
+        let num =
+            I256::try_from(Uint::from(num)).expect("u128 must fit in a Dec");
+        let inner = checked!(num * denom)?;
+        Ok(Self(inner))
     }
 }
 
@@ -352,10 +419,13 @@ impl TryFrom<Dec> for i128 {
     }
 }
 
-// Is error handling needed for this?
-impl From<I256> for Dec {
-    fn from(num: I256) -> Self {
-        Self(num * Uint::exp10(POS_DECIMAL_PRECISION as usize))
+impl TryFrom<I256> for Dec {
+    type Error = arith::Error;
+
+    fn try_from(num: I256) -> std::result::Result<Self, Self::Error> {
+        let denom = I256(Uint::exp10(usize::from(POS_DECIMAL_PRECISION)));
+        let inner = checked!(num * denom)?;
+        Ok(Self(inner))
     }
 }
 
@@ -365,131 +435,21 @@ impl From<Dec> for String {
     }
 }
 
-impl Add<Dec> for Dec {
-    type Output = Self;
-
-    fn add(self, rhs: Dec) -> Self::Output {
-        Self(self.0 + rhs.0)
-    }
-}
-
-impl Add<u64> for Dec {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + I256::from(rhs))
-    }
-}
-
-impl AddAssign<Dec> for Dec {
-    fn add_assign(&mut self, rhs: Dec) {
-        *self = *self + rhs;
-    }
-}
-
-impl Sum for Dec {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Dec::default(), |acc, next| acc + next)
-    }
-}
-
-impl Sub<Dec> for Dec {
-    type Output = Self;
-
-    fn sub(self, rhs: Dec) -> Self::Output {
-        Self(self.0 - rhs.0)
-    }
-}
-
-impl Mul<u64> for Dec {
-    type Output = Dec;
-
-    fn mul(self, rhs: u64) -> Self::Output {
-        Self(self.0 * Uint::from(rhs))
-    }
-}
-
-impl Mul<u128> for Dec {
-    type Output = Dec;
-
-    fn mul(self, rhs: u128) -> Self::Output {
-        Self(self.0 * Uint::from(rhs))
-    }
-}
-
-impl Mul<Amount> for Dec {
-    type Output = Amount;
-
-    fn mul(self, rhs: Amount) -> Self::Output {
-        if !self.is_negative() {
-            (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
-        } else {
-            panic!("Dec is negative and cannot produce a valid Amount output");
-        }
-    }
-}
-
-impl Mul<Change> for Dec {
-    type Output = Change;
-
-    fn mul(self, rhs: Change) -> Self::Output {
-        let tot = rhs * self.0;
-        let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
-        tot / denom
-    }
-}
-
-// TODO: is some checked arithmetic needed here to prevent overflows?
-impl Mul<Dec> for Dec {
-    type Output = Self;
-
-    fn mul(self, rhs: Dec) -> Self::Output {
-        let prod = self.0 * rhs.0;
-        Self(prod / Uint::exp10(POS_DECIMAL_PRECISION as usize))
-    }
-}
-
-impl Div<Dec> for Dec {
-    type Output = Self;
-
-    /// Unchecked fixed precision division.
-    ///
-    /// # Panics:
-    ///
-    ///   * Denominator is zero
-    ///   * Scaling the left hand side by 10^([`POS_DECIMAL_PRECISION`])
-    ///     overflows 256 bits
-    fn div(self, rhs: Dec) -> Self::Output {
-        self.trunc_div(&rhs).unwrap()
-    }
-}
-
-impl Div<u64> for Dec {
-    type Output = Self;
-
-    fn div(self, rhs: u64) -> Self::Output {
-        Self(self.0 / Uint::from(rhs))
-    }
-}
-
-impl Neg for Dec {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self(self.0.neg())
-    }
-}
-
 impl Display for Dec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let is_neg = self.is_negative();
         let mut string = self.0.abs().to_string();
-        if string.len() > POS_DECIMAL_PRECISION as usize {
-            let idx = string.len() - POS_DECIMAL_PRECISION as usize;
+        if string.len() > usize::from(POS_DECIMAL_PRECISION) {
+            // Cannot underflow as we checked above
+            #[allow(clippy::arithmetic_side_effects)]
+            let idx = string.len() - usize::from(POS_DECIMAL_PRECISION);
             string.insert(idx, '.');
         } else {
             let mut str_pre = "0.".to_string();
-            for _ in 0..(POS_DECIMAL_PRECISION as usize - string.len()) {
+            // Cannot underflow as we checked above
+            #[allow(clippy::arithmetic_side_effects)]
+            let end = usize::from(POS_DECIMAL_PRECISION) - string.len();
+            for _ in 0..end {
                 str_pre.push('0');
             }
             str_pre.push_str(string.as_str());
@@ -516,10 +476,93 @@ impl Debug for Dec {
 
 /// Helpers for testing.
 #[cfg(any(test, feature = "testing"))]
+#[allow(clippy::arithmetic_side_effects, clippy::cast_lossless)]
 pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
+
+    impl std::ops::Add<Dec> for Dec {
+        type Output = Dec;
+
+        fn add(self, rhs: Dec) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for Dec {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub<Dec> for Dec {
+        type Output = Dec;
+
+        fn sub(self, rhs: Dec) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl<T> std::ops::Mul<T> for Dec
+    where
+        T: Into<Self>,
+    {
+        type Output = Dec;
+
+        fn mul(self, rhs: T) -> Self::Output {
+            self.checked_mul(rhs.into()).unwrap()
+        }
+    }
+
+    impl<T> std::ops::Div<T> for Dec
+    where
+        T: Into<Self>,
+    {
+        type Output = Self;
+
+        fn div(self, rhs: T) -> Self::Output {
+            self.trunc_div(&rhs.into()).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<token::Amount> for Dec {
+        type Output = token::Amount;
+
+        fn mul(self, rhs: token::Amount) -> Self::Output {
+            if !self.is_negative() {
+                (rhs * self.0.abs()) / 10u64.pow(POS_DECIMAL_PRECISION as u32)
+            } else {
+                panic!(
+                    "Dec is negative and cannot produce a valid Amount output"
+                );
+            }
+        }
+    }
+
+    impl std::ops::Mul<token::Change> for Dec {
+        type Output = token::Change;
+
+        fn mul(self, rhs: token::Change) -> Self::Output {
+            let tot = rhs * self.0;
+            let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
+            tot.checked_div(I256(denom)).unwrap()
+        }
+    }
+
+    impl std::iter::Sum for Dec {
+        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(Dec::zero(), |a, b| a + b)
+        }
+    }
+
+    impl std::ops::Neg for Dec {
+        type Output = Dec;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
+        }
+    }
 
     /// Generate an arbitrary non-negative `Dec`
     pub fn arb_non_negative_dec() -> impl Strategy<Value = Dec> {
@@ -632,7 +675,6 @@ mod test_dec {
                 / Dec::two(),
             Dec::zero(),
         );
-
         // Test Dec * Dec multiplication
         assert!(Dec::new(32353, POS_DECIMAL_PRECISION + 1u8).is_none());
         let dec1 = Dec::new(12345654321, 12).expect("Test failed");
@@ -641,22 +683,25 @@ mod test_dec {
         let exp_quot = Dec::new(1249966393025101, 12).expect("Test failed");
         assert_eq!(dec1 * dec2, exp_prod);
         assert_eq!(dec1 / dec2, exp_quot);
+
+        Dec::one_third(); // must not panic
+        Dec::two_thirds(); // must not panic
     }
 
-    /// Test the `Dec` and `Amount` interplay
+    /// Test the `Dec` and `token::Amount` interplay
     #[test]
     fn test_dec_and_amount() {
-        let amt = Amount::from(1018u64);
+        let amt = token::Amount::from(1018u64);
         let dec = Dec::from_str("2.76").unwrap();
 
         debug_assert_eq!(
-            Dec::from(amt),
+            Dec::try_from(amt).unwrap(),
             Dec::new(1018, 6).expect("Test failed")
         );
-        debug_assert_eq!(dec * amt, Amount::from(2809u64));
+        debug_assert_eq!(dec * amt, token::Amount::from(2809u64));
 
         let chg = -amt.change();
-        debug_assert_eq!(dec * chg, Change::from(-2809i64));
+        debug_assert_eq!(dec * chg, token::Change::from(-2809i64));
     }
 
     #[test]
@@ -746,12 +791,12 @@ mod test_dec {
     fn test_ceiling() {
         let neg = Dec::from_str("-2.4").expect("Test failed");
         assert_eq!(
-            neg.ceil(),
+            neg.ceil().unwrap(),
             Dec::from_str("-2").expect("Test failed").to_i256()
         );
         let pos = Dec::from_str("2.4").expect("Test failed");
         assert_eq!(
-            pos.ceil(),
+            pos.ceil().unwrap(),
             Dec::from_str("3").expect("Test failed").to_i256()
         );
     }

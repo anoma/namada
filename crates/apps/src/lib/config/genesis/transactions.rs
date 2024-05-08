@@ -543,7 +543,9 @@ impl Transactions<Validated> {
                     BTreeMap::new();
                 for tx in txs {
                     let entry = stakes.entry(&tx.validator).or_default();
-                    *entry += tx.amount.amount();
+                    *entry = entry
+                        .checked_add(tx.amount.amount())
+                        .expect("Validator total stake must not overflow");
                 }
 
                 stakes.into_values().any(|stake| {

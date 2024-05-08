@@ -58,7 +58,7 @@ impl<'de> Deserialize<'de> for ProposalBytes {
         impl<'de> serde::de::Visitor<'de> for Visitor {
             type Value = ProposalBytes;
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(
                     f,
                     "a u64 in the range 1 - {}",
@@ -84,7 +84,13 @@ impl<'de> Deserialize<'de> for ProposalBytes {
             where
                 E: serde::de::Error,
             {
-                ProposalBytes::new(size as u64).ok_or_else(|| {
+                let max_bytes = u64::try_from(size).map_err(|_e| {
+                    serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Signed(size),
+                        &self,
+                    )
+                })?;
+                ProposalBytes::new(max_bytes).ok_or_else(|| {
                     serde::de::Error::invalid_value(
                         serde::de::Unexpected::Signed(size),
                         &self,
@@ -212,6 +218,8 @@ impl ChainId {
         let mut hasher = Sha256::new();
         hasher.update(genesis_bytes);
         // less `1` for chain ID prefix separator char
+        // Cannot underflow as the `prefix.len` is checked
+        #[allow(clippy::arithmetic_side_effects)]
         let width = CHAIN_ID_LENGTH - 1 - prefix.len();
         // lowercase hex of the first `width` chars of the hash
         let hash = format!("{:.width$x}", hasher.finalize(), width = width,);
@@ -228,9 +236,16 @@ impl ChainId {
         let mut errors = vec![];
         match self.0.rsplit_once(CHAIN_ID_PREFIX_SEP) {
             Some((prefix, hash)) => {
+                if prefix.len() > CHAIN_ID_PREFIX_MAX_LEN {
+                    errors.push(ChainIdValidationError::Prefix(
+                        ChainIdPrefixParseError::UnexpectedLen(prefix.len()),
+                    ))
+                }
                 let mut hasher = Sha256::new();
                 hasher.update(genesis_bytes);
                 // less `1` for chain ID prefix separator char
+                // Cannot underflow as the `prefix.len` is checked
+                #[allow(clippy::arithmetic_side_effects)]
                 let width = CHAIN_ID_LENGTH - 1 - prefix.len();
                 // lowercase hex of the first `width` chars of the hash
                 let expected_hash =
@@ -259,6 +274,8 @@ pub enum ChainIdValidationError {
     MissingSeparator,
     #[error("The chain ID hash is not valid, expected {0}, got {1}")]
     InvalidHash(String, String),
+    #[error("Invalid prefix {0}")]
+    Prefix(ChainIdPrefixParseError),
 }
 
 impl Default for ChainId {
