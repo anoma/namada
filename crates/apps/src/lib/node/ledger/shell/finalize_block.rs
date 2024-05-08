@@ -1268,8 +1268,8 @@ mod test_finalize_block {
 
             namada::governance::init_proposal(
                 &mut shell.state,
-                proposal,
-                Vec::<u8>::new(),
+                &proposal,
+                vec![],
                 None,
             )
             .unwrap();

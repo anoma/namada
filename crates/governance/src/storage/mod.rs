@@ -27,10 +27,10 @@ use crate::ADDRESS as governance_address;
 /// A proposal creation transaction.
 pub fn init_proposal<S>(
     storage: &mut S,
-    data: InitProposalData,
+    data: &InitProposalData,
     content: Vec<u8>,
     code: Option<Vec<u8>>,
-) -> Result<()>
+) -> Result<u64>
 where
     S: StorageRead + StorageWrite,
 {
@@ -96,7 +96,9 @@ where
         &data.author,
         &governance_address,
         min_proposal_funds,
-    )
+    )?;
+
+    Ok(proposal_id)
 }
 
 /// A proposal vote transaction.

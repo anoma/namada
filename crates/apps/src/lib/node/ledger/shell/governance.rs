@@ -1,7 +1,7 @@
 use namada::core::collections::HashMap;
 use namada::core::encode;
 use namada::core::storage::Epoch;
-use namada::governance::event::ProposalEvent;
+use namada::governance::event::GovernanceEvent;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
@@ -120,13 +120,21 @@ where
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
+                        let proposal_code =
+                            gov_api::get_proposal_code(&shell.state, id)?
+                                .unwrap_or_default();
+                        let _result = execute_default_proposal(
+                            shell,
+                            id,
+                            proposal_code.clone(),
+                        )?;
                         tracing::info!(
                             "Default Governance proposal {} has been executed \
                              and passed.",
                             id,
                         );
 
-                        ProposalEvent::default_proposal_event(id, false, false)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =
@@ -144,10 +152,10 @@ where
                             if result { "successful" } else { "unsuccessful" }
                         );
 
-                        ProposalEvent::default_proposal_event(id, true, result)
+                        GovernanceEvent::passed_proposal(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let result = execute_pgf_steward_proposal(
+                        let _result = execute_pgf_steward_proposal(
                             &mut shell.state,
                             stewards,
                         )?;
@@ -157,11 +165,11 @@ where
                             id
                         );
 
-                        ProposalEvent::pgf_steward_proposal_event(id, result)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
-                        let result = execute_pgf_funding_proposal(
+                        let _result = execute_pgf_funding_proposal(
                             &mut shell.state,
                             native_token,
                             payments,
@@ -173,7 +181,7 @@ where
                             id
                         );
 
-                        ProposalEvent::pgf_payments_proposal_event(id, result)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                 };
                 events.emit(proposal_event);
@@ -207,7 +215,10 @@ where
                         );
                     }
                 }
-                let proposal_event = ProposalEvent::rejected_proposal_event(id);
+                let proposal_event = GovernanceEvent::rejected_proposal(
+                    id,
+                    matches!(proposal_type, ProposalType::DefaultWithWasm(_)),
+                );
                 events.emit(proposal_event);
                 proposals_result.rejected.push(id);
 
