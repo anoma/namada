@@ -495,7 +495,6 @@ pub async fn validate_fee<N: Namada>(
         token: args.fee_token.clone(),
     };
 
-    // FIXME: remove fee unshielding args from cli
     // Update post balance info
     match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => {
