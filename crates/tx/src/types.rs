@@ -1587,11 +1587,9 @@ impl Tx {
 #[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
-
-    use borsh::schema::BorshSchema;
-
     use std::fs;
 
+    use borsh::schema::BorshSchema;
     use data_encoding::HEXLOWER;
 
     use super::*;
