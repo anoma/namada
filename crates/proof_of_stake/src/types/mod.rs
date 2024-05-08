@@ -65,7 +65,7 @@ pub type ValidatorEthColdKeys = crate::epoched::Epoched<
 pub type ValidatorStates = crate::epoched::Epoched<
     ValidatorState,
     crate::epoched::OffsetPipelineLen,
-    crate::epoched::OffsetDefaultNumPastEpochs,
+    crate::epoched::OffsetMaxProposalPeriodPlus,
 >;
 
 /// A map from a position to an address in a Validator Set

@@ -37,7 +37,7 @@ where
         return Ok(HashSet::new());
     }
 
-    let mut delegation_targets = HashSet::<Address>::new();
+    let mut delegation_targets = HashSet::new();
 
     for validator in validators.iter(storage)? {
         let (
@@ -56,7 +56,7 @@ where
                     delegation_targets.insert(val);
                 }
             } else {
-                // this is bond is currently held
+                // this bond is currently held
                 delegation_targets.insert(val);
             }
         } else {

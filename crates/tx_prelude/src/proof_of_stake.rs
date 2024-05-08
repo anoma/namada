@@ -3,6 +3,7 @@
 use namada_core::dec::Dec;
 use namada_core::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::queries::find_delegation_validators;
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_proof_of_stake::types::{ResultSlashing, ValidatorMetaData};
 use namada_proof_of_stake::{
