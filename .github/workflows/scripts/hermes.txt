@@ -1,1 +1,1 @@
-1.7.4-namada-beta9-rc
+1.7.4-namada-beta9-rc2
