@@ -14,4 +14,5 @@ version.workspace = true
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_storage = { path = "../storage" }

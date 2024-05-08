@@ -18,6 +18,7 @@ multicore = ["namada_shielded_token/multicore"]
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_shielded_token = { path = "../shielded_token" }
 namada_storage = { path = "../storage" }
 namada_trans_token = { path = "../trans_token" }

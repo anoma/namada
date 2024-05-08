@@ -54,9 +54,6 @@ use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::{Address, MASP};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
-use namada_core::event::extend::{
-    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
-};
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
@@ -64,6 +61,9 @@ pub use namada_core::masp::{
 use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
+use namada_events::extend::{
+    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
+};
 use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

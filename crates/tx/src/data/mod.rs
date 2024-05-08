@@ -23,9 +23,9 @@ use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::event::Event;
 use namada_core::hash::Hash;
 use namada_core::storage;
+use namada_events::Event;
 use namada_gas::{Gas, VpsGas};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

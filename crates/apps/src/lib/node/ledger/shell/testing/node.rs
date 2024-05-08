@@ -14,8 +14,6 @@ use namada::control_flow::time::Duration;
 use namada::core::collections::HashMap;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
-use namada::core::event::extend::Height as HeightAttr;
-use namada::core::event::Event;
 use namada::core::hash::Hash;
 use namada::core::key::tm_consensus_key_raw_hash;
 use namada::core::storage::{BlockHeight, Epoch, Header};
@@ -32,6 +30,8 @@ use namada::proof_of_stake::storage::{
     validator_consensus_key_handle,
 };
 use namada::proof_of_stake::types::WeightedValidator;
+use namada::sdk::events::extend::Height as HeightAttr;
+use namada::sdk::events::Event;
 use namada::state::{
     LastBlock, Sha256Hasher, StorageRead, EPOCH_SWITCH_BLOCKS_DELAY,
 };

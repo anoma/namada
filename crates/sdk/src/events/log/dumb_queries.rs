@@ -1,13 +1,19 @@
 //! Silly simple event matcher.
 
 use namada_core::collections::HashMap;
-use namada_core::ethereum_structs::event_types::{
-    BRIDGE_POOL_EXPIRED, BRIDGE_POOL_RELAYED,
-};
-use namada_core::ethereum_structs::BridgePoolTxHash;
 use namada_core::hash::Hash;
 use namada_core::keccak::KeccakHash;
 use namada_core::storage::BlockHeight;
+use namada_ethereum_bridge::event::types::{
+    BRIDGE_POOL_EXPIRED, BRIDGE_POOL_RELAYED,
+};
+use namada_ethereum_bridge::event::BridgePoolTxHash;
+use namada_ibc::event::types::UPDATE_CLIENT;
+use namada_ibc::event::{
+    ClientId as ClientIdAttr, ConsensusHeights, IbcEvent, IbcEventType,
+    PacketDstChannel, PacketDstPort, PacketSequence, PacketSrcChannel,
+    PacketSrcPort,
+};
 
 use crate::events::extend::{
     ExtendAttributesMap, ExtendEventAttributes, TxHash as TxHashAttr,
@@ -17,12 +23,6 @@ use crate::ibc::core::client::types::Height as IbcHeight;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
-use crate::ibc::event::types::UPDATE_CLIENT;
-use crate::ibc::event::{
-    ClientId as ClientIdAttr, ConsensusHeights, PacketDstChannel,
-    PacketDstPort, PacketSequence, PacketSrcChannel, PacketSrcPort,
-};
-use crate::ibc::{IbcEvent, IbcEventType};
 use crate::tx::event::types::APPLIED as APPLIED_TX;
 
 /// A [`QueryMatcher`] verifies if a Namada event matches a
@@ -169,7 +169,7 @@ impl QueryMatcher {
 
 #[cfg(test)]
 mod tests {
-    use namada_core::ethereum_structs::EthBridgeEvent;
+    use namada_ethereum_bridge::event::EthBridgeEvent;
 
     use super::*;
     use crate::events::extend::ComposeEvent;

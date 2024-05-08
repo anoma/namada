@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use namada::core::address::{Address, InternalAddress};
-use namada::core::event::extend::ReadFromEventAttributes;
 use namada::core::key::PublicKey;
 use namada::core::storage::{BlockHeight, Epoch, Key};
 use namada::core::token::Amount;
@@ -56,14 +55,16 @@ use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
+use namada::ibc::event as ibc_events;
+use namada::ibc::event::IbcEventType;
 use namada::ibc::primitives::proto::Any;
 use namada::ibc::primitives::{Signer, ToProto};
-use namada::ibc::{event as ibc_events, IbcEventType};
 use namada::ledger::ibc::storage::*;
 use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
 use namada::ledger::queries::RPC;
 use namada::ledger::storage::ics23_specs::ibc_proof_specs;
+use namada::sdk::events::extend::ReadFromEventAttributes;
 use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
