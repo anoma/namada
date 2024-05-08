@@ -933,10 +933,16 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     TxResult::from_str(tx_result_str)
                         .map_err(|e| Error::Other(e.to_string()))?;
                 let mut changed_keys_vec = BTreeMap::default();
+                let masp_txs = &tx_event.attributes.iter().find_map(|attr| {
+                    (&attr.key == "masp_tx_batch_refs").then_some(&attr.value)
+                });
+                let valid_masp_events: Vec<Hash> = match masp_txs {
+                    Some(tx_refs) => serde_json::from_str(tx_refs)
+                        .map_err(|e| Error::Other(e.to_string()))?,
+                    None => vec![],
+                };
                 for (cmt_hash, cmt_result) in result.batch_results.0 {
-                    if tx_event.attributes.iter().any(|attr| {
-                        attr.key == format!("cmt/{cmt_hash}/is_valid_masp_tx")
-                    }) {
+                    if valid_masp_events.contains(&cmt_hash) {
                         let cmt_result = cmt_result.map_err(|msg| {
                             Error::Other(format!(
                                 "Tx flagged as valid masp but resolved in an \
@@ -970,7 +976,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let is_valid_fee_unshield = tx_event
                     .attributes
                     .iter()
-                    .any(|attr| attr.key == "is_valid_masp_tx");
+                    .any(|attr| attr.key == "is_wrapper_valid_masp_tx");
                 if is_valid_fee_unshield {
                     let masp_transaction = tx
                         .get_section(&hash)
@@ -2680,24 +2686,18 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                 .filter_map(|event| {
                     let tx_index =
                         event.attributes.iter().find_map(|attribute| {
-                            if attribute.key.contains("is_valid_masp_tx") {
-                                Some(TxIndex(
-                                    u32::from_str(&attribute.value).unwrap(),
-                                ))
-                            } else {
-                                None
-                            }
+                            (attribute.key == "masp_tx_block_index").then(
+                                || {
+                                    TxIndex(
+                                        u32::from_str(&attribute.value)
+                                            .unwrap(),
+                                    )
+                                },
+                            )
                         });
-                    match tx_index {
-                        Some(idx) => {
-                            if idx >= first_idx_to_query {
-                                Some((idx, event))
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
-                    }
+                    tx_index
+                        .filter(|idx| idx >= &first_idx_to_query)
+                        .map(|idx| (idx, event))
                 })
                 .collect::<Vec<_>>()
         }))

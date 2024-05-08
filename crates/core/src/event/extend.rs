@@ -110,22 +110,39 @@ impl ExtendEvent for Info {
     }
 }
 
-/// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct ValidMaspTx(pub (usize, Option<Hash>));
+/// Extend an [`Event`] with `masp_tx_block_index` data, indicating that the tx
+/// at the specified index in the block contains a valid masp transaction.
+pub struct MaspTxBlockIndex(pub usize);
 
-impl ExtendEvent for ValidMaspTx {
+impl ExtendEvent for MaspTxBlockIndex {
     #[inline]
     fn extend_event(self, event: &mut Event) {
-        let Self((masp_tx_index, cmt_hash)) = self;
-        let attribute = if let Some(hash) = cmt_hash {
-            format!("cmt/{hash}/is_valid_masp_tx")
-        } else {
-            "is_valid_masp_tx".to_string()
-        };
-        // TODO: should we put the index of the tx in the block at the root
-        // level of the even attributes instead of as the value of the masp
-        // attribute?
-        event[&attribute] = masp_tx_index.to_string();
+        let Self(masp_tx_index) = self;
+        event["masp_tx_block_index"] = masp_tx_index.to_string();
+    }
+}
+
+// TODO: remove when fee unshielding is gone
+/// Extend an [`Event`] with `is_wrapper_valid_masp_tx` data, indicating that
+/// the wrapper tx is a valid masp txs.
+pub struct MaspTxWrapper;
+
+impl ExtendEvent for MaspTxWrapper {
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        event["is_wrapper_valid_masp_tx"] = String::new();
+    }
+}
+
+/// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
+/// inner transactions inside the batch that are valid masp txs.
+pub struct MaspTxBatchRefs(pub Vec<Hash>);
+
+impl ExtendEvent for MaspTxBatchRefs {
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        let Self(ref cmts) = self;
+        event["masp_tx_batch_refs"] = serde_json::to_string(cmts).unwrap();
     }
 }
 

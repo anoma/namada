@@ -921,13 +921,18 @@ impl Client for BenchShell {
                             // Mock the masp and tx attributes
                             attributes: vec![
                                 namada::tendermint::abci::EventAttribute {
-                                    key: format!(
-                                        "cmt/{}/is_valid_masp_tx",
+                                    key: "masp_tx_block_index".to_string(),
+                                    value: format!("{}", idx),
+                                    index: true,
+                                },
+                                namada::tendermint::abci::EventAttribute {
+                                    key: "masp_tx_batch_refs".to_string(),
+                                    value: serde_json::to_string(&vec![
                                         tx.first_commitments()
                                             .unwrap()
-                                            .get_hash()
-                                    ),
-                                    value: format!("{}", idx),
+                                            .get_hash(),
+                                    ])
+                                    .unwrap(),
                                     index: true,
                                 },
                                 namada::tendermint::abci::EventAttribute {

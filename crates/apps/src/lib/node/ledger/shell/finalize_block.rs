@@ -7,7 +7,9 @@ use namada::core::storage::{BlockResults, Epoch, Header};
 use namada::gas::event::WithGasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
-use namada::ledger::events::extend::{ComposeEvent, Height, Info, ValidMaspTx};
+use namada::ledger::events::extend::{
+    ComposeEvent, Height, Info, MaspTxBlockIndex,
+};
 use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
@@ -26,6 +28,7 @@ use namada::tx::event::{Batch, Code};
 use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
+use namada_sdk::event::extend::{MaspTxBatchRefs, MaspTxWrapper};
 
 use super::*;
 use crate::facade::tendermint::abci::types::VoteInfo;
@@ -522,9 +525,8 @@ where
             .map(|args| args.is_committed_fee_unshield)
             .unwrap_or_default()
         {
-            tx_logs
-                .tx_event
-                .extend(ValidMaspTx((tx_data.tx_index, None)));
+            tx_logs.tx_event.extend(MaspTxBlockIndex(tx_data.tx_index));
+            tx_logs.tx_event.extend(MaspTxWrapper);
         }
 
         match dispatch_result {
@@ -791,16 +793,14 @@ impl<'finalize> TempTxLogs {
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
+        let mut masp_event = MaspTxBatchRefs(vec![]);
 
         for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
                         if is_masp_tx(&result.changed_keys) {
-                            self.tx_event.extend(ValidMaspTx((
-                                tx_index,
-                                Some(*cmt_hash),
-                            )));
+                            masp_event.0.push(*cmt_hash);
                         }
                         tracing::trace!(
                             "all VPs accepted inner tx {} storage \
@@ -872,6 +872,13 @@ impl<'finalize> TempTxLogs {
                     flags.is_any_tx_invalid = true;
                 }
             }
+        }
+
+        // If at least one of the inner transactions is a valid masp tx, update
+        // the events
+        if !masp_event.0.is_empty() {
+            self.tx_event.extend(MaspTxBlockIndex(tx_index));
+            self.tx_event.extend(masp_event);
         }
 
         flags
