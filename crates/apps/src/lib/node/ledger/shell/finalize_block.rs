@@ -545,7 +545,7 @@ where
     /// if necessary. Returns a bool indicating if a new epoch began and the
     /// height of the new block.
     fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
-        let height = self.state.in_mem().get_last_block_height() + 1;
+        let height = self.state.in_mem().get_last_block_height().next_height();
 
         self.state
             .in_mem_mut()
@@ -597,7 +597,9 @@ where
         current_epoch: Epoch,
         events: &mut impl EmitEvents,
     ) -> Result<()> {
-        let last_epoch = current_epoch.prev();
+        let last_epoch = current_epoch
+            .prev()
+            .expect("Must have a prev epoch when applying inflation");
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch =
@@ -622,11 +624,9 @@ where
 
         // Take events that may be emitted from PGF
         for event in self.state.write_log_mut().take_events() {
-            events.emit(
-                event.with(Height(
-                    self.state.in_mem().get_last_block_height() + 1,
-                )),
-            );
+            events.emit(event.with(Height(
+                self.state.in_mem().get_last_block_height().next_height(),
+            )));
         }
 
         Ok(())
@@ -1923,7 +1923,8 @@ mod test_finalize_block {
         // The total rewards claimed should be approximately equal to the total
         // minted inflation, minus (unbond_amount / initial_stake) * rewards
         // from the unbond epoch and the following epoch (the missed_rewards)
-        let ratio = Dec::from(unbond_amount) / Dec::from(init_stake);
+        let ratio = Dec::try_from(unbond_amount).unwrap()
+            / Dec::try_from(init_stake).unwrap();
         let lost_rewards = ratio * missed_rewards;
         let uncertainty = Dec::from_str("0.07").unwrap();
         let token_uncertainty = uncertainty * lost_rewards;
@@ -2087,8 +2088,8 @@ mod test_finalize_block {
         ));
 
         // Check that the commission earned is expected
-        let del_stake = Dec::from(del_amount);
-        let tot_stake = Dec::from(init_stake + del_amount);
+        let del_stake = Dec::try_from(del_amount).unwrap();
+        let tot_stake = Dec::try_from(init_stake + del_amount).unwrap();
         let stake_ratio = del_stake / tot_stake;
         let del_rewards_no_commission = stake_ratio * inflation_3;
         let commission = commission_rate * del_rewards_no_commission;
@@ -3592,7 +3593,7 @@ mod test_finalize_block {
         let total_stake =
             read_total_stake(&shell.state, &params, pipeline_epoch)?;
 
-        let expected_slashed = initial_stake.mul_ceil(cubic_rate);
+        let expected_slashed = initial_stake.mul_ceil(cubic_rate).unwrap();
 
         println!(
             "Initial stake = {}\nCubic rate = {}\nExpected slashed = {}\n",
@@ -4115,8 +4116,10 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let vp_frac_3 = Dec::from(val_stake_3) / Dec::from(tot_stake_3);
-        let vp_frac_4 = Dec::from(val_stake_4) / Dec::from(tot_stake_4);
+        let vp_frac_3 = Dec::try_from(val_stake_3).unwrap()
+            / Dec::try_from(tot_stake_3).unwrap();
+        let vp_frac_4 = Dec::try_from(val_stake_4).unwrap()
+            / Dec::try_from(tot_stake_4).unwrap();
         let tot_frac = Dec::two() * vp_frac_3 + vp_frac_4;
         let cubic_rate = std::cmp::min(
             Dec::one(),
@@ -4126,7 +4129,7 @@ mod test_finalize_block {
 
         let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
             let tolerance = Dec::new(1, 9).unwrap();
-            rate1.abs_diff(&rate2) < tolerance
+            rate1.abs_diff(rate2).unwrap() < tolerance
         };
 
         // There should be 2 slashes processed for the validator, each with rate
@@ -4162,7 +4165,8 @@ mod test_finalize_block {
             - del_unbond_1_amount
             + self_bond_1_amount
             - self_unbond_2_amount)
-            .mul_ceil(slash_rate_3);
+            .mul_ceil(slash_rate_3)
+            .unwrap();
         assert!(
             ((pre_stake_10 - post_stake_10).change()
                 - exp_slashed_during_processing_9.change())
@@ -4176,22 +4180,27 @@ mod test_finalize_block {
         // Check that we can compute the stake at the pipeline epoch
         // NOTE: may be off. by 1 namnam due to rounding;
         let exp_pipeline_stake = (Dec::one() - slash_rate_3)
-            * Dec::from(
+            * Dec::try_from(
                 initial_stake + del_1_amount
                     - self_unbond_1_amount
                     - del_unbond_1_amount
                     + self_bond_1_amount
                     - self_unbond_2_amount,
             )
-            + Dec::from(del_2_amount);
+            .unwrap()
+            + Dec::try_from(del_2_amount).unwrap();
 
         assert!(
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
+            exp_pipeline_stake
+                .abs_diff(Dec::try_from(post_stake_10).unwrap())
+                .unwrap()
                 <= Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap(),
             "Expected {}, got {} (with less than 2 err), diff {}",
             exp_pipeline_stake,
             post_stake_10.to_string_native(),
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10)),
+            exp_pipeline_stake
+                .abs_diff(Dec::try_from(post_stake_10).unwrap())
+                .unwrap(),
         );
 
         // Check the balance of the Slash Pool
@@ -4418,6 +4427,7 @@ mod test_finalize_block {
             (self_details.unbonds[1].slashed_amount.unwrap().change()
                 - (self_unbond_2_amount - self_bond_1_amount)
                     .mul_ceil(rate)
+                    .unwrap()
                     .change())
             .abs()
                 <= Uint::from(1)
@@ -4438,7 +4448,7 @@ mod test_finalize_block {
         .unwrap();
 
         let exp_del_withdraw_slashed_amount =
-            del_unbond_1_amount.mul_ceil(slash_rate_3);
+            del_unbond_1_amount.mul_ceil(slash_rate_3).unwrap();
         assert!(
             (del_withdraw
                 - (del_unbond_1_amount - exp_del_withdraw_slashed_amount))

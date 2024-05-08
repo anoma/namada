@@ -9,6 +9,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
@@ -390,7 +391,8 @@ where
     };
 
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
-        if queried_height + past_height_limit < last_committed_height {
+        if checked!(queried_height + past_height_limit)? < last_committed_height
+        {
             return Err(namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(

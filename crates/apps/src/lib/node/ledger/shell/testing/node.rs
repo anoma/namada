@@ -290,12 +290,13 @@ impl MockNode {
                 self.submit_txs(txs);
             }
             MockServiceAction::IncrementEthHeight => {
-                *self
+                let mut height = self
                     .services
                     .ethereum_oracle
                     .next_block_to_process
                     .write()
-                    .await += 1.into();
+                    .await;
+                *height = height.next();
             }
         }
     }

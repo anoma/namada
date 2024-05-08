@@ -141,7 +141,7 @@ impl<'de> Deserialize<'de> for KeccakHash {
         impl<'de> de::Visitor<'de> for KeccakVisitor {
             type Value = KeccakHash;
 
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "a string containing a keccak hash")
             }
 
@@ -185,7 +185,7 @@ mod tests {
         let mut hash = KeccakHash([0; 32]);
 
         for i in 0..32 {
-            hash.0[i] = i as u8;
+            hash.0[i] = u8::try_from(i).unwrap();
         }
 
         let serialized = serde_json::to_string(&hash).unwrap();

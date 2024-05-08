@@ -218,7 +218,7 @@ impl ShouldRelay for CheckNonce {
                 });
 
             let gov_current_epoch = bridge_epoch_fut.await?;
-            if epoch == gov_current_epoch + 1u64 {
+            if epoch == gov_current_epoch.next() {
                 Ok(())
             } else {
                 Err(RelayResult::NonceError {
@@ -694,7 +694,9 @@ where
             })
         });
 
-    let bridge_current_epoch = epoch_to_relay - 1;
+    let bridge_current_epoch = epoch_to_relay
+        .prev()
+        .expect("Epoch to relay must have prev");
     let shell = RPC.shell().eth_bridge();
     let validator_set_args_fut = shell
         .read_bridge_valset(nam_client, &bridge_current_epoch)

@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
 use namada_core::address::Address;
+use namada_core::arith::{self, checked};
 use namada_core::storage::Epoch;
 use namada_core::token;
 use thiserror::Error;
 
 use super::onchain::{PgfFunding, StewardsUpdate};
 
-/// This enum raprresent a proposal data
-#[derive(Clone, Debug, PartialEq, Error)]
+/// This enum represents proposal data
+#[derive(Debug, Error)]
 pub enum ProposalValidation {
     /// The proposal field are correct but there is no signature
     #[error("The proposal is not signed. Can't vote on it")]
@@ -63,6 +64,8 @@ pub enum ProposalValidation {
     /// The pgf funding data is not valid
     #[error("invalid proposal extra data: cannot be empty.")]
     InvalidPgfFundingExtraData,
+    #[error("Arithmetic {0}.")]
+    Arith(arith::Error),
 }
 
 pub fn is_valid_author_balance(
@@ -109,7 +112,9 @@ pub fn is_valid_end_epoch(
 ) -> Result<(), ProposalValidation> {
     let voting_period = proposal_end_epoch.0 - proposal_start_epoch.0;
     let end_epoch_is_multipler =
-        proposal_end_epoch % proposal_epoch_multiplier == 0;
+        checked!(proposal_end_epoch % proposal_epoch_multiplier)
+            .map_err(ProposalValidation::Arith)?
+            == Epoch(0);
     let is_valid_voting_period = voting_period > 0
         && voting_period >= min_proposal_voting_period
         && min_proposal_voting_period <= max_proposal_period;

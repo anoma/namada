@@ -281,7 +281,7 @@ impl RefTo<PublicKey> for SecretKey {
 }
 
 impl Display for SecretKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", HEXLOWER.encode(&self.serialize_to_vec()))
     }
 }

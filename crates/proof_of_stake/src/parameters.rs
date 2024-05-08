@@ -3,6 +3,7 @@
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
@@ -126,6 +127,8 @@ pub enum ValidationError {
     TotalVotingPowerTooLarge(Uint),
     #[error("Votes per token cannot be greater than 1, got {0}")]
     VotesPerTokenGreaterThanOne(Dec),
+    #[error("Liveness threshold cannot be greater than 1, got {0}")]
+    LivenessThresholdGreaterThanOne(Dec),
     #[error("Pipeline length must be >= 2, got {0}")]
     PipelineLenTooShort(u64),
     #[error(
@@ -168,11 +171,14 @@ impl OwnedPosParams {
 
         // Check maximum total voting power cannot get larger than what
         // Tendermint allows
-        let max_total_voting_power = (self.tm_votes_per_token
-            * TOKEN_MAX_AMOUNT
-            * self.max_validator_slots)
-            .to_uint()
-            .expect("Cannot fail");
+        let max_total_voting_power = checked!(
+            self.tm_votes_per_token
+                * TOKEN_MAX_AMOUNT
+                * self.max_validator_slots
+        )
+        .expect("Must be able to calculate max total voting power")
+        .to_uint()
+        .expect("Cannot fail");
         match i64::try_from(max_total_voting_power) {
             Ok(max_total_voting_power_i64) => {
                 if max_total_voting_power_i64 > MAX_TOTAL_VOTING_POWER {
@@ -190,6 +196,12 @@ impl OwnedPosParams {
         if self.tm_votes_per_token > Dec::one() {
             errors.push(ValidationError::VotesPerTokenGreaterThanOne(
                 self.tm_votes_per_token,
+            ))
+        }
+
+        if self.liveness_threshold > Dec::one() {
+            errors.push(ValidationError::LivenessThresholdGreaterThanOne(
+                self.liveness_threshold,
             ))
         }
 
@@ -215,18 +227,20 @@ impl OwnedPosParams {
     ) -> (Epoch, Epoch) {
         let start = infraction_epoch
             .sub_or_default(Epoch(self.cubic_slashing_window_length));
-        let end = infraction_epoch + self.cubic_slashing_window_length;
+        let end =
+            infraction_epoch.unchecked_add(self.cubic_slashing_window_length);
         (start, end)
     }
 
     /// Get the redelegation end epoch from the start epoch
     pub fn redelegation_end_epoch_from_start(&self, end: Epoch) -> Epoch {
-        end + self.pipeline_len
+        end.unchecked_add(self.pipeline_len)
     }
 
     /// Get the redelegation start epoch from the end epoch
     pub fn redelegation_start_epoch_from_end(&self, end: Epoch) -> Epoch {
-        end - self.pipeline_len
+        end.checked_sub(self.pipeline_len)
+            .expect("End epoch is always gt. pipeline")
     }
 
     /// Determine if the infraction is in the lazy slashing window for a
@@ -245,8 +259,8 @@ impl OwnedPosParams {
         redel_start: Epoch,
         redel_end: Epoch,
     ) -> bool {
-        let processing_epoch =
-            infraction_epoch + self.slash_processing_epoch_offset();
+        let processing_epoch = infraction_epoch
+            .unchecked_add(self.slash_processing_epoch_offset());
         redel_start < processing_epoch && infraction_epoch < redel_end
     }
 

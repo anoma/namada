@@ -13,7 +13,6 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_rational::Ratio;
-use num_traits::ops::checked::CheckedAdd;
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -49,7 +48,7 @@ impl EthBridgeVotingPower {
 impl From<u64> for EthBridgeVotingPower {
     #[inline]
     fn from(val: u64) -> Self {
-        Self(val as u128)
+        Self(u128::from(val))
     }
 }
 
@@ -66,21 +65,22 @@ impl TryFrom<u128> for EthBridgeVotingPower {
     }
 }
 
-impl From<&FractionalVotingPower> for EthBridgeVotingPower {
-    fn from(FractionalVotingPower(ratio): &FractionalVotingPower) -> Self {
+impl TryFrom<FractionalVotingPower> for EthBridgeVotingPower {
+    type Error = ();
+
+    fn try_from(ratio: FractionalVotingPower) -> Result<Self, Self::Error> {
+        if ratio > FractionalVotingPower::WHOLE {
+            return Err(());
+        }
         let max_bridge_voting_power = Uint::from(EthBridgeVotingPower::MAX.0);
 
+        let FractionalVotingPower(ratio) = ratio;
+        // Allowed because we're checking that ratio is at most 1
+        #[allow(clippy::arithmetic_side_effects)]
         let voting_power = ratio * max_bridge_voting_power;
         let voting_power = voting_power.round().to_integer().low_u128();
 
-        Self(voting_power)
-    }
-}
-
-impl From<FractionalVotingPower> for EthBridgeVotingPower {
-    #[inline]
-    fn from(ratio: FractionalVotingPower) -> Self {
-        (&ratio).into()
+        Ok(Self(voting_power))
     }
 }
 
@@ -148,18 +148,30 @@ impl FractionalVotingPower {
     pub fn new_u64(numer: u64, denom: u64) -> Result<Self> {
         Self::new(Uint::from_u64(numer), Uint::from_u64(denom))
     }
+
+    /// Multiple with overflow checks.
+    pub fn checked_mul(&self, v: &Self) -> Option<Self> {
+        use num_traits::CheckedMul;
+        Some(Self(self.0.checked_mul(&v.0)?))
+    }
+
+    /// Multiply by `token::Amount` with overflow checks
+    pub fn checked_mul_amount(&self, v: Amount) -> Option<Amount> {
+        if self > &Self::WHOLE {
+            return None;
+        }
+        let whole: Uint = v.into();
+        // Allowed because we're checking that ratio is at most 1
+        #[allow(clippy::arithmetic_side_effects)]
+        let fraction = (self.0 * whole).to_integer();
+        Amount::from_uint(fraction, 0u8).ok()
+    }
 }
 
 impl Default for FractionalVotingPower {
     #[inline(always)]
     fn default() -> Self {
         Self::NULL
-    }
-}
-
-impl From<&FractionalVotingPower> for (Uint, Uint) {
-    fn from(ratio: &FractionalVotingPower) -> Self {
-        (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
     }
 }
 
@@ -173,33 +185,11 @@ impl Mul<FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn mul(self, rhs: FractionalVotingPower) -> Self::Output {
-        self * &rhs
-    }
-}
-
-impl Mul<&FractionalVotingPower> for FractionalVotingPower {
-    type Output = Self;
-
-    fn mul(self, rhs: &FractionalVotingPower) -> Self::Output {
-        Self(self.0 * rhs.0)
-    }
-}
-
-impl Mul<Amount> for FractionalVotingPower {
-    type Output = Amount;
-
-    fn mul(self, rhs: Amount) -> Self::Output {
-        self * &rhs
-    }
-}
-
-impl Mul<&Amount> for FractionalVotingPower {
-    type Output = Amount;
-
-    fn mul(self, &rhs: &Amount) -> Self::Output {
-        let whole: Uint = rhs.into();
-        let fraction = (self.0 * whole).to_integer();
-        Amount::from_uint(fraction, 0u8).unwrap()
+        // Allowed because the ratios are capped at 1
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            Self(self.0 * rhs.0)
+        }
     }
 }
 
@@ -207,14 +197,8 @@ impl Add<FractionalVotingPower> for FractionalVotingPower {
     type Output = Self;
 
     fn add(self, rhs: FractionalVotingPower) -> Self::Output {
-        self + &rhs
-    }
-}
+        use num_traits::CheckedAdd;
 
-impl Add<&FractionalVotingPower> for FractionalVotingPower {
-    type Output = Self;
-
-    fn add(self, rhs: &FractionalVotingPower) -> Self::Output {
         self.0
             .checked_add(&rhs.0)
             .map(Self)
@@ -228,13 +212,17 @@ impl Add<&FractionalVotingPower> for FractionalVotingPower {
 
 impl AddAssign<FractionalVotingPower> for FractionalVotingPower {
     fn add_assign(&mut self, rhs: FractionalVotingPower) {
-        *self = *self + rhs
+        // Allowed because the ratios are capped at 1
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            *self = *self + rhs
+        }
     }
 }
 
-impl AddAssign<&FractionalVotingPower> for FractionalVotingPower {
-    fn add_assign(&mut self, rhs: &FractionalVotingPower) {
-        *self = *self + rhs
+impl From<&FractionalVotingPower> for (Uint, Uint) {
+    fn from(ratio: &FractionalVotingPower) -> Self {
+        (ratio.0.numer().to_owned(), ratio.0.denom().to_owned())
     }
 }
 
@@ -303,7 +291,7 @@ struct VPVisitor;
 impl<'de> Visitor<'de> for VPVisitor {
     type Value = FractionalVotingPower;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(
             "A '/' separated pair of numbers, the second of which is non-zero.",
         )
@@ -339,6 +327,24 @@ impl<'de> Deserialize<'de> for FractionalVotingPower {
         D: Deserializer<'de>,
     {
         deserializer.deserialize_string(VPVisitor)
+    }
+}
+
+/// Helpers for testing with storage types.
+#[cfg(any(test, feature = "testing"))]
+#[allow(clippy::arithmetic_side_effects)]
+pub mod testing {
+    use super::*;
+    use crate::token;
+
+    impl Mul<token::Amount> for FractionalVotingPower {
+        type Output = token::Amount;
+
+        fn mul(self, rhs: token::Amount) -> Self::Output {
+            let whole: Uint = rhs.into();
+            let fraction = (self.0 * whole).to_integer();
+            Amount::from_uint(fraction, 0u8).unwrap()
+        }
     }
 }
 
