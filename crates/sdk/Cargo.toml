@@ -66,6 +66,7 @@ migrations = [
   "namada_storage/migrations",
   "namada_tx/migrations",
   "namada_vote_ext/migrations",
+  "namada_gas/migrations",
   "linkme",
 ]
 
@@ -111,6 +112,7 @@ orion.workspace = true
 owo-colors = "3.5.0"
 parse_duration = "2.1.1"
 paste.workspace = true
+patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand = { workspace = true, optional = true }

@@ -2,7 +2,6 @@ use std::fmt::{Debug, Formatter};
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
 
@@ -15,6 +14,8 @@ use namada::control_flow::time::Duration;
 use namada::core::collections::HashMap;
 use namada::core::ethereum_events::EthereumEvent;
 use namada::core::ethereum_structs;
+use namada::core::event::extend::Height as HeightAttr;
+use namada::core::event::Event;
 use namada::core::hash::Hash;
 use namada::core::key::tm_consensus_key_raw_hash;
 use namada::core::storage::{BlockHeight, Epoch, Header};
@@ -36,6 +37,7 @@ use namada::state::{
 };
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
+use namada::tx::event::Code as CodeAttr;
 use namada_sdk::queries::Client;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
@@ -459,13 +461,10 @@ impl MockNode {
             .events
             .into_iter()
             .map(|e| {
-                let code = ResultCode::from_u32(
-                    e.attributes
-                        .get("code")
-                        .map(|e| u32::from_str(e).unwrap())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
+                let code = e
+                    .read_attribute_opt::<CodeAttr>()
+                    .unwrap()
+                    .unwrap_or_default();
                 if code == ResultCode::Ok {
                     NodeResults::Ok
                 } else {
@@ -585,13 +584,10 @@ impl MockNode {
             .events
             .into_iter()
             .map(|e| {
-                let code = ResultCode::from_u32(
-                    e.attributes
-                        .get("code")
-                        .map(|e| u32::from_str(e).unwrap())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
+                let code = e
+                    .read_attribute_opt::<CodeAttr>()
+                    .unwrap()
+                    .unwrap_or_default();
                 if code == ResultCode::Ok {
                     NodeResults::Ok
                 } else {
@@ -799,57 +795,18 @@ impl<'a> Client for &'a MockNode {
         self.drive_mock_services_bg().await;
         let matcher = parse_tm_query(query);
         let borrowed = self.shell.lock().unwrap();
-        // we store an index into the event log as a block
-        // height in the response of the query... VERY NAISSSE
-        let matching_events = borrowed.event_log().iter().enumerate().flat_map(
-            |(index, event)| {
-                if matcher.matches(event) {
-                    Some(EncodedEvent(index as u64))
-                } else {
-                    None
-                }
-            },
-        );
-        let blocks = matching_events
-            .map(|encoded_event| namada::tendermint_rpc::endpoint::block::Response {
-                block_id: Default::default(),
-                block: namada::tendermint_proto::types::Block {
-                    header: Some(namada::tendermint_proto::types::Header {
-                        version: Some(namada::tendermint_proto::version::Consensus {
-                            block: 0,
-                            app: 0,
-                        }),
-                        chain_id: "Namada".into(),
-                        height: encoded_event.0 as i64,
-                        time: None,
-                        last_block_id: None,
-                        last_commit_hash: vec![],
-                        data_hash: vec![],
-                        validators_hash: vec![],
-                        next_validators_hash: vec![],
-                        consensus_hash: vec![],
-                        app_hash: vec![],
-                        last_results_hash: vec![],
-                        evidence_hash: vec![],
-                        proposer_address: vec![]
 
-                    }),
-                    data: Default::default(),
-                    evidence: Default::default(),
-                    last_commit: Some(namada::tendermint_proto::types::Commit {
-                        height: encoded_event.0 as i64,
-                        round: 0,
-                        block_id: Some(namada::tendermint_proto::types::BlockId {
-                            hash: vec![0u8; 32],
-                            part_set_header: Some(namada::tendermint_proto::types::PartSetHeader {
-                                total: 1,
-                                hash: vec![1; 32],
-                            }),
-                        }),
-                        signatures: vec![],
-                    }),
-                }.try_into().unwrap(),
-            })
+        // we store a hash of some event in the log as a block
+        // height in the response of the query... VERY NAISSSE
+        let matching_events = borrowed.event_log().iter().flat_map(|event| {
+            if matcher.matches(event) {
+                Some(EncodedEvent::encode(event))
+            } else {
+                None
+            }
+        });
+        let blocks = matching_events
+            .map(block_search_response)
             .collect::<Vec<_>>();
 
         Ok(namada::tendermint_rpc::endpoint::block_search::Response {
@@ -868,33 +825,27 @@ impl<'a> Client for &'a MockNode {
     {
         self.drive_mock_services_bg().await;
         let height = height.into();
-        let encoded_event = EncodedEvent(height.value());
         let locked = self.shell.lock().unwrap();
         let events: Vec<_> = locked
             .event_log()
             .iter()
             .flat_map(|event| {
-                if usize::from_str(event.attributes.get("height").unwrap())
-                    .unwrap()
-                    == encoded_event.log_index()
-                {
+                let same_block_height = event
+                    .read_attribute::<HeightAttr>()
+                    .map(|event_height| {
+                        BlockHeight(height.value()) == event_height
+                    })
+                    .unwrap_or(false);
+                let same_encoded_event =
+                    EncodedEvent::encode(event) == EncodedEvent(height.value());
+
+                if same_block_height || same_encoded_event {
                     Some(event)
                 } else {
                     None
                 }
             })
-            .map(|event| namada::tendermint::abci::Event {
-                kind: event.event_type.to_string(),
-                attributes: event
-                    .attributes
-                    .iter()
-                    .map(|(k, v)| namada::tendermint::abci::EventAttribute {
-                        key: k.parse().unwrap(),
-                        value: v.parse().unwrap(),
-                        index: true,
-                    })
-                    .collect(),
-            })
+            .map(|event| namada::tendermint::abci::Event::from(event.clone()))
             .collect();
         let has_events = !events.is_empty();
         Ok(tendermint_rpc::endpoint::block_results::Response {
@@ -980,14 +931,87 @@ fn parse_tm_query(
     }
 }
 
-/// A Namada event log index and event type encoded as
-/// a Tendermint block height.
+/// A Namada event hash encoded as a Tendermint block height.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 struct EncodedEvent(u64);
 
 impl EncodedEvent {
-    /// Get the encoded event log index.
-    const fn log_index(self) -> usize {
-        self.0 as usize
+    /// Encode an event.
+    fn encode(event: &Event) -> Self {
+        use std::hash::{DefaultHasher, Hasher};
+
+        let mut hasher = DefaultHasher::default();
+        borsh::to_writer(HasherWriter(&mut hasher), event).unwrap();
+
+        Self(hasher.finish())
+    }
+}
+
+/// Hasher that implements [`std::io::Write`].
+struct HasherWriter<H>(H);
+
+impl<H> std::io::Write for HasherWriter<H>
+where
+    H: std::hash::Hasher,
+{
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        std::hash::Hasher::write(&mut self.0, buf);
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[inline]
+fn block_search_response(
+    encoded_event: EncodedEvent,
+) -> namada::tendermint_rpc::endpoint::block::Response {
+    namada::tendermint_rpc::endpoint::block::Response {
+        block_id: Default::default(),
+        block: namada::tendermint_proto::types::Block {
+            header: Some(namada::tendermint_proto::types::Header {
+                version: Some(namada::tendermint_proto::version::Consensus {
+                    block: 0,
+                    app: 0,
+                }),
+                chain_id: String::new(),
+                // NB: this is the only field that matters to us,
+                // everything else is junk
+                height: encoded_event.0 as i64,
+                time: None,
+                last_block_id: None,
+                last_commit_hash: vec![],
+                data_hash: vec![],
+                validators_hash: vec![],
+                next_validators_hash: vec![],
+                consensus_hash: vec![],
+                app_hash: vec![],
+                last_results_hash: vec![],
+                evidence_hash: vec![],
+                proposer_address: vec![],
+            }),
+            data: Default::default(),
+            evidence: Default::default(),
+            last_commit: Some(namada::tendermint_proto::types::Commit {
+                height: encoded_event.0 as i64,
+                round: 0,
+                block_id: Some(namada::tendermint_proto::types::BlockId {
+                    hash: vec![0u8; 32],
+                    part_set_header: Some(
+                        namada::tendermint_proto::types::PartSetHeader {
+                            total: 1,
+                            hash: vec![1; 32],
+                        },
+                    ),
+                }),
+                signatures: vec![],
+            }),
+        }
+        .try_into()
+        .unwrap(),
     }
 }
