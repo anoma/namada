@@ -90,6 +90,8 @@ pub struct ResponseQuery<T> {
     pub info: String,
     /// Optional proof - used for storage value reads which request `prove`
     pub proof: Option<ProofOps>,
+    /// Block height from which data was derived
+    pub height: BlockHeight,
 }
 
 /// [`ResponseQuery`] with borsh-encoded `data` field

@@ -421,6 +421,7 @@ where
                 data: value,
                 proof,
                 info: Default::default(),
+                height: queried_height,
             })
         }
         (None, _gas) => {
@@ -437,6 +438,7 @@ where
                 data: vec![],
                 proof,
                 info: format!("No value found for key: {}", storage_key),
+                height: queried_height,
             })
         }
     }
@@ -461,20 +463,17 @@ where
         })
         .collect();
     let data = data?;
+    let queried_height = {
+        let height: BlockHeight = request.height.into();
+        let is_last_height_query = height.0 == 0;
+
+        if hints::likely(is_last_height_query) {
+            ctx.state.in_mem().get_last_block_height()
+        } else {
+            height
+        }
+    };
     let proof = if request.prove {
-        let queried_height = {
-            let last_committed_height =
-                ctx.state.in_mem().get_last_block_height();
-
-            let height: BlockHeight = request.height.into();
-            let is_last_height_query = height.0 == 0;
-
-            if hints::likely(is_last_height_query) {
-                last_committed_height
-            } else {
-                height
-            }
-        };
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
@@ -493,6 +492,7 @@ where
     Ok(EncodedResponseQuery {
         data,
         proof,
+        height: queried_height,
         ..Default::default()
     })
 }
