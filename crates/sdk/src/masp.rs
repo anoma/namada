@@ -50,7 +50,7 @@ use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
 #[cfg(not(feature = "testing"))]
 use masp_proofs::sapling::SaplingVerificationContext;
-use namada_core::address::{Address, MASP};
+use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
@@ -69,23 +69,16 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::data::TxResult;
-use namada_tx::event::InnerTx as InnerTxAttr;
 use namada_tx::Tx;
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
 use thiserror::Error;
-use token::storage_key::{balance_key, is_any_shielded_action_balance_key};
-use token::Amount;
 
 use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::queries::Client;
-use crate::rpc::{
-    query_block, query_conversion, query_denom, query_epoch_at_height,
-    query_native_token,
-};
+use crate::rpc::{query_block, query_conversion, query_denom};
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
@@ -111,16 +104,10 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<
-    IndexedTx,
-    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
->;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (
-    IndexedTx,
-    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
-);
+pub type IndexedNoteEntry = (IndexedTx, Transaction);
 
 /// Shielded transfer
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
@@ -159,8 +146,8 @@ pub enum TransferErr {
 
 #[derive(Debug, Clone)]
 struct ExtractedMaspTx {
-    fee_unshielding: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
-    inner_tx: Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
+    fee_unshielding: Option<Transaction>,
+    inner_tx: Option<Transaction>,
 }
 
 /// MASP verifying keys
@@ -619,9 +606,6 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     pub div_map: HashMap<usize, Diversifier>,
     /// Maps note positions to their witness (used to make merkle paths)
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
-    /// Tracks what each transaction does to various account balances
-    pub delta_map:
-        BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)>,
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
@@ -652,7 +636,6 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             div_map: HashMap::default(),
             witness_map: HashMap::default(),
             spents: HashSet::default(),
-            delta_map: BTreeMap::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
             unscanned: Default::default(),
@@ -754,7 +737,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             self.vk_heights.entry(*vk).or_default();
         }
         let _ = self.save().await;
-        let native_token = query_native_token(client).await?;
         // the latest block height which has been added to the witness Merkle
         // tree
         let Some(least_idx) = self.vk_heights.values().min().cloned() else {
@@ -780,7 +762,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let _ = self.save().await;
 
         let txs = logger.scan(self.unscanned.clone());
-        for (indexed_tx, (epoch, tx, stx)) in txs {
+        for (indexed_tx, stx) in txs {
             if Some(indexed_tx) > last_witnessed_tx {
                 self.update_witness_map(indexed_tx, &stx)?;
             }
@@ -790,14 +772,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .iter_mut()
                 .filter(|(_vk, h)| **h < Some(indexed_tx))
             {
-                self.scan_tx(
-                    indexed_tx,
-                    epoch,
-                    &tx,
-                    &stx,
-                    vk,
-                    native_token.clone(),
-                )?;
+                self.scan_tx(indexed_tx, &stx, vk)?;
                 *h = Some(indexed_tx);
             }
             // possibly remove unneeded elements from the cache.
@@ -833,16 +808,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             if self.unscanned.contains_height(height) {
                 continue;
             }
-            // Get the valid masp transactions at the specified height
-            let epoch = query_epoch_at_height(client, height.into())
-                .await?
-                .ok_or_else(|| {
-                    Error::from(QueryError::General(
-                        "Queried height is greater than the last committed \
-                         block height"
-                            .to_string(),
-                    ))
-                })?;
 
             let txs_results = match get_indexed_masp_events_at_height(
                 client,
@@ -867,32 +832,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for (idx, tx_event) in txs_results {
+            for idx in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let ExtractedMaspTx {
                     fee_unshielding,
                     inner_tx,
-                } = Self::extract_masp_tx(&tx, &tx_event, true).await?;
+                } = Self::extract_masp_tx(&tx, true).await?;
                 // Collect the current transaction(s)
-                fee_unshielding.and_then(|(changed_keys, masp_transaction)| {
+                fee_unshielding.and_then(|masp_transaction| {
                     shielded_txs.insert(
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: true,
                         },
-                        (epoch, changed_keys, masp_transaction),
+                        masp_transaction,
                     )
                 });
-                inner_tx.and_then(|(changed_keys, masp_transaction)| {
+                inner_tx.and_then(|masp_transaction| {
                     shielded_txs.insert(
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: false,
                         },
-                        (epoch, changed_keys, masp_transaction),
+                        masp_transaction,
                     )
                 });
             }
@@ -904,20 +869,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Extract the relevant shield portions of a [`Tx`], if any.
     async fn extract_masp_tx(
         tx: &Tx,
-        tx_event: &crate::tendermint::abci::Event,
         check_header: bool,
     ) -> Result<ExtractedMaspTx, Error> {
-        // We use the changed keys instead of the Transfer object
-        // because those are what the masp validity predicate works on
-        let (wrapper_changed_keys, changed_keys) = {
-            let result =
-                InnerTxAttr::read_from_event_attributes(&tx_event.attributes)
-                    .map_err(|err| {
-                    Error::Other(format!("Failed to extract masp tx: {err}"))
-                })?;
-            (result.wrapper_changed_keys, result.changed_keys)
-        };
-
         let tx_header = tx.header();
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
@@ -941,7 +894,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     Error::Other("Missing masp transaction".to_string())
                 })?;
 
-            Some((wrapper_changed_keys, masp_transaction))
+            Some(masp_transaction)
         } else {
             None
         };
@@ -951,17 +904,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .data()
             .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
         let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-            Ok(transfer) => Some((changed_keys, transfer)),
+            Ok(transfer) => Some(transfer),
             Err(_) => {
                 // This should be a MASP over IBC transaction, it
                 // could be a ShieldedTransfer or an Envelope
                 // message, need to try both
-                extract_payload_from_shielded_action(&tx_data, tx_event)
-                    .await
-                    .ok()
+                extract_payload_from_shielded_action(&tx_data).await.ok()
             }
         }
-        .map(|(changed_keys, transfer)| {
+        .map(|transfer| {
             if let Some(hash) = transfer.shielded {
                 let masp_tx = tx
                     .get_section(&hash)
@@ -975,7 +926,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         Error::Other("Missing masp transaction".to_string())
                     })?;
 
-                Ok::<_, Error>(Some((changed_keys, masp_tx)))
+                Ok::<_, Error>(Some(masp_tx))
             } else {
                 Ok(None)
             }
@@ -1000,11 +951,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub fn scan_tx(
         &mut self,
         indexed_tx: IndexedTx,
-        epoch: Epoch,
-        tx_changed_keys: &BTreeSet<namada_core::storage::Key>,
         shielded: &Transaction,
         vk: &ViewingKey,
-        native_token: Address,
     ) -> Result<(), Error> {
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
@@ -1090,153 +1038,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 })?;
             }
         }
-        // Record the changes to the transparent accounts
-        let mut transfer_delta = TransferDelta::new();
 
-        let balance_keys: Vec<_> = tx_changed_keys
-            .iter()
-            .filter_map(is_any_shielded_action_balance_key)
-            .collect();
-        let (source, token, amount) = match shielded.transparent_bundle() {
-            Some(transp_bundle) => {
-                // Shielding/Unshielding transfer
-                match (transp_bundle.vin.len(), transp_bundle.vout.len()) {
-                    (0, 0) => {
-                        return Err(Error::Other(
-                            "Expected shielding/unshielding transaction"
-                                .to_string(),
-                        ));
-                    }
-                    (_, 0) => {
-                        // Shielding, only if we are syncing. If in
-                        // speculative context do not update
-                        if let ContextSyncStatus::Confirmed = self.sync_status {
-                            let addresses = balance_keys
-                                .iter()
-                                .find(|addresses| {
-                                    if addresses[1] != &MASP {
-                                        let transp_addr_commit =
-                                            TransparentAddress(
-                                                ripemd::Ripemd160::digest(
-                                                    sha2::Sha256::digest(
-                                                        &addresses[1]
-                                                            .serialize_to_vec(),
-                                                    ),
-                                                )
-                                                .into(),
-                                            );
-                                        // Vins contain the same address, so we
-                                        // can
-                                        // just examine the first one
-                                        transp_bundle.vin.first().is_some_and(
-                                            |vin| {
-                                                vin.address
-                                                    == transp_addr_commit
-                                            },
-                                        )
-                                    } else {
-                                        false
-                                    }
-                                })
-                                .ok_or_else(|| {
-                                    Error::Other(
-                                        "Could not find source of MASP tx"
-                                            .to_string(),
-                                    )
-                                })?;
-
-                            let amount = transp_bundle
-                                .vin
-                                .iter()
-                                .fold(Amount::zero(), |acc, vin| {
-                                    acc + Amount::from_u64(vin.value)
-                                });
-
-                            (
-                                addresses[1].to_owned(),
-                                addresses[0].to_owned(),
-                                amount,
-                            )
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    (0, _) => {
-                        // Unshielding
-                        let token = balance_keys
-                            .iter()
-                            .find(|addresses| {
-                                if addresses[1] != &MASP {
-                                    let transp_addr_commit = TransparentAddress(
-                                        ripemd::Ripemd160::digest(
-                                            sha2::Sha256::digest(
-                                                &addresses[1]
-                                                    .serialize_to_vec(),
-                                            ),
-                                        )
-                                        .into(),
-                                    );
-
-                                    // Vouts contain the same address, so we
-                                    // can
-                                    // just examine the first one
-                                    transp_bundle.vout.first().is_some_and(
-                                        |vout| {
-                                            vout.address == transp_addr_commit
-                                        },
-                                    )
-                                } else {
-                                    false
-                                }
-                            })
-                            .ok_or_else(|| {
-                                Error::Other(
-                                    "Could not find target of MASP tx"
-                                        .to_string(),
-                                )
-                            })?[0];
-
-                        let amount = transp_bundle
-                            .vout
-                            .iter()
-                            .fold(Amount::zero(), |acc, vout| {
-                                acc + Amount::from_u64(vout.value)
-                            });
-                        (MASP, token.to_owned(), amount)
-                    }
-                    (_, _) => {
-                        return Err(Error::Other(
-                            "MASP transaction cannot contain both transparent \
-                             inputs and outputs"
-                                .to_string(),
-                        ));
-                    }
-                }
-            }
-            None => {
-                // Shielded transfer
-                (MASP, native_token, Amount::zero())
-            }
-        };
-
-        transfer_delta.insert(
-            source,
-            MaspChange {
-                asset: token,
-                change: -amount.change(),
-            },
-        );
-        self.delta_map
-            .insert(indexed_tx, (epoch, transfer_delta, transaction_delta));
         Ok(())
-    }
-
-    /// Summarize the effects on shielded and transparent accounts of each
-    /// Transfer in this context
-    pub fn get_tx_deltas(
-        &self,
-    ) -> &BTreeMap<IndexedTx, (Epoch, TransferDelta, TransactionDelta)> {
-        &self.delta_map
     }
 
     /// Compute the total unspent notes associated with the viewing key in the
@@ -2161,9 +1964,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(
-                    context, &masp_tx, source, target, token, epoch,
-                )
+                .pre_cache_transaction(context, &masp_tx)
                 .await?;
         }
 
@@ -2176,30 +1977,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     // Updates the internal state with the data of the newly generated
-    // transaction. More specifically invalidate the spent notes and the
-    // transparent balances, but do not cache the newly produced output
-    // descriptions and therefore the merkle tree
+    // transaction. More specifically invalidate the spent notes, but do not
+    // cache the newly produced output descriptions and therefore the merkle
+    // tree
     async fn pre_cache_transaction(
         &mut self,
         context: &impl Namada,
         masp_tx: &Transaction,
-        source: &TransferSource,
-        target: &TransferTarget,
-        token: &Address,
-        epoch: Epoch,
     ) -> Result<(), Error> {
-        // Need to mock the changed balance keys
-        let mut changed_balance_keys = BTreeSet::default();
-        match (source.effective_address(), target.effective_address()) {
-            // Shielded transactions don't write balance keys
-            (MASP, MASP) => (),
-            (source, target) => {
-                changed_balance_keys.insert(balance_key(token, &source));
-                changed_balance_keys.insert(balance_key(token, &target));
-            }
-        }
-
-        let native_token = query_native_token(context.client()).await?;
         let vks: Vec<_> = context
             .wallet()
             .await
@@ -2226,14 +2011,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in vks {
             self.vk_heights.entry(vk).or_default();
 
-            self.scan_tx(
-                indexed_tx,
-                epoch,
-                &changed_balance_keys,
-                masp_tx,
-                &vk,
-                native_token.clone(),
-            )?;
+            self.scan_tx(indexed_tx, masp_tx, &vk)?;
         }
         // Save the speculative state for future usage
         self.save().await.map_err(|e| Error::Other(e.to_string()))?;
@@ -2301,14 +2079,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 }
 
-// Retrieves all the indexes and tx events at the specified height which refer
+// Retrieves all the indexes at the specified height which refer
 // to a valid masp transaction. If an index is given, it filters only the
 // transactions with an index equal or greater to the provided one.
 async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, crate::tendermint::abci::Event)>>, Error> {
+) -> Result<Option<Vec<TxIndex>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2326,7 +2104,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                     .ok()?;
 
                     if tx_index >= first_idx_to_query {
-                        Some((tx_index, event))
+                        Some(tx_index)
                     } else {
                         None
                     }
@@ -2335,61 +2113,34 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         }))
 }
 
-// Extract the changed keys and Transaction hash from a masp over ibc message
+// Extract the Transaction hash from a masp over ibc message
 async fn extract_payload_from_shielded_action(
     tx_data: &[u8],
-    tx_event: &crate::tendermint::abci::Event,
-) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
+) -> Result<Transfer, Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let result = match message {
-        IbcMessage::Transfer(msg) => {
-            let tx_result = get_tx_result(tx_event)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
-        IbcMessage::NftTransfer(msg) => {
-            let tx_result = get_tx_result(tx_event)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
-        IbcMessage::RecvPacket(msg) => {
-            let tx_result = get_tx_result(tx_event)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
+        IbcMessage::Transfer(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
+        IbcMessage::NftTransfer(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
+        IbcMessage::RecvPacket(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
         IbcMessage::AckPacket(msg) => {
             // Refund tokens by the ack message
-            let tx_result = get_tx_result(tx_event)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
+            msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
+            })?
         }
         IbcMessage::Timeout(msg) => {
             // Refund tokens by the timeout message
-            let tx_result = get_tx_result(tx_event)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
+            msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
+            })?
         }
         IbcMessage::Envelope(_) => {
             return Err(Error::Other(
@@ -2399,14 +2150,6 @@ async fn extract_payload_from_shielded_action(
     };
 
     Ok(result)
-}
-
-fn get_tx_result(
-    tx_event: &crate::tendermint::abci::Event,
-) -> Result<TxResult, Error> {
-    InnerTxAttr::read_from_event_attributes(&tx_event.attributes).map_err(
-        |err| Error::Other(format!("Failed to parse tx result: {err}")),
-    )
 }
 
 mod tests {
