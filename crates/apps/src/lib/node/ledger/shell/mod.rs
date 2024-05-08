@@ -35,10 +35,10 @@ use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::chain::ChainId;
 use namada::core::ethereum_events::EthereumEvent;
+use namada::core::hints;
 use namada::core::key::*;
 use namada::core::storage::{BlockHeight, Key, TxIndex};
 use namada::core::time::DateTimeUtc;
-use namada::core::{address, hints};
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -416,7 +416,7 @@ where
             any(test, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
-        let native_token = address::testing::nam();
+        let native_token = namada::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
             any(test, feature = "testing", feature = "benches"),
@@ -1958,7 +1958,6 @@ mod test_utils {
 mod shell_tests {
     use namada::core::storage::Epoch;
     use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::Fee;
@@ -1966,6 +1965,7 @@ mod shell_tests {
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
+    use namada::{address, replay_protection};
 
     use super::*;
     use crate::node::ledger::shell::token::DenominatedAmount;
