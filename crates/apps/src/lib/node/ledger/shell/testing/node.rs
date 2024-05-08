@@ -764,6 +764,7 @@ impl<'a> Client for &'a MockNode {
     {
         self.drive_mock_services_bg().await;
         let mut resp = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
+            codespace: Default::default(),
             code: Default::default(),
             data: Default::default(),
             log: Default::default(),

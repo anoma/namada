@@ -277,14 +277,13 @@ pub enum Error {
 /// denom.
 pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
     let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
-    if prefixed_denom.trace_path.is_empty() {
+    let base_denom = prefixed_denom.base_denom.to_string();
+    if prefixed_denom.trace_path.is_empty() || base_denom.contains('/') {
+        // The denom is just a token or an NFT trace
         return None;
     }
     // The base token isn't decoded because it could be non Namada token
-    Some((
-        prefixed_denom.trace_path,
-        prefixed_denom.base_denom.to_string(),
-    ))
+    Some((prefixed_denom.trace_path, base_denom))
 }
 
 /// Returns the trace path and the token string if the trace is an NFT one
