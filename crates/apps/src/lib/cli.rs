@@ -2274,21 +2274,22 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct FetchWasms(pub args::FetchWasms);
+    pub struct FetchWasms;
 
     impl SubCmd for FetchWasms {
         const CMD: &'static str = "fetch-wasms";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::FetchWasms::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|_| Self)
         }
 
         fn def() -> App {
-            App::new(Self::CMD)
-                .about("Ensure pre-built wasms are present")
-                .add_args::<args::FetchWasms>()
+            use crate::wasm_loader::ENV_VAR_WASM_SERVER;
+
+            App::new(Self::CMD).about(format!(
+                "Download pre-built wasms from a remote server, configurable \
+                 via {ENV_VAR_WASM_SERVER}"
+            ))
         }
     }
 
@@ -7226,22 +7227,6 @@ pub mod args {
 
         fn def(app: App) -> App {
             app
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct FetchWasms {
-        pub chain_id: ChainId,
-    }
-
-    impl Args for FetchWasms {
-        fn parse(matches: &ArgMatches) -> Self {
-            let chain_id = CHAIN_ID.parse(matches);
-            Self { chain_id }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
         }
     }
 
