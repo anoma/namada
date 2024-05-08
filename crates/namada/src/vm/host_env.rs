@@ -51,6 +51,8 @@ use crate::vm::{HostRef, MutHostRef};
 pub enum TxRuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
+    #[error("Gas overflow")]
+    GasOverflow,
     #[error("Trying to modify storage for an address that doesn't exit {0}")]
     UnknownAddressStorageModification(Address),
     #[error(
@@ -1035,7 +1037,10 @@ where
     let event: Event = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
-    let gas = state.write_log_mut().emit_event(event);
+    let gas = state
+        .write_log_mut()
+        .emit_event(event)
+        .ok_or(TxRuntimeError::GasOverflow)?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)
 }
 

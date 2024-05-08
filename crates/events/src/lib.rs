@@ -451,7 +451,8 @@ impl Event {
         self
     }
 
-    /// Compute the gas cost of emitting this event.
+    /// Compute the gas cost of emitting this event. Returns `None` on u64
+    /// overflow.
     #[inline]
     pub fn emission_gas_cost(&self, cost_per_byte: u64) -> Option<u64> {
         let len = self.attributes.iter().try_fold(0_usize, |acc, (k, v)| {

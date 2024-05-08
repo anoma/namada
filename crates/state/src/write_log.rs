@@ -411,15 +411,18 @@ impl WriteLog {
         (addr, gas)
     }
 
-    /// Set an event and return the gas cost.
-    pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> u64 {
+    /// Set an event and return the gas cost. Returns `None` on gas u64
+    /// overflow.
+    pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> Option<u64> {
         let event = event.into();
         let gas_cost = event.emission_gas_cost(MEMORY_ACCESS_GAS_PER_BYTE);
-        let event_type = event.kind().to_string();
-        if !self.events.tree.contains_key(&event_type) {
-            self.events.tree.insert(&event_type, HashSet::new());
+        if gas_cost.as_ref().is_some() {
+            let event_type = event.kind().to_string();
+            if !self.events.tree.contains_key(&event_type) {
+                self.events.tree.insert(&event_type, HashSet::new());
+            }
+            self.events.tree.get_mut(&event_type).unwrap().insert(event);
         }
-        self.events.tree.get_mut(&event_type).unwrap().insert(event);
         gas_cost
     }
 
