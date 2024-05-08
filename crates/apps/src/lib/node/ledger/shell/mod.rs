@@ -1056,7 +1056,17 @@ where
                 }
 
                 // Tx gas limit
-                let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The wrapper gas limit overflowed gas \
+                                        representation"
+                            .to_owned();
+                        return response;
+                    }
+                };
+                let mut gas_meter = TxGasMeter::new(gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ResultCode::TxGasLimit.into();
                     response.log = "{INVALID_MSG}: Wrapper transaction \
@@ -1068,7 +1078,8 @@ where
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
-                );
+                )
+                .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ResultCode::AllocationError.into();
                     response.log = "{INVALID_MSG}: Wrapper transaction \

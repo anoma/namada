@@ -58,8 +58,9 @@ mod dry_run_tx {
         // Wrapper dry run to allow estimating the gas cost of a transaction
         let tx_gas_meter = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
-                let tx_gas_meter =
-                    RefCell::new(TxGasMeter::new(wrapper.gas_limit.to_owned()));
+                let gas_limit =
+                    Gas::try_from(wrapper.gas_limit).into_storage_result()?;
+                let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
                 protocol::apply_wrapper_tx(
                     tx.clone(),
                     &wrapper,
@@ -83,18 +84,22 @@ mod dry_run_tx {
             TxType::Protocol(_) => {
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
-                TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
-                ))
+                let max_block_gas =
+                    namada_parameters::get_max_block_gas(ctx.state)?;
+                let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
+                    .into_storage_result()?;
+                TxGasMeter::new(gas_limit)
             }
             TxType::Raw => {
                 // Cast tx to a decrypted for execution
 
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
-                TxGasMeter::new(GasLimit::from(
-                    namada_parameters::get_max_block_gas(ctx.state).unwrap(),
-                ))
+                let max_block_gas =
+                    namada_parameters::get_max_block_gas(ctx.state)?;
+                let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
+                    .into_storage_result()?;
+                TxGasMeter::new(gas_limit)
             }
         };
 

@@ -126,11 +126,18 @@ pub mod wrapper_tx {
         }
     }
 
-    impl From<GasLimit> for Gas {
-        // Derive a Gas instance with a sub amount which is exactly a whole
-        // amount since the limit represents gas in whole units
-        fn from(value: GasLimit) -> Self {
-            Self::from_whole_units(u64::from(value))
+    impl TryFrom<GasLimit> for Gas {
+        type Error = std::io::Error;
+
+        /// Derive a Gas instance with a sub amount which is exactly a whole
+        /// amount since the limit represents gas in whole units
+        fn try_from(value: GasLimit) -> Result<Self, Self::Error> {
+            Self::from_whole_units(u64::from(value)).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "gas overflow",
+                )
+            })
         }
     }
 

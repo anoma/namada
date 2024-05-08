@@ -214,7 +214,23 @@ where
                     TxType::Wrapper(wrapper) => {
                         stats.increment_wrapper_txs();
                         let tx_event = new_tx_event(&tx, height.0);
-                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                            Ok(value) => value,
+                            Err(_) => {
+                                response.events.emit(
+                                    new_tx_event(&tx, height.0)
+                                        .with(Code(ResultCode::InvalidTx))
+                                        .with(Info(
+                                            "The wrapper gas limit overflowed \
+                                             gas representation"
+                                                .to_owned(),
+                                        ))
+                                        .with(GasUsed(0.into())),
+                                );
+                                continue;
+                            }
+                        };
+                        let gas_meter = TxGasMeter::new(gas_limit);
                         if let Some(code_sec) = tx
                             .get_section(tx.code_sechash())
                             .and_then(|x| Section::code_sec(x.as_ref()))

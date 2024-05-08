@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
-use namada::gas::TxGasMeter;
+use namada::gas::{Gas, TxGasMeter};
 use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
@@ -288,7 +288,8 @@ where
     tx.validate_tx().map_err(|_| ())?;
     if let TxType::Wrapper(wrapper) = tx.header().tx_type {
         // Check tx gas limit for tx size
-        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+        let gas_limit = Gas::try_from(wrapper.gas_limit).map_err(|_| ())?;
+        let mut tx_gas_meter = TxGasMeter::new(gas_limit);
         tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
         super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
