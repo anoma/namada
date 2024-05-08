@@ -536,7 +536,6 @@ mod test_process_proposal {
     use namada::eth_bridge::storage::eth_bridge_queries::{
         is_bridge_comptime_enabled, EthBridgeQueries,
     };
-    use namada::replay_protection;
     use namada::state::StorageWrite;
     use namada::token::{read_denom, Amount, DenominatedAmount};
     use namada::tx::data::Fee;
@@ -544,6 +543,7 @@ mod test_process_proposal {
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
+    use namada::{address, replay_protection};
 
     use super::*;
     use crate::node::ledger::shell::test_utils::{
