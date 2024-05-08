@@ -16,10 +16,14 @@ use namada_core::ibc::core::host::types::path::{
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
-use namada_state::{StorageRead, StorageResult};
+use namada_events::{EmitEvents, EventLevel};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
+use namada_token as token;
+use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::event::TOKEN_EVENT_DESCRIPTOR;
 use crate::parameters::IbcParameters;
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
@@ -49,6 +53,64 @@ pub enum Error {
 
 /// IBC storage functions result
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Mint tokens, and emit an IBC token mint event.
+pub fn mint_tokens<S>(
+    state: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite + EmitEvents,
+{
+    token::mint_tokens(
+        state,
+        &Address::Internal(InternalAddress::Ibc),
+        token,
+        target,
+        amount,
+    )?;
+
+    state.emit(TokenEvent {
+        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
+        level: EventLevel::Tx,
+        token: token.clone(),
+        operation: TokenOperation::Mint {
+            amount: amount.into(),
+            post_balance: token::read_balance(state, token, target)?.into(),
+            target_account: UserAccount::Internal(target.clone()),
+        },
+    });
+
+    Ok(())
+}
+
+/// Burn tokens, and emit an IBC token burn event.
+pub fn burn_tokens<S>(
+    state: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite + EmitEvents,
+{
+    token::burn_tokens(state, token, target, amount)?;
+
+    state.emit(TokenEvent {
+        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
+        level: EventLevel::Tx,
+        token: token.clone(),
+        operation: TokenOperation::Burn {
+            amount: amount.into(),
+            post_balance: token::read_balance(state, token, target)?.into(),
+            target_account: UserAccount::Internal(target.clone()),
+        },
+    });
+
+    Ok(())
+}
 
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {

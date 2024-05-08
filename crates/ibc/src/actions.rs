@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_core::address::{Address, InternalAddress};
+use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
@@ -13,7 +13,7 @@ use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::ibc::MsgTransfer;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
-use namada_events::EventTypeBuilder;
+use namada_events::{EmitEvents, EventTypeBuilder};
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
@@ -24,14 +24,13 @@ use namada_token as token;
 use token::DenominatedAmount;
 
 use crate::event::IbcEvent;
-use crate::{IbcActions, IbcCommonContext, IbcStorageContext};
+use crate::{
+    storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
+};
 
 /// IBC protocol context
 #[derive(Debug)]
-pub struct IbcProtocolContext<'a, S>
-where
-    S: State,
-{
+pub struct IbcProtocolContext<'a, S> {
     state: &'a mut S,
 }
 
@@ -165,9 +164,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self, token, target, amount)?;
-        let minter_key = token::storage_key::minter_key(token);
-        self.write(&minter_key, Address::Internal(InternalAddress::Ibc))
+        ibc_storage::mint_tokens(self, target, token, amount)
     }
 
     fn burn_token(
@@ -176,7 +173,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self, token, target, amount)
+        ibc_storage::burn_tokens(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -193,7 +190,7 @@ where
 
 impl<S> IbcStorageContext for IbcProtocolContext<'_, S>
 where
-    S: State,
+    S: State + EmitEvents,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
         self.state.write_log_mut().emit_event(event);
@@ -243,10 +240,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self.state, token, target, amount)?;
-        let minter_key = token::storage_key::minter_key(token);
-        self.state
-            .write(&minter_key, Address::Internal(InternalAddress::Ibc))
+        ibc_storage::mint_tokens(self.state, target, token, amount)
     }
 
     /// Burn token
@@ -256,7 +250,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self.state, token, target, amount)
+        ibc_storage::burn_tokens(self.state, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -264,7 +258,10 @@ where
     }
 }
 
-impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where S: State {}
+impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where
+    S: State + EmitEvents
+{
+}
 
 /// Transfer tokens over IBC
 pub fn transfer_over_ibc<D, H>(

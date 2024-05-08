@@ -6,6 +6,7 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
+use namada_events::{EmitEvents, EventToEmit};
 use namada_parameters::EpochDuration;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
@@ -1087,6 +1088,30 @@ where
     }
 }
 
+impl<D, H> EmitEvents for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: EventToEmit,
+    {
+        self.write_log_mut().emit_event(event);
+    }
+
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: EventToEmit,
+    {
+        for event in event_batch {
+            self.emit(event.into());
+        }
+    }
+}
+
 impl<D, H> WithConversionState for FullAccessState<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
@@ -1139,6 +1164,30 @@ where
         &mut self,
     ) -> (&mut WriteLog, &InMemory<Self::H>, &Self::D) {
         (&mut self.write_log, &self.in_mem, &self.db)
+    }
+}
+
+impl<D, H> EmitEvents for WlState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: EventToEmit,
+    {
+        self.write_log_mut().emit_event(event);
+    }
+
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: EventToEmit,
+    {
+        for event in event_batch {
+            self.emit(event.into());
+        }
     }
 }
 

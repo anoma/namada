@@ -23,8 +23,10 @@ use namada::proof_of_stake::storage::{
     read_total_active_stake, validator_state_handle,
 };
 use namada::proof_of_stake::types::{BondId, ValidatorState};
-use namada::sdk::events::EmitEvents;
+use namada::sdk::events::{EmitEvents, EventLevel};
 use namada::state::StorageWrite;
+use namada::token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada::token::read_balance;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
 
@@ -171,6 +173,7 @@ where
                         let native_token = &shell.state.get_native_token()?;
                         let _result = execute_pgf_funding_proposal(
                             &mut shell.state,
+                            events,
                             native_token,
                             payments,
                             id,
@@ -189,11 +192,17 @@ where
 
                 // Take events that could have been emitted by PGF
                 // over IBC, governance proposal execution, etc
-                for event in shell.state.write_log_mut().take_events() {
-                    events.emit(event.with(Height(
-                        shell.state.in_mem().get_last_block_height() + 1,
-                    )));
-                }
+                let current_height =
+                    shell.state.in_mem().get_last_block_height() + 1;
+
+                events.emit_many(
+                    shell
+                        .state
+                        .write_log_mut()
+                        .take_events()
+                        .into_iter()
+                        .map(|event| event.with(Height(current_height))),
+                );
 
                 gov_api::get_proposal_author(&shell.state, id)?
             }
@@ -240,6 +249,26 @@ where
                 &address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-refund";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
+            let final_target_balance =
+                read_balance(&shell.state, &native_token, &address)?.into();
+
+            events.emit(TokenEvent {
+                descriptor: DESCRIPTOR.into(),
+                level: EventLevel::Block,
+                token: native_token.clone(),
+                operation: TokenOperation::Transfer {
+                    amount: funds.into(),
+                    source: UserAccount::Internal(gov_address),
+                    target: UserAccount::Internal(address),
+                    source_post_balance: final_gov_balance,
+                    target_post_balance: Some(final_target_balance),
+                },
+            });
         } else {
             token::burn_tokens(
                 &mut shell.state,
@@ -247,6 +276,22 @@ where
                 &gov_address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-burn";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
+
+            events.emit(TokenEvent {
+                descriptor: DESCRIPTOR.into(),
+                level: EventLevel::Block,
+                token: native_token.clone(),
+                operation: TokenOperation::Burn {
+                    amount: funds.into(),
+                    target_account: UserAccount::Internal(gov_address),
+                    post_balance: final_gov_balance,
+                },
+            });
         }
     }
 
@@ -414,6 +459,7 @@ where
 
 fn execute_pgf_funding_proposal<D, H>(
     state: &mut WlState<D, H>,
+    events: &mut impl EmitEvents,
     token: &Address,
     fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
@@ -452,25 +498,68 @@ where
                 }
             },
             PGFAction::Retro(target) => {
-                let result = match &target {
-                    PGFTarget::Internal(target) => token::transfer(
-                        state,
-                        token,
-                        &ADDRESS,
-                        &target.target,
-                        target.amount,
+                let (result, event) = match &target {
+                    PGFTarget::Internal(target) => (
+                        token::transfer(
+                            state,
+                            token,
+                            &ADDRESS,
+                            &target.target,
+                            target.amount,
+                        ),
+                        TokenEvent {
+                            descriptor: "pgf-payments".into(),
+                            level: EventLevel::Block,
+                            token: token.clone(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::Internal(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: Some(
+                                    read_balance(state, token, &target.target)?
+                                        .into(),
+                                ),
+                            },
+                        },
                     ),
-                    PGFTarget::Ibc(target) => {
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target)
-                    }
+                    PGFTarget::Ibc(target) => (
+                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        TokenEvent {
+                            descriptor: "pgf-payments-over-ibc".into(),
+                            level: EventLevel::Block,
+                            token: token.clone(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::External(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: None,
+                            },
+                        },
+                    ),
                 };
                 match result {
-                    Ok(()) => tracing::info!(
-                        "Execute RetroPgf from proposal id {}: sent {} to {}.",
-                        proposal_id,
-                        target.amount().to_string_native(),
-                        target.target()
-                    ),
+                    Ok(()) => {
+                        tracing::info!(
+                            "Execute RetroPgf from proposal id {}: sent {} to \
+                             {}.",
+                            proposal_id,
+                            target.amount().to_string_native(),
+                            target.target()
+                        );
+                        events.emit(event);
+                    }
                     Err(e) => tracing::warn!(
                         "Error in RetroPgf transfer from proposal id {}, \
                          amount {} to {}: {}",

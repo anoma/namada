@@ -247,13 +247,30 @@ where
                     storage.write(&src_key, new_src_balance)?;
                     storage.write(&dest_key, new_dest_balance)
                 }
-                None => Err(storage::Error::new_const(
-                    "The transfer would overflow destination balance",
-                )),
+                None => Err(storage::Error::new_alloc(format!(
+                    "The transfer would overflow balance of {dest}"
+                ))),
             }
         }
-        None => Err(storage::Error::new_const("Insufficient source balance")),
+        None => Err(storage::Error::new_alloc(format!(
+            "{src} has insufficient balance"
+        ))),
     }
+}
+
+/// Mint `amount` of `token` as `minter` to `dest`.
+pub fn mint_tokens<S>(
+    storage: &mut S,
+    minter: &Address,
+    token: &Address,
+    dest: &Address,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    credit_tokens(storage, token, dest, amount)?;
+    storage.write(&minter_key(token), minter.clone())
 }
 
 /// Credit tokens to an account, to be used only by protocol. In transactions,

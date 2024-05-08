@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use namada_events::{EmitEvents, EventToEmit};
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter};
 use namada_tx::data::TxSentinel;
 
@@ -88,6 +89,30 @@ where
         &mut self,
     ) -> (&mut WriteLog, &InMemory<Self::H>, &Self::D) {
         (self.write_log, (self.in_mem), (self.db))
+    }
+}
+
+impl<D, H> EmitEvents for TxHostEnvState<'_, D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: EventToEmit,
+    {
+        self.write_log_mut().emit_event(event);
+    }
+
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: EventToEmit,
+    {
+        for event in event_batch {
+            self.emit(event.into());
+        }
     }
 }
 

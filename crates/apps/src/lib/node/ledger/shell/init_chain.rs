@@ -1193,7 +1193,7 @@ mod test {
                 token::Amount::from_uint(1, 6).unwrap(),
                 6.into(),
             ),
-            "Insufficient source balance".to_string(),
+            format!("{albert_address_str} has insufficient balance"),
         )];
         assert_eq!(expected, initializer.warnings);
         initializer.warnings.clear();

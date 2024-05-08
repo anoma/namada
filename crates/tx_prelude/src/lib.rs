@@ -31,7 +31,7 @@ pub use namada_core::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::{encode, eth_bridge_pool, *};
-use namada_events::{Event, EventToEmit, EventType};
+use namada_events::{EmitEvents, Event, EventToEmit, EventType};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
@@ -246,6 +246,26 @@ impl StorageWrite for Ctx {
         let key = key.to_string();
         unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
+    }
+}
+
+impl EmitEvents for Ctx {
+    #[inline]
+    fn emit<E>(&mut self, event: E)
+    where
+        E: EventToEmit,
+    {
+        _ = self.emit_event(event);
+    }
+
+    fn emit_many<B, E>(&mut self, event_batch: B)
+    where
+        B: IntoIterator<Item = E>,
+        E: EventToEmit,
+    {
+        for event in event_batch {
+            self.emit(event.into());
+        }
     }
 }
 
