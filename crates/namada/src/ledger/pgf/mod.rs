@@ -1,8 +1,5 @@
 //! Pgf VP
 
-/// Pgf utility functions and structures
-pub mod utils;
-
 use std::collections::BTreeSet;
 
 use namada_core::booleans::BoolResultUnitExt;

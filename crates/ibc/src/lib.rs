@@ -9,7 +9,6 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -23,6 +22,9 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
 use namada_core::address::{Address, MASP};
+use namada_core::event::extend::{
+    ReadFromEventAttributes, Success as SuccessAttr,
+};
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -219,7 +221,7 @@ where
                 return Ok(());
             }
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -244,7 +246,7 @@ where
                 })
                 .collect();
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -318,14 +320,18 @@ where
                     Error::Trace("Reading the IBC event failed".to_string())
                 })?;
         }
-        match receive_event
-            .first()
-            .as_ref()
-            .and_then(|event| event.attributes.get(EVENT_ATTRIBUTE_SUCCESS))
-        {
-            Some(success) if success == EVENT_VALUE_SUCCESS => Ok(true),
-            _ => Ok(false),
-        }
+        receive_event.first().as_ref().map_or_else(
+            || Ok(false),
+            |event| {
+                let success = SuccessAttr::read_opt_from_event_attributes(
+                    &event.attributes,
+                )
+                .map_err(|err| {
+                    Error::Trace(format!("Reading the IBC event failed: {err}"))
+                })?;
+                Ok(success.unwrap_or(false))
+            },
+        )
     }
 
     /// Validate according to the message in IBC VP

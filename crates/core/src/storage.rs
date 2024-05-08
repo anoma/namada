@@ -42,6 +42,8 @@ pub enum Error {
     ParseKeySeg(String),
     #[error("Error parsing block hash: {0}")]
     ParseBlockHash(String),
+    #[error("Error parsing tx index: {0}")]
+    ParseTxIndex(String),
     #[error("The key is empty")]
     EmptyKey,
     #[error("The key is missing sub-key segments: {0}")]
@@ -161,6 +163,27 @@ impl FromStr for DbColFam {
     Deserialize,
 )]
 pub struct TxIndex(pub u32);
+
+impl TxIndex {
+    /// Convert from a [`usize`] or panic.
+    pub fn must_from_usize(tx_index: usize) -> Self {
+        Self(
+            tx_index
+                .try_into()
+                .expect("Transaction index out of bounds"),
+        )
+    }
+}
+
+impl FromStr for TxIndex {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let tx_index = u32::from_str(s)
+            .map_err(|err| Error::ParseTxIndex(err.to_string()))?;
+        Ok(TxIndex(tx_index))
+    }
+}
 
 impl Display for TxIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

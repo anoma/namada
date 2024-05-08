@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
@@ -110,6 +111,21 @@ impl Display for TallyResult {
         match self {
             TallyResult::Passed => write!(f, "passed"),
             TallyResult::Rejected => write!(f, "rejected"),
+        }
+    }
+}
+
+impl FromStr for TallyResult {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "passed" => Ok(Self::Passed),
+            "rejected" => Ok(Self::Rejected),
+            t => Err(format!(
+                "Tally result value of {t:?} does not match \"passed\" nor \
+                 \"rejected\""
+            )),
         }
     }
 }
