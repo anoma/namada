@@ -315,7 +315,6 @@ fn payment_address_gen(
         alias,
         alias_force,
         viewing_key,
-        pin,
         ..
     }: args::PayAddressGen,
 ) {
@@ -326,7 +325,7 @@ fn payment_address_gen(
     let masp_payment_addr = viewing_key
         .to_payment_address(div)
         .expect("a PaymentAddress");
-    let payment_addr = PaymentAddress::from(masp_payment_addr).pinned(pin);
+    let payment_addr = PaymentAddress::from(masp_payment_addr);
     let alias = wallet
         .insert_payment_addr(alias, payment_addr, alias_force)
         .unwrap_or_else(|| {

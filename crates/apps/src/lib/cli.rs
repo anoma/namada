@@ -3184,7 +3184,6 @@ pub mod args {
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
-    pub const PIN: ArgFlag = flag("pin");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -6778,7 +6777,6 @@ pub mod args {
                 alias: self.alias,
                 alias_force: self.alias_force,
                 viewing_key,
-                pin: self.pin,
             })
         }
     }
@@ -6788,12 +6786,10 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let viewing_key = VIEWING_KEY.parse(matches);
-            let pin = PIN.parse(matches);
             Self {
                 alias,
                 alias_force,
                 viewing_key,
-                pin,
             }
         }
 
@@ -6807,10 +6803,6 @@ pub mod args {
                 "Override the alias without confirmation if it already exists.",
             ))
             .arg(VIEWING_KEY.def().help("The viewing key."))
-            .arg(PIN.def().help(
-                "Require that the single transaction to this address be \
-                 pinned.",
-            ))
         }
     }
 
