@@ -983,7 +983,7 @@ impl Default for BenchShieldedCtx {
                 .wallet
                 .insert_payment_addr(
                     alias,
-                    PaymentAddress::from(payment_addr).pinned(false),
+                    PaymentAddress::from(payment_addr),
                     true,
                 )
                 .unwrap();
@@ -1076,7 +1076,6 @@ impl BenchShieldedCtx {
                 } else {
                     DenominatedAmount::native(amount)
                 },
-                key: None,
                 shielded: shielded_section_hash,
             },
             shielded,

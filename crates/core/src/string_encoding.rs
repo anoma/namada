@@ -27,7 +27,7 @@ pub const BECH32M_VARIANT: bech32::Variant = Variant::Bech32m;
 pub const ADDRESS_HRP: &str = "tnam";
 /// MASP extended viewing key human-readable part
 pub const MASP_EXT_FULL_VIEWING_KEY_HRP: &str = "zvknam";
-/// MASP payment address (not pinned) human-readable part
+/// MASP payment address human-readable part
 pub const MASP_PAYMENT_ADDRESS_HRP: &str = "znam";
 /// MASP extended spending key human-readable part
 pub const MASP_EXT_SPENDING_KEY_HRP: &str = "zsknam";

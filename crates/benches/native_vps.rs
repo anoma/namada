@@ -473,7 +473,6 @@ fn vp_multitoken(c: &mut Criterion) {
             target: defaults::bertha_address(),
             token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
-            key: None,
             shielded: None,
         },
         None,

@@ -71,9 +71,8 @@ impl IbcStorageContext for Ctx {
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<&str>,
     ) -> Result<(), Error> {
-        namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
+        namada_token::utils::handle_masp_tx(self, shielded)?;
         namada_token::utils::update_note_commitment_tree(self, shielded)
     }
 

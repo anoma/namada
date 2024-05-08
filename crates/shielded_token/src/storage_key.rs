@@ -7,8 +7,6 @@ use namada_core::hash::Hash;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
 use namada_trans_token::storage_key::parameter_prefix;
 
-/// Key segment prefix for pinned shielded transactions
-pub const PIN_KEY_PREFIX: &str = "pin-";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
@@ -80,8 +78,7 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == address::MASP
-                && (key.starts_with(PIN_KEY_PREFIX)
-                    || key == MASP_NOTE_COMMITMENT_TREE_KEY) =>
+                && key == MASP_NOTE_COMMITMENT_TREE_KEY =>
         {
             true
         }
@@ -93,14 +90,6 @@ pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
         ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
         _ => false,
     }
-}
-
-/// Check if the given storage key is a masp tx pin key
-pub fn is_masp_tx_pin_key(key: &storage::Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr),
-             DbKeySeg::StringSeg(prefix),
-        ] if *addr == address::MASP && prefix.starts_with(PIN_KEY_PREFIX))
 }
 
 /// Check if the given storage key is a masp nullifier key
@@ -119,13 +108,6 @@ pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> bool {
              DbKeySeg::StringSeg(prefix),
             ..
         ] if *addr == address::MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
-}
-
-/// Get a key for a masp pin
-pub fn masp_pin_tx_key(key: &str) -> storage::Key {
-    storage::Key::from(address::MASP.to_db_key())
-        .push(&(PIN_KEY_PREFIX.to_owned() + key))
-        .expect("Cannot obtain a storage key")
 }
 
 /// Get a key for a masp nullifier
