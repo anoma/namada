@@ -325,7 +325,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
                     None,
                     CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
                 ),
-                version: Some(Version::default()),
+                version: Some(Version::compatibles().first().unwrap().clone()),
                 delay_period: std::time::Duration::new(100, 0),
                 signer: defaults::albert_address().to_string().into(),
             };
