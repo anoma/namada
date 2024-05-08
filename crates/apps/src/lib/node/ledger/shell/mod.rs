@@ -43,7 +43,6 @@ use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_b
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::events::log::EventLog;
-use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
@@ -1431,6 +1430,7 @@ mod test_utils {
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
     use namada::core::storage::{Epoch, Header};
+    use namada::ledger::events::Event;
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;

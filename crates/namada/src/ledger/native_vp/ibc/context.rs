@@ -7,6 +7,8 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::Epochs;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
+use namada_sdk::events::log::dumb_queries;
+use namada_sdk::events::{Event, EventTypeBuilder};
 use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
 use namada_vp_env::VpEnv;
 
@@ -37,7 +39,7 @@ where
     /// Context to read the previous value
     ctx: CtxPreStorageRead<'view, 'a, S, CA>,
     /// IBC event
-    pub event: BTreeSet<IbcEvent>,
+    pub event: BTreeSet<Event>,
 }
 
 impl<'view, 'a, S, CA> PseudoExecutionContext<'view, 'a, S, CA>
@@ -185,7 +187,7 @@ where
     CA: 'static + WasmCacheAccess,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
-        self.event.insert(event);
+        self.event.insert(event.into());
         Ok(())
     }
 
@@ -193,11 +195,21 @@ where
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>> {
+        let matcher = dumb_queries::QueryMatcher::with_prefix(
+            EventTypeBuilder::new_of::<IbcEvent>()
+                .with_segment(event_type)
+                .build(),
+        );
         Ok(self
             .event
             .iter()
-            .filter(|event| event.event_type == *event_type.as_ref())
-            .cloned()
+            .filter_map(|event| {
+                if matcher.matches(event) {
+                    IbcEvent::try_from(event).ok()
+                } else {
+                    None
+                }
+            })
             .collect())
     }
 

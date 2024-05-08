@@ -3,6 +3,7 @@
 pub mod extend;
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -10,10 +11,10 @@ use std::str::FromStr;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::borsh::{BorshDeserialize, BorshSerialize};
-use crate::collections::HashMap;
 use crate::ethereum_structs::EthBridgeEvent;
 use crate::ibc::IbcEvent;
 
@@ -122,10 +123,14 @@ impl EmitEvents for Vec<Event> {
     Debug,
     Eq,
     PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub enum EventLevel {
     /// Indicates an event is to do with a finalized block.
@@ -162,7 +167,10 @@ impl Display for EventLevel {
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
+#[repr(transparent)]
 pub struct EventType {
     inner: Cow<'static, str>,
 }
@@ -226,19 +234,17 @@ pub struct EventTypeBuilder {
 }
 
 impl EventTypeBuilder {
-    /// Create a new [`EventTypeBuilder`] with the given domain.
+    /// Create a new [`EventTypeBuilder`] with the given type.
     #[inline]
-    pub fn new_with_domain(domain: impl Into<String>) -> Self {
-        Self {
-            inner: domain.into(),
-        }
+    pub fn new_with_type(ty: impl Into<String>) -> Self {
+        Self { inner: ty.into() }
     }
 
     /// Create a new [`EventTypeBuilder`] with the domain of the
     /// given event type.
     #[inline]
     pub fn new_of<E: EventToEmit>() -> Self {
-        Self::new_with_domain(E::DOMAIN)
+        Self::new_with_type(E::DOMAIN)
     }
 
     /// Append a new segment to the final [`EventType`] and return
@@ -279,9 +285,14 @@ impl EventTypeBuilder {
     Debug,
     Eq,
     PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    Serialize,
+    Deserialize,
 )]
 pub struct Event {
     /// The level of the event - whether it relates to a block or an individual
@@ -290,7 +301,7 @@ pub struct Event {
     /// The type of event.
     event_type: EventType,
     /// Key-value attributes of the event.
-    attributes: HashMap<String, String>,
+    attributes: BTreeMap<String, String>,
 }
 
 impl Display for Event {
@@ -335,7 +346,7 @@ impl Event {
         Self {
             event_type,
             level,
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
         }
     }
 
@@ -361,7 +372,7 @@ impl Event {
                     Consider using domain types to compose events with \
                     attributes."]
     #[inline]
-    pub fn attributes(&self) -> &HashMap<String, String> {
+    pub fn attributes(&self) -> &BTreeMap<String, String> {
         &self.attributes
     }
 
@@ -370,14 +381,14 @@ impl Event {
                     Consider using domain types to compose events with \
                     attributes."]
     #[inline]
-    pub fn attributes_mut(&mut self) -> &mut HashMap<String, String> {
+    pub fn attributes_mut(&mut self) -> &mut BTreeMap<String, String> {
         &mut self.attributes
     }
 
     /// Return the attributes of the event, destroying
     /// it in the process.
     #[inline]
-    pub fn into_attributes(self) -> HashMap<String, String> {
+    pub fn into_attributes(self) -> BTreeMap<String, String> {
         self.attributes
     }
 
@@ -452,6 +463,16 @@ impl Event {
         data.extend_event(self);
         self
     }
+
+    /// Compute the gas cost of emitting this event.
+    #[inline]
+    pub fn emission_gas_cost(&self, cost_per_byte: u64) -> u64 {
+        let len = self
+            .attributes
+            .iter()
+            .fold(0, |acc, (k, v)| acc + k.len() + v.len());
+        len as u64 * cost_per_byte
+    }
 }
 
 impl From<EthBridgeEvent> for Event {
@@ -471,7 +492,7 @@ impl From<&EthBridgeEvent> for Event {
                     use self::extend::ExtendAttributesMap;
                     use crate::ethereum_structs::BridgePoolTxHash;
 
-                    let mut attributes = HashMap::new();
+                    let mut attributes = BTreeMap::new();
                     attributes.with_attribute(BridgePoolTxHash(tx_hash));
                     attributes
                 },
@@ -490,7 +511,8 @@ impl From<IbcEvent> for Event {
             attributes: {
                 use extend::{event_domain_of, ExtendAttributesMap};
 
-                let mut attrs = ibc_event.attributes;
+                let mut attrs: BTreeMap<_, _> =
+                    ibc_event.attributes.into_iter().collect();
                 attrs.with_attribute(event_domain_of::<IbcEvent>());
                 attrs
             },
