@@ -2,11 +2,13 @@
 use borsh::BorshDeserialize;
 use eyre::{eyre, Result};
 use namada_core::storage;
+#[cfg(test)]
 use namada_core::token::Amount;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::StorageRead;
 
 /// Returns the stored Amount, or 0 if not stored
+#[cfg(test)]
 pub(super) fn amount_or_default<D, H>(
     state: &WlState<D, H>,
     key: &storage::Key,
