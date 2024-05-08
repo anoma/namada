@@ -181,7 +181,7 @@ where
 
                 // Take events that could have been emitted by PGF
                 // over IBC, governance proposal execution, etc
-                for event in shell.state.write_log_mut().take_ibc_events() {
+                for event in shell.state.write_log_mut().take_events() {
                     events.emit(event.with(Height(
                         shell.state.in_mem().get_last_block_height() + 1,
                     )));

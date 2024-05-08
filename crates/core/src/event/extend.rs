@@ -6,6 +6,7 @@ use std::ops::ControlFlow;
 use std::str::FromStr;
 
 use super::*;
+use crate::collections::HashMap;
 use crate::hash::Hash;
 use crate::storage::{BlockHeight, TxIndex};
 
@@ -28,6 +29,32 @@ pub trait AttributesMap {
 }
 
 impl AttributesMap for HashMap<String, String> {
+    #[inline]
+    fn insert_attribute<K, V>(&mut self, key: K, value: V)
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
+        self.insert(key.into(), value.into());
+    }
+
+    #[inline]
+    fn retrieve_attribute(&self, key: &str) -> Option<&str> {
+        self.get(key).map(String::as_ref)
+    }
+
+    #[inline]
+    fn is_attribute(&self, key: &str) -> bool {
+        self.contains_key(key)
+    }
+
+    #[inline]
+    fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+}
+
+impl AttributesMap for BTreeMap<String, String> {
     #[inline]
     fn insert_attribute<K, V>(&mut self, key: K, value: V)
     where
@@ -185,8 +212,8 @@ where
     const DOMAIN: &'static str = E::DOMAIN;
 }
 
-/// Extend a [`HashMap`] of string to string with event attributed
-/// related methods.
+/// Extend an [`AttributesMap`] implementation with the ability
+/// to add new attributes from domain types.
 pub trait ExtendAttributesMap: Sized {
     /// Insert a new attribute into a map of event attributes.
     fn with_attribute<DATA>(&mut self, data: DATA) -> &mut Self
@@ -609,7 +636,7 @@ mod event_composition_tests {
     #[test]
     fn test_event_compose_basic() {
         let expected_attrs = {
-            let mut attrs = HashMap::new();
+            let mut attrs = BTreeMap::new();
             attrs.insert("log".to_string(), "this is sparta!".to_string());
             attrs.insert("height".to_string(), "300".to_string());
             attrs.insert("hash".to_string(), Hash::default().to_string());
@@ -628,7 +655,7 @@ mod event_composition_tests {
     #[test]
     fn test_event_compose_repeated() {
         let expected_attrs = {
-            let mut attrs = HashMap::new();
+            let mut attrs = BTreeMap::new();
             attrs.insert("log".to_string(), "dejavu".to_string());
             attrs
         };
@@ -645,7 +672,7 @@ mod event_composition_tests {
     #[test]
     fn test_event_compose_last_one_kept() {
         let expected_attrs = {
-            let mut attrs = HashMap::new();
+            let mut attrs = BTreeMap::new();
             attrs.insert("log".to_string(), "last".to_string());
             attrs
         };
@@ -684,7 +711,7 @@ mod event_composition_tests {
         }
 
         let attributes = {
-            let mut attrs = HashMap::with_capacity(1);
+            let mut attrs = BTreeMap::new();
             attrs.with_attribute(Info(String::new()));
             attrs
         };
