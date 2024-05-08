@@ -16,7 +16,6 @@ use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
 };
-use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hints;
 use namada_core::storage::{BlockHeight, Key, KeySeg};
 use namada_parameters::read_epoch_duration_parameter;
@@ -24,6 +23,7 @@ use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 
+use crate::event::EthBridgeEvent;
 use crate::protocol::transactions::update;
 use crate::storage::bridge_pool::{
     get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,

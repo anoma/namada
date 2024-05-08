@@ -2,9 +2,10 @@
 
 pub use ics23::ProofSpec;
 use namada_core::address::Address;
-use namada_core::ibc::IbcEvent;
 use namada_core::token::Amount;
 use namada_storage::{Error, StorageRead, StorageWrite};
+
+use crate::event::IbcEvent;
 
 /// IBC context trait to be implemented in integration that can read and write
 pub trait IbcStorageContext: StorageRead + StorageWrite {

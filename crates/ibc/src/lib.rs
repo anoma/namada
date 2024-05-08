@@ -2,6 +2,7 @@
 
 mod actions;
 pub mod context;
+pub mod event;
 pub mod parameters;
 pub mod storage;
 
@@ -22,9 +23,6 @@ pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
 use namada_core::address::{Address, MASP};
-use namada_core::event::extend::{
-    ReadFromEventAttributes, Success as SuccessAttr,
-};
 use namada_core::ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
@@ -50,6 +48,7 @@ use namada_core::ibc::core::channel::types::msgs::{
 };
 use namada_core::ibc::core::entrypoint::{execute, validate};
 use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -57,6 +56,7 @@ use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
+use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
 use namada_token::Transfer;
 use prost::Message;
 use thiserror::Error;
@@ -64,6 +64,8 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("IBC event error: {0}")]
+    IbcEvent(RawIbcEventError),
     #[error("Decoding IBC data error")]
     DecodingData,
     #[error("Decoding message error: {0}")]

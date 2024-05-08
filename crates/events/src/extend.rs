@@ -5,10 +5,11 @@ use std::marker::PhantomData;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
+use namada_core::collections::HashMap;
+use namada_core::hash::Hash;
+use namada_core::storage::{BlockHeight, TxIndex};
+
 use super::*;
-use crate::collections::HashMap;
-use crate::hash::Hash;
-use crate::storage::{BlockHeight, TxIndex};
 
 /// Map of event attributes.
 pub trait AttributesMap {
@@ -80,14 +81,14 @@ impl AttributesMap for BTreeMap<String, String> {
     }
 }
 
-impl AttributesMap for Vec<crate::tendermint::abci::EventAttribute> {
+impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
     #[inline]
     fn insert_attribute<K, V>(&mut self, key: K, value: V)
     where
         K: Into<String>,
         V: Into<String>,
     {
-        self.push(crate::tendermint::abci::EventAttribute {
+        self.push(namada_core::tendermint::abci::EventAttribute {
             key: key.into(),
             value: value.into(),
             index: true,
@@ -118,7 +119,7 @@ impl AttributesMap for Vec<crate::tendermint::abci::EventAttribute> {
 }
 
 impl AttributesMap
-    for Vec<crate::tendermint_proto::v0_37::abci::EventAttribute>
+    for Vec<namada_core::tendermint_proto::v0_37::abci::EventAttribute>
 {
     #[inline]
     fn insert_attribute<K, V>(&mut self, key: K, value: V)
@@ -126,7 +127,7 @@ impl AttributesMap
         K: Into<String>,
         V: Into<String>,
     {
-        self.push(crate::tendermint_proto::v0_37::abci::EventAttribute {
+        self.push(namada_core::tendermint_proto::v0_37::abci::EventAttribute {
             key: key.into(),
             value: value.into(),
             index: true,
@@ -618,12 +619,27 @@ where
 #[cfg(test)]
 mod event_composition_tests {
     use super::*;
-    use crate::ibc::IbcEventType;
+
+    struct DummyEvent;
+
+    impl From<DummyEvent> for Event {
+        fn from(_: DummyEvent) -> Event {
+            Event::new(
+                EventTypeBuilder::new_of::<DummyEvent>()
+                    .with_segment("event")
+                    .build(),
+                EventLevel::Tx,
+            )
+        }
+    }
+
+    impl EventToEmit for DummyEvent {
+        const DOMAIN: &'static str = "dummy";
+    }
 
     #[test]
     fn test_event_height_parse() {
-        let event: Event =
-            Event::applied_tx().with(Height(BlockHeight(300))).into();
+        let event: Event = DummyEvent.with(Height(BlockHeight(300))).into();
 
         let height = event.raw_read_attribute::<Height>().unwrap();
         assert_eq!(height, "300");
@@ -643,7 +659,7 @@ mod event_composition_tests {
             attrs
         };
 
-        let base_event: Event = Event::applied_tx()
+        let base_event: Event = DummyEvent
             .with(Log("this is sparta!".to_string()))
             .with(Height(300.into()))
             .with(TxHash(Hash::default()))
@@ -660,7 +676,7 @@ mod event_composition_tests {
             attrs
         };
 
-        let base_event: Event = Event::applied_tx()
+        let base_event: Event = DummyEvent
             .with(Log("dejavu".to_string()))
             .with(Log("dejavu".to_string()))
             .with(Log("dejavu".to_string()))
@@ -677,30 +693,13 @@ mod event_composition_tests {
             attrs
         };
 
-        let base_event: Event = Event::applied_tx()
+        let base_event: Event = DummyEvent
             .with(Log("fist".to_string()))
             .with(Log("second".to_string()))
             .with(Log("last".to_string()))
             .into();
 
         assert_eq!(base_event.attributes, expected_attrs);
-    }
-
-    #[test]
-    fn test_domain_of_composed_event() {
-        let composite_event = IbcEvent {
-            event_type: IbcEventType("update_account".into()),
-            attributes: Default::default(),
-        }
-        .with(Log("this is sparta!".to_string()))
-        .with(Height(300.into()))
-        .with(TxHash(Hash::default()));
-
-        fn event_domain<E: EventToEmit>(_: &E) -> &'static str {
-            E::DOMAIN
-        }
-
-        assert_eq!(event_domain(&composite_event), IbcEvent::DOMAIN);
     }
 
     #[test]

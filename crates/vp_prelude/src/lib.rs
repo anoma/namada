@@ -7,7 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod ibc {
-    pub use namada_core::ibc::IbcEvent;
+    pub use namada_ibc::event::{IbcEvent, IbcEventType};
     pub use namada_ibc::storage::is_ibc_key;
 }
 
@@ -22,12 +22,12 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::collections::HashSet;
-use namada_core::event::{Event, EventType};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, TxIndex};
 pub use namada_core::validity_predicate::{VpError, VpErrorExtResult};
 pub use namada_core::*;
+use namada_events::{Event, EventType};
 pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;

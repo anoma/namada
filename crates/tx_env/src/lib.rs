@@ -3,8 +3,8 @@
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::event::{Event, EventToEmit, EventType};
 use namada_core::storage;
+use namada_events::{Event, EventToEmit, EventType};
 use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
 
 /// Transaction host functions

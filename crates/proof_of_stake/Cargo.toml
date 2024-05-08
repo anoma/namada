@@ -25,6 +25,7 @@ migrations = [
 namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance" }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }

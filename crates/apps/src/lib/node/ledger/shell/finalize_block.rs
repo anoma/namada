@@ -730,7 +730,6 @@ mod test_finalize_block {
     use namada::core::collections::{HashMap, HashSet};
     use namada::core::dec::{Dec, POS_DECIMAL_PRECISION};
     use namada::core::ethereum_events::{EthAddress, Uint as ethUint};
-    use namada::core::event::Event;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
     use namada::core::key::testing::common_sk_from_simple_seed;
@@ -765,6 +764,7 @@ mod test_finalize_block {
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
     use namada::replay_protection;
+    use namada::sdk::events::Event;
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
     use namada::tx::data::Fee;
