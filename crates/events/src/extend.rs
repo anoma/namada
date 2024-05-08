@@ -616,6 +616,20 @@ where
     }
 }
 
+/// Extend an [`Event`] with the given closure.
+pub struct Closure<F>(pub F);
+
+impl<F> ExtendEvent for Closure<F>
+where
+    F: FnOnce(&mut Event),
+{
+    #[inline]
+    fn extend_event(self, event: &mut Event) {
+        let Self(closure) = self;
+        closure(event);
+    }
+}
+
 #[cfg(test)]
 mod event_composition_tests {
     use super::*;

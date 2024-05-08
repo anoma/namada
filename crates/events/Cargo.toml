@@ -19,6 +19,7 @@ migrations = [
   "namada_migrations",
   "linkme",
 ]
+testing = []
 
 [dependencies]
 namada_core = {path = "../core"}

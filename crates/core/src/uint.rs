@@ -4,6 +4,7 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -507,7 +508,26 @@ impl fmt::Display for I256 {
     }
 }
 
+impl FromStr for I256 {
+    type Err = Box<dyn 'static + std::error::Error>;
+
+    fn from_str(num: &str) -> Result<Self, Self::Err> {
+        if let Some(("", neg_num)) = num.split_once('-') {
+            let uint = neg_num.parse::<Uint>()?.negate();
+            Ok(I256(uint))
+        } else {
+            let uint = num.parse::<Uint>()?;
+            Ok(I256(uint))
+        }
+    }
+}
+
 impl I256 {
+    /// Compute the two's complement of a number.
+    pub fn negate(&self) -> Self {
+        Self(self.0.negate())
+    }
+
     /// Check if the amount is not negative (greater
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
@@ -1063,5 +1083,15 @@ mod test_uint {
         assert_eq!(a.checked_mul_div(e, e), Some((a, Uint::zero())));
         assert_eq!(e.checked_mul_div(c, b), Some((Uint::zero(), c)));
         assert_eq!(d.checked_mul_div(a, e), None);
+    }
+
+    #[test]
+    fn test_i256_str_roundtrip() {
+        let minus_one = I256::one().negate();
+        let minus_one_str = minus_one.to_string();
+        assert_eq!(minus_one_str, "-1");
+
+        let parsed: I256 = minus_one_str.parse().unwrap();
+        assert_eq!(minus_one, parsed);
     }
 }

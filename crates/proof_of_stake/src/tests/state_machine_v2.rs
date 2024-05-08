@@ -1986,8 +1986,12 @@ impl StateMachineTest for ConcretePosState {
 
                 // Need to apply some slashing
                 let current_epoch = state.s.in_mem().block.epoch;
-                crate::slashing::process_slashes(&mut state.s, current_epoch)
-                    .unwrap();
+                crate::slashing::process_slashes(
+                    &mut state.s,
+                    &mut namada_events::testing::VoidEventSink,
+                    current_epoch,
+                )
+                .unwrap();
 
                 let params = read_pos_params(&state.s).unwrap();
                 state.check_next_epoch_post_conditions(&params);

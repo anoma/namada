@@ -7,6 +7,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 pub mod epoched;
+pub mod event;
 pub mod parameters;
 pub mod pos_queries;
 pub mod queries;
@@ -2869,7 +2870,7 @@ where
 /// Apply PoS updates for a block
 pub fn finalize_block<S>(
     storage: &mut S,
-    _events: &mut impl EmitEvents,
+    events: &mut impl EmitEvents,
     is_new_epoch: bool,
     validator_set_update_epoch: Epoch,
     votes: Vec<VoteInfo>,
@@ -2928,7 +2929,9 @@ where
 
         // Process and apply slashes that have already been recorded for the
         // current epoch
-        if let Err(err) = slashing::process_slashes(storage, current_epoch) {
+        if let Err(err) =
+            slashing::process_slashes(storage, events, current_epoch)
+        {
             tracing::error!(
                 "Error while processing slashes queued for epoch {}: {}",
                 current_epoch,
