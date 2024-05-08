@@ -4357,6 +4357,7 @@ dependencies = [
  "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
+ "uint",
  "wasm-instrument",
  "wasmer",
  "wasmer-cache",

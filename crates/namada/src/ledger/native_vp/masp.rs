@@ -38,7 +38,7 @@ use token::storage_key::{
 use token::Amount;
 
 use crate::ledger::native_vp;
-use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::ledger::native_vp::{Ctx, NativeVp, SignedAmount};
 use crate::token;
 use crate::token::MaspDigitPos;
 use crate::vm::WasmCacheAccess;
@@ -252,9 +252,9 @@ where
         Ok(())
     }
 
-    fn validate_state_and_get_transfer_data<'vp>(
-        &'vp self,
-        keys_changed: &'vp BTreeSet<Key>,
+    fn validate_state_and_get_transfer_data(
+        &self,
+        keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
         // Check that the transaction didn't write unallowed masp keys
         let masp_keys_changed: Vec<&Key> =
@@ -557,38 +557,46 @@ fn verify_sapling_balancing_value(
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {
-    let mut acc = pre.clone();
+    let mut acc = ValueSum::<Address, SignedAmount>::from_sum(pre.clone());
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
         match conversion_state.assets.get(asset_type) {
             Some(((address, _, digit), asset_epoch, _, _))
                 if *asset_epoch <= target_epoch =>
             {
-                let decoded_change = token::Amount::from_masp_denominated(
-                    val.unsigned_abs() as u64,
-                    *digit,
-                );
+                let decoded_change = SignedAmount::from_masp_denominated(
+                    *val, *digit,
+                )
+                .map_err(|_| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in MASP value balance",
+                    ))
+                })?;
                 let decoded_change =
                     ValueSum::from_pair(address.clone(), decoded_change);
-                if *val < 0 {
-                    acc += decoded_change;
-                } else {
-                    acc -= decoded_change;
-                }
+                acc = acc.checked_sub(&decoded_change).ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in MASP value balance",
+                    ))
+                })?;
             }
             None if tokens.contains_key(asset_type) => {
                 let (token, _denom, digit) = &tokens[asset_type];
-                let decoded_change = token::Amount::from_masp_denominated(
-                    val.unsigned_abs() as u64,
-                    *digit,
-                );
+                let decoded_change = SignedAmount::from_masp_denominated(
+                    *val, *digit,
+                )
+                .map_err(|_| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in MASP value balance",
+                    ))
+                })?;
                 let decoded_change =
                     ValueSum::from_pair(token.clone(), decoded_change);
-                if *val < 0 {
-                    acc += decoded_change;
-                } else {
-                    acc -= decoded_change;
-                }
+                acc = acc.checked_sub(&decoded_change).ok_or_else(|| {
+                    Error::NativeVpError(native_vp::Error::SimpleMessage(
+                        "Overflow in MASP value balance",
+                    ))
+                })?;
             }
             _ => {
                 let error =
@@ -600,7 +608,7 @@ fn verify_sapling_balancing_value(
             }
         }
     }
-    if acc == *post {
+    if acc == ValueSum::from_sum(post.clone()) {
         Ok(())
     } else {
         let error = Error::NativeVpError(native_vp::Error::SimpleMessage(

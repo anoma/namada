@@ -1,3 +1,4 @@
+#![allow(clippy::assign_op_pattern)]
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 
@@ -10,15 +11,19 @@ pub mod parameters;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
+use std::ops::{Add, Neg, Not, Sub};
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::storage;
 use namada_core::storage::Epochs;
+use namada_core::uint::Uint;
 use namada_gas::GasMetering;
-use namada_token::Amount;
+use namada_token::{Amount, MaspDigitPos};
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
+use num_traits::{CheckedAdd, CheckedNeg, CheckedSub};
 use state::StateRead;
+use uint::construct_uint;
 
 use super::vp_host_fns;
 use crate::address::Address;
@@ -639,24 +644,200 @@ pub(super) mod testing {
     }
 }
 
-/// A positive or negative amount
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum SignedAmount {
-    Positive(Amount),
-    Negative(Amount),
+construct_uint! {
+    #[derive(
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+    )]
+
+    struct SignedAmountInt(5);
 }
 
-impl PartialEq for SignedAmount {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Positive(lhs), Self::Positive(rhs)) => lhs == rhs,
-            (Self::Negative(lhs), Self::Negative(rhs)) => lhs == rhs,
-            (Self::Positive(lhs), Self::Negative(rhs)) => {
-                lhs == &Amount::default() && rhs == &Amount::default()
-            }
-            (Self::Negative(lhs), Self::Positive(rhs)) => {
-                lhs == &Amount::default() && rhs == &Amount::default()
-            }
+/// A positive or negative amount
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Default,
+)]
+pub struct SignedAmount(SignedAmountInt);
+
+impl<T> Add<T> for SignedAmount
+where
+    T: Into<SignedAmount>,
+{
+    type Output = Self;
+
+    fn add(self, other: T) -> Self {
+        Self(self.0.overflowing_add(other.into().0).0)
+    }
+}
+
+impl<'a, T> Add<T> for &'a SignedAmount
+where
+    T: Into<SignedAmount>,
+{
+    type Output = SignedAmount;
+
+    fn add(self, other: T) -> SignedAmount {
+        SignedAmount(self.0.overflowing_add(other.into().0).0)
+    }
+}
+
+impl<T> Sub<T> for SignedAmount
+where
+    T: Into<SignedAmount>,
+{
+    type Output = Self;
+
+    fn sub(self, other: T) -> Self {
+        Self(self.0.overflowing_sub(other.into().0).0)
+    }
+}
+
+impl<'a, T> Sub<T> for &'a SignedAmount
+where
+    T: Into<SignedAmount>,
+{
+    type Output = SignedAmount;
+
+    fn sub(self, other: T) -> SignedAmount {
+        SignedAmount(self.0.overflowing_sub(other.into().0).0)
+    }
+}
+
+impl From<Uint> for SignedAmount {
+    fn from(lo: Uint) -> Self {
+        let mut arr = [0u64; Self::N_WORDS];
+        arr[..4].copy_from_slice(&lo.0);
+        Self(SignedAmountInt(arr))
+    }
+}
+
+impl From<Amount> for SignedAmount {
+    fn from(lo: Amount) -> Self {
+        let mut arr = [0u64; Self::N_WORDS];
+        arr[..4].copy_from_slice(&lo.raw_amount().0);
+        Self(SignedAmountInt(arr))
+    }
+}
+
+impl TryInto<Amount> for SignedAmount {
+    type Error = std::io::Error;
+
+    fn try_into(self) -> Result<Amount, Self::Error> {
+        if self.0.0[Self::N_WORDS - 1] == 0 {
+            Ok(Amount::from_uint(
+                Uint([self.0.0[0], self.0.0[1], self.0.0[2], self.0.0[3]]),
+                0,
+            )
+            .unwrap())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Integer overflow when casting to Amount",
+            ))
         }
+    }
+}
+
+impl SignedAmount {
+    const N_WORDS: usize = 5;
+
+    fn one() -> Self {
+        Self(SignedAmountInt::one())
+    }
+
+    fn is_negative(&self) -> bool {
+        self.0.bit(Self::N_WORDS * SignedAmountInt::WORD_BITS - 1)
+    }
+
+    fn is_positive(&self) -> bool {
+        !self.is_negative() && !self.0.is_zero()
+    }
+
+    fn abs(&self) -> Self {
+        if self.is_negative() { -*self } else { *self }
+    }
+
+    fn to_string_native(self) -> String {
+        let mut res = self.abs().0.to_string();
+        if self.is_negative() {
+            res.insert(0, '-');
+        }
+        res
+    }
+
+    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// amount.
+    pub fn from_masp_denominated(
+        val: i128,
+        denom: MaspDigitPos,
+    ) -> Result<Self, <i64 as TryFrom<u64>>::Error> {
+        let abs = val.unsigned_abs();
+        let lo = abs as u64;
+        let hi = (abs >> 64) as u64;
+        let lo_pos = denom as usize;
+        let hi_pos = lo_pos + 1;
+        let mut raw = [0u64; Self::N_WORDS];
+        raw[lo_pos] = lo;
+        raw[hi_pos] = hi;
+        i64::try_from(raw[Self::N_WORDS - 1]).map(|_| {
+            let res = Self(SignedAmountInt(raw));
+            if val.is_negative() { -res } else { res }
+        })
+    }
+}
+
+impl Not for SignedAmount {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        Self(!self.0)
+    }
+}
+
+impl Neg for SignedAmount {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        !self + Self::one()
+    }
+}
+
+impl CheckedNeg for SignedAmount {
+    fn checked_neg(&self) -> Option<Self> {
+        let neg = -*self;
+        (neg != *self).then_some(neg)
+    }
+}
+
+impl CheckedAdd for SignedAmount {
+    fn checked_add(&self, rhs: &Self) -> Option<Self> {
+        let res = *self + *rhs;
+        ((self.is_negative() != rhs.is_negative())
+            || (self.is_negative() == res.is_negative()))
+        .then_some(res)
+    }
+}
+
+impl CheckedSub for SignedAmount {
+    fn checked_sub(&self, rhs: &Self) -> Option<Self> {
+        let res = *self + -*rhs;
+        ((self.is_negative() == rhs.is_negative())
+            || (res.is_negative() == self.is_negative()))
+        .then_some(res)
+    }
+}
+
+impl PartialOrd for SignedAmount {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (!self.is_negative(), self.0 << 1)
+            .partial_cmp(&(!other.is_negative(), other.0 << 1))
     }
 }

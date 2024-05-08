@@ -3536,6 +3536,7 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
+ "uint",
  "wasm-instrument",
  "wasmer",
  "wasmer-cache",
