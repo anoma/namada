@@ -738,6 +738,7 @@ mod tests {
                 website: None,
                 discord_handle: None,
                 avatar: None,
+                name: None,
             };
             tx::ctx().become_validator(args).unwrap();
         });
@@ -833,6 +834,7 @@ mod tests {
                     Some("website".to_owned()),
                     Some("discord".to_owned()),
                     Some("avatar".to_owned()),
+                    Some("name".to_owned()),
                     Some(Dec::new(6, 2).unwrap()),
                 )
                 .unwrap();
@@ -1019,6 +1021,7 @@ mod tests {
                 website: None,
                 discord_handle: None,
                 avatar: None,
+                name: None,
             };
             tx::ctx().become_validator(args).unwrap();
         });
@@ -1124,6 +1127,7 @@ mod tests {
                     Some("website".to_owned()),
                     Some("discord".to_owned()),
                     Some("avatar".to_owned()),
+                    Some("name".to_owned()),
                     Some(Dec::new(6, 2).unwrap()),
                 )
                 .unwrap();

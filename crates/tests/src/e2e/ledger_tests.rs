@@ -964,6 +964,8 @@ fn pos_init_validator() -> Result<()> {
         "init-validator",
         "--alias",
         new_validator,
+        "--name",
+        new_validator,
         "--account-keys",
         "bertha-key",
         "--commission-rate",
