@@ -14,6 +14,7 @@ version.workspace = true
 
 [features]
 default = []
+testing = ["namada_core/testing", "namada_token/testing"]
 
 [dependencies]
 namada_account = { path = "../account" }
