@@ -158,7 +158,7 @@ def join_network(
     info(f"Validator {genesis_validator} joined {chain_id}")
 
     command_summary[genesis_validator] = (
-        f"{binaries[NAMADA]} --base-dir='{base_dir}' --chain-id '{chain_id}' ledger run"
+        f"{binaries[NAMADA]} --base-dir='{base_dir}' ledger run"
     )
 
 
