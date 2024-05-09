@@ -122,6 +122,8 @@ def join_network(
     pre_genesis_wallet_path,
     command_summary,
 ):
+    info(f"Attempting to join {chain_id} with {genesis_validator}")
+
     if not genesis_validator_path.is_dir() or is_empty(
         genesis_validator_path.iterdir()
     ):
