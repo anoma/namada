@@ -2715,7 +2715,6 @@ pub mod test_utils {
             epochs_per_year: 10000000,
             max_signatures_per_transaction: 15,
             fee_unshielding_gas_limit: 10000,
-            fee_unshielding_descriptions_limit: 15,
             minimum_gas_price: BTreeMap::new(),
             is_native_token_transferable: true,
         };
