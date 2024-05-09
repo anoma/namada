@@ -27,9 +27,6 @@ def main():
 
 
 def main_inner(args, working_directory):
-    templates, templates_path = load_base_templates(args.templates)
-    edit_templates(templates, to_edit_from_args(args))
-
     binaries = target_binary_paths(args.mode)
 
     version_string = system(binaries[NAMADA], "--version").decode().strip()
@@ -38,7 +35,7 @@ def main_inner(args, working_directory):
     chain_id = init_network(
         working_directory=working_directory,
         binaries=binaries,
-        templates_path=templates_path,
+        args=args,
     )
 
     pre_genesis_path = (
@@ -73,7 +70,7 @@ def main_inner(args, working_directory):
 def init_network(
     working_directory,
     binaries,
-    templates_path,
+    args,
 ):
     info("Creating network release archive with `init-network`")
 
@@ -91,6 +88,8 @@ def init_network(
     chain_prefix = "local"
     genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    setup_templates(working_directory, args)
+
     init_network_output = system(
         binaries[NAMADAC],
         "utils",
@@ -100,7 +99,7 @@ def init_network(
         "--genesis-time",
         genesis_time,
         "--templates-path",
-        templates_path,
+        working_directory,
         "--wasm-checksums-path",
         wasm_checksums_path,
         "--archive-dir",
@@ -250,12 +249,13 @@ def json_object(s):
 
 
 def to_edit_from_args(args):
-    params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
     if args.max_validator_slots:
+        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("pos_params", {})[
             "max_validator_slots"
         ] = args.max_validator_slots
     if args.epoch_length:
+        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("parameters", {})["epochs_per_year"] = int(
             round(365 * 24 * 60 * 60 / args.epoch_length)
         )
@@ -270,17 +270,39 @@ def edit_templates(templates, to_edit):
         if invalid_dict(table) or invalid_dict(entries):
             return
 
+        so_far_str = None
+
         for key, value in entries.items():
             if key not in table:
-                warning(f"Skipping invalid parameters entry {so_far}/{key}")
+                if not so_far_str:
+                    so_far_str = "/".join(so_far)
+                warning(f"Skipping invalid parameters entry {so_far_str}/{key}")
                 continue
 
             if type(value) == dict:
-                edit(f"{so_far}/{key}", table[key], value)
+                so_far.append(key)
+                edit(so_far, table[key], value)
+                return
 
             table[key] = value
 
-    edit("/", templates, to_edit)
+    edit([], templates, to_edit)
+
+
+def write_templates(working_directory, templates):
+    template_path = lambda name: Path(working_directory) / name
+    for name, template in templates.items():
+        with open(template_path(name), "w") as output_file:
+            toml.dump(template, output_file)
+
+
+def setup_templates(working_directory, args):
+    to_edit = to_edit_from_args(args)
+    info(f"Updating templates with provided args: {to_edit}")
+    templates = load_base_templates(args.templates)
+    edit_templates(templates, to_edit)
+    write_templates(working_directory, templates)
+    info("Templates have been updated")
 
 
 def get_project_root():
@@ -309,7 +331,7 @@ def load_base_templates(base_templates):
     return {
         template_name: toml.load(src_templates_dir / template_name)
         for template_name in ALL_GENESIS_TEMPLATES
-    }, src_templates_dir
+    }
 
 
 def target_binary_paths(mode):
