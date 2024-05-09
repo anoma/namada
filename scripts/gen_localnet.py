@@ -196,39 +196,48 @@ def parse_cli_args():
         description="Configure a localnet for testing purposes."
     )
 
-    if sys.version_info.minor >= 9:
-        parser.add_argument(
-            "--force",
-            action=argparse.BooleanOptionalAction,
-        )
-    else:
-        parser.add_argument(
-            "--force",
-            action="store_true",
-        )
-        parser.set_defaults(feature=True)
-    parser.add_argument(
+    group = parser.add_argument_group(
+        title="Validator config",
+        description="Customize the validators the localnet will run with.",
+    )
+    group.add_argument(
+        "--templates",
+        type=Path,
+        help="Localnet directory containing genesis templates. Overrides the templates found in `genesis/localnet`.",
+    )
+    group.add_argument(
+        "--validator-aliases",
+        type=validator_aliases_json_object,
+        help='JSON object of validators passed to `--templates` (eg: `{"validator-0":"tnam1..."`).',
+    )
+    group.add_argument(
         "--pre-genesis-path",
         type=Path,
         help="Path to pre-genesis directory. Must be present with custom `--templates`.",
     )
-    parser.add_argument(
+
+    group = parser.add_argument_group(
+        title="General config",
+        description="General configuration of this script.",
+    )
+    if sys.version_info.minor >= 9:
+        group.add_argument(
+            "--force",
+            action=argparse.BooleanOptionalAction,
+        )
+    else:
+        group.add_argument(
+            "--force",
+            action="store_true",
+        )
+        parser.set_defaults(feature=True)
+    group.add_argument(
         "--base-dir-prefix",
         type=Path,
         default=get_project_root() / ".namada",
         help="Prefix path to the base directory of each validator.",
     )
-    parser.add_argument(
-        "--templates",
-        type=Path,
-        help="Localnet directory containing genesis templates. Overrides the templates found in `genesis/localnet`.",
-    )
-    parser.add_argument(
-        "--validator-aliases",
-        type=validator_aliases_json_object,
-        help='JSON object of validators passed to `--templates` (eg: `{"validator-0":"tnam1..."`).',
-    )
-    parser.add_argument(
+    group.add_argument(
         "-m",
         "--mode",
         type=str,
@@ -236,17 +245,22 @@ def parse_cli_args():
         choices=["debug", "release"],
         help="Mode to run the localnet in.",
     )
-    parser.add_argument(
+
+    group = parser.add_argument_group(
+        title="Parameters config",
+        description="Configure chain parameters.",
+    )
+    group.add_argument(
         "--epoch-length",
         type=int,
         help="Epoch length in seconds. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--max-validator-slots",
         type=int,
         help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--edit",
         default={},
         type=params_json_object,
