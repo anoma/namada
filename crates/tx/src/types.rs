@@ -1691,22 +1691,6 @@ impl<'tx> Tx {
     }
 }
 
-/// The specific inner transaction of a batch
-#[derive(
-    Debug,
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-)]
-// FIXME: remove this struct?
-pub struct IndexedInnerTx(pub TxCommitments);
-
 /// Represents the pointers of an indexed tx, which are the block height, the
 /// index inside that block and the commitment inside the tx bundle (if inner
 /// tx)
@@ -1728,7 +1712,7 @@ pub struct IndexedTx {
     /// The index in the block of the tx
     pub index: TxIndex,
     /// This is a pointer to the inner tx inside the batch
-    pub tx_type: IndexedInnerTx,
+    pub inner_tx: TxCommitments,
 }
 
 impl Default for IndexedTx {
@@ -1736,7 +1720,7 @@ impl Default for IndexedTx {
         Self {
             height: BlockHeight::first(),
             index: TxIndex(0),
-            tx_type: IndexedInnerTx(TxCommitments::default()),
+            inner_tx: TxCommitments::default(),
         }
     }
 }
