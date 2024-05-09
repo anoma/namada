@@ -117,7 +117,11 @@ def join_network(
             f"Cannot find pre-genesis directory that is not empty at {genesis_validator_path}"
         )
 
-    base_dir = reset_base_dir(base_dir_prefix, genesis_validator)
+    base_dir = reset_base_dir(
+        prefix=base_dir_prefix,
+        validator_alias=genesis_validator,
+        pre_genesis_wallet=pre_genesis_wallet_path,
+    )
 
     system(
         "env",
@@ -138,10 +142,6 @@ def join_network(
     )
 
     info(f"Validator {genesis_validator} joined {chain_id}")
-
-    # Move the genesis wallet to the base dir
-    wallet = base_dir / chain_id / "wallet.toml"
-    move_genesis_wallet(pre_genesis_wallet_path, wallet)
 
     command_summary[genesis_validator] = (
         f"{binaries[NAMADA]} --base-dir='{base_dir}' --chain-id '{chain_id}' ledger run"
@@ -234,19 +234,6 @@ def json_object(s):
         die("Only JSON objects allowed for param updates")
 
     return params
-
-
-def move_genesis_wallet(genesis_wallet_toml, wallet_toml):
-    genesis_wallet = toml.load(genesis_wallet_toml)
-    wallet = toml.load(wallet_toml)
-
-    for key in genesis_wallet.keys():
-        value_dict = genesis_wallet[key]
-        if key in wallet.keys():
-            wallet[key].update(value_dict)
-
-    with open(wallet_toml, "w") as f:
-        toml.dump(wallet, f)
 
 
 def to_edit_from_args(args):
@@ -358,9 +345,12 @@ def reset_base_dir_prefix(args):
     return prefix
 
 
-def reset_base_dir(prefix, validator_alias):
+def reset_base_dir(prefix, validator_alias, pre_genesis_wallet):
     base_dir = prefix / validator_alias
+    pre_genesis_dir = base_dir / "pre-genesis"
     os.mkdir(base_dir)
+    os.mkdir(pre_genesis_dir)
+    shutil.copy(pre_genesis_wallet, pre_genesis_dir)
     return base_dir
 
 
