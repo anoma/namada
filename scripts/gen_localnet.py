@@ -35,7 +35,46 @@ def main_inner(args, working_directory):
     version_string = system(binaries[NAMADA], "--version").decode().strip()
     info(f"Using {version_string}")
 
-    # Run namadac utils init_network with the correct arguments
+    chain_id = init_network(
+        working_directory=working_directory,
+        binaries=binaries,
+        templates_path=templates_path,
+    )
+
+    pre_genesis_path = (
+        get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
+    )
+
+    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
+
+    genesis_validator = "validator-0"
+    genesis_validator_path = pre_genesis_path / genesis_validator
+
+    command_summary = {}
+    base_dir_prefix = reset_base_dir_prefix(args)
+
+    join_network(
+        working_directory=working_directory,
+        binaries=binaries,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        genesis_validator=genesis_validator,
+        genesis_validator_path=genesis_validator_path,
+        pre_genesis_wallet_path=pre_genesis_wallet_path,
+        command_summary=command_summary,
+    )
+
+    info("Run the ledger(s) using the command string(s) below")
+
+    for validator_alias, cmd_str in command_summary.items():
+        print(f"\n{validator_alias}:\n{cmd_str}")
+
+
+def init_network(
+    working_directory,
+    binaries,
+    templates_path,
+):
     info("Creating network release archive with `init-network`")
 
     wasm_path = get_project_root() / "wasm"
@@ -71,33 +110,7 @@ def main_inner(args, working_directory):
 
     info(f"Initialized chain with id {chain_id}")
 
-    pre_genesis_path = (
-        get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
-    )
-
-    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
-
-    genesis_validator = "validator-0"
-    genesis_validator_path = pre_genesis_path / genesis_validator
-
-    command_summary = {}
-    base_dir_prefix = reset_base_dir_prefix(args)
-
-    join_network(
-        working_directory=working_directory,
-        binaries=binaries,
-        base_dir_prefix=base_dir_prefix,
-        chain_id=chain_id,
-        genesis_validator=genesis_validator,
-        genesis_validator_path=genesis_validator_path,
-        pre_genesis_wallet_path=pre_genesis_wallet_path,
-        command_summary=command_summary,
-    )
-
-    info("Run the ledger(s) using the command string(s) below")
-
-    for validator_alias, cmd_str in command_summary.items():
-        print(f"\n{validator_alias}:\n{cmd_str}")
+    return chain_id
 
 
 def join_network(
