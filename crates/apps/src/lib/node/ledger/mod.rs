@@ -146,8 +146,28 @@ pub fn migrating_state() -> Option<BlockHeight> {
     height.parse::<u64>().ok().map(BlockHeight)
 }
 
+/// Emit a header of warning log msgs if the host does not have
+/// a 64-bit CPU.
+fn emit_warning_on_non_64bit_cpu() {
+    if std::mem::size_of::<usize>() != 8 {
+        tracing::warn!("");
+        tracing::warn!(
+            "Your machine has a {}-bit CPU...",
+            8 * std::mem::size_of::<usize>()
+        );
+        tracing::warn!("");
+        tracing::warn!("A majority of nodes will run on 64-bit hardware!");
+        tracing::warn!("");
+        tracing::warn!("While not immediately being problematic, non 64-bit");
+        tracing::warn!("nodes may run into spurious consensus failures.");
+        tracing::warn!("");
+    }
+}
+
 /// Run the ledger with an async runtime
 pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
+    emit_warning_on_non_64bit_cpu();
+
     let logical_cores = num_cpus::get();
     tracing::info!("Available logical cores: {}", logical_cores);
 
