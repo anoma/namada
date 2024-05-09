@@ -5124,6 +5124,7 @@ dependencies = [
  "namada_tx",
  "regex",
  "serde 1.0.193",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]

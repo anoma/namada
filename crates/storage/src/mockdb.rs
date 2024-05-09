@@ -1,5 +1,7 @@
 //! DB mock for testing
 
+#![allow(clippy::cast_possible_wrap, clippy::arithmetic_side_effects)]
+
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::path::Path;
@@ -193,7 +195,7 @@ impl DB for MockDB {
 
     fn add_block_to_batch(
         &self,
-        state: BlockStateWrite,
+        state: BlockStateWrite<'_>,
         _batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()> {
@@ -213,7 +215,7 @@ impl DB for MockDB {
             ethereum_height,
             eth_events_queue,
             commit_only_data,
-        }: BlockStateWrite = state;
+        }: BlockStateWrite<'_> = state;
 
         self.write_value(
             NEXT_EPOCH_MIN_START_HEIGHT_KEY,
@@ -777,6 +779,7 @@ impl Iterator for PrefixIterator<MockIterator> {
     }
 }
 
+/// MockDB pattern iterator
 #[derive(Debug)]
 pub struct MockPatternIterator {
     inner: PatternIterator<MockPrefixIterator>,

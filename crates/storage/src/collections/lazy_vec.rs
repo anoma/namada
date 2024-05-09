@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::storage::{self, DbKeySeg, KeySeg};
 use thiserror::Error;
@@ -193,7 +194,7 @@ where
         let len = self.len(storage)?;
         let data_key = self.get_data_key(len);
         storage.write(&data_key, val)?;
-        storage.write(&self.get_len_key(), len + 1)
+        storage.write(&self.get_len_key(), checked!(len + 1)?)
     }
 
     /// Removes the last element from a vector and returns it, or `Ok(None)` if
@@ -208,7 +209,7 @@ where
         if len == 0 {
             Ok(None)
         } else {
-            let index = len - 1;
+            let index = checked!(len - 1)?;
             let data_key = self.get_data_key(index);
             if len == 1 {
                 storage.delete(&self.get_len_key())?;
@@ -260,7 +261,7 @@ where
         S: StorageRead,
     {
         let len = self.len(storage)?;
-        self.get(storage, len - 1)
+        self.get(storage, checked!(len - 1)?)
     }
 
     /// An iterator visiting all elements. The iterator element type is

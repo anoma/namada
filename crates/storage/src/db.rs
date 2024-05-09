@@ -133,7 +133,7 @@ pub trait DB: Debug {
     /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
     fn add_block_to_batch(
         &self,
-        state: BlockStateWrite,
+        state: BlockStateWrite<'_>,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()>;
@@ -276,8 +276,9 @@ pub trait DB: Debug {
 
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
-    /// The concrete type of the iterator
+    /// Prefix iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    /// Pattern iterator
     type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// WARNING: This only works for values that have been committed to DB.
