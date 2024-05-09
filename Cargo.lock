@@ -490,7 +490,7 @@ dependencies = [
  "bitflags 2.5.0",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "proc-macro2",
@@ -8247,7 +8247,7 @@ dependencies = [
 [[package]]
 name = "tower-abci"
 version = "0.12.0"
-source = "git+https://github.com/penumbra-zone/tower-abci.git?rev=4b7306578b93a4def9d76abae8e2a46c8ee6952f#4b7306578b93a4def9d76abae8e2a46c8ee6952f"
+source = "git+https://github.com/heliaxdev/tower-abci?rev=52382f4d2bab1022a66b06958a605da946b75144#52382f4d2bab1022a66b06958a605da946b75144"
 dependencies = [
  "bytes",
  "futures",
