@@ -38,11 +38,8 @@ def main_inner(args, working_directory):
     # Run namadac utils init_network with the correct arguments
     info("Creating network release archive with `init-network`")
 
-    chain_prefix = "local"
-    genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     wasm_path = get_project_root() / "wasm"
     wasm_checksums_path = wasm_path / "checksums.json"
-    base_dir = reset_base_dir(args)
 
     # Check that wasm checksums file exists
     if not os.path.isfile(wasm_checksums_path):
@@ -51,6 +48,9 @@ def main_inner(args, working_directory):
     # Check that wasm directory exists and is not empty
     if not os.path.isdir(wasm_path) or not os.listdir(wasm_path):
         die(f"Cannot find wasm directory that is not empty at {wasm_path}")
+
+    chain_prefix = "local"
+    genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     init_network_output = system(
         binaries[NAMADAC],
@@ -75,15 +75,49 @@ def main_inner(args, working_directory):
         get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
     )
 
+    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
+
     genesis_validator = "validator-0"
     genesis_validator_path = pre_genesis_path / genesis_validator
 
+    command_summary = {}
+    base_dir_prefix = reset_base_dir_prefix(args)
+
+    join_network(
+        working_directory=working_directory,
+        binaries=binaries,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        genesis_validator=genesis_validator,
+        genesis_validator_path=genesis_validator_path,
+        pre_genesis_wallet_path=pre_genesis_wallet_path,
+        command_summary=command_summary,
+    )
+
+    info("Run the ledger(s) using the command string(s) below")
+
+    for validator_alias, cmd_str in command_summary.items():
+        print(f"\n{validator_alias}:\n{cmd_str}")
+
+
+def join_network(
+    working_directory,
+    binaries,
+    base_dir_prefix,
+    chain_id,
+    genesis_validator,
+    genesis_validator_path,
+    pre_genesis_wallet_path,
+    command_summary,
+):
     if not genesis_validator_path.is_dir() or is_empty(
         genesis_validator_path.iterdir()
     ):
         die(
             f"Cannot find pre-genesis directory that is not empty at {genesis_validator_path}"
         )
+
+    base_dir = reset_base_dir(base_dir_prefix, genesis_validator)
 
     system(
         "env",
@@ -93,6 +127,7 @@ def main_inner(args, working_directory):
         base_dir,
         "utils",
         "join-network",
+        "--allow-duplicate-ip",
         "--chain-id",
         chain_id,
         "--genesis-validator",
@@ -102,19 +137,13 @@ def main_inner(args, working_directory):
         "--dont-prefetch-wasm",
     )
 
-    info(
-        f"Joined chain with id {chain_id} as a validator with alias {genesis_validator}"
-    )
+    info(f"Validator {genesis_validator} joined {chain_id}")
 
     # Move the genesis wallet to the base dir
-    genesis_wallet_toml = pre_genesis_path / "wallet.toml"
     wallet = base_dir / chain_id / "wallet.toml"
-    move_genesis_wallet(genesis_wallet_toml, wallet)
+    move_genesis_wallet(pre_genesis_wallet_path, wallet)
 
-    info("Run the ledger using the command string below")
-
-    print()
-    print(
+    command_summary[genesis_validator] = (
         f"{binaries[NAMADA]} --base-dir='{base_dir}' --chain-id '{chain_id}' ledger run"
     )
 
@@ -161,7 +190,9 @@ def parse_cli_args():
         )
         parser.set_defaults(feature=True)
     parser.add_argument(
-        "--base-dir", type=str, help="Path to the base directory of the chain."
+        "--base-dir-prefix",
+        type=str,
+        help="Prefix path to the base directory of each validator.",
     )
     parser.add_argument(
         "--templates",
@@ -315,18 +346,22 @@ def is_empty(g):
         return True
 
 
-def reset_base_dir(args):
-    base_dir = args.base_dir
-    if not base_dir:
-        base_dir = get_project_root() / ".namada"
-    if os.path.isdir(base_dir):
+def reset_base_dir_prefix(args):
+    prefix = Path(args.base_dir_prefix or (get_project_root() / ".namada"))
+    if os.path.isdir(prefix):
         if not args.force:
             die(
-                f"Base directory {base_dir} already exists. Try running this script with `--force`."
+                f"Base directory prefix {prefix} already exists. Try running this script with `--force`."
             )
-        shutil.rmtree(base_dir)
+        shutil.rmtree(prefix)
+    os.mkdir(prefix)
+    return prefix
+
+
+def reset_base_dir(prefix, validator_alias):
+    base_dir = prefix / validator_alias
     os.mkdir(base_dir)
-    return Path(base_dir)
+    return base_dir
 
 
 BALANCES_TEMPLATE = "balances.toml"
