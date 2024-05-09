@@ -1,5 +1,7 @@
 use namada_core::address::Address;
 use namada_events::{EmitEvents, EventLevel};
+#[cfg(any(test, feature = "testing"))]
+pub use namada_token::testing;
 pub use namada_token::{
     storage_key, utils, Amount, DenominatedAmount, Transfer,
 };

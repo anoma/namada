@@ -10,6 +10,8 @@ pub mod storage_key {
 }
 
 use namada_core::address::Address;
+#[cfg(any(test, feature = "testing"))]
+pub use namada_core::token::testing;
 use namada_events::EmitEvents;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
