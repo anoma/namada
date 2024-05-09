@@ -720,7 +720,6 @@ mod tests {
                 epochs_per_year: 100,
                 max_signatures_per_transaction: 15,
                 fee_unshielding_gas_limit: 20_000,
-                fee_unshielding_descriptions_limit: 15,
                 minimum_gas_price: BTreeMap::default(),
                 is_native_token_transferable: true,
             };

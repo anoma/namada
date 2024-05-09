@@ -59,7 +59,6 @@ where
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
-        fee_unshielding_descriptions_limit,
         is_native_token_transferable,
     } = parameters;
 
@@ -83,14 +82,6 @@ where
     let fee_unshielding_gas_limit_key =
         storage::get_fee_unshielding_gas_limit_key();
     storage.write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
-
-    // write fee unshielding descriptions limit
-    let fee_unshielding_descriptions_limit_key =
-        storage::get_fee_unshielding_descriptions_limit_key();
-    storage.write(
-        &fee_unshielding_descriptions_limit_key,
-        fee_unshielding_descriptions_limit,
-    )?;
 
     // write vp allowlist parameter
     let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
@@ -351,14 +342,6 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read fee unshielding descriptions limit
-    let fee_unshielding_descriptions_limit_key =
-        storage::get_fee_unshielding_descriptions_limit_key();
-    let value = storage.read(&fee_unshielding_descriptions_limit_key)?;
-    let fee_unshielding_descriptions_limit: u64 = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     let value = storage.read(&epochs_per_year_key)?;
@@ -409,7 +392,6 @@ where
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
-        fee_unshielding_descriptions_limit,
         is_native_token_transferable,
     })
 }
@@ -454,7 +436,6 @@ where
         epochs_per_year: 365,
         max_signatures_per_transaction: 10,
         fee_unshielding_gas_limit: 0,
-        fee_unshielding_descriptions_limit: 0,
         minimum_gas_price: Default::default(),
         is_native_token_transferable: true,
     };

@@ -313,8 +313,6 @@ pub struct Parameters {
     pub max_signatures_per_transaction: u8,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
-    /// Fee unshielding descriptions limit
-    pub fee_unshielding_descriptions_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
 }
