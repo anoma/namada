@@ -1,3 +1,5 @@
+//! Tx data to evaluate a validity-predicate
+
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::hash::Hash;
 use namada_macros::BorshDeserializer;

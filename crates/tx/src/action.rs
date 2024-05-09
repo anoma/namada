@@ -19,6 +19,7 @@ pub use crate::data::pos::{
 pub type Actions = Vec<Action>;
 
 /// An action applied from a tx.
+#[allow(missing_docs)]
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum Action {
     Pos(PosAction),
@@ -27,6 +28,7 @@ pub enum Action {
 }
 
 /// PoS tx actions.
+#[allow(missing_docs)]
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum PosAction {
     BecomeValidator(Address),
@@ -44,6 +46,7 @@ pub enum PosAction {
 }
 
 /// Gov tx actions.
+#[allow(missing_docs)]
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum GovAction {
     InitProposal { author: Address },
@@ -51,6 +54,7 @@ pub enum GovAction {
 }
 
 /// PGF tx actions.
+#[allow(missing_docs)]
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub enum PgfAction {
     ResignSteward(Address),
@@ -62,6 +66,7 @@ pub trait Read {
     /// Storage access errors
     type Err: fmt::Debug;
 
+    /// Read a temporary key-val
     fn read_temp<T: BorshDeserialize>(
         &self,
         key: &storage::Key,
@@ -78,6 +83,7 @@ pub trait Read {
 
 /// Write actions to temporary storage
 pub trait Write: Read {
+    /// Write a temporary key-val
     fn write_temp<T: BorshSerialize>(
         &mut self,
         key: &storage::Key,

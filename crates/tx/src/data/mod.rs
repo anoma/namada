@@ -265,7 +265,7 @@ pub struct VpsResult {
 }
 
 impl fmt::Display for TxResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             write!(
                 f,
@@ -294,7 +294,7 @@ impl FromStr for TxResult {
 }
 
 impl fmt::Display for VpsResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}{}{}",
