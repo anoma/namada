@@ -412,20 +412,11 @@ pub struct TxSourcePostBalance {
     pub token: Address,
 }
 
-/// Validate the fee of the transaction
-// FIXME: what about this? We should validate and if not enough balance check
-// that the first tx in the batch is a valid masp tx that pay fees. Should we
-// really check here? Or should we construct txs that guarantee this? I don't
-// think we can, we should just check here. Don't do the runtime check, jsut
-// check that there's a vout to the signer of the wrapper that matched the fee
-// amount
+/// Validate the fee amount and token
 pub async fn validate_fee<N: Namada>(
     context: &N,
     args: &args::Tx<SdkTypes>,
-    fee_payer: &common::PublicKey,
-) -> Result<(DenominatedAmount, TxSourcePostBalance), Error> {
-    let fee_payer_address = Address::from(fee_payer);
-    // Validate fee amount and token
+) -> Result<DenominatedAmount, Error> {
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
         _,
@@ -454,6 +445,7 @@ pub async fn validate_fee<N: Namada>(
     let validated_minimum_fee = context
         .denominate_amount(&args.fee_token, minimum_fee)
         .await;
+
     let fee_amount = match args.fee_amount {
         Some(amount) => {
             let validated_fee_amount =
@@ -480,6 +472,19 @@ pub async fn validate_fee<N: Namada>(
         None => validated_minimum_fee,
     };
 
+    Ok(fee_amount)
+}
+
+/// Validate the fee of the transaction in case of a transparent fee payer,
+/// computing the updated post balance
+pub async fn validate_transparent_fee<N: Namada>(
+    context: &N,
+    args: &args::Tx<SdkTypes>,
+    fee_payer: &common::PublicKey,
+) -> Result<(DenominatedAmount, TxSourcePostBalance), Error> {
+    let fee_amount = validate_fee(context, args).await?;
+    let fee_payer_address = Address::from(fee_payer);
+
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
     let balance = rpc::query_storage_value::<_, token::Amount>(
         context.client(),
@@ -495,7 +500,6 @@ pub async fn validate_fee<N: Namada>(
         token: args.fee_token.clone(),
     };
 
-    // Update post balance info
     match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => {
             let token_addr = args.fee_token.clone();
@@ -518,7 +522,7 @@ pub async fn validate_fee<N: Namada>(
             updated_balance.post_balance =
                 checked!(updated_balance.post_balance - total_fee)?;
         }
-    }
+    };
 
     Ok((fee_amount, updated_balance))
 }
