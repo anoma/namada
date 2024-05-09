@@ -32,34 +32,34 @@ def main_inner(args, working_directory):
     version_string = system(binaries[NAMADA], "--version").decode().strip()
     info(f"Using {version_string}")
 
-    chain_id = init_network(
+    chain_id, templates = init_network(
         working_directory=working_directory,
         binaries=binaries,
         args=args,
     )
 
-    pre_genesis_path = (
-        get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
-    )
-
-    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
-
-    genesis_validator = "validator-0"
-    genesis_validator_path = pre_genesis_path / genesis_validator
-
     command_summary = {}
     base_dir_prefix = reset_base_dir_prefix(args)
 
-    join_network(
-        working_directory=working_directory,
-        binaries=binaries,
-        base_dir_prefix=base_dir_prefix,
-        chain_id=chain_id,
-        genesis_validator=genesis_validator,
-        genesis_validator_path=genesis_validator_path,
-        pre_genesis_wallet_path=pre_genesis_wallet_path,
-        command_summary=command_summary,
-    )
+    for validator_alias, validator_addr in args.validator_aliases.items():
+        if not validator_exists(
+            templates=templates,
+            validator_alias=validator_alias,
+            validator_addr=validator_addr,
+        ):
+            die(
+                f"Could not find {validator_alias} with addr {validator_addr} in {TRANSACTIONS_TEMPLATE}"
+            )
+
+        join_network(
+            working_directory=working_directory,
+            binaries=binaries,
+            base_dir_prefix=base_dir_prefix,
+            chain_id=chain_id,
+            genesis_validator=validator_alias,
+            pre_genesis_path=args.pre_genesis_path,
+            command_summary=command_summary,
+        )
 
     info("Run the ledger(s) using the command string(s) below")
 
@@ -88,7 +88,7 @@ def init_network(
     chain_prefix = "local"
     genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-    setup_templates(working_directory, args)
+    templates = setup_templates(working_directory, args)
 
     init_network_output = system(
         binaries[NAMADAC],
@@ -109,7 +109,7 @@ def init_network(
 
     info(f"Initialized chain with id {chain_id}")
 
-    return chain_id
+    return chain_id, templates
 
 
 def join_network(
@@ -118,11 +118,13 @@ def join_network(
     base_dir_prefix,
     chain_id,
     genesis_validator,
-    genesis_validator_path,
-    pre_genesis_wallet_path,
+    pre_genesis_path,
     command_summary,
 ):
     info(f"Attempting to join {chain_id} with {genesis_validator}")
+
+    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
+    genesis_validator_path = pre_genesis_path / genesis_validator
 
     if not genesis_validator_path.is_dir() or is_empty(
         genesis_validator_path.iterdir()
@@ -130,6 +132,8 @@ def join_network(
         die(
             f"Cannot find pre-genesis directory that is not empty at {genesis_validator_path}"
         )
+    if not pre_genesis_wallet_path.is_file():
+        die(f"Cannot find pre-genesis wallet at {pre_genesis_wallet_path}")
 
     base_dir = reset_base_dir(
         prefix=base_dir_prefix,
@@ -204,14 +208,25 @@ def parse_cli_args():
         )
         parser.set_defaults(feature=True)
     parser.add_argument(
+        "--pre-genesis-path",
+        type=Path,
+        help="Path to pre-genesis directory. Must be present with custom `--templates`.",
+    )
+    parser.add_argument(
         "--base-dir-prefix",
-        type=str,
+        type=Path,
+        default=get_project_root() / ".namada",
         help="Prefix path to the base directory of each validator.",
     )
     parser.add_argument(
         "--templates",
-        type=str,
-        help="Localnet directory containing genesis templates.",
+        type=Path,
+        help="Localnet directory containing genesis templates. Overrides the templates found in `genesis/localnet`.",
+    )
+    parser.add_argument(
+        "--validator-aliases",
+        type=validator_aliases_json_object,
+        help='JSON object of validators passed to `--templates` (eg: `{"validator-0":"tnam1..."`).',
     )
     parser.add_argument(
         "-m",
@@ -234,14 +249,53 @@ def parse_cli_args():
     parser.add_argument(
         "--edit",
         default={},
-        type=json_object,
+        type=params_json_object,
         help='JSON object of k:v pairs to update in the templates (eg: `{"parameters.toml":{"parameters":{"epochs_per_year":5}}}`).',
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    exclusive = [args.templates, args.validator_aliases, args.pre_genesis_path]
+    exclusivity_respected = all(map(lambda x: x != None, exclusive)) or all(
+        map(lambda x: x == None, exclusive)
+    )
+
+    if not exclusivity_respected:
+        die(
+            "Validator aliases, genesis templates and a pre-genesis dir must be present simultaneously, consult `--help`"
+        )
+
+    args.templates = args.templates or get_project_root() / "genesis" / "localnet"
+    args.validator_aliases = args.validator_aliases or {
+        "validator-0": "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+    }
+    args.pre_genesis_path = (
+        args.pre_genesis_path
+        or get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
+    )
+
+    if not os.path.isdir(args.templates):
+        die(f"Path to templates {args.templates} is not a directory")
+    if not os.path.isdir(args.pre_genesis_path):
+        die(f"Path to pre-genesis {args.pre_genesis_path} is not a directory")
+
+    return args
 
 
-def json_object(s):
+def validator_aliases_json_object(s):
+    aliases = json.loads(s)
+
+    if type(aliases) != dict:
+        die("Only JSON objects allowed for validator")
+
+    for k, v in aliases.items():
+        valid_type = type(k) == str and type(v) == str and v.startswith("tnam1")
+        if not valid_type:
+            die("Must map from validator alias to their validator address")
+
+    return aliases
+
+
+def params_json_object(s):
     params = json.loads(s)
 
     if type(params) != dict:
@@ -305,6 +359,7 @@ def setup_templates(working_directory, args):
     edit_templates(templates, to_edit)
     write_templates(working_directory, templates)
     info("Templates have been updated")
+    return templates
 
 
 def get_project_root():
@@ -324,14 +379,8 @@ def genesis_template_members():
 
 
 def load_base_templates(base_templates):
-    src_templates_dir = (
-        base_templates
-        if base_templates
-        else get_project_root() / "genesis" / "localnet"
-    )
-
     return {
-        template_name: toml.load(src_templates_dir / template_name)
+        template_name: toml.load(base_templates / template_name)
         for template_name in ALL_GENESIS_TEMPLATES
     }
 
@@ -371,7 +420,7 @@ def is_empty(g):
 
 
 def reset_base_dir_prefix(args):
-    prefix = Path(args.base_dir_prefix or (get_project_root() / ".namada"))
+    prefix = args.base_dir_prefix
     if os.path.isdir(prefix):
         if not args.force:
             die(
@@ -389,6 +438,18 @@ def reset_base_dir(prefix, validator_alias, pre_genesis_wallet):
     os.mkdir(pre_genesis_dir)
     shutil.copy(pre_genesis_wallet, pre_genesis_dir)
     return base_dir
+
+
+def validator_exists(templates, validator_alias, validator_addr):
+    transactions = templates[TRANSACTIONS_TEMPLATE]
+    validators = transactions["validator_account"]
+
+    for val in validators:
+        if val["address"] == validator_addr:
+            info(f"Validator {validator_alias} will listen at {val['net_address']}")
+            return True
+
+    return False
 
 
 # https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
