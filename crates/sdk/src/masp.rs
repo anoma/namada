@@ -69,7 +69,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::{IndexedInnerTx, IndexedTx, Tx, TxCommitments};
+use namada_tx::{IndexedTx, Tx, TxCommitments};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -145,7 +145,7 @@ pub enum TransferErr {
 }
 
 #[derive(Debug, Clone)]
-struct ExtractedMaspTxs(Vec<(IndexedInnerTx, Transaction)>);
+struct ExtractedMaspTxs(Vec<(TxCommitments, Transaction)>);
 
 /// MASP verifying keys
 pub struct PVKs {
@@ -837,12 +837,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let extracted_masp_txs = Self::extract_masp_tx(&tx).await?;
                 // Collect the current transactions
-                for (tx_type, transaction) in extracted_masp_txs.0 {
+                for (inner_tx, transaction) in extracted_masp_txs.0 {
                     shielded_txs.insert(
                         IndexedTx {
                             height: height.into(),
                             index: idx,
-                            tx_type,
+                            inner_tx,
                         },
                         transaction,
                     );
@@ -901,7 +901,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .flatten();
 
             if let Some(transaction) = maybe_masp_tx {
-                txs.push((IndexedInnerTx(cmt.to_owned()), transaction));
+                txs.push((cmt.to_owned(), transaction));
             }
         }
 
@@ -1971,7 +1971,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .index
                         .checked_add(1)
                         .expect("Tx index shouldn't overflow"),
-                    tx_type: IndexedInnerTx(TxCommitments::default()),
+                    inner_tx: TxCommitments::default(),
                 }
             });
         self.sync_status = ContextSyncStatus::Speculative;

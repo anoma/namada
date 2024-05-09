@@ -163,13 +163,6 @@ where
 /// Result of applying a transaction
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Arguments needed to execute a Wrapper transaction
-// FIXME: remove this struct
-pub struct WrapperArgs<'a> {
-    /// The block proposer for the current block
-    pub block_proposer: &'a Address,
-}
-
 /// The result of a call to [`dispatch_tx`]
 pub struct DispatchError {
     /// The result of the function call
@@ -199,7 +192,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     state: &'a mut WlState<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    block_proposer: Option<&Address>,
 ) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -258,7 +251,7 @@ where
                     vp_wasm_cache,
                     tx_wasm_cache,
                 },
-                wrapper_args,
+                block_proposer,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
 
@@ -357,7 +350,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'_, S, D, H, CA>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    block_proposer: Option<&Address>,
 ) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
@@ -382,7 +375,7 @@ where
         wrapper_tx_hash,
         &mut shell_params,
         &mut wrapper_changed_keys,
-        wrapper_args,
+        block_proposer,
     )?;
 
     // Account for gas
@@ -408,7 +401,7 @@ fn charge_fee<S, D, H, CA>(
     wrapper_tx_hash: Hash,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    block_proposer: Option<&Address>,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + Sync,
@@ -417,8 +410,8 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     // Charge or check fees before propagating any possible error
-    let payment_result = match wrapper_args {
-        Some(WrapperArgs { block_proposer }) => transfer_fee(
+    let payment_result = match block_proposer {
+        Some(block_proposer) => transfer_fee(
             shell_params.state,
             block_proposer,
             wrapper,

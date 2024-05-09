@@ -15,7 +15,7 @@ use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::{DispatchError, WrapperArgs};
+use namada::ledger::protocol::DispatchError;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -210,7 +210,7 @@ where
                 continue;
             }
 
-            let (tx_gas_meter, mut wrapper_args) = match &tx_header.tx_type {
+            let (tx_gas_meter, block_proposer) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
                     let gas_meter = TxGasMeter::new(wrapper.gas_limit);
@@ -224,12 +224,7 @@ where
                             );
                         }
                     }
-                    (
-                        gas_meter,
-                        Some(WrapperArgs {
-                            block_proposer: &native_block_proposer_address,
-                        }),
-                    )
+                    (gas_meter, Some(&native_block_proposer_address))
                 }
                 TxType::Raw => {
                     tracing::error!(
@@ -312,7 +307,7 @@ where
                 &mut self.state,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
-                wrapper_args.as_mut(),
+                block_proposer,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
