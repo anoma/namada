@@ -1265,13 +1265,12 @@ where
         wrapper.fee.token
     ))))?;
 
-    wrapper_fee_check(wrapper, minimum_gas_price, shell_params)?;
+    fee_data_check(wrapper, minimum_gas_price, shell_params)?;
     protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
 }
 
 /// Check the validity of the fee data
-// FIXME: rename this, this only checks the data, doesn't run the actual payment
-pub fn wrapper_fee_check<D, H, CA>(
+pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,
     shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,

@@ -352,7 +352,7 @@ where
         }
     };
 
-    super::wrapper_fee_check(wrapper, minimum_gas_price, shell_params)?;
+    super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
     protocol::transfer_fee(
         shell_params.state,
