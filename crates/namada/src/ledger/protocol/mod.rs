@@ -67,8 +67,6 @@ pub enum Error {
     TxTypeError,
     #[error("The atomic batch failed at inner transaction {0}")]
     FailingAtomicBatch(Hash),
-    #[error("Fee ushielding error: {0}")]
-    FeeUnshieldingError(namada_tx::data::WrapperTxErr),
     #[error("Gas error: {0}")]
     GasError(String),
     #[error("Error while processing transaction's fees: {0}")]
