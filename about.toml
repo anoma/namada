@@ -14,4 +14,5 @@ accepted = [
     "Apache-2.0 WITH LLVM-exception",
     "Apache-2.0",
     "NOASSERTION",
+    "Zlib",
 ]
