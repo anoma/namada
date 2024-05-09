@@ -81,7 +81,6 @@ namada_test_utils = {path = "../test_utils", optional = true}
 ark-serialize.workspace = true
 ark-std.workspace = true
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
-assert_matches.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 bech32.workspace = true
@@ -121,7 +120,6 @@ num-rational.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 orion.workspace = true
-pretty_assertions.workspace = true
 prost-types.workspace = true
 prost.workspace = true
 rand_core = { workspace = true, features = ["std"] }
@@ -137,7 +135,6 @@ serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
 serde.workspace = true
 sha2.workspace = true
-signal-hook.workspace = true
 sysinfo.workspace = true
 tar.workspace = true
 tempfile.workspace = true
@@ -146,23 +143,22 @@ tendermint-rpc.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
 toml.workspace = true
-tonic.workspace = true
 tower-abci.workspace = true
 tower.workspace = true
 tracing-appender.workspace = true
 tracing-log.workspace = true
 tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true
-winapi.workspace = true
 zeroize.workspace = true
 warp = "0.3.2"
 bytes = "1.1.0"
 
 [dev-dependencies]
-assert_matches = "1.5.0"
 namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
+assert_matches.workspace = true
 bit-set.workspace = true
+pretty_assertions.workspace = true
 proptest.workspace = true
 test-log.workspace = true
 tokio-test.workspace = true

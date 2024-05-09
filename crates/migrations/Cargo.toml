@@ -17,8 +17,5 @@ version.workspace = true
 [dependencies]
 namada_macros = { path = "../macros" }
 
-data-encoding.workspace = true
 lazy_static.workspace = true
 linkme.workspace = true
-serde.workspace = true
-borsh.workspace = true
