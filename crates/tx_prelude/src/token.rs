@@ -1,7 +1,7 @@
 use namada_core::address::Address;
 use namada_events::{EmitEvents, EventLevel};
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, Transfer,
+    storage_key, testing, utils, Amount, DenominatedAmount, Transfer,
 };
 use namada_tx_env::TxEnv;
 
