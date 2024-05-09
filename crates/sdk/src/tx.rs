@@ -65,7 +65,6 @@ pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
-use crate::args::{self, InputAmount};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
@@ -76,11 +75,13 @@ use crate::rpc::{
     self, get_validator_stake, query_wasm_code_hash, validate_amount,
     InnerTxResult, TxBroadcastData, TxResponse,
 };
-use crate::signing::{self, validate_fee, SigningTxData};
+use crate::signing::{
+    self, validate_fee, validate_transparent_fee, SigningTxData,
+};
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
-use crate::{display_line, edisplay_line, Namada};
+use crate::{args, display_line, edisplay_line, Namada};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -298,7 +299,8 @@ pub async fn build_reveal_pk(
         signing::aux_signing_data(context, args, None, Some(public_key.into()))
             .await?;
     let (fee_amount, _) =
-        validate_fee(context, args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, args, &signing_data.fee_payer)
+            .await?;
 
     build(
         context,
@@ -553,7 +555,8 @@ pub async fn build_change_consensus_key(
     .await?;
 
     let (fee_amount, _updated_balance) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     build(
         context,
@@ -587,7 +590,8 @@ pub async fn build_validator_commission_change(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -727,7 +731,8 @@ pub async fn build_validator_metadata_change(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -938,7 +943,8 @@ pub async fn build_update_steward_commission(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
@@ -1004,7 +1010,8 @@ pub async fn build_resign_steward(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     if !rpc::is_steward(context.client(), steward).await {
         edisplay_line!(
@@ -1050,7 +1057,8 @@ pub async fn build_unjail_validator(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     if !rpc::is_validator(context.client(), validator).await? {
         edisplay_line!(
@@ -1152,7 +1160,8 @@ pub async fn build_deactivate_validator(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     // Check if the validator address is actually a validator
     if !rpc::is_validator(context.client(), validator).await? {
@@ -1225,7 +1234,8 @@ pub async fn build_reactivate_validator(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     // Check if the validator address is actually a validator
     if !rpc::is_validator(context.client(), validator).await? {
@@ -1444,7 +1454,8 @@ pub async fn build_redelegation(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let data = pos::Redelegation {
         src_validator,
@@ -1486,7 +1497,8 @@ pub async fn build_withdraw(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let epoch = rpc::query_epoch(context.client()).await?;
 
@@ -1571,7 +1583,8 @@ pub async fn build_claim_rewards(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     // Check that the validator address is actually a validator
     let validator =
@@ -1673,7 +1686,8 @@ pub async fn build_unbond(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     // Check the source's current bond amount
     let bond_source = source.clone().unwrap_or_else(|| validator.clone());
@@ -1906,7 +1920,8 @@ pub async fn build_bond(
     )
     .await?;
     let (fee_amount, updated_balance) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     // Check bond's source (source for delegation or validator for self-bonds)
     // balance
@@ -1969,7 +1984,7 @@ pub async fn build_default_proposal(
     )
     .await?;
     let (fee_amount, _updated_balance) =
-        validate_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
 
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
         .map_err(|e| TxSubmitError::InvalidProposal(e.to_string()))?;
@@ -2023,7 +2038,7 @@ pub async fn build_vote_proposal(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
 
     let proposal_vote = ProposalVote::try_from(vote.clone())
         .map_err(|_| TxSubmitError::InvalidProposalVote)?;
@@ -2324,7 +2339,8 @@ pub async fn build_become_validator(
         signing::init_validator_signing_data(context, tx_args, all_pks).await?;
 
     let (fee_amount, _updated_balance) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     build(
         context,
@@ -2360,7 +2376,7 @@ pub async fn build_pgf_funding_proposal(
     )
     .await?;
     let (fee_amount, _updated_balance) =
-        validate_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
 
     // TODO: need to pay the fee to submit a proposal, check enough balance
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
@@ -2406,7 +2422,7 @@ pub async fn build_pgf_stewards_proposal(
     )
     .await?;
     let (fee_amount, _updated_balance) =
-        validate_fee(context, tx, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx, &signing_data.fee_payer).await?;
 
     // TODO: need to pay the fee to submit a proposal, check enough balance
     let init_proposal_data = InitProposalData::try_from(proposal.clone())
@@ -2449,7 +2465,17 @@ pub async fn build_ibc_transfer(
     )
     .await?;
     let (fee_amount, updated_balance) =
-        validate_fee(context, &args.tx, &signing_data.fee_payer).await?;
+        if let TransferSource::ExtendedSpendingKey(_) = args.source {
+            // MASP fee payment
+            (validate_fee(context, &args.tx).await?, None)
+        } else {
+            // Transparent fee payment
+            validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
+                .await
+                .map(|(fee_amount, updated_balance)| {
+                    (fee_amount, Some(updated_balance))
+                })?
+        };
 
     // Check that the source address exists on chain
     let source =
@@ -2468,23 +2494,27 @@ pub async fn build_ibc_transfer(
         )));
     }
 
-    let check_balance = if updated_balance.source == source
-        && updated_balance.token == args.token
-    {
-        CheckBalance::Balance(updated_balance.post_balance)
-    } else {
-        CheckBalance::Query(balance_key(&args.token, &source))
-    };
+    // If source is transparent check the balance (MASP balance is checked when
+    // constructing the shielded part)
+    if let Some(updated_balance) = updated_balance {
+        let check_balance = if updated_balance.source == source
+            && updated_balance.token == args.token
+        {
+            CheckBalance::Balance(updated_balance.post_balance)
+        } else {
+            CheckBalance::Query(balance_key(&args.token, &source))
+        };
 
-    check_balance_too_low_err(
-        &args.token,
-        &source,
-        validated_amount.amount(),
-        check_balance,
-        args.tx.force,
-        context,
-    )
-    .await?;
+        check_balance_too_low_err(
+            &args.token,
+            &source,
+            validated_amount.amount(),
+            check_balance,
+            args.tx.force,
+            context,
+        )
+        .await?;
+    }
 
     let tx_code_hash =
         query_wasm_code_hash(context, args.tx_code_path.to_str().unwrap())
@@ -2819,8 +2849,20 @@ pub async fn build_transfer<N: Namada>(
     .await?;
 
     let (fee_amount, updated_balance) =
-        validate_fee(context, &args.tx, &signing_data.fee_payer).await?;
+        if let TransferSource::ExtendedSpendingKey(_) = args.source {
+            // MASP fee payment
+            (validate_fee(context, &args.tx).await?, None)
+        } else {
+            // Transparent fee payment
+            validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
+                .await
+                .map(|(fee_amount, updated_balance)| {
+                    (fee_amount, Some(updated_balance))
+                })?
+        };
 
+    // FIXME: to do this thing I need to rework Transfer to allow for multiple
+    // targets or leave the fees on the MASP balance
     let source = args.source.effective_address();
     let target = args.target.effective_address();
 
@@ -2834,25 +2876,27 @@ pub async fn build_transfer<N: Namada>(
         validate_amount(context, args.amount, &args.token, args.tx.force)
             .await?;
 
-    args.amount = InputAmount::Validated(validated_amount);
+    // If source is transparent check the balance (MASP balance is checked when
+    // constructing the shielded part)
+    if let Some(updated_balance) = updated_balance {
+        let check_balance = if updated_balance.source == source
+            && updated_balance.token == args.token
+        {
+            CheckBalance::Balance(updated_balance.post_balance)
+        } else {
+            CheckBalance::Query(balance_key(&args.token, &source))
+        };
 
-    let check_balance = if updated_balance.source == source
-        && updated_balance.token == args.token
-    {
-        CheckBalance::Balance(updated_balance.post_balance)
-    } else {
-        CheckBalance::Query(balance_key(&args.token, &source))
-    };
-
-    check_balance_too_low_err(
-        &args.token,
-        &source,
-        validated_amount.amount(),
-        check_balance,
-        args.tx.force,
-        context,
-    )
-    .await?;
+        check_balance_too_low_err(
+            &args.token,
+            &source,
+            validated_amount.amount(),
+            check_balance,
+            args.tx.force,
+            context,
+        )
+        .await?;
+    }
 
     let masp_addr = MASP;
 
@@ -2867,6 +2911,7 @@ pub async fn build_transfer<N: Namada>(
             (validated_amount, args.token.clone())
         };
 
+    // FIXME: this function should also take another arg as the fees
     let shielded_parts = construct_shielded_parts(
         context,
         &args.source,
@@ -2993,7 +3038,8 @@ pub async fn build_init_account(
     let signing_data =
         signing::aux_signing_data(context, tx_args, None, None).await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let vp_code_hash = query_wasm_code_hash_buf(context, vp_code_path).await?;
 
@@ -3079,7 +3125,8 @@ pub async fn build_update_account(
     )
     .await?;
     let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+        validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
+            .await?;
 
     let account = if let Some(account) =
         rpc::get_account_info(context.client(), addr).await?
@@ -3199,8 +3246,7 @@ pub async fn build_custom(
         default_signer,
     )
     .await?;
-    let (fee_amount, _) =
-        validate_fee(context, tx_args, &signing_data.fee_payer).await?;
+    let fee_amount = validate_fee(context, tx_args).await?;
 
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
