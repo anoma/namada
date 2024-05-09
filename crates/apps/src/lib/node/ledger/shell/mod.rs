@@ -1094,8 +1094,7 @@ where
                     return response;
                 }
 
-                // FIXME: validate masp fee payment if normal fee payment fails
-                // (also use the custom gas meter)
+                // TODO: validate masp fee payment if normal fee payment fails
                 // Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
                     &wrapper,

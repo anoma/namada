@@ -503,7 +503,7 @@ where
     }
 }
 
-// FIXME: check if masp fee payment in first transaction
+// TODO: check masp fee payment if required
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,

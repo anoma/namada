@@ -264,7 +264,7 @@ where
                 });
             }
 
-            // FIXME: handle masp fee payment in the first inner tx if necessary
+            // TODO: handle masp fee payment in the first inner tx if necessary
             for cmt in tx.commitments() {
                 match apply_wasm_tx(
                     tx.batch_ref_tx(cmt),
@@ -341,7 +341,7 @@ where
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
-// FIXME: this must return a flag to say if we need masp fee payment in the
+// TODO: this must signal to the caller if we need masp fee payment in the
 // first inner tx of the batch
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: Tx,

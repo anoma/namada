@@ -2861,7 +2861,7 @@ pub async fn build_transfer<N: Namada>(
                 })?
         };
 
-    // FIXME: to do this thing I need to rework Transfer to allow for multiple
+    // TODO: need multiple source/targets here for masp fee payment
     // targets or leave the fees on the MASP balance
     let source = args.source.effective_address();
     let target = args.target.effective_address();
@@ -2911,7 +2911,8 @@ pub async fn build_transfer<N: Namada>(
             (validated_amount, args.token.clone())
         };
 
-    // FIXME: this function should also take another arg as the fees
+    // TODO: this function should also take another arg as the fees token and
+    // amount
     let shielded_parts = construct_shielded_parts(
         context,
         &args.source,
