@@ -99,7 +99,7 @@ ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0
 ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
 ethers = "2.0.0"
 expectrl = "0.7.0"
-eyre = "0.6.5"
+eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
 fs_extra = "1.2.0"
