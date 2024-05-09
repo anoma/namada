@@ -64,7 +64,7 @@ def main_inner(args, working_directory):
     info("Run the ledger(s) using the command string(s) below")
 
     for validator_alias, cmd_str in command_summary.items():
-        print(f"\n{validator_alias}:\n{cmd_str}")
+        print(f"\n{Color.BOLD}{validator_alias}:{Color.END}\n{cmd_str}")
 
 
 def init_network(
@@ -160,20 +160,20 @@ def join_network(
     )
 
 
-def log(descriptor, line):
-    print(f"[{descriptor}]: {line}")
+def log(color, descriptor, line):
+    print(f"[{color}{Color.UNDERLINE}{descriptor}{Color.END}]: {line}")
 
 
 def info(msg):
-    log("info", msg)
+    log(Color.GREEN, "info", msg)
 
 
 def warning(msg):
-    log("warning", msg)
+    log(Color.YELLOW, "warning", msg)
 
 
 def error(msg):
-    log("error", msg)
+    log(Color.RED, "error", msg)
 
 
 def die(msg):
@@ -387,6 +387,20 @@ def reset_base_dir(prefix, validator_alias, pre_genesis_wallet):
     os.mkdir(pre_genesis_dir)
     shutil.copy(pre_genesis_wallet, pre_genesis_dir)
     return base_dir
+
+
+# https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
+class Color:
+    PURPLE = "\033[95m"
+    CYAN = "\033[96m"
+    DARKCYAN = "\033[36m"
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
 
 
 BALANCES_TEMPLATE = "balances.toml"
