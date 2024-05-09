@@ -293,7 +293,7 @@ where
         super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
 
         // Check fees and extract the gas limit of this transaction
-        // FIXME: check if masp fee payment is required
+        // TODO: check if masp fee payment is required
         match prepare_proposal_fee_check(
             &wrapper,
             tx.header_hash(),
