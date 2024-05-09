@@ -12,6 +12,7 @@ use crate::transaction;
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 
 /// A transfer transaction
+#[derive(Debug, Clone)]
 pub struct Transfer(Tx);
 
 impl Transfer {

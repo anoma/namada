@@ -20,6 +20,7 @@ pub mod pos;
 pub mod transfer;
 
 /// Generic arguments required to construct a transaction
+#[derive(Debug, Clone)]
 pub struct GlobalArgs {
     pub expiration: Option<DateTimeUtc>,
     pub code_hash: Hash,

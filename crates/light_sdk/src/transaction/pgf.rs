@@ -14,6 +14,7 @@ const TX_RESIGN_STEWARD: &str = "tx_resign_steward.wasm";
 const TX_UPDATE_STEWARD_COMMISSION: &str = "tx_update_steward_commission.wasm";
 
 /// A transaction to resign from stewarding pgf
+#[derive(Debug, Clone)]
 pub struct ResignSteward(Tx);
 
 impl ResignSteward {

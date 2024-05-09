@@ -25,6 +25,7 @@ const TX_CHANGE_COMMISSION_WASM: &str = "tx_change_validator_commission.wasm";
 const TX_WITHDRAW_WASM: &str = "tx_withdraw.wasm";
 
 /// A bond transaction
+#[derive(Debug, Clone)]
 pub struct Bond(Tx);
 
 impl Bond {
