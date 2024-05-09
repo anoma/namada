@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.35.1
+
+Namada 0.35.1 is a patch release that fixes a couple build issues with the last minor release.
+
 ## v0.35.0
 
 Namada 0.35.0 is a minor release that refactors events, widely implements checked arithmetics, refactors balances, and makes various other improvements across MASP and other crates needed for mainnet readiness.`
@@ -242,6 +246,9 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
+
+### SDK
+
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
