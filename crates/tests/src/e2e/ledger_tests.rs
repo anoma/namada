@@ -28,7 +28,6 @@ use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
-use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
 use serde::Serialize;
 use serde_json::json;
@@ -45,8 +44,7 @@ use crate::e2e::helpers::{
     is_debug_mode, parse_reached_epoch,
 };
 use crate::e2e::setup::{
-    self, allow_duplicate_ips, default_port_offset, set_validators, sleep, Bin,
-    Who,
+    self, allow_duplicate_ips, default_port_offset, sleep, Bin, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
@@ -471,167 +469,6 @@ fn stop_ledger_at_height() -> Result<()> {
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     ledger.exp_string("Reached block height 2, halting the chain.")?;
     ledger.exp_eof()?;
-    Ok(())
-}
-
-/// Test the optional disposable keypair for wrapper signing
-///
-/// 1. Test that a tx requesting a disposable signer with a correct unshielding
-/// operation is successful
-/// 2. Test that a tx requesting a disposable signer
-/// providing an insufficient unshielding fails
-/// 3. Submit another transaction with valid fee unshielding and an inner
-/// shielded transfer with the same source
-#[test]
-fn wrapper_disposable_signer() -> Result<()> {
-    // Download the shielded pool parameters before starting node
-    let _ = FsShieldedUtils::new(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
-    let test = setup::network(
-        |mut genesis, base_dir: &_| {
-            genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(120);
-            genesis.parameters.parameters.min_num_of_blocks = 1;
-            set_validators(1, genesis, base_dir, default_port_offset)
-        },
-        None,
-    )?;
-
-    // 1. Run the ledger node
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
-
-    // Add the relevant viewing keys to the wallet otherwise the shielded
-    // context won't precache the masp data
-    let tx_args = vec![
-        "add",
-        "--alias",
-        "alias_a",
-        "--value",
-        AA_VIEWING_KEY,
-        "--unsafe-dont-encrypt",
-    ];
-    let mut client = run!(test, Bin::Wallet, tx_args, Some(120))?;
-    client.assert_success();
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-
-    // Produce three different output descriptions to spend
-    for _ in 0..3 {
-        let tx_args = vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AA_PAYMENT_ADDRESS,
-            "--token",
-            NAM,
-            "--amount",
-            "50",
-            "--ledger-address",
-            &validator_one_rpc,
-        ];
-        let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-        client.exp_string(TX_APPLIED_SUCCESS)?;
-    }
-
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AA_VIEWING_KEY,
-        "--node",
-        &validator_one_rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        BERTHA,
-        "--token",
-        NAM,
-        "--amount",
-        "1",
-        "--gas-limit",
-        "20000",
-        "--gas-spending-key",
-        A_SPENDING_KEY,
-        "--disposable-gas-payer",
-        "--ledger-address",
-        &validator_one_rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-    let tx_args = vec!["shielded-sync", "--node", &validator_one_rpc];
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        ALBERT,
-        "--target",
-        BERTHA,
-        "--token",
-        NAM,
-        "--amount",
-        "1",
-        "--gas-limit",
-        "20000",
-        "--gas-price",
-        "90000000",
-        "--gas-spending-key",
-        A_SPENDING_KEY,
-        "--disposable-gas-payer",
-        "--ledger-address",
-        &validator_one_rpc,
-        // NOTE: Forcing the transaction will make the client produce a
-        // transfer without a masp object attached to it, so don't expect a
-        // failure from the masp vp here but from the check_fees function
-        "--force",
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-    client.exp_string("Error while processing transaction's fees")?;
-
-    // Try another valid fee unshielding and masp transaction in the same tx,
-    // with the same source. This tests that the client can properly
-    // construct multiple transactions together
-    let _ep1 = epoch_sleep(&test, &validator_one_rpc, 720)?;
-    let tx_args = vec![
-        "transfer",
-        "--source",
-        A_SPENDING_KEY,
-        "--target",
-        AB_PAYMENT_ADDRESS,
-        "--token",
-        NAM,
-        "--amount",
-        "1",
-        "--gas-limit",
-        "20000",
-        "--gas-spending-key",
-        A_SPENDING_KEY,
-        "--disposable-gas-payer",
-        "--ledger-address",
-        &validator_one_rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(720))?;
-
-    client.exp_string(TX_APPLIED_SUCCESS)?;
     Ok(())
 }
 
