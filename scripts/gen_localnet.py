@@ -8,9 +8,11 @@ import subprocess
 import shutil
 import toml
 import json
+import re
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from datetime import timedelta
 
 
 def main():
@@ -251,9 +253,9 @@ def parse_cli_args():
         description="Configure chain parameters.",
     )
     group.add_argument(
-        "--epoch-length",
-        type=int,
-        help="Epoch length in seconds. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+        "--epoch-duration",
+        type=parse_duration,
+        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit`.",
     )
     group.add_argument(
         "--max-validator-slots",
@@ -324,10 +326,10 @@ def to_edit_from_args(args):
         params.setdefault("pos_params", {})[
             "max_validator_slots"
         ] = args.max_validator_slots
-    if args.epoch_length:
+    if args.epoch_duration:
         params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("parameters", {})["epochs_per_year"] = int(
-            round(365 * 24 * 60 * 60 / args.epoch_length)
+            round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds())
         )
     return args.edit
 
@@ -466,6 +468,24 @@ def validator_exists(templates, validator_alias, validator_addr):
     return False
 
 
+# https://stackoverflow.com/questions/5522031/convert-timedelta-to-total-seconds
+def parse_duration(time_str):
+    parts = PARSE_TIME_REGEX.match(time_str)
+    if not parts:
+        die(f"Invalid duration {time_str}")
+    parts = parts.groupdict()
+    time_params = {}
+    for name, param in parts.items():
+        if param:
+            time_params[name] = int(param)
+    dur = timedelta(**time_params)
+    if dur.total_seconds() == 0:
+        die(
+            f"Duration {time_str} was parsed as zero, try using `hr`, `m` or `s` unit suffixes"
+        )
+    return dur
+
+
 # https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
 class Color:
     PURPLE = "\033[95m"
@@ -505,6 +525,10 @@ ALL_NAMADA_BINS = [
     NAMADAN,
     NAMADAW,
 ]
+
+PARSE_TIME_REGEX = re.compile(
+    r"((?P<hours>\d+?)hr)?((?P<minutes>\d+?)m)?((?P<seconds>\d+?)s)?"
+)
 
 if __name__ == "__main__":
     main()
