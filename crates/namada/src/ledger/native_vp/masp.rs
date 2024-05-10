@@ -20,6 +20,7 @@ use namada_core::collections::HashSet;
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
+use namada_governance::storage::is_proposal_accepted;
 use namada_proof_of_stake::Epoch;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
@@ -30,8 +31,8 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    is_any_shielded_action_balance_key, is_masp_allowed_key, is_masp_key,
-    is_masp_nullifier_key, masp_commitment_anchor_key,
+    is_any_shielded_action_balance_key, is_masp_key, is_masp_nullifier_key,
+    is_masp_token_map_key, is_masp_transfer_key, masp_commitment_anchor_key,
     masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
     ShieldedActionOwner,
 };
@@ -82,6 +83,29 @@ where
     S: StateRead,
     CA: 'static + WasmCacheAccess,
 {
+    /// Return if the parameter change was done via a governance proposal
+    pub fn is_valid_parameter_change(&self, tx: &Tx) -> Result<()> {
+        tx.data().map_or_else(
+            || {
+                Err(native_vp::Error::new_const(
+                    "MASP parameter changes require tx data to be present",
+                )
+                .into())
+            },
+            |data| {
+                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                    .map_err(Error::NativeVpError)?
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "MASP parameter changes can only be performed by \
+                             a governance proposal that has been accepted",
+                        )
+                        .into()
+                    })
+            },
+        )
+    }
+
     // Check that the transaction correctly revealed the nullifiers, if needed
     fn valid_nullifiers_reveal(
         &self,
@@ -253,30 +277,17 @@ where
         Ok(())
     }
 
+    // Check that transfer is pinned correctly and record the balance changes
     fn validate_state_and_get_transfer_data(
         &self,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
-        // Check that the transaction didn't write unallowed masp keys
-        let masp_keys_changed: Vec<&Key> =
-            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
-
-        if masp_keys_changed
-            .iter()
-            .any(|key| !is_masp_allowed_key(key))
-        {
-            return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Found modifications to non-allowed masp keys",
-            )));
-        }
-
         // Get the changed balance keys
-        let counterparts_balances: Vec<_> = keys_changed
+        let mut counterparts_balances = keys_changed
             .iter()
-            .filter_map(is_any_shielded_action_balance_key)
-            .collect();
+            .filter_map(is_any_shielded_action_balance_key);
 
-        counterparts_balances.iter().try_fold(
+        counterparts_balances.try_fold(
             ChangedBalances::default(),
             |mut result, (token, counterpart)| {
                 let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
@@ -316,6 +327,189 @@ where
                 Ok(result)
             },
         )
+    }
+
+    // Check that MASP Transaction and state changes are valid
+    fn is_valid_masp_transfer(
+        &self,
+        tx_data: &Tx,
+        keys_changed: &BTreeSet<Key>,
+    ) -> Result<()> {
+        let epoch = self.ctx.get_block_epoch()?;
+        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
+        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
+
+        if u64::from(self.ctx.get_block_height()?)
+            > u64::from(shielded_tx.expiry_height())
+        {
+            let error =
+                native_vp::Error::new_const("MASP transaction is expired")
+                    .into();
+            tracing::debug!("{error}");
+            return Err(error);
+        }
+
+        // The Sapling value balance adds to the transparent tx pool
+        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
+
+        // Check the validity of the keys and get the transfer data
+        let mut changed_balances =
+            self.validate_state_and_get_transfer_data(keys_changed)?;
+
+        let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &Address::Internal(Masp).serialize_to_vec(),
+            )),
+        ));
+        verify_sapling_balancing_value(
+            changed_balances
+                .pre
+                .get(&masp_address_hash)
+                .unwrap_or(&ValueSum::zero()),
+            changed_balances
+                .post
+                .get(&masp_address_hash)
+                .unwrap_or(&ValueSum::zero()),
+            &shielded_tx.sapling_value_balance(),
+            epoch,
+            &changed_balances.tokens,
+            conversion_state,
+        )?;
+
+        // The set of addresses that are required to authorize this transaction
+        let mut signers = BTreeSet::new();
+
+        // Checks on the sapling bundle
+        // 1. The spend descriptions' anchors are valid
+        // 2. The convert descriptions's anchors are valid
+        // 3. The nullifiers provided by the transaction have not been
+        // revealed previously (even in the same tx) and no unneeded
+        // nullifier is being revealed by the tx
+        // 4. The transaction must correctly update the note commitment tree
+        // in storage with the new output descriptions
+        self.valid_spend_descriptions_anchor(&shielded_tx)?;
+        self.valid_convert_descriptions_anchor(&shielded_tx)?;
+        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
+        self.valid_note_commitment_update(&shielded_tx)?;
+
+        // Checks on the transparent bundle, if present
+        validate_transparent_bundle(
+            &shielded_tx,
+            &mut changed_balances,
+            &mut transparent_tx_pool,
+            epoch,
+            conversion_state,
+            &mut signers,
+        )?;
+
+        // Ensure that every account for which balance has gone down has
+        // authorized this transaction
+        for (addr, pre) in changed_balances.pre {
+            if changed_balances.post[&addr] < pre && addr != masp_address_hash {
+                signers.insert(addr);
+            }
+        }
+
+        let ibc_address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &Address::Internal(namada_core::address::InternalAddress::Ibc)
+                    .serialize_to_vec(),
+            )),
+        ));
+
+        // Ensure that this transaction is authorized by all involved parties
+        for signer in signers {
+            if signer == ibc_address_hash {
+                // If the IBC address is a signatory, then it means that either
+                // Tx - Transaction(s) causes a decrease in the IBC balance or
+                // one of the Transactions' transparent inputs is the IBC. We
+                // can't check whether such an action has been authorized by the
+                // original sender since their address is not in this Namada
+                // instance. However, we do know that the overall changes in the
+                // IBC state are okay since the IBC VP does check this
+                // transaction. So the best we can do is just to ensure that
+                // funds intended for the IBC are not being siphoned from the
+                // Transactions inside this Tx. We achieve this by not allowing
+                // the IBC to be in the transparent output of any of the
+                // Transaction(s).
+                if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
+                    for vout in transp_bundle.vout.iter() {
+                        if vout.address == ibc_address_hash {
+                            let error = native_vp::Error::new_const(
+                                "Simultaneous credit and debit of IBC account \
+                                 in a MASP transaction not allowed",
+                            )
+                            .into();
+                            tracing::debug!("{error}");
+                            return Err(error);
+                        }
+                    }
+                }
+            } else if let Some(signer) = changed_balances.decoder.get(&signer) {
+                // Otherwise the signer must be decodable so that we can
+                // manually check the signatures
+                let public_keys_index_map =
+                    crate::account::public_keys_index_map(
+                        &self.ctx.pre(),
+                        signer,
+                    )?;
+                let threshold =
+                    crate::account::threshold(&self.ctx.pre(), signer)?
+                        .unwrap_or(1);
+                let max_signatures_per_transaction =
+                    crate::parameters::max_signatures_per_transaction(
+                        &self.ctx.pre(),
+                    )?;
+                let mut gas_meter = self.ctx.gas_meter.borrow_mut();
+                tx_data
+                    .verify_signatures(
+                        &[tx_data.raw_header_hash()],
+                        public_keys_index_map,
+                        &Some(signer.clone()),
+                        threshold,
+                        max_signatures_per_transaction,
+                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
+                    )
+                    .map_err(native_vp::Error::new)?;
+            } else {
+                // We are not able to decode the signer, so just fail
+                let error = native_vp::Error::new_const(
+                    "Unable to decode a transaction signer",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+        }
+
+        // Ensure that the shielded transaction exactly balances
+        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
+            None | Some(Ordering::Less) => {
+                let error = native_vp::Error::new_const(
+                    "Transparent transaction value pool must be nonnegative. \
+                     Violation may be caused by transaction being constructed \
+                     in previous epoch. Maybe try again.",
+                )
+                .into();
+                tracing::debug!("{error}");
+                // Section 3.4: The remaining value in the transparent
+                // transaction value pool MUST be nonnegative.
+                return Err(error);
+            }
+            Some(Ordering::Greater) => {
+                let error = native_vp::Error::new_const(
+                    "Transaction fees cannot be paid inside MASP transaction.",
+                )
+                .into();
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+            _ => {}
+        }
+
+        // Verify the proofs
+        verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
+            .map_err(Error::NativeVpError)
     }
 }
 
@@ -608,180 +802,37 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
-        let epoch = self.ctx.get_block_epoch()?;
-        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
-
-        if u64::from(self.ctx.get_block_height()?)
-            > u64::from(shielded_tx.expiry_height())
-        {
-            let error =
-                native_vp::Error::new_const("MASP transaction is expired")
-                    .into();
-            tracing::debug!("{error}");
-            return Err(error);
+        let masp_keys_changed: Vec<&Key> =
+            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
+        let non_allowed_changes = masp_keys_changed.iter().any(|key| {
+            !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
+        });
+        let masp_token_map_changed = masp_keys_changed
+            .iter()
+            .any(|key| is_masp_token_map_key(key));
+        let masp_transfer_changes = masp_keys_changed
+            .iter()
+            .any(|key| is_masp_transfer_key(key));
+        // Check that the transaction didn't write unallowed masp keys
+        if non_allowed_changes {
+            Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Found modifications to non-allowed masp keys",
+            )))
+        } else if masp_token_map_changed && masp_transfer_changes {
+            Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Cannot simultaneously do governance proposal and MASP \
+                 transfer",
+            )))
+        } else if masp_token_map_changed {
+            // The token map can only be changed by a successful governance
+            // proposal
+            self.is_valid_parameter_change(tx_data)
+        } else if masp_transfer_changes {
+            // The MASP transfer keys can only be changed by a valid Transaction
+            self.is_valid_masp_transfer(tx_data, keys_changed)
+        } else {
+            // Changing no MASP keys at all is also fine
+            Ok(())
         }
-
-        // The Sapling value balance adds to the transparent tx pool
-        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
-
-        // Check the validity of the keys and get the transfer data
-        let mut changed_balances =
-            self.validate_state_and_get_transfer_data(keys_changed)?;
-
-        let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
-            ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &Address::Internal(Masp).serialize_to_vec(),
-            )),
-        ));
-        verify_sapling_balancing_value(
-            changed_balances
-                .pre
-                .get(&masp_address_hash)
-                .unwrap_or(&ValueSum::zero()),
-            changed_balances
-                .post
-                .get(&masp_address_hash)
-                .unwrap_or(&ValueSum::zero()),
-            &shielded_tx.sapling_value_balance(),
-            epoch,
-            &changed_balances.tokens,
-            conversion_state,
-        )?;
-
-        // The set of addresses that are required to authorize this transaction
-        let mut signers = BTreeSet::new();
-
-        // Checks on the sapling bundle
-        // 1. The spend descriptions' anchors are valid
-        // 2. The convert descriptions's anchors are valid
-        // 3. The nullifiers provided by the transaction have not been
-        // revealed previously (even in the same tx) and no unneeded
-        // nullifier is being revealed by the tx
-        // 4. The transaction must correctly update the note commitment tree
-        // in storage with the new output descriptions
-        self.valid_spend_descriptions_anchor(&shielded_tx)?;
-        self.valid_convert_descriptions_anchor(&shielded_tx)?;
-        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
-        self.valid_note_commitment_update(&shielded_tx)?;
-
-        // Checks on the transparent bundle, if present
-        validate_transparent_bundle(
-            &shielded_tx,
-            &mut changed_balances,
-            &mut transparent_tx_pool,
-            epoch,
-            conversion_state,
-            &mut signers,
-        )?;
-
-        // Ensure that every account for which balance has gone down has
-        // authorized this transaction
-        for (addr, pre) in changed_balances.pre {
-            if changed_balances.post[&addr] < pre && addr != masp_address_hash {
-                signers.insert(addr);
-            }
-        }
-
-        let ibc_address_hash = TransparentAddress(<[u8; 20]>::from(
-            ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &Address::Internal(namada_core::address::InternalAddress::Ibc)
-                    .serialize_to_vec(),
-            )),
-        ));
-
-        // Ensure that this transaction is authorized by all involved parties
-        for signer in signers {
-            if signer == ibc_address_hash {
-                // If the IBC address is a signatory, then it means that either
-                // Tx - Transaction(s) causes a decrease in the IBC balance or
-                // one of the Transactions' transparent inputs is the IBC. We
-                // can't check whether such an action has been authorized by the
-                // original sender since their address is not in this Namada
-                // instance. However, we do know that the overall changes in the
-                // IBC state are okay since the IBC VP does check this
-                // transaction. So the best we can do is just to ensure that
-                // funds intended for the IBC are not being siphoned from the
-                // Transactions inside this Tx. We achieve this by not allowing
-                // the IBC to be in the transparent output of any of the
-                // Transaction(s).
-                if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
-                    for vout in transp_bundle.vout.iter() {
-                        if vout.address == ibc_address_hash {
-                            let error = native_vp::Error::new_const(
-                                "Simultaneous credit and debit of IBC account \
-                                 in a MASP transaction not allowed",
-                            )
-                            .into();
-                            tracing::debug!("{error}");
-                            return Err(error);
-                        }
-                    }
-                }
-            } else if let Some(signer) = changed_balances.decoder.get(&signer) {
-                // Otherwise the signer must be decodable so that we can
-                // manually check the signatures
-                let public_keys_index_map =
-                    crate::account::public_keys_index_map(
-                        &self.ctx.pre(),
-                        signer,
-                    )?;
-                let threshold =
-                    crate::account::threshold(&self.ctx.pre(), signer)?
-                        .unwrap_or(1);
-                let max_signatures_per_transaction =
-                    crate::parameters::max_signatures_per_transaction(
-                        &self.ctx.pre(),
-                    )?;
-                let mut gas_meter = self.ctx.gas_meter.borrow_mut();
-                tx_data
-                    .verify_signatures(
-                        &[tx_data.raw_header_hash()],
-                        public_keys_index_map,
-                        &Some(signer.clone()),
-                        threshold,
-                        max_signatures_per_transaction,
-                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
-                    )
-                    .map_err(native_vp::Error::new)?;
-            } else {
-                // We are not able to decode the signer, so just fail
-                let error = native_vp::Error::new_const(
-                    "Unable to decode a transaction signer",
-                )
-                .into();
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-        }
-
-        // Ensure that the shielded transaction exactly balances
-        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
-            None | Some(Ordering::Less) => {
-                let error = native_vp::Error::new_const(
-                    "Transparent transaction value pool must be nonnegative. \
-                     Violation may be caused by transaction being constructed \
-                     in previous epoch. Maybe try again.",
-                )
-                .into();
-                tracing::debug!("{error}");
-                // Section 3.4: The remaining value in the transparent
-                // transaction value pool MUST be nonnegative.
-                return Err(error);
-            }
-            Some(Ordering::Greater) => {
-                let error = native_vp::Error::new_const(
-                    "Transaction fees cannot be paid inside MASP transaction.",
-                )
-                .into();
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-            _ => {}
-        }
-
-        // Verify the proofs
-        verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
-            .map_err(Error::NativeVpError)
     }
 }
