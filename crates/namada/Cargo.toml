@@ -130,7 +130,6 @@ num-traits.workspace = true
 orion.workspace = true
 owo-colors = "3.5.0"
 parity-wasm = { version = "0.45.0", features = ["sign_ext"], optional = true }
-parse_duration = "2.1.1"
 paste.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true

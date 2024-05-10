@@ -34,11 +34,11 @@ use crate::{rpc, tx, Namada};
 pub struct Duration(pub StdDuration);
 
 impl ::std::str::FromStr for Duration {
-    type Err = ::parse_duration::parse::Error;
+    type Err = String;
 
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        ::parse_duration::parse(s).map(Duration)
+        ::duration_str::parse(s).map(Duration)
     }
 }
 

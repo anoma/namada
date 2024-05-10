@@ -97,6 +97,7 @@ borsh-ext.workspace = true
 circular-queue.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true
+duration-str = "0.10.0"
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
@@ -112,7 +113,6 @@ num256.workspace = true
 num-traits.workspace = true
 orion.workspace = true
 owo-colors = "3.5.0"
-parse_duration = "2.1.1"
 paste.workspace = true
 patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }

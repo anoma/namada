@@ -179,7 +179,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "derivative",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits 0.2.17",
  "paste",
  "rustc_version 0.3.3",
@@ -202,7 +202,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
 dependencies = [
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits 0.2.17",
  "quote",
  "syn 1.0.109",
@@ -899,7 +899,9 @@ checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits 0.2.17",
+ "wasm-bindgen",
  "windows-targets 0.48.5",
 ]
 
@@ -1724,6 +1726,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
+name = "duration-str"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c1a2e028bbf7921549873b291ddc0cfe08b673d9489da81ac28898cd5a0e6e0"
+dependencies = [
+ "chrono",
+ "rust_decimal",
+ "serde 1.0.193",
+ "thiserror",
+ "time",
+ "winnow 0.6.8",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2443,7 +2459,7 @@ dependencies = [
  "cbc",
  "cipher",
  "libm",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-integer",
  "num-traits 0.2.17",
 ]
@@ -4418,7 +4434,6 @@ dependencies = [
  "orion",
  "owo-colors",
  "parity-wasm",
- "parse_duration",
  "paste",
  "pretty_assertions",
  "proptest",
@@ -4518,7 +4533,7 @@ dependencies = [
  "namada_migrations",
  "namada_sdk",
  "namada_test_utils",
- "num-rational 0.4.1",
+ "num-rational",
  "num-traits 0.2.17",
  "num256",
  "num_cpus",
@@ -4618,7 +4633,7 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "num-integer",
- "num-rational 0.4.1",
+ "num-rational",
  "num-traits 0.2.17",
  "num256",
  "num_enum",
@@ -4917,6 +4932,7 @@ dependencies = [
  "circular-queue",
  "data-encoding",
  "derivation-path",
+ "duration-str",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
@@ -4949,7 +4965,6 @@ dependencies = [
  "num256",
  "orion",
  "owo-colors",
- "parse_duration",
  "paste",
  "patricia_tree",
  "proptest",
@@ -5331,40 +5346,15 @@ dependencies = [
 
 [[package]]
 name = "num"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8536030f9fea7127f841b45bb6243b27255787fb4eb83958aa1ef9d2fdc0c36"
-dependencies = [
- "num-bigint 0.2.6",
- "num-complex 0.2.4",
- "num-integer",
- "num-iter",
- "num-rational 0.2.4",
- "num-traits 0.2.17",
-]
-
-[[package]]
-name = "num"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
 dependencies = [
- "num-bigint 0.4.4",
- "num-complex 0.4.4",
+ "num-bigint",
+ "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.1",
- "num-traits 0.2.17",
-]
-
-[[package]]
-name = "num-bigint"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
-dependencies = [
- "autocfg",
- "num-integer",
+ "num-rational",
  "num-traits 0.2.17",
 ]
 
@@ -5376,16 +5366,6 @@ checksum = "608e7659b5c3d7cba262d894801b9ec9d00de989e8a82bd4bef91d08da45cdc0"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits 0.2.17",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b19411a9719e753aff12e5187b74d60d3dc449ec3f4dc21e3989c3f554bc95"
-dependencies = [
- "autocfg",
  "num-traits 0.2.17",
 ]
 
@@ -5443,24 +5423,12 @@ dependencies = [
 
 [[package]]
 name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg",
- "num-bigint 0.2.6",
- "num-integer",
- "num-traits 0.2.17",
-]
-
-[[package]]
-name = "num-rational"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
 dependencies = [
  "autocfg",
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-integer",
  "num-traits 0.2.17",
 ]
@@ -5491,7 +5459,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9b5179e82f0867b23e0b9b822493821f9345561f271364f409c8e4a058367d"
 dependencies = [
  "lazy_static",
- "num 0.4.1",
+ "num",
  "num-derive 0.3.3",
  "num-traits 0.2.17",
  "serde 1.0.193",
@@ -5729,17 +5697,6 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-targets 0.48.5",
-]
-
-[[package]]
-name = "parse_duration"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7037e5e93e0172a5a96874380bf73bc6ecef022e26fa25f2be26864d6b3ba95d"
-dependencies = [
- "lazy_static",
- "num 0.2.1",
- "regex",
 ]
 
 [[package]]
@@ -6700,6 +6657,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
 
 [[package]]
+name = "rust_decimal"
+version = "1.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1790d1c4c0ca81211399e0e0af16333276f375209e71a37b67698a373db5b47a"
+dependencies = [
+ "arrayvec 0.7.4",
+ "num-traits 0.2.17",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7267,7 +7234,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
 dependencies = [
- "num-bigint 0.4.4",
+ "num-bigint",
  "num-traits 0.2.17",
  "thiserror",
  "time",
@@ -8049,7 +8016,7 @@ checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
  "indexmap 2.1.0",
  "toml_datetime",
- "winnow",
+ "winnow 0.5.25",
 ]
 
 [[package]]
@@ -8062,7 +8029,7 @@ dependencies = [
  "serde 1.0.193",
  "serde_spanned",
  "toml_datetime",
- "winnow",
+ "winnow 0.5.25",
 ]
 
 [[package]]
@@ -9232,6 +9199,15 @@ name = "winnow"
 version = "0.5.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7e87b8dfbe3baffbe687eef2e164e32286eff31a5ee16463ce03d991643ec94"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "winnow"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3c52e9c97a68071b23e836c9380edae937f17b9c4667bd021973efc689f618d"
 dependencies = [
  "memchr",
 ]
