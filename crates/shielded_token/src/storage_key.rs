@@ -76,7 +76,7 @@ pub fn is_masp_key(key: &storage::Key) -> bool {
     )
 }
 /// Check if the given storage key is allowed to be touched by a masp transfer
-pub fn is_masp_allowed_key(key: &storage::Key) -> bool {
+pub fn is_masp_transfer_key(key: &storage::Key) -> bool {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(addr), DbKeySeg::StringSeg(key)]
             if *addr == address::MASP
@@ -119,6 +119,15 @@ pub fn is_masp_commitment_anchor_key(key: &storage::Key) -> bool {
              DbKeySeg::StringSeg(prefix),
             ..
         ] if *addr == address::MASP && prefix == MASP_NOTE_COMMITMENT_ANCHOR_PREFIX)
+}
+
+/// Check if the given storage key is a masp token map key
+pub fn is_masp_token_map_key(key: &storage::Key) -> bool {
+    matches!(&key.segments[..],
+    [DbKeySeg::AddressSeg(addr),
+             DbKeySeg::StringSeg(prefix),
+             ..
+        ] if *addr == address::MASP && prefix == MASP_TOKEN_MAP_KEY)
 }
 
 /// Get a key for a masp pin
