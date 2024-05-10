@@ -727,9 +727,6 @@ impl CliApi {
                 Utils::JoinNetwork(JoinNetwork(args)) => {
                     utils::join_network(global_args, args).await
                 }
-                Utils::FetchWasms(FetchWasms) => {
-                    utils::fetch_wasms(global_args).await
-                }
                 Utils::ValidateWasm(ValidateWasm(args)) => {
                     utils::validate_wasm(args)
                 }

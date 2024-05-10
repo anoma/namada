@@ -31,9 +31,7 @@ use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{
-    self, genesis, get_default_namada_folder, Config, TendermintMode,
-};
+use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, CliWalletUtils};
@@ -264,19 +262,6 @@ pub async fn join_network(
     crate::wallet::save(&wallet).unwrap();
 
     println!("Successfully configured for chain ID {chain_id}");
-}
-
-pub async fn fetch_wasms(global_args: args::Global) {
-    let chain_id = global_args.chain_id.expect(
-        "This command should only be called post-genesis, to fetch missing \
-         wasms on a broken chain directory",
-    );
-    let wasm_dir = wasm_dir_from_env_or(global_args.wasm_dir.as_ref())
-        .unwrap_or_else(|| {
-            let config = Config::load(&global_args.base_dir, &chain_id, None);
-            config.wasm_dir
-        });
-    fetch_wasms_aux(&chain_id, &wasm_dir).await;
 }
 
 async fn fetch_wasms_aux(chain_id: &ChainId, wasm_dir: &Path) {

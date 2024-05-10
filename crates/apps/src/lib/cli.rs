@@ -2164,7 +2164,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
-        FetchWasms(FetchWasms),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
         DeriveGenesisAddresses(DeriveGenesisAddresses),
@@ -2187,7 +2186,6 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
-                let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
                 let validate_wasm =
                     SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
@@ -2214,7 +2212,6 @@ pub mod cmds {
                 let parse_migrations_json =
                     SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 join_network
-                    .or(fetch_wasms)
                     .or(validate_wasm)
                     .or(init_network)
                     .or(derive_addresses)
@@ -2235,7 +2232,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
-                .subcommand(FetchWasms::def())
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(DeriveGenesisAddresses::def())
@@ -2270,26 +2266,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Configure Namada to join an existing network.")
                 .add_args::<args::JoinNetwork>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct FetchWasms;
-
-    impl SubCmd for FetchWasms {
-        const CMD: &'static str = "fetch-wasms";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches.subcommand_matches(Self::CMD).map(|_| Self)
-        }
-
-        fn def() -> App {
-            use crate::wasm_loader::ENV_VAR_WASM_SERVER;
-
-            App::new(Self::CMD).about(format!(
-                "Download pre-built wasms from a remote server, configurable \
-                 via {ENV_VAR_WASM_SERVER}"
-            ))
         }
     }
 
