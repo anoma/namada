@@ -5072,6 +5072,7 @@ dependencies = [
  "proptest",
  "rayon",
  "serde 1.0.193",
+ "smooth-operator",
  "test-log",
  "tracing",
 ]

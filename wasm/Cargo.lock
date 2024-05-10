@@ -4091,6 +4091,7 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "serde",
+ "smooth-operator",
  "tracing",
 ]
 
