@@ -14,7 +14,6 @@ pub mod wrapper_tx {
     };
     use namada_core::hash::Hash;
     use namada_core::key::*;
-    use namada_core::storage::Epoch;
     use namada_core::token::{Amount, DenominatedAmount, Transfer};
     use namada_core::uint::Uint;
     use namada_gas::Gas;
@@ -155,10 +154,6 @@ pub mod wrapper_tx {
         /// Used for signature verification and to determine an implicit
         /// account of the fee payer
         pub pk: common::PublicKey,
-        /// The epoch in which the tx is to be submitted. This determines
-        /// which decryption key will be used
-        // TODO: Is this still necessary without the DKG? Seems not
-        pub epoch: Epoch,
         /// Max amount of gas that can be used when executing the inner tx
         pub gas_limit: GasLimit,
         /// The hash of the optional, unencrypted, unshielding transaction for
@@ -175,14 +170,12 @@ pub mod wrapper_tx {
         pub fn new(
             fee: Fee,
             pk: common::PublicKey,
-            epoch: Epoch,
             gas_limit: GasLimit,
             unshield_hash: Option<Hash>,
         ) -> WrapperTx {
             Self {
                 fee,
                 pk,
-                epoch,
                 gas_limit,
                 unshield_section_hash: unshield_hash,
             }
@@ -224,7 +217,6 @@ pub mod wrapper_tx {
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
                 amount: self.get_tx_fee()?,
-                key: None,
                 shielded: Some(masp_hash),
             };
             let data = transfer.serialize_to_vec();

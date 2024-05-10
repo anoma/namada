@@ -22,6 +22,7 @@ migrations = [
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
 namada_macros = { path = "../macros" }
 namada_migrations = {path = "../migrations", optional = true }
@@ -30,6 +31,7 @@ ark-bls12-381.workspace = true
 bitflags.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
+konst.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
 num-derive.workspace = true

@@ -56,7 +56,7 @@ where
                 .into());
             };
             match key_type {
-                KeyType::PARAMETER => {
+                KeyType::PARAMETER | KeyType::UNKNOWN_PARAMETER => {
                     namada_governance::storage::is_proposal_accepted(
                         &self.ctx.pre(),
                         &data,
@@ -70,13 +70,6 @@ where
                         ))
                         .into()
                     })
-                }
-                KeyType::UNKNOWN_PARAMETER => {
-                    Err(native_vp::Error::new_alloc(format!(
-                        "Attempted to change an unknown protocol parameter: \
-                         {key}",
-                    ))
-                    .into())
                 }
                 KeyType::UNKNOWN => Ok(()),
             }

@@ -1,6 +1,7 @@
 //! Storage API error type, extensible with custom user errors and static string
 //! messages.
 
+use namada_core::arith;
 use thiserror::Error;
 
 #[allow(missing_docs)]
@@ -14,6 +15,12 @@ pub enum Error {
     Custom(CustomError),
     #[error("{0}: {1}")]
     CustomWithMessage(&'static str, CustomError),
+}
+
+impl From<arith::Error> for Error {
+    fn from(value: arith::Error) -> Self {
+        Error::new(value)
+    }
 }
 
 /// Result of a storage API call.

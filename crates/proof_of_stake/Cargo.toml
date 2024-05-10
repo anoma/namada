@@ -25,6 +25,7 @@ migrations = [
 namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance" }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
@@ -35,17 +36,20 @@ namada_trans_token = { path = "../trans_token" }
 borsh.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
+konst.workspace = true
 linkme = {workspace = true, optional = true}
 num-traits.workspace = true
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_events = { path = "../events", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
 
 assert_matches.workspace = true

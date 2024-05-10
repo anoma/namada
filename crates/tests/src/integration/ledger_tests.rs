@@ -19,8 +19,8 @@ use test_log::test;
 
 use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::constants::{
-    ALBERT, ALBERT_KEY, BERTHA, BERTHA_KEY, CHRISTEL, CHRISTEL_KEY, DAEWON,
-    ESTER, GOVERNANCE_ADDRESS, NAM,
+    ALBERT, ALBERT_KEY, APFEL, BERTHA, BERTHA_KEY, BTC, CHRISTEL, CHRISTEL_KEY,
+    DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, SCHNITZEL,
 };
 use crate::integration::helpers::{
     find_address, prepare_steward_commission_update_data,
@@ -59,7 +59,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             token::Amount::native_whole(10),
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         ),
-        key: None,
         shielded: None,
     }
     .serialize_to_vec();
@@ -210,19 +209,80 @@ fn ledger_txs_and_queries() -> Result<()> {
             // expect a decimal
             vec![r"nam: \d+(\.\d+)?"],
         ),
-        // Unspecified token expect all tokens from wallet derived from genesis
+        // Test balance of tokens generated at genesis
         (
-            vec!["balance", "--owner", ALBERT, "--node", &validator_one_rpc],
-            // expect all genesis tokens, sorted by alias
             vec![
-                r"apfel: \d+(\.\d+)?",
-                r"btc: \d+(\.\d+)?",
-                r"dot: \d+(\.\d+)?",
-                r"eth: \d+(\.\d+)?",
-                r"kartoffel: \d+(\.\d+)?",
-                r"schnitzel: \d+(\.\d+)?",
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                APFEL,
+                "--node",
+                &validator_one_rpc,
             ],
+            vec![r"apfel: \d+(\.\d+)?"],
         ),
+        (
+            vec![
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                BTC,
+                "--node",
+                &validator_one_rpc,
+            ],
+            vec![r"btc: \d+(\.\d+)?"],
+        ),
+        (
+            vec![
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                DOT,
+                "--node",
+                &validator_one_rpc,
+            ],
+            vec![r"dot: \d+(\.\d+)?"],
+        ),
+        (
+            vec![
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                ETH,
+                "--node",
+                &validator_one_rpc,
+            ],
+            vec![r"eth: \d+(\.\d+)?"],
+        ),
+        (
+            vec![
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                KARTOFFEL,
+                "--node",
+                &validator_one_rpc,
+            ],
+            vec![r"kartoffel: \d+(\.\d+)?"],
+        ),
+        (
+            vec![
+                "balance",
+                "--owner",
+                ALBERT,
+                "--token",
+                SCHNITZEL,
+                "--node",
+                &validator_one_rpc,
+            ],
+            vec![r"schnitzel: \d+(\.\d+)?"],
+        ),
+        // Account query
         (
             vec![
                 "query-account",
@@ -1428,8 +1488,6 @@ fn change_validator_metadata() -> Result<()> {
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
 
-    println!("\ndbg0\n");
-
     // 2. Query the validator metadata loaded from genesis
     let metadata_query_args = vec![
         "validator-metadata",
@@ -1442,6 +1500,7 @@ fn change_validator_metadata() -> Result<()> {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("No validator name"));
     assert!(captured.contains("Email:"));
     assert!(captured.contains("No description"));
     assert!(captured.contains("No website"));
@@ -1454,6 +1513,8 @@ fn change_validator_metadata() -> Result<()> {
         "change-metadata",
         "--validator",
         "validator-0-validator",
+        "--name",
+        "theokayestvalidator",
         "--email",
         "theokayestvalidator@namada.net",
         "--description",
@@ -1474,6 +1535,7 @@ fn change_validator_metadata() -> Result<()> {
         run(&node, Bin::Client, metadata_query_args.clone())
     });
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Validator name: theokayestvalidator"));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"
@@ -1502,6 +1564,7 @@ fn change_validator_metadata() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_query_args));
     assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("Validator name: theokayestvalidator"));
     assert!(captured.contains("Email: theokayestvalidator@namada.net"));
     assert!(captured.contains(
         "Description: We are just an okay validator node trying to get by"

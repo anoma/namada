@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -38,7 +39,10 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
-use crate::e2e::helpers::{generate_bin_command, make_hermes_config};
+use crate::e2e::helpers::{
+    find_gaia_address, generate_bin_command, make_hermes_config,
+    update_gaia_config,
+};
 
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
@@ -1149,14 +1153,18 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
         let chain_dir = test.test_dir.as_ref().join(chain_id);
-        let wallet = wallet::wallet_file(chain_dir);
+        let key_file_path = if chain_id == constants::GAIA_CHAIN_ID {
+            chain_dir.join(format!("{}_seed.json", constants::GAIA_RELAYER))
+        } else {
+            wallet::wallet_file(chain_dir)
+        };
         let args = [
             "keys",
             "add",
             "--chain",
             chain_id,
             "--key-file",
-            &wallet.to_string_lossy(),
+            &key_file_path.to_string_lossy(),
         ];
         let mut hermes = run_hermes_cmd(test, args, Some(10))?;
         hermes.assert_success();
@@ -1228,6 +1236,162 @@ where
     Ok(cmd_process)
 }
 
+pub fn setup_gaia() -> Result<Test> {
+    let working_dir = working_dir();
+    let test_dir = TestDir::new();
+    let gaia_dir = test_dir.as_ref().join(constants::GAIA_CHAIN_ID);
+    let net = Network {
+        chain_id: ChainId(constants::GAIA_CHAIN_ID.to_string()),
+    };
+    let test = Test {
+        working_dir,
+        test_dir,
+        net,
+        async_runtime: Default::default(),
+    };
+
+    // initialize
+    let args = [
+        "--chain-id",
+        constants::GAIA_CHAIN_ID,
+        "init",
+        constants::GAIA_CHAIN_ID,
+    ];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    for role in [
+        constants::GAIA_USER,
+        constants::GAIA_RELAYER,
+        constants::GAIA_VALIDATOR,
+    ] {
+        let key_file =
+            format!("{}/{role}_seed.json", gaia_dir.to_string_lossy());
+        let args = [
+            "keys",
+            "add",
+            role,
+            "--keyring-backend",
+            "test",
+            "--output",
+            "json",
+        ];
+        let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+        let result = gaia.exp_string("\n")?;
+        let mut file = File::create(key_file).unwrap();
+        file.write_all(result.as_bytes()).map_err(|e| {
+            eyre!(format!("Writing a Gaia key file failed: {}", e))
+        })?;
+    }
+
+    // Add tokens to a user account
+    let account = find_gaia_address(&test, constants::GAIA_USER)?;
+    let args = [
+        "genesis",
+        "add-genesis-account",
+        &account,
+        "10000stake,1000samoleans",
+    ];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // Add the stake token to the relayer
+    let account = find_gaia_address(&test, constants::GAIA_RELAYER)?;
+    let args = ["genesis", "add-genesis-account", &account, "10000stake"];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // Add the stake token to the validator
+    let validator = find_gaia_address(&test, constants::GAIA_VALIDATOR)?;
+    let stake = "100000000000stake";
+    let args = ["genesis", "add-genesis-account", &validator, stake];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    // stake
+    let args = [
+        "genesis",
+        "gentx",
+        constants::GAIA_VALIDATOR,
+        stake,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        constants::GAIA_CHAIN_ID,
+    ];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    let args = ["genesis", "collect-gentxs"];
+    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
+    gaia.assert_success();
+
+    update_gaia_config(&test)?;
+
+    Ok(test)
+}
+
+pub fn run_gaia_cmd<I, S>(
+    test: &Test,
+    args: I,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut run_cmd = Command::new("gaiad");
+    let gaia_dir = test.test_dir.as_ref().join("gaia");
+    run_cmd.args(["--home", &gaia_dir.to_string_lossy()]);
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}",
+            "Failed to run Gaia".underline().red(),
+            cmd_str,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-gaia-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    Ok(cmd_process)
+}
+
 #[allow(dead_code)]
 pub mod constants {
     // Paths to the WASMs used for tests
@@ -1246,23 +1410,23 @@ pub mod constants {
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
 
     // Shielded spending and viewing keys and payment addresses
-    pub const A_SPENDING_KEY: &str = "zsknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu69au6gn3su5ewneas486hdccyayx32hxvt64p3d0hfuprpgcgv2q9gdx3jvxrn02f0nnp3jtdd6f5vwscfuyum083cvfv4jun75ak5sdgrm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxc9q0cqr";
-    pub const B_SPENDING_KEY: &str = "zsknam1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7c2k4r7f7zu2yr5rjwr374unjjeuzrh6mquzy6grfdcnnu5clzaq2llqhr70a8yyx0p62aajqvrqjxrht3myuyypsvm725uyt5vm0fqzrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwqf599qq";
+    pub const A_SPENDING_KEY: &str = "zsknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvh3cpl9w7guustfzjxsyaeqtefhden6q8776t9cr9vkqztj7u0mgs5k9nz945sypev9ppptn5d85as3ccsnu3q6g3acqp2gpsrwe6naqg3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc06jgc7";
+    pub const B_SPENDING_KEY: &str = "zsknam1qdml0zguqqqqpqx8elavks722m0cjelgh3r044cfregyw049jze9lwha2cfqdqnekecnttdvygd6s784kch2v3wjs45g5z0n36hpqv5ruy8jjfu5mz2snl8ljyz79h3szmyf43zve79l6hwnlfk94r422tfwr2f62vvgkeqvc4z2dgrvqy033ymq5ylz3gmf6wdzhsdmzm0h9uv9374x755rzgvmcxhxntu6v63acqktv6zk390e9pd6vr0pzqaq6auu59kwpnw0haczfyju8";
     // A payment address derived from A_SPENDING_KEY
-    pub const AA_PAYMENT_ADDRESS: &str = "znam1qr57pyghrt5ek7v42nxsqdqggltwqrgj2hjlvm5sj0nr8hezzryxcu44qzcea7qdx6wh02cvt9jlu";
+    pub const AA_PAYMENT_ADDRESS: &str = "znam1ky620tz7z658cralqt693qpvk42wvth468zp38nqvq2apmex5rfut3dfqm2asrsqv0tc7saqje7";
     // A payment address derived from B_SPENDING_KEY
-    pub const AB_PAYMENT_ADDRESS: &str = "znam1qp562jexfndtcw63equndlwgwawutf6l4p4xgkcvp9sjqf9x7kdlvc48mrh3stfvwk9s9fgsmhuz6";
+    pub const AB_PAYMENT_ADDRESS: &str = "znam1zxt8e22uz666ce7hxqpc69yfj3tpd9v26ep2epwn34kvyuwjh98hhre9897shcjj4cnqugwlv4q";
     // A viewing key derived from B_SPENDING_KEY
-    pub const AB_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqqpagte43rsza46v55dlz8cffahv0fnr6eqacvnrkyuf9lmndgal7erg38awgq60r259csg3lxeeyy5355f5nj3ywpeqgd2guqd73uxz46645d0ayt9em88wflka0vsrq29u47x55psw93ly80lvftzdr5ccrzuuedtf6fala4r4nnazm9y9hq5yu6pq24arjskmpv4mdgfn3spffxxv8ugvym36kmnj45jcvvmm227vqjm5fq8882yhjsq97p7xrwq7xmucf";
+    pub const AB_VIEWING_KEY: &str = "zvknam1qdml0zguqqqqpqx8elavks722m0cjelgh3r044cfregyw049jze9lwha2cfqdqnekem0xdqf9ytuhaxzeunyl7svgvxjv5g73m24k7w0h6q7wtvcltvlzynzhc5grlfgv7037lfh8w3su5krnzzzjh4nsleydtlns4gl0vmnc4z2dgrvqy033ymq5ylz3gmf6wdzhsdmzm0h9uv9374x755rzgvmcxhxntu6v63acqktv6zk390e9pd6vr0pzqaq6auu59kwpnw0hacdsfkws";
     // A payment address derived from B_VIEWING_KEY
-    pub const BB_PAYMENT_ADDRESS: &str = "znam1qpsr9ass6lfmwlkamk3fpwapht94qqe8dq3slykkfd6wjnd4s9snlqszvxsksk3tegqv2yg9rcrzd";
+    pub const BB_PAYMENT_ADDRESS: &str = "znam1mqt0ja2zccy70du2d6rcr77jscgq3gkekfvhrqe7zkxa8rr3qsjsrd66gxnrykdmdeh5wmglmcm";
     // A viewing key derived from A_SPENDING_KEY
-    pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
-    pub const C_SPENDING_KEY: &str = "zsknam1qqqqqqqqqqqqqq8cxw3ef0fardt9wq0aqeh29wwljyctw39q4j2t5kmwu6c8x2hfwftnwm6pxtmzyyawm3kruxvk2fdgey90pv3jj9ffvdkxq5vmew5s495qwfyrerrwhxcmx6dl08xh7t36fnn99cdkmsefdv3p3cvw7cq8f4y37q0kh60pdsm6vfkgft2thpu6t9y6ucn68aerump87dgv864yfrxg5529kek99uhzheqajyfrynvsm70v44vsxj2pq5x0wwudrygnmqund";
+    pub const AA_VIEWING_KEY: &str = "zvknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvhnc63hymme53jz3mmwrzfkr9tk82nqacf5vlmj9du3s3rjz0h6usnh47pw0ufw4u6yrfvf95wfa9xj0m8pcrns9yh90s0jkf3cqy2z7c3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc8djdrp";
+    pub const C_SPENDING_KEY: &str = "zsknam1qdy5g4udqqqqpqrfdzej0s45m8s6nprder4udwqm3ql8wx34e8f46dv8cwnmcjp40uj3qy5tgetj27jytvxk4vpa3pjsd80y332nj542w39wta8lsrzqzs822ydgmz5g2sd2k29hxc3uh77v5cmcext799fxn6sa9rd3zuggl6flgjz7wz9wwu9kxd4rth4clw6ug4drxln96y96nf8fmvgm5eddm93azuzlkjj0dpw343ukwcfuvkdhd772539cskgggcqsaaf0j7czshjwe";
     // A viewing key derived from C_SPENDING_KEY
-    pub const AC_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq8cxw3ef0fardt9wq0aqeh29wwljyctw39q4j2t5kmwu6c8x2hfwtlqw4tv6u0me086mffgk9mutyarawfl9mpgjg320fn5jhyes4fmjauwa0yj4gqpg3clnqck5w8xa5svdzm2ngyex4tvpvr7e4t7tcx3f4y37q0kh60pdsm6vfkgft2thpu6t9y6ucn68aerump87dgv864yfrxg5529kek99uhzheqajyfrynvsm70v44vsxj2pq5x0wwudrygca6tgn";
+    pub const AC_VIEWING_KEY: &str = "zvknam1qdy5g4udqqqqpqrfdzej0s45m8s6nprder4udwqm3ql8wx34e8f46dv8cwnmcjp40lr4vutffut7ed5x6egd6etcdh9sxh3j9fe5dshhrn3nq4yfp78gt8ve59y4vnu45xlt93vtrzsxtwlxjjgu2p496lc3ye8m83qplsqfl6flgjz7wz9wwu9kxd4rth4clw6ug4drxln96y96nf8fmvgm5eddm93azuzlkjj0dpw343ukwcfuvkdhd772539cskgggcqsaaf0j7cfyd3jr";
     // A viewing key derived from C_VIEWING_KEY
-    pub const AC_PAYMENT_ADDRESS: &str = "znam1qyw2q5ltsvsp8gp8e3uswerwd7ekq7nc6mx7mtphtyumuq8j2qqmg4zau70m0mcseet8wqsf2gg4p";
+    pub const AC_PAYMENT_ADDRESS: &str = "znam1xv4ml6fp3zqjhw20xj3srd75cq8tyejdst0xweq60c70732ty2chd2v39tllpzf4uf6s66vfm6w";
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";
@@ -1278,6 +1442,14 @@ pub mod constants {
     pub const SCHNITZEL: &str = "Schnitzel";
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
+
+    // Gaia
+    pub const GAIA_RPC: &str = "127.0.0.1:26657";
+    pub const GAIA_CHAIN_ID: &str = "gaia";
+    pub const GAIA_USER: &str = "user";
+    pub const GAIA_RELAYER: &str = "relayer";
+    pub const GAIA_VALIDATOR: &str = "validator";
+    pub const GAIA_COIN: &str = "samoleans";
 }
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.

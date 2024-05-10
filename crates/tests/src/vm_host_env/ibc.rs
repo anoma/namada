@@ -346,7 +346,8 @@ fn dummy_client() -> (MockClientState, MockConsensusState) {
         // for a past block on the counterparty chain
         timestamp: (Timestamp::now() - Duration::from_secs(10)).unwrap(),
     };
-    let client_state = MockClientState::new(header);
+    let client_state = MockClientState::new(header)
+        .with_trusting_period(Duration::from_secs(30));
     let consensus_state = MockConsensusState::new(header);
 
     (client_state, consensus_state)
@@ -363,7 +364,7 @@ pub fn prepare_opened_connection(
         ConnState::Open,
         client_id.clone(),
         dummy_connection_counterparty(),
-        vec![ConnVersion::default()],
+        ConnVersion::compatibles(),
         Duration::new(0, 0),
     )
     .expect("invalid connection");
@@ -469,7 +470,7 @@ pub fn msg_connection_open_try(
         client_id_on_b: client_id,
         client_state_of_b_on_a: client_state,
         counterparty: dummy_connection_counterparty(),
-        versions_on_a: vec![ConnVersion::default()],
+        versions_on_a: ConnVersion::compatibles(),
         proofs_height_on_a: dummy_proof_height(),
         proof_conn_end_on_a: dummy_proof(),
         proof_client_state_of_b_on_a: dummy_proof(),
@@ -478,7 +479,7 @@ pub fn msg_connection_open_try(
         delay_period: Duration::from_secs(0),
         signer: "test".to_string().into(),
         proof_consensus_state_of_b: Some(dummy_proof()),
-        previous_connection_id: ConnectionId::default().to_string(),
+        previous_connection_id: ConnectionId::zero().to_string(),
     }
 }
 
@@ -497,7 +498,7 @@ pub fn msg_connection_open_ack(
         proof_consensus_state_of_a_on_b: dummy_proof(),
         proofs_height_on_b: dummy_proof_height(),
         consensus_height_of_a_on_b: consensus_height,
-        version: ConnVersion::default(),
+        version: ConnVersion::compatibles().first().unwrap().clone(),
         signer: "test".to_string().into(),
         proof_consensus_state_of_a: None,
     }
@@ -562,7 +563,7 @@ pub fn msg_channel_open_try(
         proof_height_on_a: dummy_proof_height(),
         ordering: Order::Unordered,
         signer: "test".to_string().into(),
-        version_proposal: ChanVersion::default(),
+        version_proposal: ChanVersion::empty(),
     }
 }
 

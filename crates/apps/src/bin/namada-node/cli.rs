@@ -59,7 +59,7 @@ pub fn main() -> Result<()> {
                     let wasm_dir = chain_ctx.wasm_dir();
                     chain_ctx.config.ledger.shell.action_at_height =
                         Some(ActionAtHeight {
-                            height: args.last_height + 2,
+                            height: args.last_height.checked_add(2).unwrap(),
                             action: Action::Halt,
                         });
                     std::env::set_var(

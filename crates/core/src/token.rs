@@ -2,8 +2,6 @@
 
 use std::cmp::Ordering;
 use std::fmt::Display;
-use std::iter::Sum;
-use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -16,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::address::Address;
+use crate::arith::{self, checked, CheckedAdd};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::hash::Hash;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
@@ -100,9 +99,10 @@ impl Amount {
 
     /// Create a new amount of native token from whole number of tokens
     pub fn native_whole(amount: u64) -> Self {
-        Self {
-            raw: Uint::from(amount) * NATIVE_SCALE,
-        }
+        let raw = Uint::from(amount)
+            .checked_mul(Uint::from(NATIVE_SCALE))
+            .expect("u64 cannot overflow token amount");
+        Self { raw }
     }
 
     /// Get the raw [`Uint`] value, which represents namnam
@@ -188,9 +188,12 @@ impl Amount {
 
     /// Checked multiplication. Returns `None` on overflow.
     #[must_use]
-    pub fn checked_mul(&self, amount: Amount) -> Option<Self> {
+    pub fn checked_mul<T>(&self, amount: T) -> Option<Self>
+    where
+        T: Into<Self>,
+    {
         self.raw
-            .checked_mul(amount.raw)
+            .checked_mul(amount.into().raw)
             .map(|result| Self { raw: result })
     }
 
@@ -211,7 +214,7 @@ impl Amount {
         let denom = denom.into();
         let uint = uint.into();
         if denom == 0 {
-            return Ok(Self { raw: uint });
+            return Ok(uint.into());
         }
         match Uint::from(10)
             .checked_pow(Uint::from(denom))
@@ -236,10 +239,10 @@ impl Amount {
         val: u128,
         denom: MaspDigitPos,
     ) -> Option<Self> {
-        let lo = val as u64;
+        let lo = u64::try_from(val).ok()?;
         let hi = (val >> 64) as u64;
         let lo_pos = denom as usize;
-        let hi_pos = lo_pos + 1;
+        let hi_pos = lo_pos.checked_add(1)?;
         let mut raw = [0u64; 4];
         raw[lo_pos] = lo;
         if hi != 0 && hi_pos >= 4 {
@@ -271,29 +274,75 @@ impl Amount {
         DenominatedAmount::from_str(string).map(|den| den.amount)
     }
 
-    /// Multiply by a decimal [`Dec`] with the result rounded up.
-    ///
-    /// # Panics
-    /// Panics when the `dec` is negative.
-    #[must_use]
-    pub fn mul_ceil(&self, dec: Dec) -> Self {
-        assert!(!dec.is_negative());
-        let tot = self.raw * dec.abs();
-        let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
-        let floor_div = tot / denom;
-        let rem = tot % denom;
+    /// Multiply by a decimal [`Dec`] with the result rounded up. Returns an
+    /// error if the dec is negative. Checks for overflow.
+    pub fn mul_ceil(&self, dec: Dec) -> Result<Self, arith::Error> {
+        // Fails if the dec negative
+        let _ = checked!(Dec(I256::maximum()) - dec)?;
+
+        let tot = checked!(self.raw * dec.abs())?;
+        let denom = Uint::from(10u64.pow(u32::from(POS_DECIMAL_PRECISION)));
+        let floor_div = checked!(tot / denom)?;
+        let rem = checked!(tot % denom)?;
         // dbg!(tot, denom, floor_div, rem);
         let raw = if !rem.is_zero() {
-            floor_div + Self::from(1_u64)
+            checked!(floor_div + Uint::one())?
         } else {
             floor_div
         };
-        Self { raw }
+        Ok(Self { raw })
+    }
+
+    /// Multiply by a decimal [`Dec`] with the result rounded down. Returns an
+    /// error if the dec is negative. Checks for overflow.
+    pub fn mul_floor(&self, dec: Dec) -> Result<Self, arith::Error> {
+        // Fails if the dec negative
+        let _ = checked!(Dec(I256::maximum()) - dec)?;
+
+        let raw = checked!(
+            (Uint::from(*self) * dec.0.abs())
+                / Uint::from(10u64.pow(u32::from(POS_DECIMAL_PRECISION)))
+        )?;
+        Ok(Self { raw })
+    }
+
+    /// Sum with overflow check
+    pub fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Option<Self> {
+        iter.try_fold(Amount::zero(), |acc, amt| acc.checked_add(amt))
+    }
+
+    /// Divide by `u64` with zero divisor and overflow check.
+    pub fn checked_div_u64(self, rhs: u64) -> Option<Self> {
+        if rhs == 0 {
+            return None;
+        }
+        let raw = self.raw.checked_div(Uint::from(rhs))?;
+        Some(Self { raw })
+    }
+
+    /// A combination of Euclidean division and fractions:
+    /// x*(a,b) = (a*(x//b), x%b).
+    pub fn u128_eucl_div_rem(
+        mut self,
+        (a, b): (u128, u128),
+    ) -> Option<(Amount, Amount)> {
+        let a = Uint::from(a);
+        let b = Uint::from(b);
+        let raw = (self.raw.checked_div(b))?.checked_mul(a)?;
+        let amt = Amount { raw };
+        self.raw = self.raw.checked_rem(b)?;
+        Some((amt, self))
+    }
+}
+
+impl CheckedAdd for Amount {
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        self.checked_add(rhs)
     }
 }
 
 impl Display for Amount {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.raw)
     }
 }
@@ -384,7 +433,10 @@ impl DenominatedAmount {
             return string;
         }
         if string.len() > decimals {
-            string.insert(string.len() - decimals, '.');
+            // Cannot underflow cause `string.len` > `decimals`
+            #[allow(clippy::arithmetic_side_effects)]
+            let idx = string.len() - decimals;
+            string.insert(idx, '.');
         } else {
             for _ in string.len()..decimals {
                 string.insert(0, '0');
@@ -406,7 +458,7 @@ impl DenominatedAmount {
             let (div, rem) = value.div_mod(ten);
             if rem == Uint::zero() {
                 value = div;
-                denom -= 1;
+                denom = denom.checked_sub(1).unwrap_or_default();
             }
         }
         Self {
@@ -424,8 +476,11 @@ impl DenominatedAmount {
         if denom.0 < self.denom.0 {
             return Err(AmountParseError::PrecisionDecrease);
         }
+        // Cannot underflow cause `denom` >= `self.denom`
+        #[allow(clippy::arithmetic_side_effects)]
+        let denom_diff = denom.0 - self.denom.0;
         Uint::from(10)
-            .checked_pow(Uint::from(denom.0 - self.denom.0))
+            .checked_pow(Uint::from(denom_diff))
             .and_then(|scaling| self.amount.raw.checked_mul(scaling))
             .map(|amount| Self {
                 amount: Amount { raw: amount },
@@ -509,7 +564,11 @@ impl FromStr for DenominatedAmount {
     type Err = AmountParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let precision = s.find('.').map(|pos| s.len() - pos - 1);
+        let precision = s.find('.').map(|pos| {
+            s.len()
+                .checked_sub(pos.checked_add(1).unwrap_or(pos))
+                .unwrap_or_default()
+        });
         let digits = s
             .chars()
             .filter_map(|c| {
@@ -522,15 +581,13 @@ impl FromStr for DenominatedAmount {
             .rev()
             .collect::<Vec<_>>();
         if digits.len() != s.len() && precision.is_none()
-            || digits.len() != s.len() - 1 && precision.is_some()
+            || digits.len() != s.len().checked_sub(1).unwrap_or_default()
+                && precision.is_some()
         {
             return Err(AmountParseError::NotNumeric);
         }
         if digits.len() > 77 {
-            return Err(AmountParseError::ScaleTooLarge(
-                digits.len() as u32,
-                77,
-            ));
+            return Err(AmountParseError::ScaleTooLarge(digits.len(), 77));
         }
         let mut value = Uint::default();
         let ten = Uint::from(10);
@@ -541,7 +598,10 @@ impl FromStr for DenominatedAmount {
                 .and_then(|scaled| value.checked_add(scaled))
                 .ok_or(AmountParseError::InvalidRange)?;
         }
-        let denom = Denomination(precision.unwrap_or_default() as u8);
+        let denom = Denomination(
+            u8::try_from(precision.unwrap_or_default())
+                .map_err(|_e| AmountParseError::PrecisionOverflow)?,
+        );
         Ok(Self {
             amount: Amount { raw: value },
             denom,
@@ -558,13 +618,15 @@ impl PartialOrd for DenominatedAmount {
 impl Ord for DenominatedAmount {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.denom < other.denom {
+            // Cannot underflow cause `self.denom` < `other.denom`
+            #[allow(clippy::arithmetic_side_effects)]
             let diff = other.denom.0 - self.denom.0;
             let (div, rem) =
                 other.amount.raw.div_mod(Uint::exp10(diff as usize));
             let div_ceil = if rem.is_zero() {
                 div
             } else {
-                div + Uint::one()
+                div.checked_add(Uint::one()).unwrap_or(Uint::MAX)
             };
             let ord = self.amount.raw.cmp(&div_ceil);
             if let Ordering::Equal = ord {
@@ -577,13 +639,15 @@ impl Ord for DenominatedAmount {
                 ord
             }
         } else {
+            // Cannot underflow cause `other.denom` >= `self.denom`
+            #[allow(clippy::arithmetic_side_effects)]
             let diff = self.denom.0 - other.denom.0;
             let (div, rem) =
                 self.amount.raw.div_mod(Uint::exp10(diff as usize));
             let div_ceil = if rem.is_zero() {
                 div
             } else {
-                div + Uint::one()
+                div.checked_add(Uint::one()).unwrap_or(Uint::MAX)
             };
             let ord = div_ceil.cmp(&other.amount.raw);
             if let Ordering::Equal = ord {
@@ -670,18 +734,17 @@ impl From<Amount> for U256 {
     }
 }
 
-impl From<Dec> for Amount {
-    fn from(dec: Dec) -> Amount {
-        if !dec.is_negative() {
-            Amount {
-                raw: dec.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize),
-            }
-        } else {
-            panic!(
-                "The Dec value is negative and cannot be multiplied by an \
-                 Amount"
-            )
-        }
+impl TryFrom<Dec> for Amount {
+    type Error = arith::Error;
+
+    fn try_from(dec: Dec) -> Result<Amount, Self::Error> {
+        // Fails if the dec negative
+        let _ = checked!(Dec(I256::maximum()) - dec)?;
+
+        // Division cannot panic as divisor is non-zero
+        #[allow(clippy::arithmetic_side_effects)]
+        let raw = dec.0.abs() / Uint::exp10(POS_DECIMAL_PRECISION as usize);
+        Ok(Amount { raw })
     }
 }
 
@@ -699,140 +762,6 @@ impl TryFrom<Amount> for u128 {
             }
         }
         Ok(value.raw.low_u128())
-    }
-}
-
-impl Add for Amount {
-    type Output = Amount;
-
-    fn add(mut self, rhs: Self) -> Self::Output {
-        self.raw += rhs.raw;
-        self
-    }
-}
-
-impl Add<u64> for Amount {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self {
-            raw: self.raw + Uint::from(rhs),
-        }
-    }
-}
-
-impl Mul<u64> for Amount {
-    type Output = Amount;
-
-    fn mul(mut self, rhs: u64) -> Self::Output {
-        self.raw *= rhs;
-        self
-    }
-}
-
-impl Mul<Amount> for u64 {
-    type Output = Amount;
-
-    fn mul(self, mut rhs: Amount) -> Self::Output {
-        rhs.raw *= self;
-        rhs
-    }
-}
-
-impl Mul<Uint> for Amount {
-    type Output = Amount;
-
-    fn mul(mut self, rhs: Uint) -> Self::Output {
-        self.raw *= rhs;
-        self
-    }
-}
-
-impl Mul<Amount> for Amount {
-    type Output = Amount;
-
-    fn mul(mut self, rhs: Amount) -> Self::Output {
-        self.raw *= rhs.raw;
-        self
-    }
-}
-
-/// A combination of Euclidean division and fractions:
-/// x*(a,b) = (a*(x//b), x%b).
-impl Mul<(u128, u128)> for Amount {
-    type Output = (Amount, Amount);
-
-    fn mul(mut self, rhs: (u128, u128)) -> Self::Output {
-        let amt = Amount {
-            raw: (self.raw / rhs.1) * Uint::from(rhs.0),
-        };
-        self.raw %= rhs.1;
-        (amt, self)
-    }
-}
-
-/// A combination of Euclidean division and fractions:
-/// x*(a,b) = (a*(x//b), x%b).
-impl Mul<(u64, u64)> for Amount {
-    type Output = (Amount, Amount);
-
-    fn mul(mut self, rhs: (u64, u64)) -> Self::Output {
-        let amt = Amount {
-            raw: (self.raw / rhs.1) * rhs.0,
-        };
-        self.raw %= rhs.1;
-        (amt, self)
-    }
-}
-
-/// A combination of Euclidean division and fractions:
-/// x*(a,b) = (a*(x//b), x%b).
-impl Mul<(u32, u32)> for Amount {
-    type Output = (Amount, Amount);
-
-    fn mul(mut self, rhs: (u32, u32)) -> Self::Output {
-        let amt = Amount {
-            raw: (self.raw / rhs.1) * rhs.0,
-        };
-        self.raw %= rhs.1;
-        (amt, self)
-    }
-}
-
-impl Div<u64> for Amount {
-    type Output = Self;
-
-    fn div(self, rhs: u64) -> Self::Output {
-        Self {
-            raw: self.raw / Uint::from(rhs),
-        }
-    }
-}
-
-impl AddAssign for Amount {
-    fn add_assign(&mut self, rhs: Self) {
-        self.raw += rhs.raw
-    }
-}
-
-impl Sub for Amount {
-    type Output = Amount;
-
-    fn sub(mut self, rhs: Self) -> Self::Output {
-        self.raw -= rhs.raw;
-        self
-    }
-}
-
-impl SubAssign for Amount {
-    fn sub_assign(&mut self, rhs: Self) {
-        self.raw -= rhs.raw
-    }
-}
-
-impl Sum for Amount {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Amount::default(), |acc, next| acc + next)
     }
 }
 
@@ -870,7 +799,7 @@ pub enum AmountParseError {
         "Error decoding token amount, too many decimal places: {0}. Maximum \
          {1}"
     )]
-    ScaleTooLarge(u32, u8),
+    ScaleTooLarge(usize, u8),
     #[error(
         "Error decoding token amount, the value is not within invalid range."
     )]
@@ -907,6 +836,12 @@ impl From<Amount> for Uint {
     }
 }
 
+impl From<Uint> for Amount {
+    fn from(raw: Uint) -> Self {
+        Self { raw }
+    }
+}
+
 /// The four possible u64 words in a [`Uint`].
 /// Used for converting to MASP amounts.
 #[derive(
@@ -921,6 +856,7 @@ impl From<Amount> for Uint {
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]
@@ -961,8 +897,10 @@ impl MaspDigitPos {
 
     /// Get the corresponding u64 word from the input uint256.
     pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = amount.abs().0[*self as usize] as i128;
+        let val = i128::from(amount.abs().0[*self as usize]);
         if Change::is_negative(amount) {
+            // Cannot panic as the value is limited to `u64` range
+            #[allow(clippy::arithmetic_side_effects)]
             -val
         } else {
             val
@@ -1006,8 +944,6 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
-    /// The unused storage location at which to place TxId
-    pub key: Option<String>,
     /// Shielded transaction part
     pub shielded: Option<Hash>,
 }
@@ -1023,14 +959,77 @@ pub enum AmountError {
 
 #[cfg(any(test, feature = "testing"))]
 /// Testing helpers and strategies for tokens
+#[allow(clippy::arithmetic_side_effects)]
 pub mod testing {
-    use proptest::option;
     use proptest::prelude::*;
 
     use super::*;
     use crate::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+
+    impl std::ops::Add for Amount {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for Amount {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub for Amount {
+        type Output = Self;
+
+        fn sub(self, rhs: Self) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::SubAssign for Amount {
+        fn sub_assign(&mut self, rhs: Self) {
+            *self = *self - rhs;
+        }
+    }
+
+    impl<T> std::ops::Mul<T> for Amount
+    where
+        T: Into<Self>,
+    {
+        type Output = Amount;
+
+        fn mul(self, rhs: T) -> Self::Output {
+            self.checked_mul(rhs.into()).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<Amount> for u64 {
+        type Output = Amount;
+
+        fn mul(self, rhs: Amount) -> Self::Output {
+            rhs * self
+        }
+    }
+
+    impl std::ops::Div<u64> for Amount {
+        type Output = Self;
+
+        fn div(self, rhs: u64) -> Self::Output {
+            Self {
+                raw: self.raw / Uint::from(rhs),
+            }
+        }
+    }
+
+    impl std::iter::Sum for Amount {
+        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(Amount::zero(), |a, b| a + b)
+        }
+    }
 
     prop_compose! {
         /// Generate an arbitrary denomination
@@ -1056,14 +1055,12 @@ pub mod testing {
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
-            key in option::of("[a-zA-Z0-9_]*"),
         ) -> Transfer {
             Transfer {
                 source,
                 target,
                 token,
                 amount,
-                key,
                 shielded: None,
             }
         }
@@ -1090,6 +1087,8 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
+
     use super::*;
 
     #[test]
@@ -1271,9 +1270,35 @@ mod tests {
         let two = Amount::from(2);
         let three = Amount::from(3);
         let dec = Dec::from_str("0.34").unwrap();
-        assert_eq!(one.mul_ceil(dec), one);
-        assert_eq!(two.mul_ceil(dec), one);
-        assert_eq!(three.mul_ceil(dec), two);
+        assert_eq!(one.mul_ceil(dec).unwrap(), one);
+        assert_eq!(two.mul_ceil(dec).unwrap(), one);
+        assert_eq!(three.mul_ceil(dec).unwrap(), two);
+
+        assert_matches!(one.mul_ceil(-dec), Err(_));
+        assert_matches!(one.mul_ceil(-Dec::new(1, 12).unwrap()), Err(_));
+        assert_matches!(
+            Amount::native_whole(1).mul_ceil(-Dec::new(1, 12).unwrap()),
+            Err(_)
+        );
+    }
+
+    #[test]
+    fn test_token_amount_mul_floor() {
+        let zero = Amount::zero();
+        let one = Amount::from(1);
+        let two = Amount::from(2);
+        let three = Amount::from(3);
+        let dec = Dec::from_str("0.34").unwrap();
+        assert_eq!(one.mul_floor(dec).unwrap(), zero);
+        assert_eq!(two.mul_floor(dec).unwrap(), zero);
+        assert_eq!(three.mul_floor(dec).unwrap(), one);
+
+        assert_matches!(one.mul_floor(-dec), Err(_));
+        assert_matches!(one.mul_floor(-Dec::new(1, 12).unwrap()), Err(_));
+        assert_matches!(
+            Amount::native_whole(1).mul_floor(-Dec::new(1, 12).unwrap()),
+            Err(_)
+        );
     }
 
     #[test]

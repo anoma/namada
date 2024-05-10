@@ -2,16 +2,15 @@
 
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
-use namada_core::ibc::clients::tendermint::context::{
-    CommonContext as TmCommonContext, ValidationContext as TmValidationContext,
-};
+use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada_core::ibc::core::channel::types::channel::ChannelEnd;
 use namada_core::ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
 use namada_core::ibc::core::channel::types::packet::Receipt;
-use namada_core::ibc::core::client::context::ClientValidationContext;
-use namada_core::ibc::core::client::types::error::ClientError;
+use namada_core::ibc::core::client::context::{
+    ClientValidationContext, ExtClientValidationContext,
+};
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::commitment_types::commitment::CommitmentPrefix;
 use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
@@ -26,7 +25,6 @@ use namada_core::ibc::core::host::types::path::{
 };
 use namada_core::ibc::core::host::ValidationContext;
 use namada_core::ibc::cosmos_host::ValidateSelfClientContext;
-use namada_core::ibc::primitives::proto::Any;
 use namada_core::ibc::primitives::{Signer, Timestamp};
 
 use super::client::{AnyClientState, AnyConsensusState};
@@ -36,13 +34,10 @@ use crate::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> TmCommonContext for IbcContext<C>
+impl<C> ExtClientValidationContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
-    type AnyConsensusState = AnyConsensusState;
-    type ConversionError = ClientError;
-
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
     }
@@ -51,30 +46,18 @@ where
         ValidationContext::host_height(self)
     }
 
-    fn consensus_state(
-        &self,
-        client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
-        ValidationContext::consensus_state(self, client_cons_state_path)
-    }
-
     fn consensus_state_heights(
         &self,
         client_id: &ClientId,
     ) -> Result<Vec<Height>, ContextError> {
         self.inner.borrow().consensus_state_heights(client_id)
     }
-}
 
-impl<C> TmValidationContext for IbcContext<C>
-where
-    C: IbcCommonContext,
-{
     fn next_consensus_state(
         &self,
         client_id: &ClientId,
         height: &Height,
-    ) -> Result<Option<Self::AnyConsensusState>, ContextError> {
+    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
         self.inner.borrow().next_consensus_state(client_id, height)
     }
 
@@ -82,7 +65,7 @@ where
         &self,
         client_id: &ClientId,
         height: &Height,
-    ) -> Result<Option<Self::AnyConsensusState>, ContextError> {
+    ) -> Result<Option<Self::ConsensusStateRef>, ContextError> {
         self.inner.borrow().prev_consensus_state(client_id, height)
     }
 }
@@ -94,16 +77,6 @@ impl<C> MockClientContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
-    type AnyConsensusState = AnyConsensusState;
-    type ConversionError = ClientError;
-
-    fn consensus_state(
-        &self,
-        client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
-        ValidationContext::consensus_state(self, client_cons_state_path)
-    }
-
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
     }
@@ -117,54 +90,20 @@ impl<C> ClientValidationContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
-    fn client_update_time(
-        &self,
-        client_id: &ClientId,
-        _height: &Height,
-    ) -> Result<Timestamp, ContextError> {
-        self.inner.borrow().client_update_time(client_id)
-    }
-
-    fn client_update_height(
-        &self,
-        client_id: &ClientId,
-        _height: &Height,
-    ) -> Result<Height, ContextError> {
-        self.inner.borrow().client_update_height(client_id)
-    }
-}
-
-impl<C> ValidationContext for IbcContext<C>
-where
-    C: IbcCommonContext,
-{
-    type AnyClientState = AnyClientState;
-    type AnyConsensusState = AnyConsensusState;
-    type E = Self;
-    type V = Self;
-
-    fn get_client_validation_context(&self) -> &Self::V {
-        self
-    }
+    type ClientStateRef = AnyClientState;
+    type ConsensusStateRef = AnyConsensusState;
 
     fn client_state(
         &self,
         client_id: &ClientId,
-    ) -> Result<Self::AnyClientState, ContextError> {
+    ) -> Result<Self::ClientStateRef, ContextError> {
         self.inner.borrow().client_state(client_id)
-    }
-
-    fn decode_client_state(
-        &self,
-        client_state: Any,
-    ) -> Result<Self::AnyClientState, ContextError> {
-        client_state.try_into().map_err(ContextError::from)
     }
 
     fn consensus_state(
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
+    ) -> Result<Self::ConsensusStateRef, ContextError> {
         let height = Height::new(
             client_cons_state_path.revision_number,
             client_cons_state_path.revision_height,
@@ -172,6 +111,27 @@ where
         self.inner
             .borrow()
             .consensus_state(&client_cons_state_path.client_id, height)
+    }
+
+    fn client_update_meta(
+        &self,
+        client_id: &ClientId,
+        _height: &Height,
+    ) -> Result<(Timestamp, Height), ContextError> {
+        self.inner.borrow().client_update_meta(client_id)
+    }
+}
+
+impl<C> ValidationContext for IbcContext<C>
+where
+    C: IbcCommonContext,
+{
+    type HostClientState = AnyClientState;
+    type HostConsensusState = AnyConsensusState;
+    type V = Self;
+
+    fn get_client_validation_context(&self) -> &Self::V {
+        self
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
@@ -187,7 +147,7 @@ where
     fn host_consensus_state(
         &self,
         height: &Height,
-    ) -> Result<Self::AnyConsensusState, ContextError> {
+    ) -> Result<Self::HostConsensusState, ContextError> {
         self.inner.borrow().host_consensus_state(height)
     }
 
@@ -205,20 +165,24 @@ where
 
     fn validate_self_client(
         &self,
-        counterparty_client_state: Any,
+        client_state_of_host_on_counterparty: Self::HostClientState,
     ) -> Result<(), ContextError> {
         #[cfg(feature = "testing")]
         {
-            if MockClientState::try_from(counterparty_client_state.clone())
-                .is_ok()
+            if MockClientState::try_from(
+                client_state_of_host_on_counterparty.clone(),
+            )
+            .is_ok()
             {
                 return Ok(());
             }
         }
 
+        let tm_client_state =
+            TmClientState::try_from(client_state_of_host_on_counterparty)?;
         ValidateSelfClientContext::validate_self_tendermint_client(
             self,
-            counterparty_client_state,
+            tm_client_state.inner().clone(),
         )
     }
 

@@ -116,6 +116,7 @@ mod dry_run_tx {
             data,
             proof: None,
             info: Default::default(),
+            height: ctx.state.in_mem().get_last_block_height(),
         })
     }
 }

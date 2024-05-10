@@ -18,9 +18,9 @@ use test_log::test;
 use super::setup;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
-    AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
-    BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
-    CHRISTEL_KEY, ETH, MASP, NAM,
+    AC_PAYMENT_ADDRESS, ALBERT, ALBERT_KEY, A_SPENDING_KEY, BB_PAYMENT_ADDRESS,
+    BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL, CHRISTEL_KEY, ETH, MASP,
+    NAM,
 };
 use crate::strings::TX_APPLIED_SUCCESS;
 
@@ -109,7 +109,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -318,7 +318,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();
@@ -439,7 +439,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded eth balance found"));
+    assert!(captured.contains("eth: 0"));
 
     node.next_epoch();
     // sync the shielded context
@@ -549,7 +549,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded btc balance found"));
+    assert!(captured.contains("btc: 0"));
 
     // Assert VK(A) retained the NAM rewards
     let captured = CapturedOutput::of(|| {
@@ -750,7 +750,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // sync the shielded context
     run(
@@ -776,7 +776,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found"));
+    assert!(captured.contains("nam: 0"));
 
     // Assert NAM balance at MASP pool is nearly 0
     let captured = CapturedOutput::of(|| {
@@ -919,187 +919,6 @@ fn spend_unconverted_asset_type() -> Result<()> {
     )?;
     node.assert_success();
 
-    Ok(())
-}
-
-/// In this test we:
-/// 1. Run the ledger node
-/// 2. Assert PPA(C) cannot be recognized by incorrect viewing key
-/// 3. Assert PPA(C) has not transaction pinned to it
-/// 4. Send 20 BTC from Albert to PPA(C)
-/// 5. Assert PPA(C) has the 20 BTC transaction pinned to it
-#[test]
-fn masp_pinned_txs() -> Result<()> {
-    // This address doesn't matter for tests. But an argument is required.
-    let validator_one_rpc = "http://127.0.0.1:26567";
-    // Download the shielded pool parameters before starting node
-    let _ = FsShieldedUtils::new(PathBuf::new());
-
-    let (mut node, _services) = setup::setup()?;
-    // Wait till epoch boundary
-    let _ep0 = node.next_epoch();
-
-    // sync shielded context
-    run(
-        &node,
-        Bin::Client,
-        vec![
-            "shielded-sync",
-            "--viewing-keys",
-            AC_VIEWING_KEY,
-            "--node",
-            validator_one_rpc,
-        ],
-    )?;
-    node.assert_success();
-
-    // Assert PPA(C) cannot be recognized by incorrect viewing key
-    let captured =
-        CapturedOutput::with_input(AB_VIEWING_KEY.into()).run(|| {
-            run(
-                &node,
-                Bin::Client,
-                vec![
-                    "balance",
-                    "--owner",
-                    AC_PAYMENT_ADDRESS,
-                    "--token",
-                    BTC,
-                    "--node",
-                    validator_one_rpc,
-                ],
-            )
-        });
-    assert!(captured.result.is_ok());
-    assert!(
-        captured.contains("Supplied viewing key cannot decode transactions to")
-    );
-
-    // Assert PPA(C) has no transaction pinned to it
-    let captured =
-        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
-            run(
-                &node,
-                Bin::Client,
-                vec![
-                    "balance",
-                    "--owner",
-                    AC_PAYMENT_ADDRESS,
-                    "--token",
-                    BTC,
-                    "--node",
-                    validator_one_rpc,
-                ],
-            )
-        });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("has not yet been consumed"));
-
-    // Wait till epoch boundary
-    let _ep1 = node.next_epoch();
-
-    // Send 20 BTC from Albert to PPA(C)
-    run(
-        &node,
-        Bin::Client,
-        vec![
-            "transfer",
-            "--source",
-            ALBERT,
-            "--target",
-            AC_PAYMENT_ADDRESS,
-            "--token",
-            BTC,
-            "--amount",
-            "20",
-            "--node",
-            validator_one_rpc,
-        ],
-    )?;
-    node.assert_success();
-
-    // Wait till epoch boundary
-    // This makes it more consistent for some reason?
-    let _ep2 = node.next_epoch();
-
-    // sync shielded context
-    run(
-        &node,
-        Bin::Client,
-        vec!["shielded-sync", "--node", validator_one_rpc],
-    )?;
-    node.assert_success();
-
-    // Assert PPA(C) has the 20 BTC transaction pinned to it
-    let captured =
-        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
-            run(
-                &node,
-                Bin::Client,
-                vec![
-                    "balance",
-                    "--owner",
-                    AC_PAYMENT_ADDRESS,
-                    "--token",
-                    BTC,
-                    "--node",
-                    validator_one_rpc,
-                ],
-            )
-        });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("Received 20 btc"));
-
-    // Assert PPA(C) has no NAM pinned to it
-    let captured =
-        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
-            run(
-                &node,
-                Bin::Client,
-                vec![
-                    "balance",
-                    "--owner",
-                    AC_PAYMENT_ADDRESS,
-                    "--token",
-                    NAM,
-                    "--node",
-                    validator_one_rpc,
-                ],
-            )
-        });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("Received no shielded nam"));
-
-    // Wait till epoch boundary
-    let _ep1 = node.next_epoch();
-
-    // sync shielded context
-    run(
-        &node,
-        Bin::Client,
-        vec!["shielded-sync", "--node", validator_one_rpc],
-    )?;
-    node.assert_success();
-
-    // Assert PPA(C) does not NAM pinned to it on epoch boundary
-    let captured =
-        CapturedOutput::with_input(AC_VIEWING_KEY.into()).run(|| {
-            run(
-                &node,
-                Bin::Client,
-                vec![
-                    "balance",
-                    "--owner",
-                    AC_PAYMENT_ADDRESS,
-                    "--token",
-                    NAM,
-                    "--node",
-                    validator_one_rpc,
-                ],
-            )
-        });
-    assert!(captured.result.is_ok());
-    assert!(captured.contains("Received no shielded nam"));
     Ok(())
 }
 
@@ -1313,7 +1132,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("No shielded btc balance found"),
+            Response::Ok("btc: 0"),
         ),
         // 9. Assert ETH balance at VK(A) is 0
         (
@@ -1326,7 +1145,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("No shielded eth balance found"),
+            Response::Ok("eth: 0"),
         ),
         // 10. Assert balance at VK(B) is 20 BTC
         (
@@ -1334,10 +1153,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 "balance",
                 "--owner",
                 AB_VIEWING_KEY,
+                "--token",
+                BTC,
                 "--node",
                 validator_one_rpc,
             ],
-            Response::Ok("btc : 20"),
+            Response::Ok("btc: 20"),
         ),
         // 11. Send 20 BTC from SK(B) to Bertha
         (
@@ -1978,7 +1799,6 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 token: native_token.clone(),
             },
             pk.clone(),
-            Default::default(),
             20000.into(),
             None,
         );
@@ -2336,7 +2156,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     {
         // Start decoding and distributing shielded rewards for BTC in next
@@ -2405,7 +2225,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     // Send 1 BTC from Albert to PA
     run(
@@ -2470,7 +2290,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("No shielded nam balance found for given key"));
+    assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
     node.next_epoch();

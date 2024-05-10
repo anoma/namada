@@ -17,6 +17,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
+use namada_core::arith::checked;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::eth_bridge_pool::erc20_token_address;
 use namada_core::hints;
@@ -63,11 +64,12 @@ struct AmountDelta {
 impl AmountDelta {
     /// Resolve the updated amount by applying the delta value.
     #[inline]
-    fn resolve(self) -> Amount {
+    fn resolve(self) -> Result<Amount, Error> {
         match self.delta {
-            SignedAmount::Positive(delta) => self.base + delta,
-            SignedAmount::Negative(delta) => self.base - delta,
+            SignedAmount::Positive(delta) => checked!(self.base + delta),
+            SignedAmount::Negative(delta) => checked!(self.base - delta),
         }
+        .map_err(|e| Error(e.into()))
     }
 }
 
@@ -92,33 +94,38 @@ where
         &self,
         token: &Address,
         address: &Address,
-    ) -> Option<AmountDelta> {
+    ) -> Result<Option<AmountDelta>, Error> {
         let account_key = balance_key(token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .map_err(|error| {
                 tracing::warn!(?error, %account_key, "reading pre value");
-            })
-            .ok()?
+                error
+            })?
             // NB: the previous balance of the given account might
             // have been null. this is valid if the account is
             // being credited, such as when we escrow gas under
             // the Bridge pool
             .unwrap_or_default();
-        let after: Amount = (&self.ctx)
-            .read_post_value(&account_key)
-            .unwrap_or_else(|error| {
-                tracing::warn!(?error, %account_key, "reading post value");
-                None
-            })?;
-        Some(AmountDelta {
+        let after: Amount = match (&self.ctx).read_post_value(&account_key)? {
+            Some(after) => after,
+            None => {
+                tracing::warn!(%account_key, "no post value");
+                return Ok(None);
+            }
+        };
+        Ok(Some(AmountDelta {
             base: before,
             delta: if before > after {
-                SignedAmount::Negative(before - after)
+                SignedAmount::Negative(
+                    checked!(before - after).map_err(|e| Error(e.into()))?,
+                )
             } else {
-                SignedAmount::Positive(after - before)
+                SignedAmount::Positive(
+                    checked!(after - before).map_err(|e| Error(e.into()))?,
+                )
             },
-        })
+        }))
     }
 
     /// Check that the correct amount of tokens were sent
@@ -147,8 +154,8 @@ where
             expected_credit,
             ..
         } = delta;
-        let debit = self.account_balance_delta(&token, payer_account);
-        let credit = self.account_balance_delta(&token, escrow_account);
+        let debit = self.account_balance_delta(&token, payer_account)?;
+        let credit = self.account_balance_delta(&token, escrow_account)?;
 
         match (debit, credit) {
             // success case
@@ -291,7 +298,7 @@ where
         // storage.
         let escrowed_balance =
             match self.check_escrowed_toks_balance(token_check)? {
-                Some(balance) => balance.resolve(),
+                Some(balance) => balance.resolve()?,
                 None => return Ok(false),
             };
 

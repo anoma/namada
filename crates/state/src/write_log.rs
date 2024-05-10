@@ -7,9 +7,10 @@ use itertools::Itertools;
 use namada_core::address::{Address, EstablishedAddressGen};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcEvent;
 use namada_core::storage;
+use namada_events::{Event, EventToEmit, EventType};
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
+use patricia_tree::map::StringPatriciaMap;
 use thiserror::Error;
 
 #[allow(missing_docs)]
@@ -76,8 +77,8 @@ pub(crate) struct TxWriteLog {
     // only be populated through a dump of the `tx_write_log` and should be
     // cleaned either when committing or dumping the `tx_write_log`
     precommit_write_log: HashMap<storage::Key, StorageModification>,
-    // The IBC events for the current transaction
-    ibc_events: BTreeSet<IbcEvent>,
+    /// The events emitted by the current transaction
+    events: WriteLogEvents,
 }
 
 impl Default for TxWriteLog {
@@ -87,7 +88,9 @@ impl Default for TxWriteLog {
             write_log: HashMap::with_capacity(100),
             tx_temp_log: HashMap::with_capacity(1),
             precommit_write_log: HashMap::with_capacity(100),
-            ibc_events: BTreeSet::new(),
+            events: WriteLogEvents {
+                tree: StringPatriciaMap::new(),
+            },
         }
     }
 }
@@ -101,6 +104,30 @@ pub(crate) struct BatchedTxWriteLog {
     // The storage modifications for the transaction
     write_log: HashMap<storage::Key, StorageModification>,
 }
+
+/// Log of events in the write log.
+#[derive(Debug, Clone)]
+pub(crate) struct WriteLogEvents {
+    pub tree: StringPatriciaMap<HashSet<Event>>,
+}
+
+impl std::cmp::PartialEq for WriteLogEvents {
+    fn eq(&self, other: &WriteLogEvents) -> bool {
+        if self.tree.len() != other.tree.len() {
+            return false;
+        }
+
+        self.tree.iter().all(|(event_type, event_set)| {
+            other
+                .tree
+                .get(event_type)
+                .map(|other_event_set| event_set == other_event_set)
+                .unwrap_or_default()
+        })
+    }
+}
+
+impl std::cmp::Eq for WriteLogEvents {}
 
 /// The write log storage
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -440,14 +467,24 @@ impl WriteLog {
         (addr, gas)
     }
 
-    /// Set an IBC event and return the gas cost.
-    pub fn emit_ibc_event(&mut self, event: IbcEvent) -> u64 {
-        let len = event
-            .attributes
-            .iter()
-            .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        self.tx_write_log.ibc_events.insert(event);
-        len as u64 * MEMORY_ACCESS_GAS_PER_BYTE
+    /// Set an event and return the gas cost.
+    pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> u64 {
+        let event = event.into();
+        let gas_cost = event.emission_gas_cost(MEMORY_ACCESS_GAS_PER_BYTE);
+        let event_type = event.kind().to_string();
+        if !self.tx_write_log.events.tree.contains_key(&event_type) {
+            self.tx_write_log
+                .events
+                .tree
+                .insert(&event_type, HashSet::new());
+        }
+        self.tx_write_log
+            .events
+            .tree
+            .get_mut(&event_type)
+            .unwrap()
+            .insert(event);
+        gas_cost
     }
 
     /// Get the non-temporary storage keys changed and accounts keys initialized
@@ -514,14 +551,45 @@ impl WriteLog {
             .collect()
     }
 
-    /// Take the IBC event of the current transaction
-    pub fn take_ibc_events(&mut self) -> BTreeSet<IbcEvent> {
-        std::mem::take(&mut self.tx_write_log.ibc_events)
+    /// Take the events of the current transaction
+    pub fn take_events(&mut self) -> BTreeSet<Event> {
+        std::mem::take(&mut self.tx_write_log.events.tree)
+            .into_iter()
+            .flat_map(|(_, event_set)| event_set)
+            .collect()
     }
 
-    /// Get the IBC event of the current transaction
-    pub fn get_ibc_events(&self) -> &BTreeSet<IbcEvent> {
-        &self.tx_write_log.ibc_events
+    /// Get events emitted by the current transaction of
+    /// a certain type.
+    #[inline]
+    pub fn lookup_events_with_prefix<'this, 'ty: 'this>(
+        &'this self,
+        event_type: &'ty EventType,
+    ) -> impl Iterator<Item = &'this Event> + 'this {
+        self.tx_write_log
+            .events
+            .tree
+            .iter_prefix(event_type)
+            .flat_map(|(_, event_set)| event_set)
+    }
+
+    /// Get events emitted by the current transaction of
+    /// type `E`.
+    #[inline]
+    pub fn get_events_of<E: EventToEmit>(
+        &self,
+    ) -> impl Iterator<Item = &Event> {
+        self.tx_write_log
+            .events
+            .tree
+            .iter_prefix(E::DOMAIN)
+            .flat_map(|(_, event_set)| event_set)
+    }
+
+    /// Get all events emitted by the current transaction.
+    #[inline]
+    pub fn get_events(&self) -> impl Iterator<Item = &Event> {
+        self.tx_write_log.events.tree.values().flatten()
     }
 
     /// Add the entire content of the tx write log to the precommit one. The tx

@@ -1,17 +1,19 @@
 //! Gas related events.
 
-use namada_core::event::extend::ExtendEvent;
-use namada_core::event::Event;
+use namada_events::extend::EventAttributeEntry;
 
 use super::Gas;
 
 /// Extend an [`Event`] with gas used data.
-pub struct WithGasUsed(pub Gas);
+pub struct GasUsed(pub Gas);
 
-impl ExtendEvent for WithGasUsed {
-    #[inline]
-    fn extend_event(self, event: &mut Event) {
-        let Self(gas_used) = self;
-        event["gas_used"] = gas_used.to_string();
+impl EventAttributeEntry<'static> for GasUsed {
+    type Value = Gas;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "gas_used";
+
+    fn into_value(self) -> Self::Value {
+        self.0
     }
 }

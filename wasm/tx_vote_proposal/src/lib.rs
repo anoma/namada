@@ -1,6 +1,7 @@
 //! A tx to vote on a proposal
 
 use namada_tx_prelude::action::{Action, GovAction, Write};
+use namada_tx_prelude::proof_of_stake::find_delegation_validators;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -19,6 +20,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
 
     debug_log!("apply_tx called to vote a governance proposal");
 
-    governance::vote_proposal(ctx, tx_data)
+    // Pass in all target validators to the proposal vote. Whether or not the
+    // vote will be counted based on the validator state will be determined
+    // when tallying the votes and executing the proposal.
+    let current_epoch = ctx.get_block_epoch()?;
+    let delegation_targets =
+        find_delegation_validators(ctx, &tx_data.voter, &current_epoch)?;
+
+    governance::vote_proposal(ctx, tx_data, delegation_targets)
         .wrap_err("Failed to vote on governance proposal")
 }

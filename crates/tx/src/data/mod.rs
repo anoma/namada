@@ -24,10 +24,9 @@ use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcEvent;
 use namada_core::storage;
+use namada_events::Event;
 use namada_gas::{Gas, VpsGas};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -45,6 +44,7 @@ use crate::data::protocol::ProtocolTx;
 /// indicating the status of their submitted tx.
 /// The codes must not change with versions, only need ones may be added.
 #[derive(
+    Default,
     Debug,
     Copy,
     Clone,
@@ -60,6 +60,7 @@ pub enum ResultCode {
     // WARN: These codes shouldn't be changed between version!
     // =========================================================================
     /// Success
+    #[default]
     Ok = 0,
     /// Error in WASM tx execution
     WasmRuntimeError = 1,
@@ -107,6 +108,11 @@ impl ResultCode {
     /// Convert to `u32`.
     pub fn to_u32(&self) -> u32 {
         ToPrimitive::to_u32(self).unwrap()
+    }
+
+    /// Convert to `usize`.
+    pub fn to_usize(&self) -> usize {
+        ToPrimitive::to_usize(self).unwrap()
     }
 
     /// Convert from `u32`.
@@ -302,10 +308,8 @@ pub struct BatchedTxResult {
     pub vps_result: VpsResult,
     /// New established addresses created by the transaction
     pub initialized_accounts: Vec<Address>,
-    /// IBC events emitted by the transaction
-    pub ibc_events: BTreeSet<IbcEvent>,
-    /// Ethereum bridge events emitted by the transaction
-    pub eth_bridge_events: BTreeSet<EthBridgeEvent>,
+    /// Events emitted by the transaction
+    pub events: BTreeSet<Event>,
 }
 
 impl BatchedTxResult {
@@ -522,7 +526,6 @@ mod test_process_tx {
     use assert_matches::assert_matches;
     use namada_core::address::testing::nam;
     use namada_core::key::*;
-    use namada_core::storage::Epoch;
     use namada_core::token::{Amount, DenominatedAmount};
 
     use super::*;
@@ -620,7 +623,6 @@ mod test_process_tx {
                 token: nam(),
             },
             keypair.ref_to(),
-            Epoch(0),
             0.into(),
             None,
         ))));
@@ -649,7 +651,6 @@ mod test_process_tx {
                 token: nam(),
             },
             keypair.ref_to(),
-            Epoch(0),
             0.into(),
             None,
         ))));

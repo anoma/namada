@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use borsh::BorshDeserialize;
 use namada_core::storage;
 use namada_core::storage::Epochs;
+use namada_events::{Event, EventType};
 use namada_gas::GasMetering;
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 pub use namada_vp_env::VpEnv;
@@ -22,7 +23,6 @@ use state::StateRead;
 use super::vp_host_fns;
 use crate::address::Address;
 use crate::hash::Hash;
-use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
 use crate::state;
 use crate::state::{ResultExt, StorageRead};
@@ -385,12 +385,16 @@ where
             .into_storage_result()
     }
 
-    fn get_ibc_events(
+    fn get_events(
         &self,
-        event_type: String,
-    ) -> Result<Vec<IbcEvent>, state::StorageError> {
-        vp_host_fns::get_ibc_events(self.gas_meter, self.state, event_type)
-            .into_storage_result()
+        event_type: &EventType,
+    ) -> Result<Vec<Event>, state::StorageError> {
+        vp_host_fns::get_events(
+            self.gas_meter,
+            self.state,
+            event_type.to_string(),
+        )
+        .into_storage_result()
     }
 
     fn iter_prefix<'iter>(

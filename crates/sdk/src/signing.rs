@@ -13,11 +13,11 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
 use namada_core::sign::SignatureIndex;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::token::Transfer;
 // use namada_core::storage::Key;
@@ -487,7 +487,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
     .await
     .unwrap_or_default();
 
-    let total_fee = fee_amount.amount() * u64::from(args.gas_limit);
+    let total_fee = checked!(fee_amount.amount() * u64::from(args.gas_limit))?;
     let mut updated_balance = TxSourcePostBalance {
         post_balance: balance,
         source: fee_payer_address.clone(),
@@ -622,7 +622,8 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                         .to_string(),
                 ));
             }
-            updated_balance.post_balance -= total_fee;
+            updated_balance.post_balance =
+                checked!(updated_balance.post_balance - total_fee)?;
             None
         }
     };
@@ -637,7 +638,6 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
 pub async fn wrap_tx(
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
-    epoch: Epoch,
     unshield: Option<Transaction>,
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
@@ -656,7 +656,6 @@ pub async fn wrap_tx(
             token: args.fee_token.clone(),
         },
         fee_payer,
-        epoch,
         // TODO: partially validate the gas limit in client
         args.gas_limit,
         unshield_section_hash,
@@ -1265,19 +1264,12 @@ pub async fn to_ledger_vector(
                 format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
                 format!("Voter : {}", vote_proposal.voter),
             ]);
-            for delegation in &vote_proposal.delegation_validators {
-                tv.output.push(format!("Delegation : {}", delegation));
-            }
 
             tv.output_expert.extend(vec![
                 format!("ID : {}", vote_proposal.id),
                 format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
                 format!("Voter : {}", vote_proposal.voter),
             ]);
-            for delegation in vote_proposal.delegation_validators {
-                tv.output_expert
-                    .push(format!("Delegation : {}", delegation));
-            }
         } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
             let public_key = common::PublicKey::try_from_slice(
                 &tx.data(cmt)
@@ -1884,7 +1876,6 @@ pub async fn to_ledger_vector(
             tv.output_expert.extend(vec![
                 format!("Timestamp : {}", tx.header.timestamp.0),
                 format!("Pubkey : {}", wrapper.pk),
-                format!("Epoch : {}", wrapper.epoch),
                 format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
             if let Some(token) = tokens.get(&wrapper.fee.token) {

@@ -2,6 +2,7 @@
 
 mod actions;
 pub mod context;
+pub mod event;
 pub mod parameters;
 pub mod storage;
 
@@ -9,7 +10,6 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -48,6 +48,7 @@ use namada_core::ibc::core::channel::types::msgs::{
 };
 use namada_core::ibc::core::entrypoint::{execute, validate};
 use namada_core::ibc::core::handler::types::error::ContextError;
+use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
 use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_core::ibc::core::host::types::error::IdentifierError;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -55,6 +56,7 @@ use namada_core::ibc::core::router::types::error::RouterError;
 use namada_core::ibc::primitives::proto::Any;
 pub use namada_core::ibc::*;
 use namada_core::masp::PaymentAddress;
+use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
 use namada_token::Transfer;
 use prost::Message;
 use thiserror::Error;
@@ -62,6 +64,8 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("IBC event error: {0}")]
+    IbcEvent(RawIbcEventError),
     #[error("Decoding IBC data error")]
     DecodingData,
     #[error("Decoding message error: {0}")]
@@ -219,7 +223,7 @@ where
                 return Ok(());
             }
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -244,7 +248,7 @@ where
                 })
                 .collect();
             let receiver =
-                if PaymentAddress::from_str(data.receiver.as_ref()).is_ok() {
+                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
                     MASP.to_string()
                 } else {
                     data.receiver.to_string()
@@ -318,14 +322,18 @@ where
                     Error::Trace("Reading the IBC event failed".to_string())
                 })?;
         }
-        match receive_event
-            .first()
-            .as_ref()
-            .and_then(|event| event.attributes.get(EVENT_ATTRIBUTE_SUCCESS))
-        {
-            Some(success) if success == EVENT_VALUE_SUCCESS => Ok(true),
-            _ => Ok(false),
-        }
+        receive_event.first().as_ref().map_or_else(
+            || Ok(false),
+            |event| {
+                let success = SuccessAttr::read_opt_from_event_attributes(
+                    &event.attributes,
+                )
+                .map_err(|err| {
+                    Error::Trace(format!("Reading the IBC event failed: {err}"))
+                })?;
+                Ok(success.unwrap_or(false))
+            },
+        )
     }
 
     /// Validate according to the message in IBC VP

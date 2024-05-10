@@ -272,9 +272,9 @@ where
                     .into()),
                 }
             }
-            _ => Err(native_vp::Error::new_const(
-                "Only IBC tokens can be minted by a user transaction",
-            )
+            _ => Err(native_vp::Error::new_alloc(format!(
+                "Attempted to mint non-IBC token {token}"
+            ))
             .into()),
         }
     }

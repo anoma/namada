@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::{Encode, EncodeCell};
 use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
@@ -17,6 +18,7 @@ use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
 use namada_core::token::Amount;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_core::{ethereum_structs, hints};
+use namada_ethereum_bridge::event::{BpTransferStatus, BridgePoolTxHash};
 use namada_ethereum_bridge::protocol::transactions::votes::{
     EpochedVotingPower, EpochedVotingPowerExt,
 };
@@ -41,7 +43,6 @@ use namada_vote_ext::validator_set_update::{
 use serde::{Deserialize, Serialize};
 
 use crate::eth_bridge::ethers::abi::AbiDecode;
-use crate::events::EventType;
 use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
 /// Container for the status of queried transfers to Ethereum.
@@ -104,8 +105,11 @@ impl Erc20FlowControl {
     /// Check if the `transferred_amount` exceeds the token caps of some ERC20
     /// asset.
     #[inline]
-    pub fn exceeds_token_caps(&self, transferred_amount: Amount) -> bool {
-        self.supply + transferred_amount > self.cap
+    pub fn exceeds_token_caps(
+        &self,
+        transferred_amount: Amount,
+    ) -> crate::error::Result<bool> {
+        Ok(checked!(self.supply + transferred_amount)? > self.cap)
     }
 }
 
@@ -248,18 +252,16 @@ where
         return Ok(Default::default());
     }
 
+    let last_committed_height = ctx.state.in_mem().get_last_block_height();
     let mut status = TransferToEthereumStatus {
-        queried_height: ctx.state.in_mem().get_last_block_height(),
+        queried_height: last_committed_height,
         ..Default::default()
     };
 
     // check which transfers in the Bridge pool match the requested hashes
     let merkle_tree = ctx
         .state
-        .get_merkle_tree(
-            ctx.state.in_mem().get_last_block_height(),
-            Some(StoreType::BridgePool),
-        )
+        .get_merkle_tree(last_committed_height, Some(StoreType::BridgePool))
         .expect("We should always be able to read the database");
     let stores = merkle_tree.stores();
     let store = match stores.store(&StoreType::BridgePool) {
@@ -289,6 +291,7 @@ where
         let data = status.serialize_to_vec();
         return Ok(EncodedResponseQuery {
             data,
+            height: last_committed_height,
             ..Default::default()
         });
     }
@@ -296,32 +299,20 @@ where
     // INVARIANT: transfers that are in the event log will have already
     // been processed and therefore removed from the Bridge pool at the
     // time of this query
-    let kind_key: String = "kind".into();
     let completed_transfers = ctx.event_log.iter().filter_map(|ev| {
-        if !matches!(&ev.event_type, EventType::EthereumBridge) {
+        let Ok(transfer_status) = BpTransferStatus::try_from(ev.kind()) else {
             return None;
-        }
-        let eth_event_kind =
-            ev.attributes.get(&kind_key).map(|k| k.as_str())?;
-        let is_relayed = match eth_event_kind {
-            "bridge_pool_relayed" => true,
-            "bridge_pool_expired" => false,
-            _ => return None,
         };
         let tx_hash: KeccakHash = ev
-            .attributes
-            .get("tx_hash")
-            .expect("The transfer hash must be available")
-            .as_str()
-            .try_into()
-            .expect("We must have a valid KeccakHash");
+            .read_attribute::<BridgePoolTxHash>()
+            .expect("The transfer hash must be available");
         if !transfer_hashes.swap_remove(&tx_hash) {
             return None;
         }
-        Some((tx_hash, is_relayed, transfer_hashes.is_empty()))
+        Some((tx_hash, transfer_status, transfer_hashes.is_empty()))
     });
-    for (hash, is_relayed, early_exit) in completed_transfers {
-        if hints::likely(is_relayed) {
+    for (hash, transfer_status, early_exit) in completed_transfers {
+        if hints::likely(matches!(transfer_status, BpTransferStatus::Relayed)) {
             status.relayed.insert(hash.clone());
         } else {
             status.expired.insert(hash.clone());
@@ -342,6 +333,7 @@ where
     };
     Ok(EncodedResponseQuery {
         data: status.serialize_to_vec(),
+        height: last_committed_height,
         ..Default::default()
     })
 }
@@ -606,6 +598,7 @@ where
                 let data = rsp.serialize_to_vec();
                 Ok(EncodedResponseQuery {
                     data,
+                    height,
                     ..Default::default()
                 })
             }
@@ -829,7 +822,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().get_current_epoch().0;
-    if epoch > current_epoch + 1u64 {
+    if epoch > checked!(current_epoch + 1u64)? {
         return Err(namada_storage::Error::SimpleMessage(
             "The requested epoch cannot be queried",
         ));
@@ -913,7 +906,8 @@ mod test_ethbridge_router {
                     let voting_power: EthBridgeVotingPower =
                         FractionalVotingPower::new(power.into(), total_power)
                             .expect("Fractional voting power should be >1")
-                            .into();
+                            .try_into()
+                            .unwrap();
                     (hot_key_addr, voting_power)
                 })
                 .unzip();
@@ -1690,14 +1684,14 @@ mod test_ethbridge_router {
         let mut transfer3 = transfer.clone();
         transfer3.transfer.amount = 2.into();
         client.event_log.log_events(vec![
-            ethereum_structs::EthBridgeEvent::BridgePool {
+            crate::eth_bridge::event::EthBridgeEvent::BridgePool {
                 tx_hash: transfer2.keccak256(),
-                status: ethereum_structs::BpTransferStatus::Expired,
+                status: crate::eth_bridge::event::BpTransferStatus::Expired,
             }
             .into(),
-            ethereum_structs::EthBridgeEvent::BridgePool {
+            crate::eth_bridge::event::EthBridgeEvent::BridgePool {
                 tx_hash: transfer3.keccak256(),
-                status: ethereum_structs::BpTransferStatus::Relayed,
+                status: crate::eth_bridge::event::BpTransferStatus::Relayed,
             }
             .into(),
         ]);

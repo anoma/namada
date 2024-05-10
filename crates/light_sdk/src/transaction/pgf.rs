@@ -3,7 +3,6 @@ use namada_sdk::collections::HashMap;
 use namada_sdk::dec::Dec;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError};
@@ -49,10 +48,9 @@ impl ResignSteward {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign
@@ -131,10 +129,9 @@ impl UpdateStewardCommission {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign

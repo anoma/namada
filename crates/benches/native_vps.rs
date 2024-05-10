@@ -89,9 +89,6 @@ fn governance(c: &mut Criterion) {
                         id: 0,
                         vote: ProposalVote::Yay,
                         voter: defaults::albert_address(),
-                        delegation_validators: vec![
-                            defaults::validator_address(),
-                        ],
                     },
                     None,
                     None,
@@ -107,7 +104,6 @@ fn governance(c: &mut Criterion) {
                         id: 0,
                         vote: ProposalVote::Nay,
                         voter: defaults::validator_address(),
-                        delegation_validators: vec![],
                     },
                     None,
                     None,
@@ -134,8 +130,10 @@ fn governance(c: &mut Criterion) {
                         author: defaults::albert_address(),
                         r#type: ProposalType::Default,
                         voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch + 3_u64,
-                        activation_epoch: voting_start_epoch + 9_u64,
+                        voting_end_epoch: voting_start_epoch
+                            .unchecked_add(3_u64),
+                        activation_epoch: voting_start_epoch
+                            .unchecked_add(9_u64),
                     },
                     None,
                     Some(vec![content_section]),
@@ -187,8 +185,10 @@ fn governance(c: &mut Criterion) {
                             wasm_code_section.get_hash(),
                         ),
                         voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch + 3_u64,
-                        activation_epoch: voting_start_epoch + 9_u64,
+                        voting_end_epoch: voting_start_epoch
+                            .unchecked_add(3_u64),
+                        activation_epoch: voting_start_epoch
+                            .unchecked_add(9_u64),
                     },
                     None,
                     Some(vec![content_section, wasm_code_section]),
@@ -330,7 +330,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
                     None,
                     CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
                 ),
-                version: Some(Version::default()),
+                version: Some(Version::compatibles().first().unwrap().clone()),
                 delay_period: std::time::Duration::new(100, 0),
                 signer: defaults::albert_address().to_string().into(),
             };
@@ -476,7 +476,6 @@ fn vp_multitoken(c: &mut Criterion) {
             target: defaults::bertha_address(),
             token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
-            key: None,
             shielded: None,
         },
         None,

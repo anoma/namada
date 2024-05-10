@@ -1,13 +1,13 @@
 //! Validator set updates
 
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::PublicKeyTmRawHash;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::{StorageRead, StorageWrite};
-use num_traits::ops::checked::CheckedAdd;
 use once_cell::unsync::Lazy;
 
 use crate::storage::{
@@ -40,7 +40,7 @@ where
         return Ok(());
     }
     let offset = offset.unwrap_or(params.pipeline_len);
-    let epoch = current_epoch + offset;
+    let epoch = checked!(current_epoch + offset)?;
     tracing::debug!(
         "Update epoch for validator set: {epoch}, validator: {validator}"
     );
@@ -53,10 +53,7 @@ where
 
     let tokens_pre = read_validator_stake(storage, params, validator, epoch)?;
 
-    let tokens_post = tokens_pre
-        .change()
-        .checked_add(&token_change)
-        .expect("Post-validator set update token amount has overflowed");
+    let tokens_post = checked!(tokens_pre.change() + token_change)?;
     debug_assert!(tokens_post.non_negative());
     let tokens_post = token::Amount::from_change(tokens_post);
 
@@ -364,7 +361,7 @@ pub fn insert_validator_into_validator_set<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let target_epoch = current_epoch + offset;
+    let target_epoch = checked!(current_epoch + offset)?;
     let consensus_set = consensus_validator_set_handle().at(&target_epoch);
     let below_cap_set = below_capacity_validator_set_handle().at(&target_epoch);
 
@@ -526,7 +523,7 @@ pub fn promote_next_below_capacity_validator_to_consensus<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let epoch = current_epoch + offset;
+    let epoch = checked!(current_epoch + offset)?;
     let below_cap_set = below_capacity_validator_set_handle().at(&epoch);
     let max_below_capacity_amount =
         get_max_below_capacity_validator_amount(&below_cap_set, storage)?;
@@ -773,7 +770,7 @@ pub fn copy_validator_sets_and_positions<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    let prev_epoch = target_epoch.prev();
+    let prev_epoch = target_epoch.prev().expect("Must have a prev epoch");
 
     let consensus_validator_set = consensus_validator_set_handle();
     let below_capacity_validator_set = below_capacity_validator_set_handle();
@@ -901,7 +898,7 @@ where
         .remove(storage, &last_position_of_min_consensus_vals)?
         .expect("There must be always be at least 1 consensus validator");
 
-    let offset_epoch = current_epoch + offset;
+    let offset_epoch = checked!(current_epoch + offset)?;
 
     // Insert the min consensus validator into the below-capacity
     // set

@@ -82,8 +82,6 @@ pub struct VoteProposalData {
     pub vote: ProposalVote,
     /// The proposal voter address
     pub voter: Address,
-    /// Validators to who the voter has delegations to
-    pub delegation_validators: Vec<Address>,
 }
 
 impl TryFrom<DefaultProposal> for InitProposalData {
@@ -198,6 +196,10 @@ impl StoragePgfFunding {
     BorshDeserializer,
     Serialize,
     Deserialize,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 pub enum ProposalType {
     /// Default governance proposal
@@ -256,6 +258,7 @@ where
     Ord,
     Eq,
     PartialOrd,
+    Hash,
 )]
 pub enum PGFTarget {
     /// Funding target on this chain
@@ -308,6 +311,7 @@ impl Display for PGFTarget {
     Ord,
     Eq,
     PartialOrd,
+    Hash,
 )]
 pub struct PGFInternalTarget {
     /// The target address
@@ -327,6 +331,7 @@ pub struct PGFInternalTarget {
     Eq,
     PartialOrd,
     BorshDeserializer,
+    Hash,
 )]
 pub struct PGFIbcTarget {
     /// The target address on the target chain
@@ -416,6 +421,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     Eq,
     Ord,
     PartialOrd,
+    Hash,
 )]
 pub enum PGFAction {
     /// A continuous payment
@@ -771,13 +777,11 @@ pub mod testing {
             id: u64,
             vote in arb_proposal_vote(),
             voter in arb_non_internal_address(),
-            delegation_validators in collection::vec(arb_non_internal_address(), 0..10),
         ) -> VoteProposalData {
             VoteProposalData {
                 id,
                 vote,
-                voter,
-                delegation_validators,
+                voter
             }
         }
     }

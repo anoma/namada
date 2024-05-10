@@ -1,6 +1,5 @@
 //! IBC-related data types
 
-use std::cmp::Ordering;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -13,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::address::{Address, InternalAddress, HASH_LEN};
-use crate::collections::HashMap;
 use crate::ibc::apps::nft_transfer::context::{NftClassContext, NftContext};
 use crate::ibc::apps::nft_transfer::types::error::NftTransferError;
 use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
@@ -27,22 +25,14 @@ use crate::ibc::core::channel::types::msgs::{
     MsgAcknowledgement as IbcMsgAcknowledgement,
     MsgRecvPacket as IbcMsgRecvPacket, MsgTimeout as IbcMsgTimeout,
 };
-use crate::ibc::core::handler::types::events::{
-    Error as IbcEventError, IbcEvent as RawIbcEvent,
-};
 use crate::ibc::core::handler::types::msgs::MsgEnvelope;
 use crate::ibc::primitives::proto::Protobuf;
-use crate::tendermint::abci::Event as AbciEvent;
 use crate::token::Transfer;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
 /// The event type defined in ibc-rs for receiving an NFT
 pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
-/// The event attribute key defined in ibc-rs for receiving result
-pub const EVENT_ATTRIBUTE_SUCCESS: &str = "success";
-/// The event attribute value defined in ibc-rs for receiving success
-pub const EVENT_VALUE_SUCCESS: &str = "true";
 /// The escrow address for IBC transfer
 pub const IBC_ESCROW_ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 
@@ -75,59 +65,10 @@ impl std::fmt::Display for IbcTokenHash {
 impl FromStr for IbcTokenHash {
     type Err = DecodePartial;
 
-    fn from_str(h: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(h: &str) -> Result<Self, Self::Err> {
         let mut output = [0u8; HASH_LEN];
         HEXLOWER_PERMISSIVE.decode_mut(h.as_ref(), &mut output)?;
         Ok(IbcTokenHash(output))
-    }
-}
-
-/// Wrapped IbcEvent
-#[derive(
-    Debug,
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
-pub struct IbcEvent {
-    /// The IBC event type
-    pub event_type: String,
-    /// The attributes of the IBC event
-    pub attributes: HashMap<String, String>,
-}
-
-impl std::cmp::PartialOrd for IbcEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for IbcEvent {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // should not compare the same event type
-        self.event_type.cmp(&other.event_type)
-    }
-}
-
-impl std::fmt::Display for IbcEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let attributes = self
-            .attributes
-            .iter()
-            .map(|(k, v)| format!("{}: {};", k, v))
-            .collect::<Vec<String>>()
-            .join(", ");
-        write!(
-            f,
-            "Event type: {}, Attributes: {}",
-            self.event_type, attributes
-        )
     }
 }
 
@@ -326,47 +267,23 @@ impl BorshDeserialize for MsgTimeout {
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("IBC event error: {0}")]
-    IbcEvent(IbcEventError),
     #[error("IBC transfer memo HEX decoding error: {0}")]
     DecodingHex(data_encoding::DecodeError),
     #[error("IBC transfer memo decoding error: {0}")]
     DecodingShieldedTransfer(std::io::Error),
 }
 
-/// Conversion functions result
-type Result<T> = std::result::Result<T, Error>;
-
-impl TryFrom<RawIbcEvent> for IbcEvent {
-    type Error = Error;
-
-    fn try_from(e: RawIbcEvent) -> Result<Self> {
-        let event_type = e.event_type().to_string();
-        let abci_event = AbciEvent::try_from(e).map_err(Error::IbcEvent)?;
-        let attributes: HashMap<_, _> = abci_event
-            .attributes
-            .iter()
-            .map(|tag| (tag.key.to_string(), tag.value.to_string()))
-            .collect();
-        Ok(Self {
-            event_type,
-            attributes,
-        })
-    }
-}
-
 /// Returns the trace path and the token string if the denom is an IBC
 /// denom.
 pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
     let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
-    if prefixed_denom.trace_path.is_empty() {
+    let base_denom = prefixed_denom.base_denom.to_string();
+    if prefixed_denom.trace_path.is_empty() || base_denom.contains('/') {
+        // The denom is just a token or an NFT trace
         return None;
     }
     // The base token isn't decoded because it could be non Namada token
-    Some((
-        prefixed_denom.trace_path,
-        prefixed_denom.base_denom.to_string(),
-    ))
+    Some((prefixed_denom.trace_path, base_denom))
 }
 
 /// Returns the trace path and the token string if the trace is an NFT one

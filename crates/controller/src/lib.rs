@@ -1,5 +1,7 @@
+use namada_core::arith::{self, checked};
 use namada_core::dec::Dec;
 use namada_core::uint::Uint;
+use thiserror::Error;
 
 #[derive(Clone, Debug)]
 pub struct PDController {
@@ -11,6 +13,18 @@ pub struct PDController {
     epochs_per_year: u64,
     target_metric: Dec,
     last_metric: Dec,
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
+    #[error("Decimal {0}")]
+    Dec(#[from] namada_core::dec::Error),
+    #[error("Max inflation overflow")]
+    MaxInflationOverflow,
+    #[error("Inflation amount overflow")]
+    InflationOverflow,
 }
 
 impl PDController {
@@ -41,54 +55,56 @@ impl PDController {
         &self,
         control_coeff: Dec,
         current_metric: Dec,
-    ) -> Uint {
-        let control = self.compute_control(control_coeff, current_metric);
+    ) -> Result<Uint, Error> {
+        let control = self.compute_control(control_coeff, current_metric)?;
         self.compute_inflation_aux(control)
     }
 
-    pub fn get_total_native_dec(&self) -> Dec {
-        Dec::try_from(self.total_native_amount)
-            .expect("Should not fail to convert Uint to Dec")
+    pub fn get_total_native_dec(&self) -> Result<Dec, Error> {
+        Dec::try_from(self.total_native_amount).map_err(Into::into)
     }
 
     pub fn get_epochs_per_year(&self) -> u64 {
         self.epochs_per_year
     }
 
-    fn get_max_inflation(&self) -> Uint {
-        let total_native = self.get_total_native_dec();
+    fn get_max_inflation(&self) -> Result<Uint, Error> {
+        let total_native = self.get_total_native_dec()?;
         let epochs_py: Dec = self.epochs_per_year.into();
-
-        let max_inflation = total_native * self.max_reward_rate / epochs_py;
-        max_inflation
-            .to_uint()
-            .expect("Should not fail to convert Dec to Uint")
+        let max_inflation =
+            checked!(total_native * self.max_reward_rate / epochs_py)?;
+        max_inflation.to_uint().ok_or(Error::MaxInflationOverflow)
     }
 
     // TODO: could possibly use I256 instead of Dec here (need to account for
     // negative vals)
-    fn compute_inflation_aux(&self, control: Dec) -> Uint {
-        let last_inflation_amount = Dec::try_from(self.last_inflation_amount)
-            .expect("Should not fail to convert Uint to Dec");
-        let new_inflation_amount = last_inflation_amount + control;
+    fn compute_inflation_aux(&self, control: Dec) -> Result<Uint, Error> {
+        let last_inflation_amount = Dec::try_from(self.last_inflation_amount)?;
+        let new_inflation_amount = checked!(last_inflation_amount + control)?;
         let new_inflation_amount = if new_inflation_amount.is_negative() {
             Uint::zero()
         } else {
             new_inflation_amount
                 .to_uint()
-                .expect("Should not fail to convert Dec to Uint")
+                .ok_or(Error::InflationOverflow)?
         };
 
-        let max_inflation = self.get_max_inflation();
-        std::cmp::min(new_inflation_amount, max_inflation)
+        let max_inflation = self.get_max_inflation()?;
+        Ok(std::cmp::min(new_inflation_amount, max_inflation))
     }
 
     // NOTE: This formula is the comactification of all the old intermediate
     // computations that were done in multiple steps (as in the specs)
-    fn compute_control(&self, coeff: Dec, current_metric: Dec) -> Dec {
-        let val = current_metric * (self.d_gain_nom - self.p_gain_nom)
-            + (self.target_metric * self.p_gain_nom)
-            - (self.last_metric * self.d_gain_nom);
-        coeff * val
+    fn compute_control(
+        &self,
+        coeff: Dec,
+        current_metric: Dec,
+    ) -> Result<Dec, arith::Error> {
+        let val: Dec = checked!(
+            current_metric * (self.d_gain_nom - self.p_gain_nom)
+                + (self.target_metric * self.p_gain_nom)
+                - (self.last_metric * self.d_gain_nom)
+        )?;
+        checked!(coeff * val)
     }
 }

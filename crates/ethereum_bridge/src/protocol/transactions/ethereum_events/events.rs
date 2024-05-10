@@ -16,15 +16,15 @@ use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada,
     TransfersToNamada,
 };
-use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::hints;
 use namada_core::storage::{BlockHeight, Key, KeySeg};
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
+use token::{burn_tokens, decrement_total_supply, increment_total_supply};
 
-use crate::protocol::transactions::update;
+use crate::event::EthBridgeEvent;
 use crate::storage::bridge_pool::{
     get_nonce_key, is_pending_transfer_key, BRIDGE_POOL_ADDRESS,
 };
@@ -162,48 +162,9 @@ where
     let native_werc20_supply_key =
         minted_balance_key(&erc20_token_address(native_erc20));
 
-    update::amount(state, &eth_bridge_native_token_balance_key, |balance| {
-        tracing::debug!(
-            %eth_bridge_native_token_balance_key,
-            ?balance,
-            "Existing value found",
-        );
-        balance.spend(amount)?;
-        tracing::debug!(
-            %eth_bridge_native_token_balance_key,
-            ?balance,
-            "New value calculated",
-        );
-        Ok(())
-    })?;
-    update::amount(state, &receiver_native_token_balance_key, |balance| {
-        tracing::debug!(
-            %receiver_native_token_balance_key,
-            ?balance,
-            "Existing value found",
-        );
-        balance.receive(amount)?;
-        tracing::debug!(
-            %receiver_native_token_balance_key,
-            ?balance,
-            "New value calculated",
-        );
-        Ok(())
-    })?;
-    update::amount(state, &native_werc20_supply_key, |balance| {
-        tracing::debug!(
-            %native_werc20_supply_key,
-            ?balance,
-            "Existing value found",
-        );
-        balance.spend(amount)?;
-        tracing::debug!(
-            %native_werc20_supply_key,
-            ?balance,
-            "New value calculated",
-        );
-        Ok(())
-    })?;
+    let native_token = state.in_mem().native_token.clone();
+    token::transfer(state, &native_token, &BRIDGE_ADDRESS, receiver, *amount)?;
+    decrement_total_supply(state, &erc20_token_address(native_erc20), *amount)?;
 
     tracing::info!(
         amount = %amount.to_string_native(),
@@ -255,38 +216,11 @@ where
     .flatten();
 
     for (token, ref amount) in assets_to_mint {
-        let balance_key = balance_key(&token, receiver);
-        update::amount(state, &balance_key, |balance| {
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "Existing value found",
-            );
-            balance.receive(amount)?;
-            tracing::debug!(
-                %balance_key,
-                ?balance,
-                "New value calculated",
-            );
-            Ok(())
-        })?;
-        _ = changed_keys.insert(balance_key);
+        token::credit_tokens(state, &token, receiver, *amount)?;
 
+        let balance_key = balance_key(&token, receiver);
         let supply_key = minted_balance_key(&token);
-        update::amount(state, &supply_key, |supply| {
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "Existing value found",
-            );
-            supply.receive(amount)?;
-            tracing::debug!(
-                %supply_key,
-                ?supply,
-                "New value calculated",
-            );
-            Ok(())
-        })?;
+        _ = changed_keys.insert(balance_key);
         _ = changed_keys.insert(supply_key);
     }
 
@@ -347,14 +281,16 @@ where
             balance_key(&pending_transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
         let relayer_rewards_key =
             balance_key(&pending_transfer.gas_fee.token, relayer);
-        // give the relayer the gas fee for this transfer.
-        update::amount(state, &relayer_rewards_key, |balance| {
-            balance.receive(&pending_transfer.gas_fee.amount)
-        })?;
-        // the gas fee is removed from escrow.
-        update::amount(state, &pool_balance_key, |balance| {
-            balance.spend(&pending_transfer.gas_fee.amount)
-        })?;
+        // give the relayer the gas fee for this transfer and remove it from
+        // escrow.
+        token::transfer(
+            state,
+            &pending_transfer.gas_fee.token,
+            &BRIDGE_POOL_ADDRESS,
+            relayer,
+            pending_transfer.gas_fee.amount,
+        )?;
+
         state.delete(&key)?;
         _ = pending_keys.swap_remove(&key);
         _ = changed_keys.insert(key);
@@ -452,12 +388,14 @@ where
         balance_key(&transfer.gas_fee.token, &transfer.gas_fee.payer);
     let pool_balance_key =
         balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
-    update::amount(state, &payer_balance_key, |balance| {
-        balance.receive(&transfer.gas_fee.amount)
-    })?;
-    update::amount(state, &pool_balance_key, |balance| {
-        balance.spend(&transfer.gas_fee.amount)
-    })?;
+
+    token::transfer(
+        state,
+        &transfer.gas_fee.token,
+        &BRIDGE_POOL_ADDRESS,
+        &transfer.gas_fee.payer,
+        transfer.gas_fee.amount,
+    )?;
 
     tracing::debug!(?transfer, "Refunded Bridge pool transfer fees");
     _ = changed_keys.insert(payer_balance_key);
@@ -478,26 +416,33 @@ where
     let native_erc20_addr = state
         .read(&bridge_storage::native_erc20_key())?
         .ok_or_else(|| eyre::eyre!("Could not read wNam key from storage"))?;
-    let (source, target) = if transfer.transfer.asset == native_erc20_addr {
+    let (source, target, token) = if transfer.transfer.asset
+        == native_erc20_addr
+    {
         let escrow_balance_key =
             balance_key(&state.in_mem().native_token, &BRIDGE_ADDRESS);
         let sender_balance_key = balance_key(
             &state.in_mem().native_token,
             &transfer.transfer.sender,
         );
-        (escrow_balance_key, sender_balance_key)
+        (
+            escrow_balance_key,
+            sender_balance_key,
+            state.in_mem().native_token.clone(),
+        )
     } else {
         let token = transfer.token_address();
         let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
         let sender_balance_key = balance_key(&token, &transfer.transfer.sender);
-        (escrow_balance_key, sender_balance_key)
+        (escrow_balance_key, sender_balance_key, token)
     };
-    update::amount(state, &source, |balance| {
-        balance.spend(&transfer.transfer.amount)
-    })?;
-    update::amount(state, &target, |balance| {
-        balance.receive(&transfer.transfer.amount)
-    })?;
+    token::transfer(
+        state,
+        &token,
+        &BRIDGE_POOL_ADDRESS,
+        &transfer.transfer.sender,
+        transfer.transfer.amount,
+    )?;
 
     tracing::debug!(?transfer, "Refunded Bridge pool transferred assets");
     _ = changed_keys.insert(source);
@@ -533,26 +478,23 @@ where
             unreachable!("Attempted to mint wNAM NUTs!");
         }
         let supply_key = minted_balance_key(&token);
-        update::amount(state, &supply_key, |supply| {
-            supply.receive(&transfer.transfer.amount)
-        })?;
+        increment_total_supply(state, &token, transfer.transfer.amount)?;
         _ = changed_keys.insert(supply_key);
         tracing::debug!(?transfer, "Updated wrapped NAM supply");
         return Ok(changed_keys);
     }
 
     // other asset kinds must be burned
+    burn_tokens(
+        state,
+        &token,
+        &BRIDGE_POOL_ADDRESS,
+        transfer.transfer.amount,
+    )?;
 
     let escrow_balance_key = balance_key(&token, &BRIDGE_POOL_ADDRESS);
-    update::amount(state, &escrow_balance_key, |balance| {
-        balance.spend(&transfer.transfer.amount)
-    })?;
-    _ = changed_keys.insert(escrow_balance_key);
-
     let supply_key = minted_balance_key(&token);
-    update::amount(state, &supply_key, |supply| {
-        supply.spend(&transfer.transfer.amount)
-    })?;
+    _ = changed_keys.insert(escrow_balance_key);
     _ = changed_keys.insert(supply_key);
 
     tracing::debug!(?transfer, "Burned wrapped ERC20 tokens");
@@ -574,6 +516,7 @@ mod tests {
     use namada_core::{address, eth_bridge_pool};
     use namada_parameters::{update_epoch_parameter, EpochDuration};
     use namada_state::testing::TestState;
+    use token::increment_balance;
 
     use super::*;
     use crate::storage::bridge_pool::get_pending_key;
@@ -731,12 +674,12 @@ mod tests {
             let payer_key = balance_key(&transfer.gas_fee.token, &payer);
             let payer_balance = Amount::from(0);
             state.write(&payer_key, payer_balance).expect("Test failed");
-            let escrow_key =
-                balance_key(&transfer.gas_fee.token, &BRIDGE_POOL_ADDRESS);
-            update::amount(state, &escrow_key, |balance| {
-                let gas_fee = Amount::from_u64(1);
-                balance.receive(&gas_fee)
-            })
+            increment_balance(
+                state,
+                &transfer.gas_fee.token,
+                &BRIDGE_POOL_ADDRESS,
+                Amount::from_u64(1),
+            )
             .expect("Test failed");
 
             if transfer.transfer.asset == wnam() {
@@ -763,10 +706,8 @@ mod tests {
                 state
                     .write(&escrow_key, escrow_balance)
                     .expect("Test failed");
-                update::amount(state, &minted_balance_key(&token), |supply| {
-                    supply.receive(&transfer.transfer.amount)
-                })
-                .expect("Test failed");
+                increment_total_supply(state, &token, transfer.transfer.amount)
+                    .expect("Test failed");
             };
         }
     }

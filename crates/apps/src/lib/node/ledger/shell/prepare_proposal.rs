@@ -6,6 +6,7 @@ use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::TxGasMeter;
+use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
@@ -295,6 +296,7 @@ where
         // Check fees and extract the gas limit of this transaction
         match prepare_proposal_fee_check(
             &wrapper,
+            tx.header_hash(),
             protocol::get_fee_unshielding_transaction(&tx, &wrapper),
             block_proposer,
             proposer_local_config,
@@ -313,8 +315,10 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
+    wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
@@ -357,8 +361,13 @@ where
         shell_params,
     )?;
 
-    protocol::transfer_fee(shell_params.state, proposer, wrapper)
-        .map_err(Error::TxApply)
+    protocol::transfer_fee(
+        shell_params.state,
+        proposer,
+        wrapper,
+        wrapper_tx_hash,
+    )
+    .map_err(Error::TxApply)
 }
 
 #[cfg(test)]
@@ -444,7 +453,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -720,7 +728,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -764,7 +771,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -801,7 +807,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -846,7 +851,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -868,7 +872,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         ))));
@@ -898,7 +901,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -947,7 +949,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair.ref_to(),
-            Epoch(0),
             (block_gas_limit + 1).into(),
             None,
         );
@@ -986,7 +987,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair.ref_to(),
-            Epoch(0),
             0.into(),
             None,
         );
@@ -1041,7 +1041,6 @@ mod test_prepare_proposal {
                 token: address::testing::btc(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );
@@ -1089,7 +1088,6 @@ mod test_prepare_proposal {
                 token: address::testing::apfel(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );
@@ -1142,7 +1140,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );
@@ -1182,7 +1179,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );
@@ -1223,7 +1219,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );
@@ -1264,7 +1259,6 @@ mod test_prepare_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
-            Epoch(0),
             GAS_LIMIT_MULTIPLIER.into(),
             None,
         );

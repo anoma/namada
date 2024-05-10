@@ -1,0 +1,32 @@
+[package]
+name = "namada_events"
+description = "Namada events"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+mainnet = []
+migrations = [
+  "namada_migrations",
+  "linkme",
+]
+testing = []
+
+[dependencies]
+namada_core = {path = "../core"}
+namada_macros = {path = "../macros"}
+namada_migrations = {path = "../migrations", optional = true}
+borsh.workspace = true
+linkme = {workspace = true, optional = true}
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

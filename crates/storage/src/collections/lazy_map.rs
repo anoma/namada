@@ -449,6 +449,21 @@ where
         Ok(())
     }
 
+    /// Try update a value at the given key with the given function that may
+    /// fail. If no existing value exists, the closure's argument will be
+    /// `None`.
+    pub fn try_update<S, F>(&self, storage: &mut S, key: K, f: F) -> Result<()>
+    where
+        S: StorageWrite + StorageRead,
+        F: FnOnce(Option<V>) -> Result<V>,
+    {
+        let data_key = self.get_data_key(&key);
+        let current = Self::read_key_val(storage, &data_key)?;
+        let new = f(current)?;
+        Self::write_key_val(storage, &data_key, new)?;
+        Ok(())
+    }
+
     /// Returns whether the map contains a key with a value.
     pub fn contains<S>(&self, storage: &S, key: &K) -> Result<bool>
     where

@@ -268,8 +268,12 @@ impl StateMachineTest for ConcretePosState {
 
                 // Need to apply some slashing
                 let current_epoch = state.s.in_mem().block.epoch;
-                crate::slashing::process_slashes(&mut state.s, current_epoch)
-                    .unwrap();
+                crate::slashing::process_slashes(
+                    &mut state.s,
+                    &mut namada_events::testing::VoidEventSink,
+                    current_epoch,
+                )
+                .unwrap();
 
                 let params = read_pos_params(&state.s).unwrap();
                 state.check_next_epoch_post_conditions(&params);
@@ -824,7 +828,7 @@ impl ConcretePosState {
 
     fn check_next_epoch_post_conditions(&self, params: &PosParams) {
         let pipeline = self.current_epoch() + params.pipeline_len;
-        let before_pipeline = pipeline.prev();
+        let before_pipeline = pipeline.prev().unwrap();
 
         // Post-condition: Consensus validator sets at pipeline offset
         // must be the same as at the epoch before it.
@@ -3604,7 +3608,7 @@ impl AbstractPosState {
     /// Copy validator sets and validator states at the given epoch from its
     /// predecessor
     fn copy_discrete_epoched_data(&mut self, epoch: Epoch) {
-        let prev_epoch = epoch.prev();
+        let prev_epoch = epoch.prev().unwrap();
         // Copy the non-delta data from the last epoch into the new one
         self.consensus_set.insert(
             epoch,
@@ -4699,7 +4703,7 @@ impl AbstractPosState {
         }
         // Hack - should this be done differently? (think this is safe)
         let last_amt = slashed_amounts
-            .get(&self.pipeline().prev())
+            .get(&self.pipeline().prev().unwrap())
             .cloned()
             .unwrap();
         slashed_amounts.insert(self.pipeline(), last_amt);
@@ -4820,7 +4824,8 @@ impl AbstractPosState {
                 redel_bonds,
                 validator,
             )
-            .mul_ceil(slash_rate);
+            .mul_ceil(slash_rate)
+            .unwrap();
         let slashable_amount = self.compute_bond_at_epoch(
             epoch,
             bond_start,
@@ -4993,7 +4998,8 @@ impl AbstractPosState {
                 &list_slashes,
                 slashable_amount,
             )
-            .mul_ceil(slash_rate);
+            .mul_ceil(slash_rate)
+            .unwrap();
 
             let list_slashes = slashes
                 .iter()
@@ -5014,7 +5020,8 @@ impl AbstractPosState {
                 &list_slashes,
                 slashable_amount,
             )
-            .mul_ceil(slash_rate);
+            .mul_ceil(slash_rate)
+            .unwrap();
 
             tot_unbonded = updated_total_unbonded;
 
@@ -5196,8 +5203,8 @@ impl AbstractPosState {
                         val_stake.to_string_native(),
                     );
                     vp_frac_sum += Dec::from(slashes.len())
-                        * Dec::from(val_stake)
-                        / Dec::from(consensus_stake);
+                        * Dec::try_from(val_stake).unwrap()
+                        / Dec::try_from(consensus_stake).unwrap();
                 }
             }
         }
@@ -5392,7 +5399,7 @@ impl AbstractPosState {
             incoming_redelegations.get(src_validator);
         if let Some(incoming) = src_incoming_redelegations {
             if let Some(redel_end_epoch) = incoming.get(delegator) {
-                return redel_end_epoch.prev()
+                return redel_end_epoch.prev().unwrap()
                     + params.slash_processing_epoch_offset()
                     > current_epoch;
             }
@@ -5736,7 +5743,7 @@ impl AbstractPosState {
             .fold(amount, |acc, (_, amnt)| {
                 acc.checked_sub(*amnt).unwrap_or_default()
             });
-        updated_amount.mul_ceil(slash.rate)
+        updated_amount.mul_ceil(slash.rate).unwrap()
     }
 }
 

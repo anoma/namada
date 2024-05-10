@@ -9,6 +9,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
@@ -18,6 +19,7 @@ use namada_core::storage::{
 };
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
+use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
@@ -26,7 +28,7 @@ use namada_tx::data::TxResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::events::log::dumb_queries;
-use crate::events::{Event, EventType};
+use crate::events::Event;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
@@ -113,7 +115,7 @@ router! {SHELL,
     ( "ibc_client_update" / [client_id: ClientId] / [consensus_height: BlockHeight] ) -> Option<Event> = ibc_client_update,
 
     // IBC packet event
-    ( "ibc_packet" / [event_type: EventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
+    ( "ibc_packet" / [event_type: IbcEventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
 }
 
 // Handlers:
@@ -389,7 +391,8 @@ where
     };
 
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
-        if queried_height + past_height_limit < last_committed_height {
+        if checked!(queried_height + past_height_limit)? < last_committed_height
+        {
             return Err(namada_storage::Error::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
@@ -420,6 +423,7 @@ where
                 data: value,
                 proof,
                 info: Default::default(),
+                height: queried_height,
             })
         }
         (None, _gas) => {
@@ -436,6 +440,7 @@ where
                 data: vec![],
                 proof,
                 info: format!("No value found for key: {}", storage_key),
+                height: queried_height,
             })
         }
     }
@@ -460,20 +465,17 @@ where
         })
         .collect();
     let data = data?;
+    let queried_height = {
+        let height: BlockHeight = request.height.into();
+        let is_last_height_query = height.0 == 0;
+
+        if hints::likely(is_last_height_query) {
+            ctx.state.in_mem().get_last_block_height()
+        } else {
+            height
+        }
+    };
     let proof = if request.prove {
-        let queried_height = {
-            let last_committed_height =
-                ctx.state.in_mem().get_last_block_height();
-
-            let height: BlockHeight = request.height.into();
-            let is_last_height_query = height.0 == 0;
-
-            if hints::likely(is_last_height_query) {
-                last_committed_height
-            } else {
-                height
-            }
-        };
         let mut ops = vec![];
         for PrefixValue { key, value } in &data {
             let mut proof = ctx
@@ -492,6 +494,7 @@ where
     Ok(EncodedResponseQuery {
         data,
         proof,
+        height: queried_height,
         ..Default::default()
     })
 }
@@ -517,12 +520,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let matcher = dumb_queries::QueryMatcher::applied(tx_hash);
-    Ok(ctx
-        .event_log
-        .iter_with_matcher(matcher)
-        .by_ref()
-        .next()
-        .cloned())
+    Ok(ctx.event_log.with_matcher(matcher).iter().next().cloned())
 }
 
 fn ibc_client_update<D, H, V, T>(
@@ -538,17 +536,12 @@ where
         client_id,
         consensus_height,
     );
-    Ok(ctx
-        .event_log
-        .iter_with_matcher(matcher)
-        .by_ref()
-        .next()
-        .cloned())
+    Ok(ctx.event_log.with_matcher(matcher).iter().next().cloned())
 }
 
 fn ibc_packet<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-    event_type: EventType,
+    event_type: IbcEventType,
     source_port: PortId,
     source_channel: ChannelId,
     destination_port: PortId,
@@ -567,12 +560,7 @@ where
         destination_channel,
         sequence,
     );
-    Ok(ctx
-        .event_log
-        .iter_with_matcher(matcher)
-        .by_ref()
-        .next()
-        .cloned())
+    Ok(ctx.event_log.with_matcher(matcher).iter().next().cloned())
 }
 
 fn account<D, H, V, T>(

@@ -1,30 +1,31 @@
 //! A log to store events emitted by `FinalizeBlock` calls in the ledger.
 //!
-//! The log can only hold `N` events at a time, where `N` is a configurable
-//! parameter. If the log is holding `N` events, and a new event is logged,
-//! old events are pruned.
+//! The log will hold up to `N` events of a certain kind at a time, before
+//! resorting to pruning older events contained within.
 
 use circular_queue::CircularQueue;
+use patricia_tree::map::StringPatriciaMap;
 
-use super::{EmitEvents, Event};
+use super::{EmitEvents, Event, EventType};
 
 pub mod dumb_queries;
 
 /// Parameters to configure the pruning of the event log.
 #[derive(Debug, Copy, Clone)]
 pub struct Params {
-    /// Soft limit on the maximum number of events the event log can hold.
+    /// Soft limit on the maximum number of events the event log can hold,
+    /// for a given event kind.
     ///
-    /// If the number of events in the log exceeds this value, the log
-    /// will be pruned.
-    pub max_log_events: usize,
+    /// If the number of events of a given type in the log exceeds this value,
+    /// events of that kind in the log will be pruned.
+    pub max_log_events_per_kind: usize,
 }
 
 impl Default for Params {
     fn default() -> Self {
         // TODO: tune the default params
         Self {
-            max_log_events: 50000,
+            max_log_events_per_kind: 50000,
         }
     }
 }
@@ -33,7 +34,8 @@ impl Default for Params {
 /// `FinalizeBlock` calls, in the ledger.
 #[derive(Debug)]
 pub struct EventLog {
-    queue: CircularQueue<Event>,
+    cap: usize,
+    map: StringPatriciaMap<CircularQueue<Event>>,
 }
 
 impl Default for EventLog {
@@ -63,10 +65,27 @@ impl EmitEvents for EventLog {
 }
 
 impl EventLog {
+    /// Retrieve an event queue of a given type.
+    fn get_queue_of_type(
+        &mut self,
+        event_type: &EventType,
+    ) -> &mut CircularQueue<Event> {
+        let event_type = event_type.to_string();
+
+        if namada_core::hints::unlikely(!self.map.contains_key(&event_type)) {
+            // some monkey business
+            self.map
+                .insert(&event_type, CircularQueue::with_capacity(self.cap));
+        }
+
+        self.map.get_mut(&event_type).unwrap()
+    }
+
     /// Return a new event log.
     pub fn new(params: Params) -> Self {
         Self {
-            queue: CircularQueue::with_capacity(params.max_log_events),
+            cap: params.max_log_events_per_kind,
+            map: StringPatriciaMap::new(),
         }
     }
 
@@ -77,7 +96,7 @@ impl EventLog {
     {
         let mut num_entries = 0;
         for event in events.into_iter() {
-            self.queue.push(event);
+            self.get_queue_of_type(event.kind()).push(event);
             num_entries += 1;
         }
         tracing::debug!(num_entries, "Added new entries to the event log");
@@ -86,59 +105,89 @@ impl EventLog {
     /// Returns a new iterator over this [`EventLog`].
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &Event> {
-        self.queue.iter()
+        self.map.values().flat_map(|queue| queue.iter())
     }
 
-    /// Returns a filtering iterator over this [`EventLog`].
+    /// Returns an adapter that turns this [`EventLog`] into
+    /// a filtering iterator over the events contained within.
     #[inline]
-    pub fn iter_with_matcher(
+    pub fn with_matcher(
         &self,
         matcher: dumb_queries::QueryMatcher,
-    ) -> impl Iterator<Item = &Event> {
-        self.queue
-            .iter()
-            .filter(move |&event| matcher.matches(event))
+    ) -> WithMatcher<'_> {
+        WithMatcher { matcher, log: self }
+    }
+}
+
+/// Iterator over an [`EventLog`] taking a [matcher](dumb_queries::QueryMatcher)
+/// in order to filter events within.
+pub struct WithMatcher<'log> {
+    log: &'log EventLog,
+    matcher: dumb_queries::QueryMatcher,
+}
+
+impl<'log> WithMatcher<'log> {
+    /// Iterates and filters events in the associated [`EventLog`]
+    /// using the provided [event matcher](dumb_queries::QueryMatcher).
+    pub fn iter<'this: 'log>(
+        &'this self,
+    ) -> impl Iterator<Item = &'log Event> + 'log {
+        self.log
+            .map
+            .iter_prefix(self.matcher.event_type())
+            .flat_map(|(_, queue)| {
+                queue.iter().filter(|&event| self.matcher.matches(event))
+            })
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod event_log_tests {
     use namada_core::hash::Hash;
+    use namada_core::keccak::KeccakHash;
+    use namada_ethereum_bridge::event::types::BRIDGE_POOL_RELAYED;
+    use namada_ethereum_bridge::event::BridgePoolTxHash;
 
     use super::*;
-    use crate::events::{EventLevel, EventType};
+    use crate::events::extend::{ComposeEvent, TxHash};
+    use crate::events::EventLevel;
+    use crate::tx::event::types::APPLIED as APPLIED_TX;
 
     const HASH: &str =
         "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF";
 
-    /// An accepted tx hash query.
+    /// An applied tx hash query.
     macro_rules! applied {
         ($hash:expr) => {
             dumb_queries::QueryMatcher::applied(Hash::try_from($hash).unwrap())
         };
     }
 
+    /// An applied tx hash query.
+    macro_rules! bridge_pool_relayed {
+        ($hash:expr) => {
+            dumb_queries::QueryMatcher::bridge_pool_relayed(
+                &KeccakHash::try_from($hash).unwrap(),
+            )
+        };
+    }
+
+    /// Return a mock `FinalizeBlock` event.
+    fn mock_event(event_type: EventType, hash: impl AsRef<str>) -> Event {
+        Event::new(event_type, EventLevel::Tx)
+            .with(TxHash(Hash::try_from(hash.as_ref()).unwrap()))
+            .with(BridgePoolTxHash(
+                &KeccakHash::try_from(hash.as_ref()).unwrap(),
+            ))
+            .into()
+    }
+
     /// Return a vector of mock `FinalizeBlock` events.
     fn mock_tx_events(hash: &str) -> Vec<Event> {
-        let event_1 = Event {
-            event_type: EventType::Applied,
-            level: EventLevel::Block,
-            attributes: {
-                let mut attrs = namada_core::collections::HashMap::new();
-                attrs.insert("hash".to_string(), hash.to_string());
-                attrs
-            },
-        };
-        let event_2 = Event {
-            event_type: EventType::Proposal,
-            level: EventLevel::Block,
-            attributes: {
-                let mut attrs = namada_core::collections::HashMap::new();
-                attrs.insert("hash".to_string(), hash.to_string());
-                attrs
-            },
-        };
-        vec![event_1, event_2]
+        vec![
+            mock_event(BRIDGE_POOL_RELAYED, hash),
+            mock_event(APPLIED_TX, hash),
+        ]
     }
 
     /// Test adding a couple of events to the event log, and
@@ -157,13 +206,27 @@ mod tests {
         }
 
         // inspect log
-        let events_in_log: Vec<_> =
-            log.iter_with_matcher(applied!(HASH)).cloned().collect();
+        assert_eq!(log.iter().count(), NUM_HEIGHTS * events.len());
+
+        let events_in_log: Vec<_> = log
+            .with_matcher(bridge_pool_relayed!(HASH))
+            .iter()
+            .cloned()
+            .collect();
 
         assert_eq!(events_in_log.len(), NUM_HEIGHTS);
 
         for event in events_in_log {
             assert_eq!(events[0], event);
+        }
+
+        let events_in_log: Vec<_> =
+            log.with_matcher(applied!(HASH)).iter().cloned().collect();
+
+        assert_eq!(events_in_log.len(), NUM_HEIGHTS);
+
+        for event in events_in_log {
+            assert_eq!(events[1], event);
         }
     }
 
@@ -172,51 +235,47 @@ mod tests {
     fn test_log_prune() {
         const LOG_CAP: usize = 4;
 
-        // log cap has to be a multiple of two
-        // for this test
-        if LOG_CAP < 2 || LOG_CAP & 1 != 0 {
+        if LOG_CAP == 0 {
             panic!();
         }
 
-        const MATCHED_EVENTS: usize = LOG_CAP / 2;
-
         let mut log = EventLog::new(Params {
-            max_log_events: LOG_CAP,
+            max_log_events_per_kind: LOG_CAP,
         });
 
         // completely fill the log with events
-        //
-        // `mock_tx_events` returns 2 events, so
-        // we do `LOG_CAP / 2` iters to fill the log
-        let events = mock_tx_events(HASH);
-        assert_eq!(events.len(), 2);
-
-        for _ in 0..(LOG_CAP / 2) {
-            log.log_events(events.clone());
+        for i in 0..LOG_CAP {
+            log.emit(mock_event(APPLIED_TX, format!("{i:064X}")));
         }
 
         // inspect log - it should be full
-        let events_in_log: Vec<_> =
-            log.iter_with_matcher(applied!(HASH)).cloned().collect();
+        let events_in_log: Vec<_> = log.iter().cloned().collect();
 
-        assert_eq!(events_in_log.len(), MATCHED_EVENTS);
+        assert_eq!(events_in_log.len(), LOG_CAP);
 
-        for event in events_in_log {
-            assert_eq!(events[0], event);
+        // iter in reverse since the ringbuf gives us items
+        // in the order of the last insertion
+        for (i, event) in events_in_log.into_iter().rev().enumerate() {
+            assert_eq!(mock_event(APPLIED_TX, format!("{i:064X}")), event);
         }
 
-        // add a new PROPOSAL event to the log,
-        // pruning the first APPLIED event we added
-        log.log_events(Some(events[1].clone()));
+        // add a new APPLIED event to the log
+        log.emit(mock_event(APPLIED_TX, HASH));
 
-        let events_in_log: Vec<_> =
-            log.iter_with_matcher(applied!(HASH)).cloned().collect();
+        // inspect log - oldest event should have been pruned
+        let events_in_log: Vec<_> = log.iter().cloned().collect();
 
-        const ACCEPTED_EVENTS: usize = MATCHED_EVENTS - 1;
-        assert_eq!(events_in_log.len(), ACCEPTED_EVENTS);
+        assert_eq!(events_in_log.len(), LOG_CAP);
+        assert_eq!(events_in_log[0], mock_event(APPLIED_TX, HASH));
 
-        for event in events_in_log {
-            assert_eq!(events[0], event);
+        for (i, event) in events_in_log
+            .into_iter()
+            .rev()
+            .enumerate()
+            .take(LOG_CAP - 1)
+        {
+            let i = i + 1; // last elem was pruned
+            assert_eq!(mock_event(APPLIED_TX, format!("{i:064X}")), event);
         }
     }
 }

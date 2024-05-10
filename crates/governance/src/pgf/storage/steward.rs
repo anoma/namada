@@ -35,11 +35,14 @@ impl StewardDetail {
         }
 
         let mut sum = Dec::zero();
-        for percentage in self.reward_distribution.values().cloned() {
+        for percentage in self.reward_distribution.values().copied() {
             if percentage < Dec::zero() || percentage > Dec::one() {
                 return false;
             }
-            sum += percentage;
+            match sum.checked_add(percentage) {
+                Some(new_sum) => sum = new_sum,
+                None => return false,
+            }
             if sum > Dec::one() {
                 return false;
             }

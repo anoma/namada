@@ -15,7 +15,6 @@ use namada_core::ibc::core::channel::types::error::{
 };
 use namada_core::ibc::core::channel::types::packet::Receipt;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::core::client::context::consensus_state::ConsensusState;
 use namada_core::ibc::core::client::types::error::ClientError;
 use namada_core::ibc::core::client::types::Height;
 use namada_core::ibc::core::connection::types::error::ConnectionError;
@@ -103,7 +102,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         consensus_state: AnyConsensusState,
     ) -> Result<()> {
         let key = storage::consensus_state_key(client_id, height);
-        let bytes = consensus_state.encode_vec();
+        let bytes = Any::from(consensus_state).encode_to_vec();
         self.write_bytes(&key, bytes).map_err(ContextError::from)
     }
 
@@ -208,7 +207,10 @@ pub trait IbcCommonContext: IbcStorageContext {
     }
 
     /// Get the client update time
-    fn client_update_time(&self, client_id: &ClientId) -> Result<Timestamp> {
+    fn client_update_meta(
+        &self,
+        client_id: &ClientId,
+    ) -> Result<(Timestamp, Height)> {
         let key = storage::client_update_timestamp_key(client_id);
         let value =
             self.read_bytes(&key)?.ok_or(ClientError::ClientSpecific {
@@ -216,39 +218,14 @@ pub trait IbcCommonContext: IbcStorageContext {
                     "The client update time doesn't exist: ID {client_id}",
                 ),
             })?;
-        let time =
-            TmTime::decode_vec(&value).map_err(|_| ClientError::Other {
+        let time = TmTime::decode_vec(&value)
+            .map_err(|_| ClientError::Other {
                 description: format!(
                     "Decoding the client update time failed: ID {client_id}",
                 ),
-            })?;
-        Ok(time.into())
-    }
+            })?
+            .into();
 
-    /// Store the client update time
-    fn store_update_time(
-        &mut self,
-        client_id: &ClientId,
-        timestamp: Timestamp,
-    ) -> Result<()> {
-        let key = storage::client_update_timestamp_key(client_id);
-        let time = timestamp.into_tm_time().ok_or(ClientError::Other {
-            description: format!(
-                "The client timestamp is invalid: ID {client_id}",
-            ),
-        })?;
-        self.write_bytes(&key, time.encode_vec())
-            .map_err(ContextError::from)
-    }
-
-    /// Delete the client update time
-    fn delete_update_time(&mut self, client_id: &ClientId) -> Result<()> {
-        let key = storage::client_update_timestamp_key(client_id);
-        self.delete(&key).map_err(ContextError::from)
-    }
-
-    /// Get the client update height
-    fn client_update_height(&self, client_id: &ClientId) -> Result<Height> {
         let key = storage::client_update_height_key(client_id);
         let value = self.read_bytes(&key)?.ok_or({
             ClientError::ClientSpecific {
@@ -257,14 +234,45 @@ pub trait IbcCommonContext: IbcStorageContext {
                 ),
             }
         })?;
-        Height::decode_vec(&value).map_err(|_| {
-            ClientError::Other {
+        let height = Height::decode_vec(&value).map_err(|_| {
+            ContextError::ClientError(ClientError::Other {
                 description: format!(
                     "Decoding the client update height failed: ID {client_id}",
                 ),
-            }
-            .into()
-        })
+            })
+        })?;
+
+        Ok((time, height))
+    }
+
+    /// Store the client update time and height
+    fn store_update_meta(
+        &mut self,
+        client_id: &ClientId,
+        host_timestamp: Timestamp,
+        host_height: Height,
+    ) -> Result<()> {
+        let key = storage::client_update_timestamp_key(client_id);
+        let time = host_timestamp.into_tm_time().ok_or(ClientError::Other {
+            description: format!(
+                "The client timestamp is invalid: ID {client_id}",
+            ),
+        })?;
+        self.write_bytes(&key, time.encode_vec())
+            .map_err(ContextError::from)?;
+
+        let key = storage::client_update_height_key(client_id);
+        let bytes = host_height.encode_vec();
+        self.write_bytes(&key, bytes).map_err(ContextError::from)
+    }
+
+    /// Delete the client update time and height
+    fn delete_update_meta(&mut self, client_id: &ClientId) -> Result<()> {
+        let key = storage::client_update_timestamp_key(client_id);
+        self.delete(&key).map_err(ContextError::from)?;
+
+        let key = storage::client_update_height_key(client_id);
+        self.delete(&key).map_err(ContextError::from)
     }
 
     /// Get the timestamp on this chain
@@ -278,7 +286,7 @@ pub trait IbcCommonContext: IbcStorageContext {
                     // `FinalizeBlock` phase, e.g. dry-run, use the previous
                     // header's time. It should be OK though the constraints
                     // become a bit stricter when checking timeouts.
-                    self.get_block_header(height.prev_height())?
+                    self.get_block_header(height.prev_height().unwrap())?
                 } else {
                     None
                 }
@@ -329,23 +337,6 @@ pub trait IbcCommonContext: IbcStorageContext {
             Some(duration) => Ok(duration.into()),
             None => unreachable!("The parameter should be initialized"),
         }
-    }
-
-    /// Store the client update height
-    fn store_update_height(
-        &mut self,
-        client_id: &ClientId,
-        host_height: Height,
-    ) -> Result<()> {
-        let key = storage::client_update_height_key(client_id);
-        let bytes = host_height.encode_vec();
-        self.write_bytes(&key, bytes).map_err(ContextError::from)
-    }
-
-    /// Delete the client update height
-    fn delete_update_height(&mut self, client_id: &ClientId) -> Result<()> {
-        let key = storage::client_update_height_key(client_id);
-        self.delete(&key).map_err(ContextError::from)
     }
 
     /// Get the ConnectionEnd

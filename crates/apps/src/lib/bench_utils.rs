@@ -25,6 +25,8 @@ use namada::core::masp::{
 use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::core::time::DateTimeUtc;
 use namada::core::token::{Amount, DenominatedAmount, Transfer};
+use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
+use namada::events::Event;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::InitProposalData;
 use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
@@ -75,6 +77,7 @@ use namada::tx::data::pos::Bond;
 use namada::tx::data::{
     BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
 };
+use namada::tx::event::{new_tx_event, Batch};
 use namada::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
 };
@@ -258,8 +261,8 @@ impl Default for BenchShell {
                 author: defaults::albert_address(),
                 r#type: ProposalType::Default,
                 voting_start_epoch,
-                voting_end_epoch: voting_start_epoch + 3_u64,
-                activation_epoch: voting_start_epoch + 9_u64,
+                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
+                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
             },
             None,
             Some(vec![content_section]),
@@ -428,7 +431,7 @@ impl BenchShell {
             &mut self.state,
             &params,
             current_epoch,
-            current_epoch + params.pipeline_len,
+            current_epoch.unchecked_add(params.pipeline_len),
         )
         .unwrap();
 
@@ -513,7 +516,7 @@ impl BenchShell {
                 Some(ConnectionId::new(1)),
                 CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
             ),
-            vec![Version::default()],
+            Version::compatibles(),
             std::time::Duration::new(100, 0),
         )
         .unwrap();
@@ -584,7 +587,7 @@ impl BenchShell {
         self.inner
             .state
             .in_mem_mut()
-            .begin_block(last_height + 1)
+            .begin_block(last_height.next_height())
             .unwrap();
 
         self.inner.commit();
@@ -605,7 +608,6 @@ impl BenchShell {
                 token: self.state.in_mem().native_token.clone(),
             },
             defaults::albert_keypair().ref_to(),
-            self.state.in_mem().last_epoch,
             0.into(),
             None,
         );
@@ -908,40 +910,26 @@ impl Client for BenchShell {
                                         changed_keys: changed_keys.to_owned(),
                                         vps_result: VpsResult::default(),
                                         initialized_accounts: vec![],
-                                        ibc_events: BTreeSet::default(),
-                                        eth_bridge_events: BTreeSet::default(),
+                                        events: BTreeSet::default(),
                                     }),
                                 )]
                                 .into_iter()
                                 .collect(),
                             ),
                         };
-                        namada::tendermint::abci::Event {
-                            kind: "applied".to_string(),
-                            // Mock the masp and tx attributes
-                            attributes: vec![
-                                namada::tendermint::abci::EventAttribute {
-                                    key: "masp_tx_block_index".to_string(),
-                                    value: format!("{}", idx),
-                                    index: true,
-                                },
-                                namada::tendermint::abci::EventAttribute {
-                                    key: "masp_tx_batch_refs".to_string(),
-                                    value: serde_json::to_string(&vec![
-                                        tx.first_commitments()
-                                            .unwrap()
-                                            .get_hash(),
-                                    ])
-                                    .unwrap(),
-                                    index: true,
-                                },
-                                namada::tendermint::abci::EventAttribute {
-                                    key: "batch".to_string(),
-                                    value: tx_result.to_string(),
-                                    index: true,
-                                },
-                            ],
-                        }
+                        let event: Event = new_tx_event(tx, height.value())
+                            .with(Batch(&tx_result))
+                            .with(MaspTxBlockIndex(TxIndex::must_from_usize(
+                                idx,
+                            )))
+                            .with(MaspTxBatchRefs(
+                                vec![
+                                    tx.first_commitments().unwrap().get_hash(),
+                                ]
+                                .into(),
+                            ))
+                            .into();
+                        namada::tendermint::abci::Event::from(event)
                     })
                     .collect(),
             )
@@ -1027,7 +1015,7 @@ impl Default for BenchShieldedCtx {
                 .wallet
                 .insert_payment_addr(
                     alias,
-                    PaymentAddress::from(payment_addr).pinned(false),
+                    PaymentAddress::from(payment_addr),
                     true,
                 )
                 .unwrap();
@@ -1119,7 +1107,6 @@ impl BenchShieldedCtx {
                 } else {
                     DenominatedAmount::native(amount)
                 },
-                key: None,
                 shielded: shielded_section_hash,
             },
             shielded,

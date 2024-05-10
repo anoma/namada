@@ -13,7 +13,7 @@ use namada::governance::cli::onchain::{
 };
 use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::tx::{CompressedSignature, Section, Signer, Tx};
+use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
@@ -115,7 +115,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
                 .expect("unable to parse signature from Ledger");
         // Signatures from the Ledger come back in compressed
         // form
-        let compressed = CompressedSignature {
+        let compressed = CompressedAuthorization {
             targets: response.raw_indices,
             signer: Signer::PubKeys(vec![pubkey]),
             signatures: [(0, signature)].into(),
@@ -133,7 +133,7 @@ pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
                 .expect("unable to parse signature from Ledger");
         // Signatures from the Ledger come back in compressed
         // form
-        let compressed = CompressedSignature {
+        let compressed = CompressedAuthorization {
             targets: response.wrapper_indices,
             signer: Signer::PubKeys(vec![pubkey]),
             signatures: [(0, signature)].into(),
@@ -680,6 +680,7 @@ pub async fn submit_init_validator(
         description,
         discord_handle,
         avatar,
+        name,
         validator_vp_code_path,
         unsafe_dont_encrypt,
         tx_init_account_code_path,
@@ -732,6 +733,7 @@ pub async fn submit_init_validator(
             website,
             discord_handle,
             avatar,
+            name,
             tx_code_path: tx_become_validator_code_path,
             unsafe_dont_encrypt,
         },
@@ -855,12 +857,13 @@ where
                 e.to_string(),
             )
         })?;
-        let author_balance = rpc::get_token_balance(
+        let author_balance = namada_sdk::rpc::get_token_balance(
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
         )
-        .await;
+        .await
+        .unwrap();
         let proposal = proposal
             .validate(
                 &governance_parameters,
@@ -883,12 +886,13 @@ where
                 e.to_string(),
             )
         })?;
-        let author_balane = rpc::get_token_balance(
+        let author_balane = namada_sdk::rpc::get_token_balance(
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
         )
-        .await;
+        .await
+        .unwrap();
         let proposal = proposal
             .validate(
                 &governance_parameters,

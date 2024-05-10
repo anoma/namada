@@ -1,9 +1,12 @@
-#![allow(clippy::assign_op_pattern)]
 //! An unsigned 256 integer type. Used for, among other things,
 //! the backing type of token amounts.
+
+// Used in `construct_uint!`
+#![allow(clippy::assign_op_pattern)]
+
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::{Add, AddAssign, BitAnd, Div, Mul, Neg, Rem, Sub, SubAssign};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use impl_num_traits::impl_uint_num_traits;
@@ -11,18 +14,22 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_integer::Integer;
-use num_traits::{CheckedAdd, CheckedMul, CheckedSub};
 use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
+use crate::arith::{self, checked, CheckedAdd};
 use crate::token;
-use crate::token::{Amount, AmountParseError, MaspDigitPos};
+use crate::token::{AmountParseError, MaspDigitPos};
 
 /// The value zero.
 pub const ZERO: Uint = Uint::from_u64(0);
 
 /// The value one.
 pub const ONE: Uint = Uint::from_u64(1);
+
+// Allowed because the value is a const `64`
+#[allow(clippy::cast_possible_truncation)]
+const UINT_U32_WORD_BITS: u32 = Uint::WORD_BITS as u32;
 
 impl Uint {
     const N_WORDS: usize = 4;
@@ -34,6 +41,7 @@ impl Uint {
 
     /// Return the least number of bits needed to represent the number
     #[inline]
+    #[allow(clippy::arithmetic_side_effects)]
     pub fn bits_512(arr: &[u64; 2 * Self::N_WORDS]) -> usize {
         for i in 1..arr.len() {
             if arr[arr.len() - i] > 0 {
@@ -57,6 +65,7 @@ impl Uint {
         (slf, rem.into())
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn shr_512(
         original: [u64; 2 * Self::N_WORDS],
         shift: u32,
@@ -81,24 +90,26 @@ impl Uint {
         ret
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn full_shl_512(
         slf: [u64; 2 * Self::N_WORDS],
         shift: u32,
     ) -> [u64; 2 * Self::N_WORDS + 1] {
-        debug_assert!(shift < Self::WORD_BITS as u32);
+        debug_assert!(shift < UINT_U32_WORD_BITS);
         let mut u = [0u64; 2 * Self::N_WORDS + 1];
         let u_lo = slf[0] << shift;
-        let u_hi = Self::shr_512(slf, Self::WORD_BITS as u32 - shift);
+        let u_hi = Self::shr_512(slf, UINT_U32_WORD_BITS - shift);
         u[0] = u_lo;
         u[1..].copy_from_slice(&u_hi[..]);
         u
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn full_shr_512(
         u: [u64; 2 * Self::N_WORDS + 1],
         shift: u32,
     ) -> [u64; 2 * Self::N_WORDS] {
-        debug_assert!(shift < Self::WORD_BITS as u32);
+        debug_assert!(shift < UINT_U32_WORD_BITS);
         let mut res = [0; 2 * Self::N_WORDS];
         for i in 0..res.len() {
             res[i] = u[i] >> shift;
@@ -106,13 +117,14 @@ impl Uint {
         // carry
         if shift > 0 {
             for i in 1..=res.len() {
-                res[i - 1] |= u[i] << (Self::WORD_BITS as u32 - shift);
+                res[i - 1] |= u[i] << (UINT_U32_WORD_BITS - shift);
             }
         }
         res
     }
 
     // See Knuth, TAOCP, Volume 2, section 4.3.1, Algorithm D.
+    #[allow(clippy::arithmetic_side_effects)]
     fn div_mod_knuth_512(
         slf: [u64; 2 * Self::N_WORDS],
         mut v: Self,
@@ -206,14 +218,10 @@ impl Uint {
     }
 
     /// Returns a pair `(self / other, self % other)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `other` is zero.
     pub fn div_mod_512(
         slf: [u64; 2 * Self::N_WORDS],
         other: Self,
-    ) -> ([u64; 2 * Self::N_WORDS], Self) {
+    ) -> Option<([u64; 2 * Self::N_WORDS], Self)> {
         let my_bits = Self::bits_512(&slf);
         let your_bits = other.bits();
 
@@ -221,32 +229,28 @@ impl Uint {
 
         // Early return in case we are dividing by a larger number than us
         if my_bits < your_bits {
-            return (
+            return Some((
                 [0; 2 * Self::N_WORDS],
                 Self(slf[..Self::N_WORDS].try_into().unwrap()),
-            );
+            ));
         }
 
         if your_bits <= Self::WORD_BITS {
-            return Self::div_mod_small_512(slf, other.low_u64());
+            return Some(Self::div_mod_small_512(slf, other.low_u64()));
         }
 
         let (n, m) = {
             let my_words = Self::words(my_bits);
             let your_words = Self::words(your_bits);
-            (your_words, my_words - your_words)
+            (your_words, my_words.checked_sub(your_words)?)
         };
 
-        Self::div_mod_knuth_512(slf, other, n, m)
+        Some(Self::div_mod_knuth_512(slf, other, n, m))
     }
 
     /// Returns a pair `(Some((self * num) / denom), (self * num) % denom)` if
     /// the quotient fits into Self. Otherwise `(None, (self * num) % denom)` is
     /// returned.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `denom` is zero.
     pub fn checked_mul_div(
         &self,
         num: Self,
@@ -256,7 +260,7 @@ impl Uint {
             None
         } else {
             let prod = uint::uint_full_mul_reg!(Uint, 4, self, num);
-            let (quotient, remainder) = Self::div_mod_512(prod, denom);
+            let (quotient, remainder) = Self::div_mod_512(prod, denom)?;
             // The compiler WILL NOT inline this if you remove this annotation.
             #[inline(always)]
             fn any_nonzero(arr: &[u64]) -> bool {
@@ -280,20 +284,6 @@ impl Uint {
                 ))
             }
         }
-    }
-
-    /// Returns a pair `((self * num) / denom, (self * num) % denom)`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `denom` is zero.
-    pub fn mul_div(&self, num: Self, denom: Self) -> (Self, Self) {
-        let prod = uint::uint_full_mul_reg!(Uint, 4, self, num);
-        let (quotient, remainder) = Self::div_mod_512(prod, denom);
-        (
-            Self(quotient[0..Self::N_WORDS].try_into().unwrap()),
-            remainder,
-        )
     }
 }
 
@@ -348,7 +338,7 @@ impl<'de> serde::Deserialize<'de> for Uint {
         }
         if digits.len() > 77 {
             return Err(D::Error::custom(AmountParseError::ScaleTooLarge(
-                digits.len() as u32,
+                digits.len(),
                 77,
             )));
         }
@@ -368,9 +358,12 @@ impl<'de> serde::Deserialize<'de> for Uint {
 
 impl_uint_num_traits!(Uint, 4);
 
+// Required for Ratio used in `voting_power::FractionalVotingPower`.
+// Use with care as some of the methods may panic.
+#[allow(clippy::arithmetic_side_effects)]
 impl Integer for Uint {
     fn div_floor(&self, other: &Self) -> Self {
-        self.div(other)
+        self.checked_div(*other).unwrap()
     }
 
     fn mod_floor(&self, other: &Self) -> Self {
@@ -407,11 +400,14 @@ impl Integer for Uint {
     }
 
     fn lcm(&self, other: &Self) -> Self {
-        (*self * *other).div(self.gcd(other))
+        (*self * *other).checked_div(self.gcd(other)).unwrap()
     }
 
     fn divides(&self, other: &Self) -> bool {
-        other.rem(self).is_zero()
+        other
+            .checked_rem(*self)
+            .map(|rem| rem.is_zero())
+            .unwrap_or_default()
     }
 
     fn is_multiple_of(&self, other: &Self) -> bool {
@@ -419,6 +415,7 @@ impl Integer for Uint {
     }
 
     fn is_even(&self) -> bool {
+        use std::ops::BitAnd;
         self.bitand(Self::one()) != Self::one()
     }
 
@@ -448,13 +445,15 @@ impl Uint {
             .map(|x| x.0)
     }
 
-    /// Compute the two's complement of a number.
-    fn negate(&self) -> Self {
+    /// Compute the two's complement of a number. Returns a flag if the negation
+    /// overflows.
+    fn negate(&self) -> (Self, bool) {
         let mut output = self.0;
         for byte in output.iter_mut() {
             *byte ^= u64::MAX;
         }
-        Self(output).overflowing_add(Uint::from(1u64)).0.canonical()
+        let (res, overflow) = Self(output).overflowing_add(Uint::from(1u64));
+        (res.canonical(), overflow)
     }
 
     /// There are two valid representations of zero: plus and
@@ -507,7 +506,33 @@ impl fmt::Display for I256 {
     }
 }
 
+impl FromStr for I256 {
+    type Err = Box<dyn 'static + std::error::Error>;
+
+    fn from_str(num: &str) -> Result<Self, Self::Err> {
+        if let Some(("", neg_num)) = num.split_once('-') {
+            let (uint, overflow) = neg_num.parse::<Uint>()?.negate();
+            if overflow {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "I256 overflow",
+                )));
+            }
+            Ok(I256(uint))
+        } else {
+            let uint = num.parse::<Uint>()?;
+            Ok(I256(uint))
+        }
+    }
+}
+
 impl I256 {
+    /// Compute the two's complement of a number.
+    pub fn negate(&self) -> Option<Self> {
+        let (uint, overflow) = self.0.negate();
+        if overflow { None } else { Some(Self(uint)) }
+    }
+
     /// Check if the amount is not negative (greater
     /// than or equal to zero)
     pub fn non_negative(&self) -> bool {
@@ -529,7 +554,7 @@ impl I256 {
         if self.non_negative() {
             self.0
         } else {
-            self.0.negate()
+            self.0.negate().0
         }
     }
 
@@ -580,11 +605,17 @@ impl I256 {
         let is_negative = value < 0;
         let value = value.unsigned_abs();
         let mut result = [0u64; 4];
-        result[denom as usize] = value as u64;
+        result[denom as usize] = u64::try_from(value)
+            .map_err(|_e| AmountParseError::PrecisionOverflow)?;
         let result = Uint(result);
         if result <= MAX_SIGNED_VALUE {
             if is_negative {
-                Ok(Self(result.negate()).canonical())
+                let (inner, overflow) = result.negate();
+                if overflow {
+                    Err(AmountParseError::InvalidRange)
+                } else {
+                    Ok(Self(inner))
+                }
             } else {
                 Ok(Self(result).canonical())
             }
@@ -593,20 +624,142 @@ impl I256 {
         }
     }
 
-    /// Multiply by a decimal [`Dec`] with the result rounded up.
-    #[must_use]
-    pub fn mul_ceil(&self, dec: Dec) -> Self {
+    /// Multiply by a decimal [`Dec`] with the result rounded up. Checks for
+    /// overflow.
+    pub fn mul_ceil(&self, dec: Dec) -> Result<Self, arith::Error> {
         let is_res_negative = self.is_negative() ^ dec.is_negative();
-        let tot = self.abs() * dec.0.abs();
-        let denom = Uint::from(10u64.pow(POS_DECIMAL_PRECISION as u32));
-        let floor_div = tot / denom;
-        let rem = tot % denom;
+        let tot = checked!(self.abs() * dec.0.abs())?;
+        let denom = Uint::from(10u64.pow(u32::from(POS_DECIMAL_PRECISION)));
+        let floor_div = checked!(tot / denom)?;
+        let rem = checked!(tot % denom)?;
         let abs_res = Self(if !rem.is_zero() && !is_res_negative {
-            floor_div + Uint::from(1_u64)
+            checked!(floor_div + Uint::from(1_u64))?
         } else {
             floor_div
         });
-        if is_res_negative { -abs_res } else { abs_res }
+        Ok(if is_res_negative {
+            checked!(-abs_res)?
+        } else {
+            abs_res
+        })
+    }
+
+    /// Sum with overflow check
+    pub fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Option<Self> {
+        iter.try_fold(I256::zero(), |acc, amt| acc.checked_add(amt))
+    }
+
+    /// Adds two [`I256`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
+    pub fn checked_add(&self, rhs: Self) -> Option<Self> {
+        let result = match (self.non_negative(), rhs.non_negative()) {
+            (true, true) => {
+                let inner = self.0.checked_add(rhs.0)?;
+                if inner > MAX_SIGNED_VALUE {
+                    return None;
+                }
+                Self(inner)
+            }
+            (false, false) => {
+                let inner = self.abs().checked_add(rhs.abs())?;
+                if inner > MAX_SIGNED_VALUE {
+                    return None;
+                }
+                Self(inner).checked_neg()?
+            }
+            (true, false) => {
+                if self.0 >= rhs.abs() {
+                    Self(self.0.checked_sub(rhs.abs())?)
+                } else {
+                    Self(rhs.abs().checked_sub(self.0)?).checked_neg()?
+                }
+            }
+            (false, true) => {
+                if rhs.0 >= self.abs() {
+                    Self(rhs.abs().checked_sub(self.abs())?)
+                } else {
+                    Self(self.abs().checked_sub(rhs.0)?).checked_neg()?
+                }
+            }
+        }
+        .canonical();
+        Some(result)
+    }
+
+    /// Subtracts two [`I256`]'s if the absolute value does
+    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
+    pub fn checked_sub(&self, other: Self) -> Option<Self> {
+        self.checked_add(other.checked_neg()?)
+    }
+
+    /// Checked negation
+    pub fn checked_neg(&self) -> Option<Self> {
+        if self.is_zero() {
+            return Some(*self);
+        }
+        let (inner, overflow) = self.0.negate();
+        if overflow { None } else { Some(Self(inner)) }
+    }
+
+    /// Checked multiplication
+    pub fn checked_mul(&self, v: Self) -> Option<Self> {
+        let is_negative = self.is_negative() != v.is_negative();
+        let unsigned_res =
+            I256::try_from(self.abs().checked_mul(v.abs())?).ok()?;
+        Some(if is_negative {
+            unsigned_res.checked_neg()?
+        } else {
+            unsigned_res
+        })
+    }
+
+    /// Checked division
+    pub fn checked_div(&self, rhs: Self) -> Option<Self> {
+        if rhs.is_zero() {
+            None
+        } else {
+            let quot = self
+                .abs()
+                .fixed_precision_div(&rhs.abs(), 0u8)
+                .unwrap_or_default();
+            Some(if self.is_negative() == rhs.is_negative() {
+                Self(quot)
+            } else {
+                Self(quot).checked_neg()?
+            })
+        }
+    }
+
+    /// Checked division remnant
+    pub fn checked_rem(&self, rhs: Self) -> Option<Self> {
+        let inner: Uint = self.abs().checked_rem(rhs.abs())?;
+        if self.is_negative() {
+            Some(Self(inner).checked_neg()?)
+        } else {
+            Some(Self(inner))
+        }
+    }
+}
+
+impl CheckedAdd for I256 {
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        self.checked_add(rhs)
+    }
+}
+
+// NOTE: This is here only because MASP requires it for `ValueSum` addition
+impl num_traits::CheckedAdd for I256 {
+    fn checked_add(&self, rhs: &Self) -> Option<Self> {
+        self.checked_add(*rhs)
+    }
+}
+
+// NOTE: This is here only because num_traits::CheckedAdd requires it
+impl std::ops::Add for I256 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.checked_add(rhs).unwrap()
     }
 }
 
@@ -628,14 +781,6 @@ impl TryFrom<Uint> for I256 {
                  SignedUint"
                 .into())
         }
-    }
-}
-
-impl Neg for I256 {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self(self.0.negate())
     }
 }
 
@@ -664,153 +809,27 @@ impl Ord for I256 {
     }
 }
 
-impl Add<I256> for I256 {
-    type Output = Self;
-
-    fn add(self, rhs: I256) -> Self::Output {
-        match (self.non_negative(), rhs.non_negative()) {
-            (true, true) => Self(self.0 + rhs.0),
-            (false, false) => -Self(self.abs() + rhs.abs()),
-            (true, false) => {
-                if self.0 >= rhs.abs() {
-                    Self(self.0 - rhs.abs())
-                } else {
-                    -Self(rhs.abs() - self.0)
-                }
-            }
-            (false, true) => {
-                if rhs.0 >= self.abs() {
-                    Self(rhs.0 - self.abs())
-                } else {
-                    -Self(self.abs() - rhs.0)
-                }
-            }
-        }
-        .canonical()
-    }
-}
-
-impl AddAssign for I256 {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = *self + rhs;
-    }
-}
-
-impl Sub for I256 {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        self + (-rhs)
-    }
-}
-
-impl SubAssign for I256 {
-    fn sub_assign(&mut self, rhs: Self) {
-        *self = *self - rhs;
-    }
-}
-
-// NOTE: watch the overflow
-impl Mul<Uint> for I256 {
-    type Output = Self;
-
-    fn mul(self, rhs: Uint) -> Self::Output {
-        let is_neg = self.is_negative();
-        let prod = self.abs() * rhs;
-        if is_neg { -Self(prod) } else { Self(prod) }
-    }
-}
-
-impl CheckedAdd for I256 {
-    /// Adds two [`I256`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
-    fn checked_add(&self, other: &Self) -> Option<Self> {
-        if self.non_negative() == other.non_negative() {
-            self.abs().checked_add(other.abs()).and_then(|val| {
-                Self::try_from(val)
-                    .ok()
-                    .map(|val| if !self.non_negative() { -val } else { val })
-            })
-        } else {
-            Some(*self + *other)
-        }
-    }
-}
-
-impl CheckedSub for I256 {
-    /// Subtracts two [`I256`]'s if the absolute value does
-    /// not exceed [`MAX_SIGNED_VALUE`], else returns `None`.
-    fn checked_sub(&self, other: &Self) -> Option<Self> {
-        self.checked_add(&other.neg())
-    }
-}
-
-impl CheckedMul for I256 {
-    fn checked_mul(&self, v: &Self) -> Option<Self> {
-        let is_negative = self.is_negative() != v.is_negative();
-        let unsigned_res =
-            I256::try_from(self.abs().checked_mul(v.abs())?).ok()?;
-        Some(if is_negative {
-            -unsigned_res
-        } else {
-            unsigned_res
-        })
-    }
-}
-
-impl Mul for I256 {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        if rhs.is_negative() {
-            -self * rhs.abs()
-        } else {
-            self * rhs.abs()
-        }
-    }
-}
-
-impl Div<Uint> for I256 {
-    type Output = Self;
-
-    fn div(self, rhs: Uint) -> Self::Output {
-        let is_neg = self.is_negative();
-        let quot = self
-            .abs()
-            .fixed_precision_div(&rhs, 0u8)
-            .unwrap_or_default();
-        if is_neg { -Self(quot) } else { Self(quot) }
-    }
-}
-
-impl Div<I256> for I256 {
-    type Output = Self;
-
-    fn div(self, rhs: I256) -> Self::Output {
-        if rhs.is_negative() {
-            -(self / rhs.abs())
-        } else {
-            self / rhs.abs()
-        }
-    }
-}
-
-impl Rem for I256 {
-    type Output = Self;
-
-    fn rem(self, rhs: Self) -> Self::Output {
-        if self.is_negative() {
-            -(Self(self.abs() % rhs.abs()))
-        } else {
-            Self(self.abs() % rhs.abs())
-        }
-    }
-}
 impl From<i128> for I256 {
     fn from(val: i128) -> Self {
-        if val < 0 {
-            let abs = Self((-val).into());
-            -abs
+        if val == i128::MIN {
+            Self(170141183460469231731687303715884105728_u128.into())
+                .checked_neg()
+                .expect(
+                    "This cannot panic as the value is greater than \
+                     `I256::MIN`",
+                )
+        } else if val < 0 {
+            let abs = Self(
+                (val.checked_neg().expect(
+                    "This cannot panic as we're checking for `i128::MIN` above",
+                ))
+                .into(),
+            );
+
+            //
+            abs.checked_neg().expect(
+                "This cannot panic as the value is limited to `i128` range",
+            )
         } else {
             Self(val.into())
         }
@@ -819,19 +838,13 @@ impl From<i128> for I256 {
 
 impl From<i64> for I256 {
     fn from(val: i64) -> Self {
-        Self::from(val as i128)
+        Self::from(i128::from(val))
     }
 }
 
 impl From<i32> for I256 {
     fn from(val: i32) -> Self {
-        Self::from(val as i128)
-    }
-}
-
-impl std::iter::Sum for I256 {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(I256::zero(), |acc, amt| acc + amt)
+        Self::from(i128::from(val))
     }
 }
 
@@ -839,10 +852,73 @@ impl TryFrom<I256> for i128 {
     type Error = std::io::Error;
 
     fn try_from(value: I256) -> Result<Self, Self::Error> {
+        // The negation cannot panic as `i128::MIN` > `I256::MIN`.
+        #[allow(clippy::arithmetic_side_effects)]
+        let i128_min =
+            I256(170141183460469231731687303715884105728_u128.into())
+                .checked_neg()
+                .expect("const value neg in range");
+        // Because we're converting abs value, `i128::MIN` would be overflow it
+        // so we have to check for it first.
+        if value == i128_min {
+            return Ok(i128::MIN);
+        }
+        let raw = i128::try_from(value.abs().low_u128()).map_err(|err| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, err)
+        })?;
         if !value.non_negative() {
-            Ok(-(u128::try_from(Amount::from_change(value))? as i128))
+            // This cannot panic as we're checking for `i128::MIN`
+            #[allow(clippy::arithmetic_side_effects)]
+            Ok(-raw)
         } else {
-            Ok(u128::try_from(Amount::from_change(value))? as i128)
+            Ok(raw)
+        }
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+/// Testing helpers
+pub mod testing {
+    use super::*;
+
+    impl Uint {
+        /// Returns a pair `((self * num) / denom, (self * num) % denom)`.
+        ///
+        /// # Panics
+        ///
+        /// Panics if `denom` is zero.
+        pub fn mul_div(&self, num: Self, denom: Self) -> (Self, Self) {
+            self.checked_mul_div(num, denom).unwrap()
+        }
+    }
+
+    impl std::ops::AddAssign for I256 {
+        fn add_assign(&mut self, rhs: Self) {
+            *self = self.checked_add(rhs).unwrap();
+        }
+    }
+
+    impl std::ops::Sub<I256> for I256 {
+        type Output = Self;
+
+        fn sub(self, rhs: I256) -> Self::Output {
+            self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Mul<I256> for I256 {
+        type Output = Self;
+
+        fn mul(self, rhs: I256) -> Self::Output {
+            self.checked_mul(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Neg for I256 {
+        type Output = Self;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
         }
     }
 }
@@ -850,6 +926,8 @@ impl TryFrom<I256> for i128 {
 #[cfg(test)]
 mod test_uint {
     use std::str::FromStr;
+
+    use assert_matches::assert_matches;
 
     use super::*;
 
@@ -888,19 +966,13 @@ mod test_uint {
         );
     }
 
-    /// Test that adding one to the max signed
-    /// value gives zero.
+    /// Test that checked add and sub stays below max signed value
     #[test]
     fn test_max_signed_value() {
         let signed = I256::try_from(MAX_SIGNED_VALUE).expect("Test failed");
         let one = I256::try_from(Uint::from(1u64)).expect("Test failed");
-        let overflow = signed + one;
-        assert_eq!(
-            overflow,
-            I256::try_from(Uint::zero()).expect("Test failed")
-        );
-        assert!(signed.checked_add(&one).is_none());
-        assert!((-signed).checked_sub(&one).is_none());
+        assert!(signed.checked_add(one).is_none());
+        assert!((-signed).checked_sub(one).is_none());
     }
 
     /// Sanity on our constants and that the minus zero representation
@@ -914,7 +986,7 @@ mod test_uint {
         assert_eq!(larger, MINUS_ZERO);
         assert!(I256::try_from(MINUS_ZERO).is_err());
         let zero = Uint::zero();
-        assert_eq!(zero, zero.negate());
+        assert_eq!(zero, zero.negate().0);
     }
 
     /// Test that we correctly reserve the right bit for indicating the
@@ -991,8 +1063,8 @@ mod test_uint {
     /// Test that ordering is correctly implemented
     #[test]
     fn test_ord() {
-        let this = Amount::from_uint(1, 0).unwrap().change();
-        let that = Amount::native_whole(1000).change();
+        let this = token::Amount::from_uint(1, 0).unwrap().change();
+        let that = token::Amount::native_whole(1000).change();
         assert!(this <= that);
         assert!(-this <= that);
         assert!(-this >= -that);
@@ -1019,15 +1091,16 @@ mod test_uint {
         let one = I256::from(1);
         let two = I256::from(2);
         let dec = Dec::from_str("0.25").unwrap();
-        assert_eq!(one.mul_ceil(dec), one);
-        assert_eq!(two.mul_ceil(dec), one);
-        assert_eq!(I256::from(4).mul_ceil(dec), one);
-        assert_eq!(I256::from(5).mul_ceil(dec), two);
+        let neg_dec = dec.checked_neg().unwrap();
+        assert_eq!(one.mul_ceil(dec).unwrap(), one);
+        assert_eq!(two.mul_ceil(dec).unwrap(), one);
+        assert_eq!(I256::from(4).mul_ceil(dec).unwrap(), one);
+        assert_eq!(I256::from(5).mul_ceil(dec).unwrap(), two);
 
-        assert_eq!((-one).mul_ceil(-dec), one);
+        assert_eq!((-one).mul_ceil(neg_dec).unwrap(), one);
 
-        assert_eq!((-one).mul_ceil(dec), I256::zero());
-        assert_eq!(one.mul_ceil(-dec), I256::zero());
+        assert_eq!((-one).mul_ceil(dec).unwrap(), I256::zero());
+        assert_eq!(one.mul_ceil(neg_dec).unwrap(), I256::zero());
     }
 
     #[test]
@@ -1063,5 +1136,42 @@ mod test_uint {
         assert_eq!(a.checked_mul_div(e, e), Some((a, Uint::zero())));
         assert_eq!(e.checked_mul_div(c, b), Some((Uint::zero(), c)));
         assert_eq!(d.checked_mul_div(a, e), None);
+    }
+
+    #[test]
+    fn test_i256_str_roundtrip() {
+        let minus_one = I256::one().negate().unwrap();
+        let minus_one_str = minus_one.to_string();
+        assert_eq!(minus_one_str, "-1");
+
+        let parsed: I256 = minus_one_str.parse().unwrap();
+        assert_eq!(minus_one, parsed);
+    }
+
+    #[test]
+    fn test_i128_try_from_i256() {
+        for src in [
+            I256::from(0),
+            I256::from(1),
+            I256::from(-1),
+            I256::from(i128::MAX),
+            I256::from(i128::MIN),
+        ] {
+            println!("Src val {src}");
+            let res = i128::try_from(src);
+            // Source value is constructed from a valid i128 range
+            assert_matches!(res, Ok(_));
+        }
+
+        for src in [
+            I256::maximum(),
+            I256::maximum() - I256::from(1),
+            -I256::maximum(),
+            -(I256::maximum() - I256::from(1)),
+        ] {
+            println!("Src val {src}");
+            // Out of i128 range, but must not panic!
+            let _res = i128::try_from(src);
+        }
     }
 }

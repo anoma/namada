@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use namada_macros::BorshDeserializer;
@@ -27,6 +27,7 @@ use crate::token::{Denomination, MaspDigitPos};
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    BorshSchema,
     Clone,
     Debug,
     PartialOrd,
@@ -98,8 +99,7 @@ pub fn encode_asset_type(
 pub type TokenMap = BTreeMap<String, Address>;
 
 // enough capacity to store the payment address
-// plus the pinned/unpinned discriminant
-const PAYMENT_ADDRESS_SIZE: usize = 43 + 1;
+const PAYMENT_ADDRESS_SIZE: usize = 43;
 
 /// Wrapper for masp_primitive's FullViewingKey
 #[derive(
@@ -159,7 +159,6 @@ impl string_encoding::Format for PaymentAddress {
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PAYMENT_ADDRESS_SIZE);
-        bytes.push(self.is_pinned() as u8);
         bytes.extend_from_slice(self.0.to_bytes().as_slice());
         bytes
     }
@@ -172,16 +171,10 @@ impl string_encoding::Format for PaymentAddress {
                 "expected {PAYMENT_ADDRESS_SIZE} bytes for the payment address"
             )));
         }
-        let pinned = match bytes[0] {
-            0 => false,
-            1 => true,
-            k => return Err(DecodeError::UnexpectedDiscriminant(k)),
-        };
         let payment_addr =
             masp_primitives::sapling::PaymentAddress::from_bytes(&{
-                // NB: the first byte is the pinned/unpinned discriminant
-                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE - 1];
-                payment_addr.copy_from_slice(&bytes[1..]);
+                let mut payment_addr = [0u8; PAYMENT_ADDRESS_SIZE];
+                payment_addr.copy_from_slice(&bytes[0..]);
                 payment_addr
             })
             .ok_or_else(|| {
@@ -189,7 +182,7 @@ impl string_encoding::Format for PaymentAddress {
                     "invalid payment address provided".to_string(),
                 )
             })?;
-        Ok(Self(payment_addr, pinned))
+        Ok(Self(payment_addr))
     }
 }
 
@@ -256,22 +249,12 @@ impl<'de> serde::Deserialize<'de> for ExtendedViewingKey {
     BorshDeserialize,
     BorshDeserializer,
 )]
-pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress, bool);
+pub struct PaymentAddress(masp_primitives::sapling::PaymentAddress);
 
 impl PaymentAddress {
-    /// Turn this PaymentAddress into a pinned/unpinned one
-    pub fn pinned(self, pin: bool) -> PaymentAddress {
-        PaymentAddress(self.0, pin)
-    }
-
-    /// Determine whether this PaymentAddress is pinned
-    pub fn is_pinned(&self) -> bool {
-        self.1
-    }
-
     /// Hash this payment address
     pub fn hash(&self) -> String {
-        let bytes = (self.0, self.1).serialize_to_vec();
+        let bytes = self.0.serialize_to_vec();
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         // hex of the first 40 chars of the hash
@@ -287,7 +270,7 @@ impl From<PaymentAddress> for masp_primitives::sapling::PaymentAddress {
 
 impl From<masp_primitives::sapling::PaymentAddress> for PaymentAddress {
     fn from(addr: masp_primitives::sapling::PaymentAddress) -> Self {
-        Self(addr, false)
+        Self(addr)
     }
 }
 
@@ -492,8 +475,6 @@ pub enum BalanceOwner {
     Address(Address),
     /// A balance stored at a shielded address
     FullViewingKey(ExtendedViewingKey),
-    /// A balance stored at a payment address
-    PaymentAddress(PaymentAddress),
 }
 
 impl BalanceOwner {
@@ -512,14 +493,6 @@ impl BalanceOwner {
             _ => None,
         }
     }
-
-    /// Get the contained PaymentAddress, if any
-    pub fn payment_address(&self) -> Option<PaymentAddress> {
-        match self {
-            Self::PaymentAddress(x) => Some(*x),
-            _ => None,
-        }
-    }
 }
 
 impl Display for BalanceOwner {
@@ -527,7 +500,6 @@ impl Display for BalanceOwner {
         match self {
             BalanceOwner::Address(addr) => addr.fmt(f),
             BalanceOwner::FullViewingKey(fvk) => fvk.fmt(f),
-            BalanceOwner::PaymentAddress(pa) => pa.fmt(f),
         }
     }
 }

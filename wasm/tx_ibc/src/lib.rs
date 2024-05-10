@@ -7,7 +7,6 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx { tx: signed, cmt } = tx_data;
     // let data = ctx.get_tx_data(&tx_data)?;
 
     // let transfer =
@@ -21,7 +20,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
             .shielded
             .as_ref()
             .map(|hash| {
-                signed
+                tx_data
+                    .tx
                     .get_section(hash)
                     .and_then(|x| x.as_ref().masp_tx())
                     .ok_or_err_msg("unable to find shielded section")
@@ -32,23 +32,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
             })
             .transpose()?;
         if let Some(shielded) = shielded {
-            match transfer.key {
-                Some(key) => token::utils::handle_masp_tx(
-                    ctx,
-                    &shielded,
-                    Some((key.as_str(), cmt)),
-                )
-                .wrap_err(
-                    "Encountered error while handling MASP transaction",
-                )?,
-                None => {
-                    token::utils::handle_masp_tx(ctx, &shielded, None)
-                        .wrap_err(
-                            "Encountered error while handling MASP transaction",
-                        )?;
-                }
-            };
-
+            token::utils::handle_masp_tx(ctx, &shielded)?;
             update_masp_note_commitment_tree(&shielded)?;
         }
     }

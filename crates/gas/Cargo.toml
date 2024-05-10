@@ -20,6 +20,7 @@ migrations = [
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 borsh.workspace = true

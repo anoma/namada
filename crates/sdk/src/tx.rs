@@ -21,6 +21,7 @@ use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -61,6 +62,7 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
+use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
 use crate::args::{self, InputAmount};
@@ -196,8 +198,7 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
 /// Prepare a transaction for signing and submission by adding a wrapper header
 /// to it.
 #[allow(clippy::too_many_arguments)]
-pub async fn prepare_tx<C: crate::queries::Client + Sync>(
-    client: &C,
+pub async fn prepare_tx(
     args: &args::Tx,
     tx: &mut Tx,
     unshield: Option<masp_primitives::transaction::Transaction>,
@@ -205,9 +206,7 @@ pub async fn prepare_tx<C: crate::queries::Client + Sync>(
     fee_payer: common::PublicKey,
 ) -> Result<()> {
     if !args.dry_run {
-        let epoch = rpc::query_epoch(client).await?;
-
-        signing::wrap_tx(tx, args, epoch, unshield, fee_amount, fee_payer).await
+        signing::wrap_tx(tx, args, unshield, fee_amount, fee_payer).await
     } else {
         Ok(())
     }
@@ -620,7 +619,8 @@ pub async fn build_validator_commission_change(
             )));
         }
 
-        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
+        let pipeline_epoch_minus_one =
+            epoch.unchecked_add(params.pipeline_len - 1);
 
         let CommissionPair {
             commission_rate,
@@ -647,7 +647,7 @@ pub async fn build_validator_commission_change(
                         ));
                     }
                 }
-                if rate.abs_diff(&commission_rate)
+                if rate.abs_diff(commission_rate)?
                     > max_commission_change_per_epoch
                 {
                     edisplay_line!(
@@ -727,6 +727,7 @@ pub async fn build_validator_metadata_change(
         website,
         discord_handle,
         avatar,
+        name,
         commission_rate,
         tx_code_path,
     }: &args::MetaDataChange,
@@ -844,7 +845,8 @@ pub async fn build_validator_metadata_change(
                 )));
             }
         }
-        let pipeline_epoch_minus_one = epoch + params.pipeline_len - 1;
+        let pipeline_epoch_minus_one =
+            epoch.unchecked_add(params.pipeline_len - 1);
 
         let CommissionPair {
             commission_rate,
@@ -871,7 +873,7 @@ pub async fn build_validator_metadata_change(
                         ));
                     }
                 }
-                if rate.abs_diff(&commission_rate)
+                if rate.abs_diff(commission_rate)?
                     > max_commission_change_per_epoch
                 {
                     edisplay_line!(
@@ -918,6 +920,7 @@ pub async fn build_validator_metadata_change(
         description: description.clone(),
         discord_handle: discord_handle.clone(),
         avatar: avatar.clone(),
+        name: name.clone(),
         commission_rate: *commission_rate,
     };
 
@@ -1097,7 +1100,7 @@ pub async fn build_unjail_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
@@ -1124,8 +1127,8 @@ pub async fn build_unjail_validator(
     match last_slash_epoch {
         Ok(Some(last_slash_epoch)) => {
             // Jailed due to slashing
-            let eligible_epoch =
-                last_slash_epoch + params.slash_processing_epoch_offset();
+            let eligible_epoch = last_slash_epoch
+                .unchecked_add(params.slash_processing_epoch_offset());
             if current_epoch < eligible_epoch {
                 edisplay_line!(
                     context.io(),
@@ -1205,7 +1208,7 @@ pub async fn build_deactivate_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
@@ -1283,7 +1286,7 @@ pub async fn build_reactivate_validator(
 
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
 
     for epoch in Epoch::iter_bounds_inclusive(current_epoch, pipeline_epoch) {
         let (validator_state, _) =
@@ -1391,8 +1394,9 @@ pub async fn build_redelegation(
     .await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
     let is_not_chained = if let Some(redel_end_epoch) = incoming_redel_epoch {
-        let last_contrib_epoch = redel_end_epoch.prev();
-        last_contrib_epoch + params.slash_processing_epoch_offset()
+        let last_contrib_epoch =
+            redel_end_epoch.prev().expect("End epoch must have a prev");
+        last_contrib_epoch.unchecked_add(params.slash_processing_epoch_offset())
             <= current_epoch
     } else {
         true
@@ -1418,7 +1422,7 @@ pub async fn build_redelegation(
 
     // Give a redelegation warning based on the pipeline state of the dest
     // validator
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
     let (dest_validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &dest_validator,
@@ -1699,8 +1703,8 @@ pub async fn build_unbond(
         let params = rpc::get_pos_params(context.client()).await?;
         let current_epoch = rpc::query_epoch(context.client()).await?;
 
-        let eligible_epoch =
-            infraction_epoch + params.slash_processing_epoch_offset();
+        let eligible_epoch = infraction_epoch
+            .unchecked_add(params.slash_processing_epoch_offset());
         if current_epoch < eligible_epoch {
             edisplay_line!(
                 context.io(),
@@ -1774,7 +1778,7 @@ pub async fn build_unbond(
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
-        *to_withdraw += amount;
+        *to_withdraw = checked!(to_withdraw + amount)?;
     }
     let latest_withdrawal_pre = withdrawable.into_iter().last();
 
@@ -1818,7 +1822,7 @@ pub async fn query_unbonds(
     let mut withdrawable = BTreeMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         let to_withdraw = withdrawable.entry(withdraw_epoch).or_default();
-        *to_withdraw += amount;
+        *to_withdraw = checked!(to_withdraw + amount)?;
     }
     let (latest_withdraw_epoch_post, latest_withdraw_amount_post) =
         withdrawable.into_iter().last().ok_or_else(|| {
@@ -1844,8 +1848,11 @@ pub async fn query_unbonds(
                 display_line!(
                     context.io(),
                     "Amount {} withdrawable starting from epoch {}",
-                    (latest_withdraw_amount_post - latest_withdraw_amount_pre)
-                        .to_string_native(),
+                    checked!(
+                        latest_withdraw_amount_post
+                            - latest_withdraw_amount_pre
+                    )?
+                    .to_string_native(),
                     latest_withdraw_epoch_post
                 );
             }
@@ -1929,7 +1936,7 @@ pub async fn build_bond(
     // Give a bonding warning based on the pipeline state
     let params: PosParams = rpc::get_pos_params(context.client()).await?;
     let current_epoch = rpc::query_epoch(context.client()).await?;
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = current_epoch.unchecked_add(params.pipeline_len);
     let (validator_state_at_pipeline, _) = rpc::get_validator_state(
         context.client(),
         &validator,
@@ -2107,36 +2114,6 @@ pub async fn build_vote_proposal(
     let is_validator =
         rpc::is_validator(context.client(), voter_address).await?;
 
-    // Prevent jailed or inactive validators from voting
-    if is_validator {
-        let state = rpc::get_validator_state(
-            context.client(),
-            voter_address,
-            Some(current_epoch),
-        )
-        .await?
-        .0
-        .expect("Expected to find the state of the validator");
-
-        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
-            edisplay_line!(
-                context.io(),
-                "The voter {} is a validator who is currently jailed or \
-                 inactive. Thus, this address is prohibited from voting in \
-                 governance right now.",
-                voter_address
-            );
-            if !tx.force {
-                return Err(Error::from(
-                    TxSubmitError::CannotVoteInGovernance(
-                        voter_address.clone(),
-                        current_epoch,
-                    ),
-                ));
-            }
-        }
-    }
-
     // Check if the voting period is still valid for the voter
     if !proposal.can_be_voted(current_epoch, is_validator) {
         edisplay_line!(
@@ -2160,25 +2137,10 @@ pub async fn build_vote_proposal(
         }
     }
 
-    let delegations = if is_validator {
-        let stake =
-            get_validator_stake(context.client(), current_epoch, voter_address)
-                .await?;
-
-        if stake.is_zero() {
-            edisplay_line!(
-                context.io(),
-                "Voter address {} is a validator but has no stake, so it has \
-                 no votes.",
-                voter_address
-            );
-            if !tx.force {
-                return Err(Error::Other(
-                    "Voter address must have delegations".to_string(),
-                ));
-            }
-        }
-        let val_state = rpc::get_validator_state(
+    if is_validator {
+        // Prevent a validator voter from voting if they are jailed or inactive
+        // right now
+        let state = rpc::get_validator_state(
             context.client(),
             voter_address,
             Some(current_epoch),
@@ -2187,17 +2149,13 @@ pub async fn build_vote_proposal(
         .0
         .expect("Expected to find the state of the validator");
 
-        if !matches!(
-            val_state,
-            ValidatorState::Jailed | ValidatorState::Inactive
-        ) {
-            vec![voter_address.clone()]
-        } else {
+        if matches!(state, ValidatorState::Jailed | ValidatorState::Inactive) {
             edisplay_line!(
                 context.io(),
-                "Voter address {} is a validator that is either jailed or \
-                 inactive, and so it may not vote in governance at this \
-                 moment.",
+                "The voter {} is a validator who is currently jailed or \
+                 inactive. Thus, this address is prohibited from voting in \
+                 governance right now. Please try again when not jailed or \
+                 inactive.",
                 voter_address
             );
             if !tx.force {
@@ -2208,44 +2166,37 @@ pub async fn build_vote_proposal(
                     ),
                 ));
             }
-            vec![]
+        }
+
+        let stake =
+            get_validator_stake(context.client(), current_epoch, voter_address)
+                .await?;
+
+        if stake.is_zero() {
+            edisplay_line!(
+                context.io(),
+                "Voter address {voter_address} is a validator but has no \
+                 stake, so it has no votes.",
+            );
+            if !tx.force {
+                return Err(Error::Other(
+                    "Voter address must have delegations".to_string(),
+                ));
+            }
         }
     } else {
-        // Get active valid validators with whom the voter has delegations
-        // (bonds)
-        let delegation_vals = rpc::get_delegations_of_delegator_at(
+        // Check that there are delegations to vote with
+        let delegation_validators = rpc::get_delegation_validators(
             context.client(),
             voter_address,
-            proposal.voting_start_epoch,
+            current_epoch,
         )
         .await?;
 
-        let mut delegation_validators = Vec::<Address>::new();
-        for validator in delegation_vals.keys() {
-            let val_state = rpc::get_validator_state(
-                context.client(),
-                validator,
-                Some(current_epoch),
-            )
-            .await?
-            .0
-            .expect("Expected to find the state of the validator");
-
-            if matches!(
-                val_state,
-                ValidatorState::Jailed | ValidatorState::Inactive
-            ) {
-                continue;
-            }
-            delegation_validators.push(validator.clone());
-        }
-
-        // Check that there are delegations to vote with
         if delegation_validators.is_empty() {
             edisplay_line!(
                 context.io(),
-                "Voter address {} does not have any delegations.",
-                voter_address
+                "Voter address {voter_address} does not have any delegations.",
             );
             if !tx.force {
                 return Err(Error::from(TxSubmitError::NoDelegationsFound(
@@ -2254,14 +2205,12 @@ pub async fn build_vote_proposal(
                 )));
             }
         }
-        delegation_validators
     };
 
     let data = VoteProposalData {
         id: *proposal_id,
         vote: proposal_vote,
         voter: voter_address.clone(),
-        delegation_validators: delegations,
     };
 
     build(
@@ -2296,6 +2245,7 @@ pub async fn build_become_validator(
         description,
         discord_handle,
         avatar,
+        name,
         unsafe_dont_encrypt: _,
         tx_code_path,
     }: &args::TxBecomeValidator,
@@ -2422,6 +2372,7 @@ pub async fn build_become_validator(
         website: website.clone(),
         discord_handle: discord_handle.clone(),
         avatar: avatar.clone(),
+        name: name.clone(),
     };
 
     // Put together all the PKs that we have to sign with to verify ownership
@@ -2688,9 +2639,6 @@ pub async fn build_ibc_transfer(
             target: Address::Internal(InternalAddress::Ibc),
             token: args.token.clone(),
             amount: validated_amount,
-            // The address could be a payment address, but the address isn't
-            // that of this chain.
-            key: None,
             // Link the Transfer to the MASP Transaction by hash code
             shielded: Some(masp_tx_hash),
         };
@@ -2785,7 +2733,6 @@ pub async fn build_ibc_transfer(
     .add_serialized_data(data);
 
     prepare_tx(
-        context.client(),
         &args.tx,
         &mut tx,
         unshield,
@@ -2855,7 +2802,6 @@ where
         .add_data(data);
 
     prepare_tx(
-        context.client(),
         tx_args,
         &mut tx_builder,
         unshield,
@@ -2888,9 +2834,9 @@ async fn add_asset_type(
 /// Collect the asset types used in the given Builder and decode them. This
 /// function provides the data necessary for offline wallets to present asset
 /// type information.
-async fn used_asset_types<P, R, K, N>(
+async fn used_asset_types<P, K, N>(
     context: &impl Namada,
-    builder: &Builder<P, R, K, N>,
+    builder: &Builder<P, K, N>,
 ) -> std::result::Result<HashSet<AssetData>, RpcError> {
     let mut asset_types = HashSet::new();
     // Collect all the asset types used in the Sapling inputs
@@ -3026,11 +2972,6 @@ pub async fn build_transfer<N: Namada>(
         } else {
             (validated_amount, args.token.clone())
         };
-    // Determine whether to pin this transaction to a storage key
-    let key = match &args.target {
-        TransferTarget::PaymentAddress(pa) if pa.is_pinned() => Some(pa.hash()),
-        _ => None,
-    };
 
     let shielded_parts = construct_shielded_parts(
         context,
@@ -3049,7 +2990,6 @@ pub async fn build_transfer<N: Namada>(
         target: target.clone(),
         token: transparent_token.clone(),
         amount: transparent_amount,
-        key: key.clone(),
         // Link the Transfer to the MASP Transaction by hash code
         shielded: None,
     };
@@ -3169,7 +3109,27 @@ pub async fn build_init_account(
     let vp_code_hash = query_wasm_code_hash_buf(context, vp_code_path).await?;
 
     let threshold = match threshold {
-        Some(threshold) => *threshold,
+        Some(threshold) => {
+            let threshold = *threshold;
+            if (threshold > 0 && public_keys.len() as u8 >= threshold)
+                || tx_args.force
+            {
+                threshold
+            } else {
+                edisplay_line!(
+                    context.io(),
+                    "Invalid account threshold: either the provided threshold \
+                     is zero or the number of public keys is less than the \
+                     threshold."
+                );
+                if !tx_args.force {
+                    return Err(Error::from(
+                        TxSubmitError::InvalidAccountThreshold,
+                    ));
+                }
+                threshold
+            }
+        }
         None => {
             if public_keys.len() == 1 {
                 1u8
@@ -3237,16 +3197,49 @@ pub async fn build_update_account(
     )
     .await?;
 
-    let addr = if let Some(account) =
+    let account = if let Some(account) =
         rpc::get_account_info(context.client(), addr).await?
     {
-        account.address
-    } else if tx_args.force {
-        addr.clone()
+        account
     } else {
         return Err(Error::from(TxSubmitError::LocationDoesNotExist(
             addr.clone(),
         )));
+    };
+
+    let threshold = if let Some(threshold) = threshold {
+        let threshold = *threshold;
+
+        let invalid_threshold = threshold.is_zero();
+        let invalid_too_few_pks: bool = (public_keys.is_empty()
+            && public_keys.len() < threshold as usize)
+            || (account.get_all_public_keys().len() < threshold as usize);
+
+        if invalid_threshold || invalid_too_few_pks {
+            edisplay_line!(
+                context.io(),
+                "Invalid account threshold: either the provided threshold is \
+                 zero or the number of public keys is less than the threshold."
+            );
+            if !tx_args.force {
+                return Err(Error::from(
+                    TxSubmitError::InvalidAccountThreshold,
+                ));
+            }
+        }
+
+        Some(threshold)
+    } else {
+        let invalid_too_few_pks = (!public_keys.is_empty()
+            && public_keys.len() < account.threshold as usize)
+            || (account.get_all_public_keys().len()
+                < account.threshold as usize);
+
+        if invalid_too_few_pks {
+            return Err(Error::from(TxSubmitError::InvalidAccountThreshold));
+        }
+
+        None
     };
 
     let vp_code_hash = match vp_code_path {
@@ -3272,10 +3265,10 @@ pub async fn build_update_account(
     );
 
     let data = UpdateAccount {
-        addr,
+        addr: account.address,
         vp_code_hash: extra_section_hash,
         public_keys: public_keys.clone(),
-        threshold: *threshold,
+        threshold,
     };
 
     let add_code_hash = |tx: &mut Tx, data: &mut UpdateAccount| {
@@ -3353,7 +3346,6 @@ pub async fn build_custom(
     };
 
     prepare_tx(
-        context.client(),
         tx_args,
         &mut tx,
         unshield,
@@ -3370,11 +3362,6 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
 ) -> Result<Option<(token::Transfer, MaspTransaction)>> {
-    let key = match args.target.payment_address() {
-        Some(pa) if pa.is_pinned() => Some(pa.hash()),
-        Some(_) => None,
-        None => return Ok(None),
-    };
     let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
@@ -3434,7 +3421,6 @@ pub async fn gen_ibc_shielded_transfer<N: Namada>(
             target: MASP,
             token: token.clone(),
             amount: validated_amount,
-            key,
             shielded: Some(masp_tx_hash),
         };
         Ok(Some((transfer, shielded_transfer.masp_tx)))

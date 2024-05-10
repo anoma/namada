@@ -117,7 +117,12 @@ fn test_simple_redelegation_aux(
 
     for _ in 0..5 {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     let init_epoch = current_epoch;
@@ -135,11 +140,26 @@ fn test_simple_redelegation_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Redelegate in epoch 3
     redelegate_tokens(
@@ -175,7 +195,7 @@ fn test_simple_redelegation_aux(
 
     let redelegated = validator_outgoing_redelegations_handle(&src_validator)
         .at(&dest_validator)
-        .at(&current_epoch.prev())
+        .at(&current_epoch.prev().unwrap())
         .get(&storage, &current_epoch)
         .unwrap()
         .unwrap();
@@ -183,11 +203,26 @@ fn test_simple_redelegation_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Unbond in epoch 5 from dest_validator
     let _ = unbond_tokens(
@@ -239,7 +274,12 @@ fn test_simple_redelegation_aux(
     // Advance to withdrawal epoch
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
         if current_epoch == unbond_end {
             break;
         }
@@ -324,7 +364,12 @@ fn test_slashes_with_unbonding_aux(
     s.commit_block().unwrap();
 
     current_epoch = advance_epoch(&mut s, &params);
-    process_slashes(&mut s, current_epoch).unwrap();
+    process_slashes(
+        &mut s,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Discover first slash
     let slash_0_evidence_epoch = current_epoch;
@@ -349,7 +394,12 @@ fn test_slashes_with_unbonding_aux(
         slash_0_evidence_epoch + params.slash_processing_epoch_offset();
     while current_epoch < unfreeze_epoch {
         current_epoch = advance_epoch(&mut s, &params);
-        process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(
+            &mut s,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     // Advance more epochs randomly from the generated delay
@@ -386,7 +436,12 @@ fn test_slashes_with_unbonding_aux(
     let withdraw_epoch = unbond_epoch + params.withdrawable_epoch_offset();
     while current_epoch < withdraw_epoch {
         current_epoch = advance_epoch(&mut s, &params);
-        process_slashes(&mut s, current_epoch).unwrap();
+        process_slashes(
+            &mut s,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
     let token = staking_token_address(&s);
     let val_balance_pre = read_balance(&s, &token, val_addr).unwrap();
@@ -418,16 +473,21 @@ fn test_slashes_with_unbonding_aux(
         .unwrap()
         .rate;
 
-    let expected_withdrawn_amount = Dec::from(
-        (Dec::one() - slash_rate_1)
-            * (Dec::one() - slash_rate_0)
-            * unbond_amount,
-    );
+    let expected_withdrawn_amount = Dec::try_from(
+        unbond_amount
+            .mul_floor(
+                (Dec::one() - slash_rate_1) * (Dec::one() - slash_rate_0),
+            )
+            .unwrap(),
+    )
+    .unwrap();
     // Allow some rounding error, 1 NAMNAM per each slash
     let rounding_error_tolerance =
         Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap();
     assert!(
-        expected_withdrawn_amount.abs_diff(&Dec::from(withdrawn_tokens))
+        expected_withdrawn_amount
+            .abs_diff(Dec::try_from(withdrawn_tokens).unwrap())
+            .unwrap()
             <= rounding_error_tolerance
     );
 
@@ -496,7 +556,12 @@ fn test_redelegation_with_slashing_aux(
 
     for _ in 0..5 {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     let init_epoch = current_epoch;
@@ -514,11 +579,26 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Redelegate in epoch 8
     redelegate_tokens(
@@ -550,7 +630,7 @@ fn test_redelegation_with_slashing_aux(
 
     let redelegated = validator_outgoing_redelegations_handle(&src_validator)
         .at(&dest_validator)
-        .at(&current_epoch.prev())
+        .at(&current_epoch.prev().unwrap())
         .get(&storage, &current_epoch)
         .unwrap()
         .unwrap();
@@ -558,11 +638,26 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance three epochs
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Unbond in epoch 11 from dest_validator
     let _ = unbond_tokens(
@@ -577,7 +672,12 @@ fn test_redelegation_with_slashing_aux(
 
     // Advance one epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Discover evidence
     slash(
@@ -631,7 +731,12 @@ fn test_redelegation_with_slashing_aux(
     // Advance to withdrawal epoch
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
         if current_epoch == unbond_end {
             break;
         }
@@ -729,7 +834,12 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance one epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Redelegate in epoch 1 to dest_validator
     let redel_amount_1: token::Amount = 58.into();
@@ -842,9 +952,19 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Attempt to redelegate in epoch 3 to dest_validator
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     let redel_amount_2: token::Amount = 23.into();
     let redel_att = redelegate_tokens(
@@ -860,11 +980,16 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to right before the redelegation can be redelegated again
     assert_eq!(redel_end, current_epoch);
     let epoch_can_redel =
-        redel_end.prev() + params.slash_processing_epoch_offset();
+        redel_end.prev().unwrap() + params.slash_processing_epoch_offset();
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
-        if current_epoch == epoch_can_redel.prev() {
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
+        if current_epoch == epoch_can_redel.prev().unwrap() {
             break;
         }
     }
@@ -882,7 +1007,12 @@ fn test_chain_redelegations_aux(mut validators: Vec<GenesisValidator>) {
 
     // Advance one more epoch
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Redelegate from dest_validator to dest_validator_2 now
     redelegate_tokens(
@@ -1154,17 +1284,23 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to processing epoch 1
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
         if current_epoch == processing_epoch_1 {
             break;
         }
     }
 
-    let total_stake_1 = offending_stake + 3 * other_stake;
-    let stake_frac = Dec::from(offending_stake) / Dec::from(total_stake_1);
+    let total_stake_1 = offending_stake + other_stake * 3;
+    let stake_frac = Dec::try_from(offending_stake).unwrap()
+        / Dec::try_from(total_stake_1).unwrap();
     let slash_rate_1 = Dec::from_str("9.0").unwrap() * stake_frac * stake_frac;
 
-    let exp_slashed_1 = offending_stake.mul_ceil(slash_rate_1);
+    let exp_slashed_1 = offending_stake.mul_ceil(slash_rate_1).unwrap();
 
     // Check that the proper amount was slashed
     let epoch = current_epoch.next();
@@ -1175,7 +1311,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     let total_stake = read_total_stake(&storage, &params, epoch).unwrap();
     let exp_total_stake =
-        offending_stake - exp_slashed_1 + amount_del + 3 * other_stake;
+        offending_stake - exp_slashed_1 + amount_del + other_stake * 3;
     assert_eq!(total_stake, exp_total_stake);
 
     let self_bond_id = BondId {
@@ -1190,18 +1326,24 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
     // Advance to processing epoch 2
     loop {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
         if current_epoch == processing_epoch_2 {
             break;
         }
     }
 
-    let total_stake_2 = offending_stake + amount_del + 3 * other_stake;
-    let stake_frac =
-        Dec::from(offending_stake + amount_del) / Dec::from(total_stake_2);
+    let total_stake_2 = offending_stake + amount_del + other_stake * 3;
+    let stake_frac = Dec::try_from(offending_stake + amount_del).unwrap()
+        / Dec::try_from(total_stake_2).unwrap();
     let slash_rate_2 = Dec::from_str("9.0").unwrap() * stake_frac * stake_frac;
 
-    let exp_slashed_from_delegation = amount_del.mul_ceil(slash_rate_2);
+    let exp_slashed_from_delegation =
+        amount_del.mul_ceil(slash_rate_2).unwrap();
 
     // Check that the proper amount was slashed. We expect that all of the
     // validator self-bond has been slashed and some of the delegation has been
@@ -1215,7 +1357,7 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
 
     let total_stake = read_total_stake(&storage, &params, epoch).unwrap();
     let exp_total_stake =
-        amount_del - exp_slashed_from_delegation + 3 * other_stake;
+        amount_del - exp_slashed_from_delegation + other_stake * 3;
     assert_eq!(total_stake, exp_total_stake);
 
     let delegation_id = BondId {
@@ -1333,7 +1475,12 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch to 1
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Bond to validator 1
     bond_tokens(
@@ -1381,7 +1528,12 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     // Advance an epoch to ep 2
     current_epoch = advance_epoch(&mut storage, &params);
-    process_slashes(&mut storage, current_epoch).unwrap();
+    process_slashes(
+        &mut storage,
+        &mut namada_events::testing::VoidEventSink,
+        current_epoch,
+    )
+    .unwrap();
 
     // Bond to validator 1
     bond_tokens(
@@ -1419,7 +1571,12 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     // Advance two epochs to ep 4
     for _ in 0..2 {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     // Find some slashes committed in various epochs
@@ -1471,7 +1628,12 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     // Advance such that these slashes are all processed
     for _ in 0..params.slash_processing_epoch_offset() {
         current_epoch = advance_epoch(&mut storage, &params);
-        process_slashes(&mut storage, current_epoch).unwrap();
+        process_slashes(
+            &mut storage,
+            &mut namada_events::testing::VoidEventSink,
+            current_epoch,
+        )
+        .unwrap();
     }
 
     let pipeline_epoch = current_epoch + params.pipeline_len;

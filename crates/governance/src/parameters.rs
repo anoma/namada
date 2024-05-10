@@ -25,9 +25,10 @@ pub struct GovernanceParameters {
     pub min_proposal_fund: token::Amount,
     /// Maximum kibibyte length for proposal code
     pub max_proposal_code_size: u64,
-    /// Minimum proposal voting period in epochs
+    /// Minimum number of epochs between the proposal end epoch and start epoch
     pub min_proposal_voting_period: u64,
-    /// Maximum proposal voting period in epochs
+    /// Maximum number of epochs between the proposal activation epoch and
+    /// start epoch
     pub max_proposal_period: u64,
     /// Maximum number of characters for proposal content
     pub max_proposal_content_size: u64,

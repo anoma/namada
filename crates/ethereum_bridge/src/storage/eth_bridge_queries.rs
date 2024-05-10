@@ -403,7 +403,8 @@ where
                 let voting_power: EthBridgeVotingPower =
                     FractionalVotingPower::new(power.into(), total_power)
                         .expect("Fractional voting power should be >1")
-                        .into();
+                        .try_into()
+                        .unwrap();
                 (select_validator(addr_book), voting_power)
             })
             .unzip();
@@ -524,9 +525,16 @@ where
             );
         }
 
-        if amount_to_mint + supply > cap {
-            let erc20_amount = cap - supply;
-            let nut_amount = amount_to_mint - erc20_amount;
+        if amount_to_mint
+            .checked_add(supply)
+            .expect("Token amount shouldn't overflow")
+            > cap
+        {
+            let erc20_amount =
+                cap.checked_sub(supply).expect("Cannot underflow");
+            let nut_amount = amount_to_mint
+                .checked_sub(erc20_amount)
+                .expect("Cannot underflow");
 
             return EthAssetMint {
                 nut_amount,

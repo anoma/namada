@@ -736,6 +736,8 @@ pub struct TxBecomeValidator<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// The validator's avatar
     pub avatar: Option<String>,
+    /// The validator's name
+    pub name: Option<String>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
     /// Don't encrypt the keypair
@@ -831,6 +833,8 @@ pub struct TxInitValidator<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// The validator's avatar
     pub avatar: Option<String>,
+    /// The validator's name
+    pub name: Option<String>,
     /// Path to the VP WASM code file
     pub validator_vp_code_path: PathBuf,
     /// Path to the TX WASM code file
@@ -1321,24 +1325,11 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Address of an owner
-    pub owner: Option<C::BalanceOwner>,
+    pub owner: C::BalanceOwner,
     /// Address of a token
-    pub token: Option<C::Address>,
+    pub token: C::Address,
     /// Whether not to convert balances
     pub no_conversions: bool,
-    /// Show IBC tokens
-    pub show_ibc_tokens: bool,
-}
-
-/// Query IBC token(s)
-#[derive(Clone, Debug)]
-pub struct QueryIbcToken<C: NamadaTypes = SdkTypes> {
-    /// Common query args
-    pub query: Query<C>,
-    /// The token address which could be a non-namada address
-    pub token: Option<String>,
-    /// Address of an owner
-    pub owner: Option<C::BalanceOwner>,
 }
 
 /// Query historical transfer(s)
@@ -1517,6 +1508,8 @@ pub struct MetaDataChange<C: NamadaTypes = SdkTypes> {
     pub discord_handle: Option<String>,
     /// New validator avatar url
     pub avatar: Option<String>,
+    /// New validator name
+    pub name: Option<String>,
     /// New validator commission rate
     pub commission_rate: Option<Dec>,
     /// Path to the TX WASM code file
@@ -1585,6 +1578,14 @@ impl<C: NamadaTypes> MetaDataChange<C> {
     pub fn avatar(self, avatar: String) -> Self {
         Self {
             avatar: Some(avatar),
+            ..self
+        }
+    }
+
+    /// New validator name
+    pub fn name(self, name: String) -> Self {
+        Self {
+            name: Some(name),
             ..self
         }
     }
@@ -2328,8 +2329,6 @@ pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
     pub alias_force: bool,
     /// Viewing key
     pub viewing_key: C::ViewingKey,
-    /// Pin
-    pub pin: bool,
 }
 
 /// Bridge pool batch recommendation.
