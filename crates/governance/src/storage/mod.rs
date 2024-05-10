@@ -74,7 +74,12 @@ where
         governance_keys::get_activation_epoch_key(proposal_id);
     storage.write(&activation_epoch_key, data.activation_epoch)?;
 
-    storage.write(&counter_key, proposal_id + 1)?;
+    storage.write(
+        &counter_key,
+        proposal_id
+            .checked_add(1)
+            .expect("Number of proposals should never exceed `u64::MAX`"),
+    )?;
 
     let min_proposal_funds_key = governance_keys::get_min_proposal_fund_key();
     let min_proposal_funds: token::Amount =
