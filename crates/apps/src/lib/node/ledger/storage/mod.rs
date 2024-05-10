@@ -245,7 +245,7 @@ mod tests {
 
         state.commit_block().expect("commit failed");
 
-        let (iter, gas) = state.db_iter_prefix(&prefix);
+        let (iter, gas) = state.db_iter_prefix(&prefix).unwrap();
         assert_eq!(gas, (prefix.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
         for (k, v, gas) in iter {
             match expected.pop() {

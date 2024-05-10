@@ -19,7 +19,7 @@ use namada_gas::{
 };
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
-    DBIter, InMemory, State, StateRead, StorageError, StorageHasher,
+    DBIter, InMemory, ResultExt, State, StateRead, StorageError, StorageHasher,
     StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState, DB,
 };
 use namada_token::storage_key::is_any_token_parameter_key;
@@ -714,7 +714,7 @@ where
     let key = Key::parse(key).map_err(TxRuntimeError::StorageDataError)?;
 
     let write_log = unsafe { env.ctx.write_log.get() };
-    let (log_val, gas) = write_log.read_temp(&key);
+    let (log_val, gas) = write_log.read_temp(&key).into_storage_result()?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     match log_val {
         Some(value) => {
@@ -786,7 +786,7 @@ where
 
     let write_log = unsafe { env.ctx.write_log.get() };
     let db = unsafe { env.ctx.db.get() };
-    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, &prefix);
+    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, &prefix)?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
@@ -815,10 +815,13 @@ where
     let iterators = unsafe { env.ctx.iterators.get() };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-        let (log_val, log_gas) = state.write_log().read(
-            &Key::parse(key.clone())
-                .map_err(TxRuntimeError::StorageDataError)?,
-        );
+        let (log_val, log_gas) = state
+            .write_log()
+            .read(
+                &Key::parse(key.clone())
+                    .map_err(TxRuntimeError::StorageDataError)?,
+            )
+            .into_storage_result()?;
         tx_charge_gas::<MEM, D, H, CA>(env, iter_gas + log_gas)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
@@ -1798,7 +1801,7 @@ where
     let state = env.state();
     let (header, gas) =
         StateRead::get_block_header(&state, Some(BlockHeight(height)))
-            .map_err(vp_host_fns::RuntimeError::StorageError)?;
+            .map_err(vp_host_fns::RuntimeError::StateError)?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     Ok(match header {
         Some(h) => {

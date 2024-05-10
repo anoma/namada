@@ -12,7 +12,7 @@ use namada_core::storage::{
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
-use namada_state::{write_log, DBIter, StateRead, DB};
+use namada_state::{write_log, DBIter, ResultExt, StateRead, DB};
 use namada_tx::{Section, Tx};
 use thiserror::Error;
 
@@ -25,8 +25,10 @@ use crate::ledger::gas::{GasMetering, VpGasMeter};
 pub enum RuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
+    #[error("State error: {0}")]
+    StateError(namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(namada_state::Error),
+    StorageError(#[from] namada_state::StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::storage::Error),
     #[error("Encoding error: {0}")]
@@ -69,7 +71,8 @@ pub fn read_pre<S>(
 where
     S: StateRead + Debug,
 {
-    let (log_val, gas) = state.write_log().read_pre(key);
+    let (log_val, gas) =
+        state.write_log().read_pre(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
@@ -88,7 +91,7 @@ where
         None => {
             // When not found in write log, try to read from the storage
             let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StorageError)?;
+                state.db_read(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -106,7 +109,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { value }) => {
@@ -124,7 +127,7 @@ where
             // When not found in write log, try
             // to read from the storage
             let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StorageError)?;
+                state.db_read(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -141,7 +144,8 @@ pub fn read_temp<S>(
 where
     S: StateRead + Debug,
 {
-    let (log_val, gas) = state.write_log().read_temp(key);
+    let (log_val, gas) =
+        state.write_log().read_temp(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     Ok(log_val.cloned())
 }
@@ -157,7 +161,8 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read_pre(key);
+    let (log_val, gas) =
+        state.write_log().read_pre(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -169,7 +174,7 @@ where
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+                state.db_has_key(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -187,7 +192,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { .. }) => Ok(true),
@@ -200,7 +205,7 @@ where
             // When not found in write log, try
             // to check the storage
             let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+                state.db_has_key(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -244,7 +249,7 @@ where
     S: StateRead + Debug,
 {
     let (header, gas) = StateRead::get_block_header(state, Some(height))
-        .map_err(RuntimeError::StorageError)?;
+        .map_err(RuntimeError::StateError)?;
     add_gas(gas_meter, gas)?;
     Ok(header)
 }
@@ -354,7 +359,7 @@ pub fn iter_prefix_pre<'a, D>(
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
-    let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix);
+    let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix)?;
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }
@@ -373,7 +378,7 @@ pub fn iter_prefix_post<'a, D>(
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
-    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix);
+    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix)?;
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }

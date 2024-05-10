@@ -42,6 +42,7 @@ ics23.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
 sha2.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tiny-keccak.workspace = true
 tracing.workspace = true

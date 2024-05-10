@@ -25,6 +25,7 @@ use std::iter::Peekable;
 pub use host_env::{TxHostEnvState, VpHostEnvState};
 pub use in_memory::{BlockStorage, InMemory, LastBlock};
 use namada_core::address::Address;
+use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 pub use namada_core::hash::Sha256Hasher;
 use namada_core::hash::{Error as HashError, Hash};
@@ -79,14 +80,16 @@ pub trait StateRead: StorageRead + Debug {
     /// Borrow `InMemory` state
     fn in_mem(&self) -> &InMemory<Self::H>;
 
+    /// Try to charge a given gas amount. Returns an error on out-of-gas.
     fn charge_gas(&self, gas: u64) -> Result<()>;
 
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
     fn db_has_key(&self, key: &storage::Key) -> Result<(bool, u64)> {
+        let len = key.len() as u64;
         Ok((
             self.db().read_subspace_val(key)?.is_some(),
-            key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
+            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
         ))
     }
 
@@ -96,11 +99,15 @@ pub trait StateRead: StorageRead + Debug {
 
         match self.db().read_subspace_val(key)? {
             Some(v) => {
-                let gas =
-                    (key.len() + v.len()) as u64 * STORAGE_ACCESS_GAS_PER_BYTE;
+                let len = checked!(key.len() + v.len())? as u64;
+                let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
                 Ok((Some(v), gas))
             }
-            None => Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE)),
+            None => {
+                let len = key.len() as u64;
+                let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
+                Ok((None, gas))
+            }
         }
     }
 
@@ -112,11 +119,12 @@ pub trait StateRead: StorageRead + Debug {
     fn db_iter_prefix(
         &self,
         prefix: &Key,
-    ) -> (<Self::D as DBIter<'_>>::PrefixIter, u64) {
-        (
+    ) -> Result<(<Self::D as DBIter<'_>>::PrefixIter, u64)> {
+        let len = prefix.len() as u64;
+        Ok((
             self.db().iter_prefix(Some(prefix)),
-            prefix.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE,
-        )
+            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+        ))
     }
 
     /// Returns an iterator over the block results
@@ -155,7 +163,8 @@ pub trait StateRead: StorageRead + Debug {
                 let header = self.in_mem().header.clone();
                 let gas = match header {
                     Some(ref header) => {
-                        header.encoded_len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE
+                        let len = header.encoded_len() as u64;
+                        checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?
                     }
                     None => MEMORY_ACCESS_GAS_PER_BYTE,
                 };
@@ -163,8 +172,8 @@ pub trait StateRead: StorageRead + Debug {
             }
             Some(h) => match self.db().read_block_header(h)? {
                 Some(header) => {
-                    let gas = header.encoded_len() as u64
-                        * STORAGE_ACCESS_GAS_PER_BYTE;
+                    let len = header.encoded_len() as u64;
+                    let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
                     Ok((Some(header), gas))
                 }
                 None => Ok((None, STORAGE_ACCESS_GAS_PER_BYTE)),
@@ -193,6 +202,8 @@ pub trait State: StateRead + StorageWrite {
     }
 }
 
+/// Implement [`trait StorageRead`] using its [`trait StateRead`]
+/// implementation.
 #[macro_export]
 macro_rules! impl_storage_read {
     ($($type:ty)*) => {
@@ -208,7 +219,7 @@ macro_rules! impl_storage_read {
                 key: &storage::Key,
             ) -> namada_storage::Result<Option<Vec<u8>>> {
                 // try to read from the write log first
-                let (log_val, gas) = self.write_log().read(key);
+                let (log_val, gas) = self.write_log().read(key)?;
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
                     Some(write_log::StorageModification::Write { value }) => {
@@ -229,7 +240,7 @@ macro_rules! impl_storage_read {
 
             fn has_key(&self, key: &storage::Key) -> namada_storage::Result<bool> {
                 // try to read from the write log first
-                let (log_val, gas) = self.write_log().read(key);
+                let (log_val, gas) = self.write_log().read(key)?;
                 self.charge_gas(gas).into_storage_result()?;
                 match log_val {
                     Some(&write_log::StorageModification::Write { .. })
@@ -252,7 +263,7 @@ macro_rules! impl_storage_read {
                 prefix: &storage::Key,
             ) -> namada_storage::Result<Self::PrefixIter<'iter>> {
                 let (iter, gas) =
-                    iter_prefix_post(self.write_log(), self.db(), prefix);
+                    iter_prefix_post(self.write_log(), self.db(), prefix)?;
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(iter)
             }
@@ -328,6 +339,7 @@ macro_rules! impl_storage_read {
     }
 }
 
+/// Implement [`trait StorageWrite`] using its [`trait State`] implementation.
 #[macro_export]
 macro_rules! impl_storage_write {
     ($($type:ty)*) => {
@@ -404,10 +416,6 @@ impl_storage_read!(TxHostEnvState<'_, D, H>);
 impl_storage_read!(VpHostEnvState<'_, D, H>);
 impl_storage_write!(TxHostEnvState<'_, D, H>);
 
-pub fn merklize_all_keys(_key: &storage::Key) -> bool {
-    true
-}
-
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
@@ -433,6 +441,8 @@ pub enum Error {
     Gas(namada_gas::Error),
     #[error("{0}")]
     StorageError(#[from] namada_storage::Error),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 impl From<MerkleTreeError> for Error {
@@ -462,19 +472,20 @@ pub fn iter_prefix_pre<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &storage::Key,
-) -> (PrefixIter<'a, D>, u64)
+) -> namada_storage::Result<(PrefixIter<'a, D>, u64)>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let storage_iter = db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_pre(prefix).peekable();
-    (
+    let len = prefix.len() as u64;
+    Ok((
         PrefixIter::<D> {
             storage_iter,
             write_log_iter,
         },
-        prefix.len() as u64 * namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
-    )
+        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+    ))
 }
 
 /// Iterate write-log storage items posterior to a tx execution, matching the
@@ -486,19 +497,20 @@ pub fn iter_prefix_post<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &storage::Key,
-) -> (PrefixIter<'a, D>, u64)
+) -> namada_storage::Result<(PrefixIter<'a, D>, u64)>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
     let storage_iter = db.iter_prefix(Some(prefix)).peekable();
     let write_log_iter = write_log.iter_prefix_post(prefix).peekable();
-    (
+    let len = prefix.len() as u64;
+    Ok((
         PrefixIter::<D> {
             storage_iter,
             write_log_iter,
         },
-        prefix.len() as u64 * namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
-    )
+        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+    ))
 }
 
 impl<'iter, D> Iterator for PrefixIter<'iter, D>
@@ -588,6 +600,7 @@ pub mod testing {
     use super::mockdb::MockDB;
     use super::*;
 
+    /// A full-access state with a `MockDB` nd sha256 hasher.
     pub type TestState = FullAccessState<MockDB, Sha256Hasher>;
 
     impl Default for TestState {
@@ -599,6 +612,10 @@ pub mod testing {
                 merkle_tree_key_filter: merklize_all_keys,
             })
         }
+    }
+
+    fn merklize_all_keys(_key: &storage::Key) -> bool {
+        true
     }
 
     /// In memory State for testing.
@@ -641,6 +658,11 @@ pub mod testing {
     }
 }
 
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap
+)]
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -1101,7 +1123,8 @@ mod tests {
 
         // Collect the values from prior state prefix iterator
         let (iter_pre, _gas) =
-            iter_prefix_pre(s.write_log(), s.db(), &storage::Key::default());
+            iter_prefix_pre(s.write_log(), s.db(), &storage::Key::default())
+                .unwrap();
         let mut read_pre = BTreeMap::new();
         for (key, val, _gas) in iter_pre {
             let key = storage::Key::parse(key).unwrap();
@@ -1141,7 +1164,8 @@ mod tests {
 
         // Collect the values from posterior state prefix iterator
         let (iter_post, _gas) =
-            iter_prefix_post(s.write_log(), s.db(), &storage::Key::default());
+            iter_prefix_post(s.write_log(), s.db(), &storage::Key::default())
+                .unwrap();
         let mut read_post = BTreeMap::new();
         for (key, val, _gas) in iter_post {
             let key = storage::Key::parse(key).unwrap();

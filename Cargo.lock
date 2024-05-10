@@ -5102,6 +5102,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "test-log",
  "thiserror",

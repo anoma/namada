@@ -4117,6 +4117,7 @@ dependencies = [
  "patricia_tree",
  "proptest",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "thiserror",
  "tiny-keccak",

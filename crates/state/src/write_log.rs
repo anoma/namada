@@ -5,9 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use namada_core::address::{Address, EstablishedAddressGen};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
-use namada_core::storage;
+use namada_core::{arith, storage};
 use namada_events::{Event, EventToEmit, EventType};
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
 use patricia_tree::map::StringPatriciaMap;
@@ -33,6 +34,12 @@ pub enum Error {
     WriteTempAfterWrite,
     #[error("Replay protection key: {0}")]
     ReplayProtection(String),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
+    #[error("Sized-diff overflowed")]
+    SizeDiffOverflow,
+    #[error("Value length overflowed")]
+    ValueLenOverflow,
 }
 
 /// Result for functions that may fail
@@ -149,7 +156,8 @@ impl WriteLog {
     pub fn read(
         &self,
         key: &storage::Key,
-    ) -> (Option<&StorageModification>, u64) {
+    ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
+    {
         // try to read from tx write log first
         match self
             .tx_write_log
@@ -165,16 +173,19 @@ impl WriteLog {
             Some(v) => {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
-                        key.len() + value.len()
+                        checked!(key.len() + value.len())?
                     }
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
-                        key.len() + vp_code_hash.len()
+                        checked!(key.len() + vp_code_hash.len())?
                     }
-                };
-                (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+                } as u64;
+                Ok((Some(v), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
             }
-            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
+            None => {
+                let gas = key.len() as u64;
+                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+            }
         }
     }
 
@@ -184,36 +195,46 @@ impl WriteLog {
     pub fn read_pre(
         &self,
         key: &storage::Key,
-    ) -> (Option<&StorageModification>, u64) {
+    ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
+    {
         match self.block_write_log.get(key) {
             Some(v) => {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
-                        key.len() + value.len()
+                        checked!(key.len() + value.len())?
                     }
                     StorageModification::Delete => key.len(),
                     StorageModification::InitAccount { ref vp_code_hash } => {
-                        key.len() + vp_code_hash.len()
+                        checked!(key.len() + vp_code_hash.len())?
                     }
-                };
-                (Some(v), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+                } as u64;
+                Ok((Some(v), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
             }
-            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
+            None => {
+                let gas = key.len() as u64;
+                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+            }
         }
     }
 
     /// Read a temp value at the given key and return the value and the gas
     /// cost, returns [`None`] if the key is not present in the temp write
     /// log
-    pub fn read_temp(&self, key: &storage::Key) -> (Option<&Vec<u8>>, u64) {
+    pub fn read_temp(
+        &self,
+        key: &storage::Key,
+    ) -> Result<(Option<&Vec<u8>>, u64)> {
         // try to read from tx write log first
         match self.tx_temp_log.get(key) {
             Some(value) => {
-                let gas = key.len() + value.len();
+                let gas = checked!(key.len() + value.len())? as u64;
 
-                (Some(value), gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+                Ok((Some(value), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
             }
-            None => (None, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE),
+            None => {
+                let gas = key.len() as u64;
+                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+            }
         }
     }
 
@@ -228,10 +249,11 @@ impl WriteLog {
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
         let len = value.len();
-        let gas = key.len() + len;
         if self.tx_temp_log.contains_key(key) {
             return Err(Error::UpdateTemporaryValue);
         }
+        let len_signed =
+            i64::try_from(len).map_err(|_| Error::ValueLenOverflow)?;
         let size_diff = match self
             .tx_write_log
             .get(key)
@@ -239,9 +261,11 @@ impl WriteLog {
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
-                    len as i64 - value.len() as i64
+                    let val_len = i64::try_from(value.len())
+                        .map_err(|_| Error::ValueLenOverflow)?;
+                    checked!(len_signed - val_len)?
                 }
-                StorageModification::Delete => len as i64,
+                StorageModification::Delete => len_signed,
                 StorageModification::InitAccount { .. } => {
                     // NOTE: errors from host functions force a shudown of the
                     // wasm environment without the need for cooperation from
@@ -253,13 +277,14 @@ impl WriteLog {
             },
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
-            None => len as i64,
+            None => len_signed,
         };
 
         self.tx_write_log
             .insert(key.clone(), StorageModification::Write { value });
 
-        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, size_diff))
+        let gas = checked!(key.len() + len)? as u64;
+        Ok((checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?, size_diff))
     }
 
     /// Write a key and a value.
@@ -322,19 +347,25 @@ impl WriteLog {
         }
 
         let len = value.len();
-        let gas = key.len() + len;
+        let len_signed =
+            i64::try_from(len).map_err(|_| Error::ValueLenOverflow)?;
         let size_diff = match self.tx_temp_log.get(key) {
-            Some(prev) => len as i64 - prev.len() as i64,
+            Some(prev) => {
+                let prev_len = i64::try_from(prev.len())
+                    .map_err(|_| Error::ValueLenOverflow)?;
+                checked!(len_signed - prev_len)?
+            }
             // set just the length of the value because we don't know if
             // the previous value exists on the storage
-            None => len as i64,
+            None => len_signed,
         };
 
         self.tx_temp_log.insert(key.clone(), value);
 
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
-        Ok((gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE, size_diff))
+        let gas = checked!(key.len() + len)? as u64;
+        Ok((checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?, size_diff))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
@@ -351,7 +382,7 @@ impl WriteLog {
             .or_else(|| self.tx_precommit_write_log.get(key))
         {
             Some(prev) => match prev {
-                StorageModification::Write { ref value } => value.len() as i64,
+                StorageModification::Write { ref value } => value.len(),
                 StorageModification::Delete => 0,
                 StorageModification::InitAccount { .. } => {
                     return Err(Error::DeleteVp);
@@ -364,8 +395,12 @@ impl WriteLog {
 
         self.tx_write_log
             .insert(key.clone(), StorageModification::Delete);
-        let gas = key.len() + size_diff as usize;
-        Ok((gas as u64 * STORAGE_WRITE_GAS_PER_BYTE, -size_diff))
+        let gas = checked!(key.len() + size_diff)? as u64;
+        let size_diff = i64::try_from(size_diff)
+            .ok()
+            .and_then(i64::checked_neg)
+            .ok_or(Error::SizeDiffOverflow)?;
+        Ok((checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?, size_diff))
     }
 
     /// Delete a key and its value.
@@ -404,8 +439,12 @@ impl WriteLog {
             .get_or_insert_with(|| storage_address_gen.clone());
         let addr = address_gen.generate_address(entropy_source);
         let key = storage::Key::validity_predicate(&addr);
-        let gas = (key.len() + vp_code_hash.len()) as u64
-            * STORAGE_WRITE_GAS_PER_BYTE;
+        let gas = ((key
+            .len()
+            .checked_add(vp_code_hash.len())
+            .expect("Cannot overflow")) as u64)
+            .checked_mul(STORAGE_WRITE_GAS_PER_BYTE)
+            .expect("Canno overflow");
         self.tx_write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)
@@ -668,6 +707,7 @@ impl WriteLog {
     }
 }
 
+#[allow(clippy::cast_possible_wrap)]
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -685,7 +725,7 @@ mod tests {
             storage::Key::parse("key").expect("cannot parse the key string");
 
         // read a non-existing key
-        let (value, gas) = write_log.read(&key);
+        let (value, gas) = write_log.read(&key).unwrap();
         assert!(value.is_none());
         assert_eq!(gas, (key.len() as u64) * MEMORY_ACCESS_GAS_PER_BYTE);
 
@@ -704,7 +744,7 @@ mod tests {
         assert_eq!(diff, inserted.len() as i64);
 
         // read the value
-        let (value, gas) = write_log.read(&key);
+        let (value, gas) = write_log.read(&key).unwrap();
         match value.expect("no read value") {
             StorageModification::Write { value } => {
                 assert_eq!(*value, inserted)
@@ -739,7 +779,7 @@ mod tests {
         assert_eq!(diff, 0);
 
         // read the deleted key
-        let (value, gas) = write_log.read(&key);
+        let (value, gas) = write_log.read(&key).unwrap();
         match &value.expect("no read value") {
             StorageModification::Delete => {}
             _ => panic!("unexpected result"),
@@ -772,7 +812,7 @@ mod tests {
         );
 
         // read
-        let (value, gas) = write_log.read(&vp_key);
+        let (value, gas) = write_log.read(&vp_key).unwrap();
         match value.expect("no read value") {
             StorageModification::InitAccount { vp_code_hash } => {
                 assert_eq!(*vp_code_hash, vp_hash)
