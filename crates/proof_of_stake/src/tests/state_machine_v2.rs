@@ -1,5 +1,7 @@
 //! Test PoS transitions with a state machine
 
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ops::{AddAssign, Deref};
 use std::{cmp, mem};

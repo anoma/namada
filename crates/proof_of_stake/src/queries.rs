@@ -489,8 +489,10 @@ fn make_unbond_details(
             && slash.epoch
                 < withdraw
                     .checked_sub(
-                        params.unbonding_len
-                            + params.cubic_slashing_window_length,
+                        params
+                            .unbonding_len
+                            .checked_add(params.cubic_slashing_window_length)
+                            .expect("Cannot overflow"),
                     )
                     .unwrap_or_default()
         {

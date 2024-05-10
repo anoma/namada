@@ -6,7 +6,6 @@ use core::fmt::Debug;
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::hash::Hash;
-use std::ops::Sub;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
@@ -520,14 +519,6 @@ impl KeySeg for Position {
     }
 }
 
-impl Sub<Position> for Position {
-    type Output = Self;
-
-    fn sub(self, rhs: Position) -> Self::Output {
-        Position(self.0 - rhs.0)
-    }
-}
-
 impl Position {
     /// Position value of 1
     pub const ONE: Position = Position(1_u64);
@@ -535,6 +526,11 @@ impl Position {
     /// Get the next Position (+1)
     pub fn next(&self) -> Self {
         Self(self.0.wrapping_add(1))
+    }
+
+    /// Checked subtraction
+    pub fn checked_sub(self, rhs: Self) -> Option<Self> {
+        Some(Self(self.0.checked_sub(rhs.0)?))
     }
 }
 

@@ -1,5 +1,7 @@
 //! PoS system tests
 
+#![allow(clippy::arithmetic_side_effects, clippy::cast_sign_loss)]
+
 use std::collections::BTreeMap;
 
 use assert_matches::assert_matches;
