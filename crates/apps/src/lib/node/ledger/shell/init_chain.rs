@@ -300,6 +300,7 @@ where
             &mut self.state,
             &pos_params,
             current_epoch,
+            HistoryMode::Regular,
         )
         .expect("Must be able to copy PoS genesis validator sets");
 

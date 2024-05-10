@@ -117,6 +117,7 @@ where
             validator_set_update_epoch,
             votes,
             req.byzantine_validators,
+            self.history_mode,
         )?;
         // - IBC
         ibc::finalize_block(&mut self.state, emit_events, new_epoch)?;

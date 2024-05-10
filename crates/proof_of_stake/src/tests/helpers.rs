@@ -72,6 +72,7 @@ pub fn advance_epoch(s: &mut TestState, params: &PosParams) -> Epoch {
         params,
         current_epoch,
         current_epoch + params.pipeline_len,
+        namada_storage::HistoryMode::Regular,
     )
     .unwrap();
     // purge_validator_sets_for_old_epoch(s, current_epoch).unwrap();

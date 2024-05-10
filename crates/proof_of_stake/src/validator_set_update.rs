@@ -7,7 +7,7 @@ use namada_core::key::PublicKeyTmRawHash;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
-use namada_storage::{StorageRead, StorageWrite};
+use namada_storage::{HistoryMode, StorageRead, StorageWrite};
 use once_cell::unsync::Lazy;
 
 use crate::storage::{
@@ -766,6 +766,7 @@ pub fn copy_validator_sets_and_positions<S>(
     params: &PosParams,
     current_epoch: Epoch,
     target_epoch: Epoch,
+    historic_mode: HistoryMode,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -827,9 +828,15 @@ where
             .insert(storage, val_position, val_address)?;
     }
 
-    // Purge consensus and below-capacity validator sets
-    consensus_validator_set.update_data(storage, params, current_epoch)?;
-    below_capacity_validator_set.update_data(storage, params, current_epoch)?;
+    if historic_mode.does_pruning() {
+        // Purge consensus and below-capacity validator sets
+        consensus_validator_set.update_data(storage, params, current_epoch)?;
+        below_capacity_validator_set.update_data(
+            storage,
+            params,
+            current_epoch,
+        )?;
+    }
 
     // Copy validator positions
     let mut positions = HashMap::<Address, Position>::default();
@@ -847,12 +854,14 @@ where
         debug_assert!(prev.is_none());
     }
 
-    // Purge old epochs of validator positions
-    validator_set_positions_handle.update_data(
-        storage,
-        params,
-        current_epoch,
-    )?;
+    if historic_mode.does_pruning() {
+        // Purge old epochs of validator positions
+        validator_set_positions_handle.update_data(
+            storage,
+            params,
+            current_epoch,
+        )?;
+    }
 
     // Copy set of all validator addresses
     let mut all_validators = HashSet::<Address>::default();
@@ -869,8 +878,14 @@ where
         debug_assert!(!was_in);
     }
 
-    // Purge old epochs of all validator addresses
-    validator_addresses_handle.update_data(storage, params, current_epoch)?;
+    if historic_mode.does_pruning() {
+        // Purge old epochs of all validator addresses
+        validator_addresses_handle.update_data(
+            storage,
+            params,
+            current_epoch,
+        )?;
+    }
 
     Ok(())
 }

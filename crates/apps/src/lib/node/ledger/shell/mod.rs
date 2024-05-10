@@ -10,6 +10,7 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
+use namada::storage::HistoryMode;
 use namada::vm::wasm::run::check_tx_allowed;
 use namada_sdk::state::StateRead;
 pub mod prepare_proposal;
@@ -347,6 +348,8 @@ where
     storage_read_past_height_limit: Option<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
+    /// History node controls how data is pruned
+    pub history_mode: HistoryMode,
 }
 
 /// Merkle tree storage key filter. Return `false` for keys that shouldn't be
@@ -524,6 +527,10 @@ where
             storage_read_past_height_limit,
             // TODO: config event log params
             event_log: EventLog::default(),
+            history_mode: match config.shell.history_mode {
+                config::HistoryMode::Archive => HistoryMode::Archive,
+                config::HistoryMode::Regular => HistoryMode::Regular,
+            },
         };
         shell.update_eth_oracle(&Default::default());
         shell

@@ -418,6 +418,7 @@ impl BenchShell {
             &params,
             current_epoch,
             current_epoch.unchecked_add(params.pipeline_len),
+            namada::storage::HistoryMode::Regular
         )
         .unwrap();
 

@@ -65,6 +65,24 @@ impl TendermintMode {
     }
 }
 
+#[derive(
+    Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq,
+)]
+pub enum HistoryMode {
+    Archive,
+    #[default]
+    Regular,
+}
+
+impl HistoryMode {
+    pub fn to_str(&self) -> &str {
+        match *self {
+            Self::Archive => "archive",
+            Self::Regular => "regular",
+        }
+    }
+}
+
 /// An action to be performed at a
 /// certain block height.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +137,8 @@ pub struct Shell {
     pub action_at_height: Option<ActionAtHeight>,
     /// Specify if tendermint is started as validator, fullnode or seednode
     pub tendermint_mode: TendermintMode,
+    /// History node controls how data is pruned
+    pub history_mode: HistoryMode,
 }
 
 impl Ledger {
@@ -147,6 +167,7 @@ impl Ledger {
                 cometbft_dir: COMETBFT_DIR.into(),
                 action_at_height: None,
                 tendermint_mode: mode,
+                history_mode: HistoryMode::default(),
             },
             cometbft: tendermint_config,
             ethereum_bridge: ethereum_bridge::ledger::Config::default(),

@@ -39,7 +39,7 @@ pub use namada_core::storage::{Epoch, Key, KeySeg};
 use namada_core::tendermint::abci::types::Misbehavior;
 use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
-use namada_storage::{OptionExt, StorageRead, StorageWrite};
+use namada_storage::{HistoryMode, OptionExt, StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
 use storage::write_validator_name;
@@ -139,6 +139,7 @@ pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
+    history_mode: HistoryMode,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -152,6 +153,7 @@ where
             &params,
             current_epoch,
             epoch,
+            history_mode,
         )?;
     }
     Ok(())
@@ -2680,7 +2682,12 @@ pub mod test_utils {
         compute_and_store_total_consensus_stake(storage, current_epoch)?;
 
         // Copy validator sets and positions
-        copy_genesis_validator_sets(storage, params, current_epoch)?;
+        copy_genesis_validator_sets(
+            storage,
+            params,
+            current_epoch,
+            HistoryMode::Regular,
+        )?;
 
         Ok(())
     }
@@ -2939,6 +2946,7 @@ pub fn finalize_block<S>(
     validator_set_update_epoch: Epoch,
     votes: Vec<VoteInfo>,
     byzantine_validators: Vec<Misbehavior>,
+    historic_mode: HistoryMode,
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead,
@@ -2955,6 +2963,7 @@ where
             &pos_params,
             current_epoch,
             checked!(current_epoch + pos_params.pipeline_len)?,
+            historic_mode,
         )?;
 
         // Compute the total stake of the consensus validator set and record

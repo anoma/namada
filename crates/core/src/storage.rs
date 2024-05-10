@@ -213,6 +213,23 @@ impl TxIndex {
     }
 }
 
+/// Represent the pruning strategy of a node
+#[derive(Clone, Copy, Debug, Default)]
+pub enum HistoryMode {
+    /// The node will keep all the data without pruning
+    Archive,
+    /// Default mode allows for pruning data
+    #[default]
+    Regular,
+}
+
+impl HistoryMode {
+    /// Return true if the node is configured to prune data from storage
+    pub fn does_pruning(&self) -> bool {
+        matches!(self, HistoryMode::Regular)
+    }
+}
+
 /// Represents the indices of the accepted transactions
 /// in a block.
 #[derive(
