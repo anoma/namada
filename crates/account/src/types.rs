@@ -55,6 +55,7 @@ pub struct UpdateAccount {
     pub threshold: Option<u8>,
 }
 
+#[allow(clippy::cast_possible_truncation)]
 #[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for accounts
 pub mod tests {
