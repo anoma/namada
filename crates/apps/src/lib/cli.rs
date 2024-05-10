@@ -2164,7 +2164,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Utils {
         JoinNetwork(JoinNetwork),
-        FetchWasms(FetchWasms),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
         DeriveGenesisAddresses(DeriveGenesisAddresses),
@@ -2187,7 +2186,6 @@ pub mod cmds {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let join_network =
                     SubCmd::parse(matches).map(Self::JoinNetwork);
-                let fetch_wasms = SubCmd::parse(matches).map(Self::FetchWasms);
                 let validate_wasm =
                     SubCmd::parse(matches).map(Self::ValidateWasm);
                 let init_network =
@@ -2214,7 +2212,6 @@ pub mod cmds {
                 let parse_migrations_json =
                     SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 join_network
-                    .or(fetch_wasms)
                     .or(validate_wasm)
                     .or(init_network)
                     .or(derive_addresses)
@@ -2235,7 +2232,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Utilities.")
                 .subcommand(JoinNetwork::def())
-                .subcommand(FetchWasms::def())
                 .subcommand(ValidateWasm::def())
                 .subcommand(InitNetwork::def())
                 .subcommand(DeriveGenesisAddresses::def())
@@ -2270,25 +2266,6 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about("Configure Namada to join an existing network.")
                 .add_args::<args::JoinNetwork>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct FetchWasms(pub args::FetchWasms);
-
-    impl SubCmd for FetchWasms {
-        const CMD: &'static str = "fetch-wasms";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::FetchWasms::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about("Ensure pre-built wasms are present")
-                .add_args::<args::FetchWasms>()
         }
     }
 
@@ -2995,6 +2972,7 @@ pub mod args {
     use crate::facade::tendermint_rpc::Url;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
     pub const ALIAS_FORCE: ArgFlag = flag("alias-force");
@@ -3069,7 +3047,6 @@ pub mod args {
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DO_IT: ArgFlag = flag("do-it");
-    pub const DONT_ARCHIVE: ArgFlag = flag("dont-archive");
     pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
@@ -7165,6 +7142,7 @@ pub mod args {
         pub pre_genesis_path: Option<PathBuf>,
         pub dont_prefetch_wasm: bool,
         pub allow_duplicate_ip: bool,
+        pub add_persistent_peers: bool,
     }
 
     impl Args for JoinNetwork {
@@ -7174,12 +7152,14 @@ pub mod args {
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
             let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
+            let add_persistent_peers = ADD_PERSISTENT_PEERS.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
                 dont_prefetch_wasm,
                 allow_duplicate_ip,
+                add_persistent_peers,
             }
         }
 
@@ -7194,6 +7174,10 @@ pub mod args {
             .arg(ALLOW_DUPLICATE_IP.def().help(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.",
+            ))
+            .arg(ADD_PERSISTENT_PEERS.def().help(
+                "Whether to add persistent peers to the P2P config of CometBFT, \
+                 derived from the list of genesis validators.",
             ))
         }
     }
@@ -7231,22 +7215,6 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct FetchWasms {
-        pub chain_id: ChainId,
-    }
-
-    impl Args for FetchWasms {
-        fn parse(matches: &ArgMatches) -> Self {
-            let chain_id = CHAIN_ID.parse(matches);
-            Self { chain_id }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(CHAIN_ID.def().help("The chain ID. The chain must be known in the https://github.com/heliaxdev/anoma-network-config repository, in which case it should have pre-built wasms available for download."))
-        }
-    }
-
-    #[derive(Clone, Debug)]
     pub struct ValidateWasm {
         pub code_path: PathBuf,
     }
@@ -7273,7 +7241,6 @@ pub mod args {
         pub chain_id_prefix: ChainIdPrefix,
         pub genesis_time: DateTimeUtc,
         pub consensus_timeout_commit: Timeout,
-        pub dont_archive: bool,
         pub archive_dir: Option<PathBuf>,
     }
 
@@ -7285,7 +7252,6 @@ pub mod args {
             let genesis_time = GENESIS_TIME.parse(matches);
             let consensus_timeout_commit =
                 CONSENSUS_TIMEOUT_COMMIT.parse(matches);
-            let dont_archive = DONT_ARCHIVE.parse(matches);
             let archive_dir = ARCHIVE_DIR.parse(matches);
             Self {
                 templates_path,
@@ -7293,7 +7259,6 @@ pub mod args {
                 chain_id_prefix,
                 genesis_time,
                 consensus_timeout_commit,
-                dont_archive,
                 archive_dir,
             }
         }
@@ -7320,11 +7285,6 @@ pub mod args {
                 "The Tendermint consensus timeout_commit configuration as \
                  e.g. `1s` or `1000ms`. Defaults to 10 seconds.",
             ))
-            .arg(
-                DONT_ARCHIVE
-                    .def()
-                    .help("Do NOT create the release archive."),
-            )
             .arg(ARCHIVE_DIR.def().help(
                 "Specify a directory into which to store the archive. Default \
                  is the current working directory.",

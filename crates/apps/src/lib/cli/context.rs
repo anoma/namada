@@ -124,6 +124,26 @@ pub struct ChainContext {
     pub native_token: Address,
 }
 
+/// Convenience function wrapping over [`wasm_dir_from_env_or`].
+pub fn wasm_dir_from_env_or_args(
+    global_args: &args::Global,
+) -> Option<PathBuf> {
+    wasm_dir_from_env_or(global_args.wasm_dir.as_ref())
+}
+
+/// Return the wasm artifacts path in use.
+pub fn wasm_dir_from_env_or<P: AsRef<Path>>(
+    wasm_dir: Option<&P>,
+) -> Option<PathBuf> {
+    wasm_dir
+        .map(|wasm_dir| wasm_dir.as_ref().to_owned())
+        .or_else(|| {
+            env::var(ENV_VAR_WASM_DIR)
+                .ok()
+                .map(|wasm_dir| wasm_dir.into())
+        })
+}
+
 impl Context {
     pub fn new<IO: Io>(global_args: args::Global) -> Result<Self> {
         let global_config = read_or_try_new_global_config(&global_args);
@@ -154,18 +174,12 @@ impl Context {
                     );
                 };
 
-                // If the WASM dir specified, put it in the config
-                match global_args.wasm_dir.as_ref() {
-                    Some(wasm_dir) => {
-                        config.wasm_dir = wasm_dir.clone();
-                    }
-                    None => {
-                        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-                            let wasm_dir: PathBuf = wasm_dir.into();
-                            config.wasm_dir = wasm_dir;
-                        }
-                    }
+                // Put WASM dir path in the config
+                if let Some(wasm_dir) = wasm_dir_from_env_or_args(&global_args)
+                {
+                    config.wasm_dir = wasm_dir;
                 }
+
                 Some(ChainContext {
                     wallet,
                     config,

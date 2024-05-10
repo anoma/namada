@@ -25,15 +25,13 @@ use tokio::sync::RwLock;
 
 use crate::cli::args;
 use crate::cli::args::TestGenesis;
-use crate::cli::context::ENV_VAR_WASM_DIR;
+use crate::cli::context::wasm_dir_from_env_or;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
 use crate::config::global::GlobalConfig;
-use crate::config::{
-    self, genesis, get_default_namada_folder, Config, TendermintMode,
-};
+use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, CliWalletUtils};
@@ -61,6 +59,7 @@ pub async fn join_network(
         pre_genesis_path,
         dont_prefetch_wasm,
         allow_duplicate_ip,
+        add_persistent_peers,
     }: args::JoinNetwork,
 ) {
     use tokio::fs;
@@ -125,15 +124,6 @@ pub async fn join_network(
             )
         });
 
-    let wasm_dir = global_args.wasm_dir.as_ref().cloned().or_else(|| {
-        if let Ok(wasm_dir) = env::var(ENV_VAR_WASM_DIR) {
-            let wasm_dir: PathBuf = wasm_dir.into();
-            Some(wasm_dir)
-        } else {
-            None
-        }
-    });
-
     let release_filename = format!("{}.tar.gz", chain_id);
     let net_config = if let Some(configs_dir) = network_configs_dir() {
         fs::read(PathBuf::from(&configs_dir).join(release_filename))
@@ -167,63 +157,8 @@ pub async fn join_network(
     // Decode and unpack the archive
     let decoder = GzDecoder::new(&net_config[..]);
     let mut archive = tar::Archive::new(decoder);
-
-    // If the base-dir is non-default, unpack the archive into a temp dir inside
-    // first.
-    let cwd = env::current_dir().unwrap();
-    let (unpack_dir, non_default_dir) =
-        if base_dir_full != cwd.join(config::DEFAULT_BASE_DIR) {
-            (base_dir.clone(), true)
-        } else {
-            (PathBuf::from_str(".").unwrap(), false)
-        };
-    archive.unpack(&unpack_dir).unwrap();
-
-    // Rename the base-dir from the default and rename wasm-dir, if non-default.
-    if non_default_dir {
-        // For compatibility for networks released with Namada <= v0.4:
-        // The old releases include the WASM directory at root path of the
-        // archive. This has been moved into the chain directory, so if the
-        // WASM dir is found at the old path, we move it to the new path.
-        if let Ok(wasm_dir) =
-            fs::canonicalize(unpack_dir.join(config::DEFAULT_WASM_DIR)).await
-        {
-            fs::rename(
-                &wasm_dir,
-                unpack_dir
-                    .join(config::DEFAULT_BASE_DIR)
-                    .join(chain_id.as_str())
-                    .join(config::DEFAULT_WASM_DIR),
-            )
-            .await
-            .unwrap();
-        }
-
-        // Move the chain dir
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(chain_id.as_str()),
-            &chain_dir,
-        )
-        .await
-        .unwrap();
-
-        // Move the global config
-        fs::rename(
-            unpack_dir
-                .join(config::DEFAULT_BASE_DIR)
-                .join(config::global::FILENAME),
-            base_dir_full.join(config::global::FILENAME),
-        )
-        .await
-        .unwrap();
-
-        // Remove the default dir
-        fs::remove_dir_all(unpack_dir.join(config::DEFAULT_BASE_DIR))
-            .await
-            .unwrap();
-    }
+    archive.unpack(&base_dir_full).unwrap();
+    _ = archive;
 
     // Read the genesis files
     let genesis = genesis::chain::Finalized::read_toml_files(&chain_dir)
@@ -252,11 +187,12 @@ pub async fn join_network(
     };
 
     // Derive config from genesis
-    let config = genesis.derive_config(
+    let mut config = genesis.derive_config(
         &chain_dir,
         node_mode,
         validator_keys.as_ref().map(|(sk, _)| sk.ref_to()).as_ref(),
         allow_duplicate_ip,
+        add_persistent_peers,
     );
 
     // Try to load pre-genesis wallet, if any
@@ -276,10 +212,6 @@ pub async fn join_network(
         pre_genesis_wallet,
         validator_alias_and_pre_genesis_wallet,
     );
-
-    // Save the config and the wallet
-    config.write(&base_dir, &chain_id, true).unwrap();
-    crate::wallet::save(&wallet).unwrap();
 
     // Setup the node for a genesis validator, if used
     if let Some((tendermint_node_key, consensus_key)) = validator_keys {
@@ -305,54 +237,36 @@ pub async fn join_network(
     }
 
     // Move wasm-dir and update config if it's non-default
-    if let Some(wasm_dir) = wasm_dir.as_ref() {
-        if wasm_dir.to_string_lossy() != config::DEFAULT_WASM_DIR {
-            tokio::fs::rename(
-                base_dir_full
-                    .join(chain_id.as_str())
-                    .join(config::DEFAULT_WASM_DIR),
-                chain_dir.join(wasm_dir),
-            )
-            .await
-            .unwrap();
+    if let Some(wasm_dir) = wasm_dir_from_env_or(global_args.wasm_dir.as_ref())
+    {
+        let wasm_dir_full = chain_dir.join(wasm_dir);
 
-            // Update the config
-            let wasm_dir = wasm_dir.clone();
-            let base_dir = base_dir.clone();
-            let chain_id = chain_id.clone();
-            tokio::task::spawn_blocking(move || {
-                let mut config = Config::load(&base_dir, &chain_id, None);
-                config.wasm_dir = wasm_dir;
-                config.write(&base_dir, &chain_id, true).unwrap();
-            })
-            .await
-            .unwrap();
-        }
+        tokio::fs::rename(
+            base_dir_full
+                .join(chain_id.as_str())
+                .join(config::DEFAULT_WASM_DIR),
+            &wasm_dir_full,
+        )
+        .await
+        .unwrap();
+
+        config.wasm_dir = wasm_dir_full;
     }
 
     if !dont_prefetch_wasm {
-        fetch_wasms_aux(&base_dir, &chain_id).await;
+        fetch_wasms_aux(&chain_id, &config.wasm_dir).await;
     }
 
-    println!("Successfully configured for chain ID {}", chain_id);
+    // Save the config and the wallet
+    config.write(&base_dir, &chain_id, true).unwrap();
+    crate::wallet::save(&wallet).unwrap();
+
+    println!("Successfully configured for chain ID {chain_id}");
 }
 
-pub async fn fetch_wasms(
-    global_args: args::Global,
-    args::FetchWasms { chain_id }: args::FetchWasms,
-) {
-    fetch_wasms_aux(&global_args.base_dir, &chain_id).await;
-}
-
-pub async fn fetch_wasms_aux(base_dir: &Path, chain_id: &ChainId) {
-    println!("Fetching wasms for chain ID {}...", chain_id);
-    let wasm_dir = {
-        let mut path = base_dir.to_owned();
-        path.push(chain_id.as_str());
-        path.push("wasm");
-        path
-    };
-    wasm_loader::pre_fetch_wasm(&wasm_dir).await;
+async fn fetch_wasms_aux(chain_id: &ChainId, wasm_dir: &Path) {
+    println!("Fetching missing wasms for chain ID {chain_id}...");
+    wasm_loader::pre_fetch_wasm(wasm_dir).await;
 }
 
 pub fn validate_wasm(args::ValidateWasm { code_path }: args::ValidateWasm) {
@@ -389,23 +303,18 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 }
 
 /// Initialize a new test network from the given configuration.
-///
-/// For any public keys that are not specified in the genesis configuration,
-/// this command will generate them and place them in the "setup" directory
-/// inside the chain-dir, so it can be used for testing (we're using it in the
-/// e2e tests), dev/test-nets and public networks setup.
 pub fn init_network(
-    global_args: args::Global,
     args::InitNetwork {
         templates_path,
         wasm_checksums_path,
         chain_id_prefix,
         genesis_time,
         consensus_timeout_commit,
-        dont_archive,
         archive_dir,
     }: args::InitNetwork,
-) {
+) -> PathBuf {
+    let base_dir = tempfile::tempdir().unwrap();
+
     // Load and validate the templates
     let templates = genesis::templates::load_and_validate(&templates_path)
         .unwrap_or_else(|| {
@@ -454,46 +363,12 @@ pub fn init_network(
         genesis_time,
         consensus_timeout_commit,
     );
+
     let chain_id = &genesis.metadata.chain_id;
-    let chain_dir = global_args.base_dir.join(chain_id.as_str());
+    println!("Derived chain ID: {chain_id}");
 
     // Check that chain dir is empty
-    if chain_dir.exists() && chain_dir.read_dir().unwrap().next().is_some() {
-        println!(
-            "The target chain directory {} already exists and is not empty.",
-            chain_dir.to_string_lossy()
-        );
-        loop {
-            let mut buffer = String::new();
-            print!(
-                "Do you want to override the chain directory? Will exit \
-                 otherwise. [y/N]: "
-            );
-            std::io::stdout().flush().unwrap();
-            match std::io::stdin().read_line(&mut buffer) {
-                Ok(size) if size > 0 => {
-                    // Isolate the single character representing the choice
-                    let byte = buffer.chars().next().unwrap();
-                    buffer.clear();
-                    match byte {
-                        'y' | 'Y' => {
-                            fs::remove_dir_all(&chain_dir).unwrap();
-                            break;
-                        }
-                        'n' | 'N' => {
-                            println!("Exiting.");
-                            safe_exit(1)
-                        }
-                        // Input is senseless fall through to repeat prompt
-                        _ => {
-                            println!("Unrecognized input.");
-                        }
-                    };
-                }
-                _ => {}
-            }
-        }
-    }
+    let chain_dir = base_dir.path().join(chain_id.as_str());
     fs::create_dir_all(&chain_dir).unwrap();
 
     // Write the finalized genesis config to the chain dir
@@ -507,82 +382,61 @@ pub fn init_network(
 
     // Write the global config setting the default chain ID
     let global_config = GlobalConfig::new(chain_id.clone());
-    global_config.write(&global_args.base_dir).unwrap();
+    global_config.write(base_dir.path()).unwrap();
 
     // Copy the WASM checksums
     let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
     fs::copy(
-        &wasm_checksums_path,
+        wasm_checksums_path,
         wasm_dir_full.join(config::DEFAULT_WASM_CHECKSUMS_FILE),
     )
     .unwrap();
 
-    println!("Derived chain ID: {}", chain_id);
-    println!("Genesis files stored at {}", chain_dir.to_string_lossy());
-
-    // Create a release tarball for anoma-network-config
-    if !dont_archive {
-        // TODO: remove the `config::DEFAULT_BASE_DIR` and instead just archive
-        // the chain dir
-        let mut release = tar::Builder::new(Vec::new());
-        release
-            .append_dir_all(
-                PathBuf::from(config::DEFAULT_BASE_DIR).join(chain_id.as_str()),
-                &chain_dir,
-            )
-            .unwrap();
-        let global_config_path = GlobalConfig::file_path(&global_args.base_dir);
-        let release_global_config_path =
-            GlobalConfig::file_path(config::DEFAULT_BASE_DIR);
-        release
-            .append_path_with_name(
-                global_config_path,
-                release_global_config_path,
-            )
-            .unwrap();
-        let release_wasm_checksums_path =
-            PathBuf::from(config::DEFAULT_BASE_DIR)
-                .join(chain_id.as_str())
-                .join(config::DEFAULT_WASM_DIR)
-                .join(config::DEFAULT_WASM_CHECKSUMS_FILE);
-        release
-            .append_path_with_name(
-                &wasm_checksums_path,
-                release_wasm_checksums_path,
-            )
-            .unwrap();
-
-        // Gzip tar release and write to file
-        let release_file = archive_dir
-            .unwrap_or_else(|| env::current_dir().unwrap())
-            .join(format!("{}.tar.gz", chain_id));
-        let compressed_file = File::create(&release_file).unwrap();
-        let mut encoder =
-            GzEncoder::new(compressed_file, Compression::default());
-        encoder.write_all(&release.into_inner().unwrap()).unwrap();
-        encoder.finish().unwrap();
-        println!(
-            "Release archive created at {}",
-            release_file.to_string_lossy()
-        );
-    }
-
-    // After the archive is created, try to copy the built WASM, if they're
-    // present with the checksums. This is used for local network setup, so
-    // that we can use a local WASM build.
+    // Try to copy the built WASM, if they're present with the checksums
     let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
         .unwrap_or_else(|_| safe_exit(1));
+    let base_wasm_path = std::env::current_dir()
+        .unwrap()
+        .join(crate::config::DEFAULT_WASM_DIR);
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
-        let file = std::env::current_dir()
-            .unwrap()
-            .join(crate::config::DEFAULT_WASM_DIR)
-            .join(&full_name);
-        if file.exists() {
-            fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
+        let file = base_wasm_path.join(&full_name);
+        if !file.exists() {
+            println!(
+                "Skipping nonexistent wasm artifact: {}",
+                file.to_string_lossy()
+            );
+            continue;
         }
+        fs::copy(file, wasm_dir_full.join(&full_name)).unwrap();
     }
+
+    // Create release tarball
+    let mut release = tar::Builder::new(Vec::new());
+    release
+        .append_dir_all(PathBuf::from(chain_id.as_str()), &chain_dir)
+        .unwrap();
+    let global_config_path = GlobalConfig::file_path(base_dir.path());
+    let release_global_config_path = GlobalConfig::file_path("");
+    release
+        .append_path_with_name(global_config_path, release_global_config_path)
+        .unwrap();
+
+    // Gzip tar release and write to file
+    let release_file = archive_dir
+        .unwrap_or_else(|| env::current_dir().unwrap())
+        .join(format!("{}.tar.gz", chain_id));
+    let compressed_file = File::create(&release_file).unwrap();
+    let mut encoder = GzEncoder::new(compressed_file, Compression::default());
+    encoder.write_all(&release.into_inner().unwrap()).unwrap();
+    encoder.finish().unwrap();
+    println!(
+        "Release archive created at {}",
+        release_file.to_string_lossy()
+    );
+
+    release_file
 }
 
 pub fn test_genesis(args: TestGenesis) {
