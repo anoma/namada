@@ -18,6 +18,7 @@
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
 
+/// Token storage keys
 pub mod storage_key {
     pub use namada_shielded_token::storage_key::*;
     pub use namada_trans_token::storage_key::*;
@@ -46,6 +47,7 @@ where
     Ok(())
 }
 
+/// Apply token logic for finalizing block (i.e. shielded token rewards)
 pub fn finalize_block<S>(
     storage: &mut S,
     _events: &mut impl EmitEvents,
