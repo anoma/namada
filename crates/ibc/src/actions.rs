@@ -298,6 +298,7 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
+    #[allow(clippy::arithmetic_side_effects)]
     let timeout_timestamp = state
         .in_mem()
         .header
