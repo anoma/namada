@@ -304,7 +304,6 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 
 /// Initialize a new test network from the given configuration.
 pub fn init_network(
-    _: args::Global,
     args::InitNetwork {
         templates_path,
         wasm_checksums_path,

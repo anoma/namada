@@ -94,17 +94,15 @@ pub fn initialize_genesis(
     };
 
     // Create genesis chain release archive
-    let release_archive_path = namada_apps::client::utils::init_network(
-        global_args.clone(),
-        args::InitNetwork {
+    let release_archive_path =
+        namada_apps::client::utils::init_network(args::InitNetwork {
             templates_path: genesis_path,
             wasm_checksums_path,
             chain_id_prefix,
             consensus_timeout_commit: Timeout::from_str("30s").unwrap(),
             archive_dir: None,
             genesis_time,
-        },
-    );
+        });
 
     // Decode and unpack the release archive
     let mut archive = {
