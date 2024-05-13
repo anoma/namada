@@ -35,16 +35,10 @@ use crate::error::Error;
 use crate::masp::{ShieldedContext, ShieldedUtils};
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<
-    IndexedTx,
-    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
->;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (
-    IndexedTx,
-    (Epoch, BTreeSet<namada_core::storage::Key>, Transaction),
-);
+pub type IndexedNoteEntry = (IndexedTx, Transaction);
 
 /// Represents the amount used of different conversions
 pub type Conversions =
@@ -83,7 +77,7 @@ impl Authorization for PartialAuthorized {
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct ShieldedTransfer {
     /// Shielded transfer builder
-    pub builder: Builder<(), (), ExtendedFullViewingKey, ()>,
+    pub builder: Builder<(), ExtendedFullViewingKey, ()>,
     /// MASP transaction
     pub masp_tx: Transaction,
     /// Metadata
@@ -108,10 +102,8 @@ pub struct MaspTokenRewardData {
 /// and / or the main payload.
 #[derive(Debug, Clone)]
 pub(super) struct ExtractedMaspTx {
-    pub(crate) fee_unshielding:
-        Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
-    pub(crate) inner_tx:
-        Option<(BTreeSet<namada_core::storage::Key>, Transaction)>,
+    pub(crate) fee_unshielding: Option<Transaction>,
+    pub(crate) inner_tx: Option<Transaction>,
 }
 
 /// MASP verifying keys
@@ -227,9 +219,7 @@ impl ScannedData {
 /// is not parallelizable).
 pub struct DecryptedData {
     pub tx: Transaction,
-    pub keys: BTreeSet<namada_core::storage::Key>,
     pub delta: TransactionDelta,
-    pub epoch: Epoch,
 }
 
 /// A cache of decrypted txs that have not yet been
@@ -392,19 +382,9 @@ impl<P1>
     }
 }
 
-impl<P1, R1, N1>
-    MapBuilder<
-        P1,
-        R1,
-        ExtendedSpendingKey,
-        N1,
-        (),
-        (),
-        ExtendedFullViewingKey,
-        (),
-    > for WalletMap
+impl<P1, N1>
+    MapBuilder<P1, ExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
+    for WalletMap
 {
-    fn map_rng(&self, _s: R1) {}
-
     fn map_notifier(&self, _s: N1) {}
 }

@@ -37,7 +37,7 @@ use namada::proof_of_stake::types::{
 };
 use namada::{state as storage, token};
 use namada_sdk::control_flow::time::{Duration, Instant};
-use namada_sdk::masp::MaspTokenRewardData;
+use namada_sdk::masp::types::MaspTokenRewardData;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::{

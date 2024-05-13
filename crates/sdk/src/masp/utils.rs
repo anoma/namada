@@ -1,5 +1,4 @@
-use core::str::FromStr;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::env;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -14,12 +13,13 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
-use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::storage::{BlockHeight, IndexedTx, TxIndex};
 use namada_core::token::Transfer;
+use namada_events::extend::{
+    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
+};
 use namada_ibc::IbcMessage;
-use namada_tx::data::{TxResult, WrapperTx};
 use namada_tx::Tx;
 use rand_core::{CryptoRng, RngCore};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -33,7 +33,6 @@ use crate::masp::types::{
 };
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
 use crate::queries::Client;
-use crate::rpc::query_epoch_at_height;
 use crate::{MaybeSend, MaybeSync};
 
 /// Make sure the MASP params are present and load verifying keys into memory
@@ -122,18 +121,6 @@ pub(super) fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
     (a.clone(), b.clone())
 }
 
-/// Extract the payload from the given Tx object
-pub(super) fn extract_payload(
-    tx: Tx,
-    wrapper: &mut Option<WrapperTx>,
-    transfer: &mut Option<Transfer>,
-) -> Result<(), Error> {
-    *wrapper = tx.header.wrapper();
-    let _ = tx.data().map(|signed| {
-        Transfer::try_from_slice(&signed[..]).map(|tfer| *transfer = Some(tfer))
-    });
-    Ok(())
-}
 
 /// Retrieves all the indexes and tx events at the specified height which refer
 /// to a valid MASP transaction. If an index is given, it filters only the
@@ -142,7 +129,7 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, crate::tendermint::abci::Event)>>, Error> {
+) -> Result<Option<Vec<TxIndex>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -154,69 +141,26 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let tx_index =
-                        event.attributes.iter().find_map(|attribute| {
-                            if attribute.key == "is_valid_masp_tx" {
-                                Some(TxIndex(
-                                    u32::from_str(&attribute.value).unwrap(),
-                                ))
-                            } else {
-                                None
-                            }
-                        });
+                    let tx_index = ValidMaspTxAttr::read_from_event_attributes(
+                        &event.attributes,
+                    )
+                    .ok()?;
 
-                    match tx_index {
-                        Some(idx) => {
-                            if idx >= first_idx_to_query {
-                                Some((idx, event))
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
+                    if tx_index >= first_idx_to_query {
+                        Some(tx_index)
+                    } else {
+                        None
                     }
                 })
                 .collect::<Vec<_>>()
         }))
 }
 
-pub(super) enum ExtractShieldedActionArg<'args, C: Client> {
-    Event(&'args crate::tendermint::abci::Event),
-    Request((&'args C, BlockHeight, Option<TxIndex>)),
-}
-
 /// Extract the relevant shielded portions of a [`Tx`], if any.
-pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
+pub(super) async fn extract_masp_tx(
     tx: &Tx,
-    action_arg: ExtractShieldedActionArg<'args, C>,
     check_header: bool,
 ) -> Result<ExtractedMaspTx, Error> {
-    // We use the changed keys instead of the Transfer object
-    // because those are what the masp validity predicate works on
-    let (wrapper_changed_keys, changed_keys) =
-        if let ExtractShieldedActionArg::Event(tx_event) = action_arg {
-            let tx_result_str = tx_event
-                .attributes
-                .iter()
-                .find_map(|attr| {
-                    if attr.key == "inner_tx" {
-                        Some(&attr.value)
-                    } else {
-                        None
-                    }
-                })
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing required tx result in event".to_string(),
-                    )
-                })?;
-            let result = TxResult::from_str(tx_result_str)
-                .map_err(|e| Error::Other(e.to_string()))?;
-            (result.wrapper_changed_keys, result.changed_keys)
-        } else {
-            (Default::default(), Default::default())
-        };
-
     let tx_header = tx.header();
     // NOTE: simply looking for masp sections attached to the tx
     // is not safe. We don't validate the sections attached to a
@@ -240,7 +184,7 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
                 Error::Other("Missing masp transaction".to_string())
             })?;
 
-        Some((wrapper_changed_keys, masp_transaction))
+        Some(masp_transaction)
     } else {
         None
     };
@@ -250,17 +194,15 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
         .data()
         .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
     let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-        Ok(transfer) => Some((changed_keys, transfer)),
+        Ok(transfer) => Some(transfer),
         Err(_) => {
             // This should be a MASP over IBC transaction, it
             // could be a ShieldedTransfer or an Envelope
             // message, need to try both
-            extract_payload_from_shielded_action::<C>(&tx_data, action_arg)
-                .await
-                .ok()
+            extract_payload_from_shielded_action(&tx_data).await.ok()
         }
     }
-    .map(|(changed_keys, transfer)| {
+    .map(|transfer| {
         if let Some(hash) = transfer.shielded {
             let masp_tx = tx
                 .get_section(&hash)
@@ -274,7 +216,7 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
                     Error::Other("Missing masp transaction".to_string())
                 })?;
 
-            Ok::<_, Error>(Some((changed_keys, masp_tx)))
+            Ok::<_, Error>(Some(masp_tx))
         } else {
             Ok(None)
         }
@@ -289,63 +231,33 @@ pub(super) async fn extract_masp_tx<'args, C: Client + Sync>(
 }
 
 /// Extract the changed keys and Transaction hash from a MASP over ibc message
-pub(super) async fn extract_payload_from_shielded_action<
-    'args,
-    C: Client + Sync,
->(
+pub(super) async fn extract_payload_from_shielded_action(
     tx_data: &[u8],
-    args: ExtractShieldedActionArg<'args, C>,
-) -> Result<(BTreeSet<namada_core::storage::Key>, Transfer), Error> {
+) -> Result<Transfer, Error> {
     let message = namada_ibc::decode_message(tx_data)
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let result = match message {
-        IbcMessage::Transfer(msg) => {
-            let tx_result = get_sending_result(args)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
-        IbcMessage::NftTransfer(msg) => {
-            let tx_result = get_sending_result(args)?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
-        IbcMessage::RecvPacket(msg) => {
-            let tx_result = get_receiving_result(args).await?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
-        }
+        IbcMessage::Transfer(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
+        IbcMessage::NftTransfer(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
+        IbcMessage::RecvPacket(msg) => msg.transfer.ok_or_else(|| {
+            Error::Other("Missing masp tx in the ibc message".to_string())
+        })?,
         IbcMessage::AckPacket(msg) => {
             // Refund tokens by the ack message
-            let tx_result = get_receiving_result(args).await?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
+            msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
+            })?
         }
         IbcMessage::Timeout(msg) => {
             // Refund tokens by the timeout message
-            let tx_result = get_receiving_result(args).await?;
-
-            let transfer = msg.transfer.ok_or_else(|| {
+            msg.transfer.ok_or_else(|| {
                 Error::Other("Missing masp tx in the ibc message".to_string())
-            })?;
-
-            (tx_result.changed_keys, transfer)
+            })?
         }
         IbcMessage::Envelope(_) => {
             return Err(Error::Other(
@@ -355,78 +267,6 @@ pub(super) async fn extract_payload_from_shielded_action<
     };
 
     Ok(result)
-}
-
-fn get_sending_result<C: Client + Sync>(
-    args: ExtractShieldedActionArg<'_, C>,
-) -> Result<TxResult, Error> {
-    let tx_event = match args {
-        ExtractShieldedActionArg::Event(event) => event,
-        ExtractShieldedActionArg::Request(_) => {
-            return Err(Error::Other(
-                "Unexpected event request for ShieldedTransfer".to_string(),
-            ));
-        }
-    };
-
-    get_tx_result(tx_event)
-}
-
-async fn get_receiving_result<C: Client + Sync>(
-    args: ExtractShieldedActionArg<'_, C>,
-) -> Result<TxResult, Error> {
-    let tx_event = match args {
-        ExtractShieldedActionArg::Event(event) => {
-            std::borrow::Cow::Borrowed(event)
-        }
-        ExtractShieldedActionArg::Request((client, height, index)) => {
-            std::borrow::Cow::Owned(
-                get_indexed_masp_events_at_height(client, height, index)
-                    .await?
-                    .ok_or_else(|| {
-                        Error::Other(format!(
-                            "Missing required ibc event at block height {}",
-                            height
-                        ))
-                    })?
-                    .first()
-                    .ok_or_else(|| {
-                        Error::Other(format!(
-                            "Missing required ibc event at block height {}",
-                            height
-                        ))
-                    })?
-                    .1
-                    .to_owned(),
-            )
-        }
-    };
-
-    get_tx_result(&tx_event)
-}
-
-fn get_tx_result(
-    tx_event: &crate::tendermint::abci::Event,
-) -> Result<TxResult, Error> {
-    tx_event
-        .attributes
-        .iter()
-        .find_map(|attribute| {
-            if attribute.key == "inner_tx" {
-                let tx_result = TxResult::from_str(&attribute.value)
-                    .expect("The event value should be parsable");
-                Some(tx_result)
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| {
-            Error::Other(
-                "Couldn't find changed keys in the event for the provided \
-                 transaction"
-                    .to_string(),
-            )
-        })
 }
 
 /// The updates to the commitment tree and witness maps
@@ -528,7 +368,7 @@ where
                     note_map_delta: Default::default(),
                 };
                 let mut note_pos = updates.commitment_tree.size();
-                for (indexed_tx, (_, _, ref shielded)) in tx_receiver {
+                for (indexed_tx,  ref shielded) in tx_receiver {
                     updates.note_map_delta.insert(indexed_tx, note_pos);
                     for so in shielded
                         .sapling_bundle()
@@ -582,16 +422,7 @@ where
                 fetch_iter.next();
                 continue;
             }
-            // Get the valid masp transactions at the specified height
-            let epoch = query_epoch_at_height(self.client, height.into())
-                .await?
-                .ok_or_else(|| {
-                    Error::from(QueryError::General(
-                        "Queried height is greater than the last committed \
-                         block height"
-                            .to_string(),
-                    ))
-                })?;
+
             let txs_results = match get_indexed_masp_events_at_height::<C>(
                 self.client,
                 height.into(),
@@ -619,37 +450,32 @@ where
                 .block
                 .data;
 
-            for (idx, tx_event) in txs_results {
+            for idx in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let ExtractedMaspTx {
                     fee_unshielding,
                     inner_tx,
-                } = extract_masp_tx::<C>(
-                    &tx,
-                    ExtractShieldedActionArg::Event(&tx_event),
-                    true,
-                )
-                .await?;
-                if let Some((changed_keys, masp_transaction)) = fee_unshielding
-                {
+                } = extract_masp_tx(&tx, true).await?;
+                // Collect the current transaction(s)
+                if let Some(masp_transaction) = fee_unshielding {
                     tx_sender.send((
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: true,
                         },
-                        (epoch, changed_keys, masp_transaction),
+                        masp_transaction,
                     ));
                 }
-                if let Some((changed_keys, masp_transaction)) = inner_tx {
+                if let Some(masp_transaction) = inner_tx {
                     tx_sender.send((
                         IndexedTx {
                             height: height.into(),
                             index: idx,
                             is_wrapper: false,
                         },
-                        (epoch, changed_keys, masp_transaction),
+                        masp_transaction,
                     ));
                 }
             }
@@ -801,7 +627,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
 
     /// Run all actions scheduled by the scanning thread until
     /// that process indicates it has finished.
-    pub async fn run(&mut self, native_token: &Address) -> Result<(), Error> {
+    pub async fn run(&mut self) -> Result<(), Error> {
         while let Some(action) = self.action.recv().await {
             match action {
                 // On completion, update the height to which all keys have been
@@ -818,7 +644,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                             *h = std::cmp::max(*h, Some(self.latest_idx));
                         }
                         // updated the spent notes and balances
-                        locked.nullify_spent_notes(native_token)?;
+                        locked.nullify_spent_notes()?;
                         _ = locked.save().await;
                     }
                     return Ok(());
