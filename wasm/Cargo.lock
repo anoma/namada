@@ -4302,6 +4302,7 @@ dependencies = [
  "namada_ibc",
  "namada_storage",
  "namada_tx",
+ "smooth-operator",
  "thiserror",
 ]
 

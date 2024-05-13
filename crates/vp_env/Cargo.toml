@@ -21,4 +21,5 @@ namada_ibc = { path = "../ibc" }
 
 derivative.workspace = true
 masp_primitives.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
