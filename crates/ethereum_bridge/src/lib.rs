@@ -1,3 +1,5 @@
+//! Ethereum bridge
+
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]

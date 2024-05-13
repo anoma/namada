@@ -67,6 +67,7 @@ where
         })
 }
 
+/// Aggregate validators' votes
 pub fn aggregate_votes<D, H>(
     state: &mut WlState<D, H>,
     ext: validator_set_update::VextDigest,

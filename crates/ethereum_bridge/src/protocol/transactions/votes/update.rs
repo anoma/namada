@@ -208,6 +208,7 @@ fn keys_changed<T>(
     changed_keys
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

@@ -287,7 +287,12 @@ where
         return Ok(Vec::new());
     }
 
-    let timeout_epoch = Epoch(current_epoch.0 - unbonding_len);
+    let timeout_epoch = Epoch(
+        current_epoch
+            .0
+            .checked_sub(unbonding_len)
+            .expect("Cannot underflow - checked above"),
+    );
     let prefix = vote_tallies::eth_msgs_prefix();
     let mut cur_keys: Option<Keys<EthereumEvent>> = None;
     let mut is_timed_out = false;

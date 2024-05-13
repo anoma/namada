@@ -1,5 +1,7 @@
 //! Test utilities for the Ethereum bridge crate.
 
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::num::NonZeroU64;
 
 use namada_account::protocol_pk_key;

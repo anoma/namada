@@ -311,8 +311,15 @@ where
 
     // Check time out and refund
     if state.in_mem().block.height.0 > timeout_offset {
-        let timeout_height =
-            BlockHeight(state.in_mem().block.height.0 - timeout_offset);
+        let timeout_height = BlockHeight(
+            state
+                .in_mem()
+                .block
+                .height
+                .0
+                .checked_sub(timeout_offset)
+                .expect("Cannot underflow - checked above"),
+        );
         for key in pending_keys {
             let inserted_height = BlockHeight::try_from_slice(
                 &state.in_mem().block.tree.get(&key)?,
@@ -501,6 +508,7 @@ where
     Ok(changed_keys)
 }
 
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;

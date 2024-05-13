@@ -7,6 +7,7 @@ pub mod validator_set_update;
 use thiserror::Error;
 
 /// The error yielded from validating faulty vote extensions.
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum VoteExtensionError {
     #[error(
