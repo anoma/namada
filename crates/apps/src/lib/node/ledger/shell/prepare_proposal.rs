@@ -263,7 +263,7 @@ fn validate_wrapper_bytes<D, H, CA>(
     block_time: Option<DateTimeUtc>,
     block_proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_state: &mut TempWlState<D, H>,
+    temp_state: &mut TempWlState<'_, D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<u64, ()>
@@ -323,7 +323,7 @@ fn prepare_proposal_fee_check<D, H, CA>(
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<(), Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -371,6 +371,7 @@ where
     .map_err(Error::TxApply)
 }
 
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 #[cfg(test)]
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals

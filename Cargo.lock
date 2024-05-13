@@ -4614,6 +4614,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "signal-hook",
+ "smooth-operator",
  "sparse-merkle-tree",
  "sysinfo",
  "tar",

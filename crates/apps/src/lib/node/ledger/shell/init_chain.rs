@@ -222,8 +222,10 @@ where
         let ts: protobuf::Timestamp = init.time.into();
         let initial_height = init.initial_height.into();
         // TODO hacky conversion, depends on https://github.com/informalsystems/tendermint-rs/issues/870
-        let genesis_time: DateTimeUtc = (Utc
-            .timestamp_opt(ts.seconds, ts.nanos as u32))
+        let genesis_time: DateTimeUtc = (Utc.timestamp_opt(
+            ts.seconds,
+            u32::try_from(ts.nanos).expect("Time nanos cannot be negative"),
+        ))
         .single()
         .expect("genesis time should be a valid timestamp")
         .into();
@@ -757,7 +759,7 @@ where
     pub fn new(
         shell: &'shell mut Shell<D, H>,
         dry_run: bool,
-    ) -> InitChainValidation<D, H> {
+    ) -> InitChainValidation<'_, D, H> {
         Self {
             shell,
             errors: vec![],

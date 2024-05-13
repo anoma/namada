@@ -107,6 +107,7 @@ where
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_vote_extensions {
     use namada::core::key::RefTo;

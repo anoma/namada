@@ -1,3 +1,5 @@
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::fmt::Display;
 
 use namada::core::collections::HashMap;

@@ -51,6 +51,7 @@ fn new_blake2b() -> Blake2b {
     Blake2bBuilder::new(32).personal(b"namada storage").build()
 }
 
+#[allow(clippy::arithmetic_side_effects, clippy::cast_sign_loss)]
 #[cfg(test)]
 mod tests {
     use borsh::BorshDeserialize;

@@ -116,7 +116,10 @@ pub mod eth_events {
         /// Check if the minimum number of confirmations has been
         /// reached at the input block height.
         pub fn is_confirmed(&self, height: &Uint256) -> bool {
-            self.confirmations <= height.clone() - self.block_height.clone()
+            use num_traits::CheckedSub;
+
+            self.confirmations
+                <= height.checked_sub(&self.block_height).unwrap_or_default()
         }
     }
 

@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::num::TryFromIntError;
 
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
@@ -7,7 +8,7 @@ use namada_core::storage::{
     Key,
 };
 use namada_core::time::DateTimeUtc;
-use namada_core::{ethereum_events, ethereum_structs};
+use namada_core::{arith, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -39,6 +40,10 @@ pub enum Error {
     NoMerkleTree { height: BlockHeight },
     #[error("Code hash error: {0}")]
     InvalidCodeHash(HashError),
+    #[error("Numeric conversion error: {0}")]
+    NumConversionError(#[from] TryFromIntError),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// A result of a function that may fail

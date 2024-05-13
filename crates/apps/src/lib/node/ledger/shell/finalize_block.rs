@@ -82,7 +82,10 @@ where
                 "Will begin a new epoch {} in {} blocks starting at height {}",
                 current_epoch.next(),
                 EPOCH_SWITCH_BLOCKS_DELAY,
-                height.0 + u64::from(EPOCH_SWITCH_BLOCKS_DELAY)
+                height
+                    .0
+                    .checked_add(u64::from(EPOCH_SWITCH_BLOCKS_DELAY))
+                    .expect("Shouldn't overflow")
             );
         }
         tracing::debug!(
@@ -624,10 +627,20 @@ where
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch =
             self.state.in_mem().block.pred_epochs.first_block_heights
-                [last_epoch.0 as usize]
-                .0;
-        let num_blocks_in_last_epoch =
-            self.state.in_mem().block.height.0 - first_block_of_last_epoch;
+                [usize::try_from(last_epoch.0)
+                    .expect("Last epoch shouldn't exceed `usize::MAX`")]
+            .0;
+        let num_blocks_in_last_epoch = self
+            .state
+            .in_mem()
+            .block
+            .height
+            .0
+            .checked_sub(first_block_of_last_epoch)
+            .expect(
+                "First block of last epoch must always be lower than or equal \
+                 to current block height",
+            );
 
         // PoS inflation
         namada_proof_of_stake::rewards::apply_inflation(
@@ -741,6 +754,7 @@ fn pos_votes_from_abci(
 
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::BTreeMap;

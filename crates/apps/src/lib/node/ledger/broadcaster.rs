@@ -55,14 +55,18 @@ impl Broadcaster {
                 } else {
                     DEFAULT_BROADCAST_TIMEOUT
                 };
+            let now = {
+                #[allow(clippy::disallowed_methods)]
+                time::Instant::now()
+            };
             let status_result = time::Sleep {
                 strategy: time::Constant(time::Duration::from_secs(1)),
             }
             .timeout(
+                #[allow(clippy::arithmetic_side_effects)]
                 {
-                    #[allow(clippy::disallowed_methods)]
-                    time::Instant::now()
-                } + time::Duration::from_secs(timeout),
+                    now + time::Duration::from_secs(timeout)
+                },
                 || async {
                     match self.client.status().await {
                         Ok(status) => ControlFlow::Break(status),

@@ -192,7 +192,7 @@ where
         &self,
         tx_bytes: &[u8],
         metadata: &mut ValidationMeta,
-        temp_state: &mut TempWlState<D, H>,
+        temp_state: &mut TempWlState<'_, D, H>,
         block_time: DateTimeUtc,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
@@ -515,7 +515,7 @@ fn process_proposal_fee_check<D, H, CA>(
     wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
