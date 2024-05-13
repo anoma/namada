@@ -3321,7 +3321,7 @@ pub mod args {
                      `$XDG_DATA_HOME/namada` (`$HOME/.local/share/namada` \
                      where `XDG_DATA_HOME` is unset) on \
                      Unix,`$HOME/Library/Application Support/Namada` on \
-                     Mac,and `%AppData%\\Namada` on Windows.",
+                     Mac, and `%AppData%\\Namada` on Windows.",
                 ))
                 .arg(WASM_DIR.def().global(true).wrapped_help(
                     "Directory with built WASM validity predicates, \
