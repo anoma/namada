@@ -3,6 +3,7 @@
 //! tx_data. This tx uses an IBC message wrapped inside
 //! `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
 
+use namada_tx_prelude::action::{Action, MaspAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -12,24 +13,26 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
     if let Some(transfer) = transfer {
-        let shielded = transfer
-            .shielded
-            .as_ref()
-            .map(|hash| {
-                tx_data
-                    .tx
-                    .get_section(hash)
-                    .and_then(|x| x.as_ref().masp_tx())
-                    .ok_or_err_msg("unable to find shielded section")
-                    .map_err(|err| {
-                        ctx.set_commitment_sentinel();
-                        err
-                    })
-            })
-            .transpose()?;
-        if let Some(shielded) = shielded {
-            token::utils::handle_masp_tx(ctx, &shielded)?;
-            update_masp_note_commitment_tree(&shielded)?;
+        if let Some(masp_section_ref) = transfer.shielded {
+            let shielded = signed
+                .get_section(&masp_section_ref)
+                .and_then(|x| x.as_ref().masp_tx())
+                .ok_or_err_msg(
+                    "Unable to find required shielded section in tx data",
+                )
+                .map_err(|err| {
+                    ctx.set_commitment_sentinel();
+                    err
+                })?;
+            token::utils::handle_masp_tx(
+                ctx,
+                &shielded,
+                transfer.key.as_deref(),
+            )
+            .wrap_err("Encountered error while handling MASP transaction")?;
+            update_masp_note_commitment_tree(&shielded)
+                .wrap_err("Failed to update the MASP commitment tree")?;
+            ctx.push_action(Action::Masp(MaspAction { masp_section_ref }))?;
         }
     }
 

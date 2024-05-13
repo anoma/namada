@@ -363,7 +363,7 @@ where
                     ref masp_section_ref,
                 }) = action
                 {
-                    tx_data.get_section(masp_section_ref)?.masp_tx()
+                    tx_data.tx.get_section(masp_section_ref)?.masp_tx()
                 } else {
                     None
                 }
