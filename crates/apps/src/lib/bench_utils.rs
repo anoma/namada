@@ -901,7 +901,6 @@ impl Client for BenchShell {
                     .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
-                            wrapper_changed_keys: Default::default(),
                             batch_results: BatchResults(
                                 [(
                                     tx.first_commitments().unwrap().get_hash(),

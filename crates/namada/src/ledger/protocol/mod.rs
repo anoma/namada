@@ -215,7 +215,6 @@ where
 
             Ok(TxResult {
                 gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                wrapper_changed_keys: Default::default(),
                 batch_results: BatchResults(
                     [(cmt.get_hash(), Ok(batched_tx_result))]
                         .into_iter()
@@ -356,8 +355,6 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let mut wrapper_changed_keys = BTreeSet::default();
-
     let wrapper_tx_hash = tx.header_hash();
 
     // Write wrapper tx hash to storage
@@ -368,13 +365,7 @@ where
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
-    charge_fee(
-        wrapper,
-        wrapper_tx_hash,
-        &mut shell_params,
-        &mut wrapper_changed_keys,
-        block_proposer,
-    )?;
+    charge_fee(wrapper, wrapper_tx_hash, &mut shell_params, block_proposer)?;
 
     // Account for gas
     shell_params
@@ -385,7 +376,6 @@ where
 
     Ok(TxResult {
         gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
-        wrapper_changed_keys,
         batch_results: BatchResults::default(),
     })
 }
@@ -398,7 +388,6 @@ fn charge_fee<S, D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
-    changed_keys: &mut BTreeSet<Key>,
     block_proposer: Option<&Address>,
 ) -> Result<()>
 where
@@ -420,9 +409,6 @@ where
             Ok(())
         }
     };
-
-    changed_keys
-        .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
 
     // Commit tx write log even in case of subsequent errors
     shell_params.state.write_log_mut().commit_tx();

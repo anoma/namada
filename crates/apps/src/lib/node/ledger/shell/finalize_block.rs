@@ -615,9 +615,6 @@ where
         }
 
         tx_logs
-            .changed_keys
-            .extend(tx_result.wrapper_changed_keys.iter().cloned());
-        tx_logs
             .tx_event
             .extend(GasUsed(tx_result.gas_used))
             .extend(Info("Check batch for result.".to_string()))
