@@ -4,14 +4,12 @@
 pub mod collection_validation;
 
 // TODO: this should be re-exported from namada_shielded_token
-use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
-use namada_core::token::Transfer;
-use namada_ibc::{decode_message, IbcEvent, IbcMessage};
-use namada_storage::{OptionExt, StorageRead};
+use namada_ibc::IbcEvent;
+use namada_storage::StorageRead;
 use namada_tx::Tx;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
@@ -104,40 +102,6 @@ where
 
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
-
-    /// Get the masp tx part of the shielded action
-    fn get_shielded_action(
-        &self,
-        tx_data: &Tx,
-    ) -> Result<Transaction, namada_storage::Error> {
-        let signed = tx_data;
-        let data = signed.data().ok_or_err_msg("No transaction data")?;
-        let transfer = match Transfer::try_from_slice(&data) {
-            Ok(transfer) => Some(transfer),
-            Err(_) => {
-                match decode_message(&data).map_err(|_| {
-                    namada_storage::Error::new_const("Unknown IBC message")
-                })? {
-                    IbcMessage::Transfer(msg) => msg.transfer,
-                    IbcMessage::NftTransfer(msg) => msg.transfer,
-                    IbcMessage::RecvPacket(msg) => msg.transfer,
-                    IbcMessage::AckPacket(msg) => msg.transfer,
-                    IbcMessage::Timeout(msg) => msg.transfer,
-                    IbcMessage::Envelope(_) => None,
-                }
-            }
-        };
-
-        let shielded_hash = transfer
-            .ok_or_err_msg("Missing transfer")?
-            .shielded
-            .ok_or_err_msg("unable to find shielded hash")?;
-        let masp_tx = signed
-            .get_section(&shielded_hash)
-            .and_then(|x| x.as_ref().masp_tx())
-            .ok_or_err_msg("unable to find shielded section")?;
-        Ok(masp_tx)
-    }
 
     /// Charge the provided gas for the current vp
     fn charge_gas(&self, used_gas: u64) -> Result<(), namada_storage::Error>;

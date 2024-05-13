@@ -24,6 +24,7 @@ use namada_proof_of_stake::Epoch;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
+use namada_tx::action::{Action, MaspAction, Read};
 use namada_tx::Tx;
 use namada_vp_env::VpEnv;
 use num_traits::ops::checked::{CheckedAdd, CheckedSub};
@@ -366,7 +367,28 @@ where
     ) -> Result<()> {
         let epoch = self.ctx.get_block_epoch()?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
+
+        // Get the Transaction object from the actions
+        let shielded_tx = self
+            .ctx
+            .read_actions()?
+            .iter()
+            .find_map(|action| {
+                // In case of multiple masp actions we only get the first one
+                if let Action::Masp(MaspAction {
+                    ref masp_section_ref,
+                }) = action
+                {
+                    tx_data.get_section(masp_section_ref)?.masp_tx()
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "Missing MASP section in transaction",
+                )
+            })?;
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
