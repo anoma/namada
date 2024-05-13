@@ -88,18 +88,18 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
         K: Into<String>,
         V: Into<String>,
     {
-        self.push(namada_core::tendermint::abci::EventAttribute {
-            key: key.into(),
-            value: value.into(),
-            index: true,
-        });
+        self.push((key, value, true).into());
     }
 
     #[inline]
     fn retrieve_attribute(&self, key: &str) -> Option<&str> {
         self.iter().find_map(|attr| {
-            if attr.key == key {
-                Some(attr.value.as_str())
+            if attr.key_str().expect("Attribute key is malformed UFT-8") == key
+            {
+                Some(
+                    attr.value_str()
+                        .expect("Attribute value is malformed UTF-8"),
+                )
             } else {
                 None
             }
@@ -108,13 +108,19 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
 
     #[inline]
     fn is_attribute(&self, key: &str) -> bool {
-        self.iter().any(|attr| attr.key == key)
+        self.iter().any(|attr| {
+            attr.key_str().expect("Attribute key is malformed UTF-8") == key
+        })
     }
 
     #[inline]
     fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.iter()
-            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
+        self.iter().map(|attr| {
+            (
+                attr.key_str().expect("Attribute key is malformed UTF-8"),
+                attr.value_str().expect("Attribute key is malformed UTF-8"),
+            )
+        })
     }
 }
 

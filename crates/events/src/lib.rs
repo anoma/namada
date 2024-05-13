@@ -503,19 +503,9 @@ impl From<Event> for namada_core::tendermint::abci::Event {
             attributes: event
                 .attributes
                 .into_iter()
-                .map(|(key, value)| {
-                    namada_core::tendermint::abci::EventAttribute {
-                        key,
-                        value,
-                        index: true,
-                    }
-                })
+                .map(|(key, value)| (key, value, true).into())
                 .chain(std::iter::once_with(|| {
-                    namada_core::tendermint::abci::EventAttribute {
-                        key: "event-level".to_string(),
-                        value: event.level.to_string(),
-                        index: true,
-                    }
+                    ("event-level", event.level.to_string(), true).into()
                 }))
                 .collect(),
         }
