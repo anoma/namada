@@ -61,15 +61,21 @@ impl Dec {
     /// means that any fractional part of the result that exceeds
     /// [`POS_DECIMAL_PRECISION`] is discarded.
     ///
-    /// The division is performed in the following way:
-    /// 1. The absolute values of the numerator and denominator are used for the
-    /// division. 2. The result is calculated to a fixed precision defined
-    /// by [`POS_DECIMAL_PRECISION`]. 3. If either the numerator or
-    /// denominator (but not both) is negative, the result is negated. 4. If
-    /// the division is impossible (e.g., division by zero or overflow), `None`
-    /// is returned.
+    /// ## Breakdown of the algorithm
     ///
-    /// Example:
+    /// The division is performed in the following way:
+    ///
+    /// 1. The absolute values of the numerator and denominator are used for the
+    /// division.
+    /// 2. The result is calculated to a fixed precision defined
+    /// by [`POS_DECIMAL_PRECISION`].
+    /// 3. If either the numerator or
+    /// denominator (but not both) is negative, the result is negated.
+    /// 4. If the division is impossible (e.g., division by zero or overflow),
+    ///    `None` is returned.
+    ///
+    /// ## Example
+    ///
     /// ```
     /// use namada_core::dec::Dec;
     ///
@@ -79,11 +85,11 @@ impl Dec {
     /// assert_eq!(result, Dec::new(15, 1).unwrap()); // Result is 1.5 truncated to 1 decimal place
     /// ```
     ///
-    /// # Arguments
+    /// ## Arguments
     ///
     /// * `rhs`: The right-hand side `Dec` value for the division.
     ///
-    /// # Returns
+    /// ## Returns
     ///
     /// An `Option<Dec>` which is `Some` with the result if the division is
     /// successful, or `None` if the division cannot be performed.

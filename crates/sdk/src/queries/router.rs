@@ -363,8 +363,6 @@ macro_rules! try_match {
 }
 
 /// Convert literal pattern into a `&[&'static str]`
-// TODO sub router pattern is not yet used
-#[allow(unused_macros)]
 macro_rules! pattern_to_prefix {
     ( ( $( $pattern:literal )/ * ) ) => {
         &[$( $pattern ),*]
@@ -809,7 +807,7 @@ macro_rules! router {
         router_type!{[<$name:camel>] {}, $( $pattern $( -> $return_type )? = $handle ),* }
 
 		impl $crate::queries::Router for [<$name:camel>] {
-            // TODO: for some patterns, there's unused assignment of `$end`
+            // NB: for some patterns, there's an unused assignment of `$end`
             #[allow(unused_assignments)]
             fn internal_handle<D, H, V, T>(
 			    &self,

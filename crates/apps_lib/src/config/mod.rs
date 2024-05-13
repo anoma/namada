@@ -364,9 +364,8 @@ And this is correct
     }
 "#;
 
-// TODO: Replaced `block_sync` and `blocksync`
-// with `fast_sync` and `fastsync`
-// due to https://github.com/informalsystems/tendermint-rs/issues/1368
+// TODO(informalsystems/tendermint-rs#1368): Replaced
+// `block_sync` and `blocksync` with `fast_sync` and `fastsync`
 pub const DEFAULT_COMETBFT_CONFIG: &str = r#"
 
 # This is a TOML config file.

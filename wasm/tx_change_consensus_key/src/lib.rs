@@ -4,7 +4,7 @@ use booleans::ResultBoolExt;
 use namada_tx_prelude::transaction::pos::ConsensusKeyChange;
 use namada_tx_prelude::*;
 
-#[transaction] // TODO: need to benchmark this gas
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
     let ConsensusKeyChange {

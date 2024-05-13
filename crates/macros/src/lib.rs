@@ -56,7 +56,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(()) => 1,
                 Err(err) => {
                     namada_tx_prelude::debug_log!("Transaction error: {err}");
-                    // TODO: pass some proper error from txs, instead of a string
+                    // TODO(namada#2980): pass some proper error from txs, instead of a string
                     let err = err.to_string().serialize_to_vec();
                     ctx.yield_value(err);
                     0
@@ -165,7 +165,6 @@ pub fn derive_storage_keys(struct_def: TokenStream) -> TokenStream {
 }
 
 #[inline]
-// TODO: use this crate for errors: https://crates.io/crates/proc-macro-error
 fn derive_storage_keys_inner(struct_def: TokenStream2) -> TokenStream2 {
     let struct_def: ItemStruct = syn::parse2(struct_def)
         .expect("Expected a struct in the StorageKeys derive");

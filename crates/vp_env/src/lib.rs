@@ -20,7 +20,6 @@
 
 pub mod collection_validation;
 
-// TODO: this should be re-exported from namada_shielded_token
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;

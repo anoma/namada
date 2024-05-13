@@ -717,7 +717,7 @@ impl<'a> Client for &'a MockNode {
             tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
             storage_read_past_height_limit: None,
         };
-        if request.path == "/shell/dry_run_tx" {
+        if request.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(ctx, &request)
         } else {
             rpc.handle(ctx, &request)

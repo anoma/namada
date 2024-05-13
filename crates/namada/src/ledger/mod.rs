@@ -234,9 +234,10 @@ mod test {
                 tx_wasm_cache: self.tx_wasm_cache.clone(),
                 storage_read_past_height_limit: None,
             };
-            // TODO: this is a hack to propagate errors to the caller, we should
-            // really permit error types other than [`std::io::Error`]
-            if request.path == "/shell/dry_run_tx" {
+            // TODO(namada#3240): this is a hack to propagate errors to the
+            // caller, we should really permit error types other
+            // than [`std::io::Error`]
+            if request.path == RPC.shell().dry_run_tx_path() {
                 super::dry_run_tx(ctx, &request)
             } else {
                 self.rpc.handle(ctx, &request)

@@ -833,8 +833,8 @@ pub mod testing {
             Just(InternalAddress::Governance),
             Just(InternalAddress::EthBridge),
             Just(InternalAddress::EthBridgePool),
-            Just(arb_erc20()),
-            Just(arb_nut()),
+            arb_erc20(),
+            arb_nut(),
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
             Just(InternalAddress::Masp),
@@ -863,16 +863,16 @@ pub mod testing {
         })
     }
 
-    fn arb_erc20() -> InternalAddress {
-        use crate::ethereum_events::testing::arbitrary_eth_address;
-        // TODO: generate random erc20 addr data
-        InternalAddress::Erc20(arbitrary_eth_address())
+    fn arb_erc20() -> impl Strategy<Value = InternalAddress> {
+        proptest::array::uniform20(proptest::num::u8::ANY).prop_map(|addr| {
+            InternalAddress::Erc20(crate::ethereum_events::EthAddress(addr))
+        })
     }
 
-    fn arb_nut() -> InternalAddress {
-        use crate::ethereum_events::testing::arbitrary_eth_address;
-        // TODO: generate random erc20 addr data
-        InternalAddress::Nut(arbitrary_eth_address())
+    fn arb_nut() -> impl Strategy<Value = InternalAddress> {
+        proptest::array::uniform20(proptest::num::u8::ANY).prop_map(|addr| {
+            InternalAddress::Nut(crate::ethereum_events::EthAddress(addr))
+        })
     }
 
     /// NAM token address for testing
@@ -919,7 +919,6 @@ pub mod testing {
 
     /// Imaginary eth address for testing
     pub const fn wnam() -> EthAddress {
-        // TODO: Replace this with the real wNam ERC20 address once it exists
         // "DEADBEEF DEADBEEF DEADBEEF DEADBEEF DEADBEEF"
         EthAddress([
             222, 173, 190, 239, 222, 173, 190, 239, 222, 173, 190, 239, 222,

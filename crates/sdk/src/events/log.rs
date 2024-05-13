@@ -23,7 +23,7 @@ pub struct Params {
 
 impl Default for Params {
     fn default() -> Self {
-        // TODO: tune the default params
+        // TODO(namada#3237): tune the default params
         Self {
             max_log_events_per_kind: 50000,
         }

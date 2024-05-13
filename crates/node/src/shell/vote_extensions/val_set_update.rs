@@ -403,13 +403,4 @@ mod test_vote_extensions {
             .is_err()
         );
     }
-
-    /// Test if a [`validator_set_update::Vext`] is signed with a secp key
-    /// that belongs to a consensus validator of some previous epoch
-    #[test]
-    #[ignore]
-    fn test_secp_key_belongs_to_consensus_validator() {
-        // TODO: we need to prove ownership of validator keys
-        // https://github.com/anoma/namada/issues/106
-    }
 }

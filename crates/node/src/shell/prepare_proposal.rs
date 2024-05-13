@@ -150,7 +150,7 @@ where
                                 false
                             }
                             AllocFailure::OverflowsBin { bin_resource} => {
-                                // TODO: handle tx whose size is greater
+                                // TODO(namada#3250): handle tx whose size is greater
                                 // than bin size
                                 tracing::warn!(
                                     ?tx_bytes,
@@ -216,7 +216,7 @@ where
                 .map_or_else(
                     |status| match status {
                         AllocFailure::Rejected { bin_resource_left} => {
-                            // TODO: maybe we should find a way to include
+                            // TODO(namada#3250): maybe we should find a way to include
                             // validator set updates all the time. for instance,
                             // we could have recursive bins -> bin space within
                             // a bin is partitioned into yet more bins. so, we
@@ -234,7 +234,7 @@ where
                             false
                         }
                         AllocFailure::OverflowsBin { bin_resource} => {
-                            // TODO: handle tx whose size is greater
+                            // TODO(namada#3250): handle tx whose size is greater
                             // than bin size
                             tracing::warn!(
                                 ?tx_bytes,
@@ -401,7 +401,7 @@ where
 
 #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 #[cfg(test)]
-// TODO: write tests for validator set update vote extensions in
+// TODO(namada#3249): write tests for validator set update vote extensions in
 // prepare proposals
 mod test_prepare_proposal {
     use std::collections::BTreeSet;

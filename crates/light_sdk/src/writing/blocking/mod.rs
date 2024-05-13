@@ -4,6 +4,7 @@ use namada_sdk::error::{EncodingError, Error, TxSubmitError};
 use namada_sdk::queries::Client;
 use namada_sdk::tx::Tx;
 use tendermint_config::net::Address as TendermintAddress;
+use tendermint_rpc::client::CompatMode;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use tendermint_rpc::error::Error as RpcError;
 use tendermint_rpc::HttpClient;
@@ -18,11 +19,15 @@ use tokio::runtime::Runtime;
 ///
 /// In the case of errors in any of those stages, an error message is returned
 pub fn broadcast_tx(tendermint_addr: &str, tx: Tx) -> Result<Response, Error> {
-    let client = HttpClient::new(
+    let client = HttpClient::builder(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
     )
+    .compat_mode(CompatMode::V0_37)
+    .timeout(std::time::Duration::from_secs(30))
+    .build()
     .map_err(|e| Error::Other(e.to_string()))?;
+
     let rt = Runtime::new().unwrap();
 
     let wrapper_tx_hash = tx.header_hash().to_string();
@@ -30,9 +35,6 @@ pub fn broadcast_tx(tendermint_addr: &str, tx: Tx) -> Result<Response, Error> {
     // on-chain
     let decrypted_tx_hash = tx.raw_header_hash().to_string();
 
-    // TODO: configure an explicit timeout value? we need to hack away at
-    // `tendermint-rs` for this, which is currently using a hard-coded 30s
-    // timeout.
     let response = rt
         .block_on(client.broadcast_tx_sync(tx.to_bytes()))
         .map_err(|e| Error::from(TxSubmitError::TxBroadcast(e)))?;

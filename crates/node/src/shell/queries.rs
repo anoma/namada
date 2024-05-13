@@ -1,7 +1,7 @@
 //! Shell methods for querying state
 
 use namada::ledger::dry_run_tx;
-use namada::ledger::queries::{RequestCtx, ResponseQuery};
+use namada::ledger::queries::{RequestCtx, ResponseQuery, RPC};
 
 use super::*;
 
@@ -24,7 +24,7 @@ where
         };
 
         // Invoke the root RPC handler - returns borsh-encoded data on success
-        let result = if query.path == "/shell/dry_run_tx" {
+        let result = if query.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(ctx, &query)
         } else {
             namada::ledger::queries::handle_path(ctx, &query)

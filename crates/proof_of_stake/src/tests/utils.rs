@@ -6,7 +6,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
 use std::{env, fmt};
 
-// TODO: allow custom fmt fn
 #[derive(Clone)]
 pub struct DbgPrintDiff<T>
 where

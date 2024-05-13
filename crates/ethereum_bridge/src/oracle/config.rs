@@ -18,8 +18,7 @@ pub struct Config {
     pub active: bool,
 }
 
-// TODO: this production Default implementation is temporary, there should be no
-//  default config - initialization should always be from storage.
+#[cfg(any(test, feature = "testing"))]
 impl std::default::Default for Config {
     fn default() -> Self {
         Self {

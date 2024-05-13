@@ -20,7 +20,7 @@ use crate::cli::context::FromContext;
 
 /// Environment variable where Ethereum relayer private
 /// keys are stored.
-// TODO: remove this in favor of getting eth keys from
+// TODO(namada#2029): remove this in favor of getting eth keys from
 // namadaw, ledger, or something more secure
 #[cfg_attr(not(feature = "namada-eth-bridge"), allow(dead_code))]
 const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";

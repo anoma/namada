@@ -796,7 +796,7 @@ impl Client for BenchShell {
             storage_read_past_height_limit: None,
         };
 
-        if request.path == "/shell/dry_run_tx" {
+        if request.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(ctx, &request)
         } else {
             RPC.handle(ctx, &request)

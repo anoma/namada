@@ -176,8 +176,9 @@ pub fn is_validator<S>(
 where
     S: StorageRead,
 {
-    // TODO: should this check be made different? I suppose it does work but
-    // feels weird...
+    // NB: we attempt to read one of the validator keys in storage.
+    // kinda weird, but it works to check if `address` belongs to
+    // a validator
     let rate = read_validator_max_commission_rate_change(storage, address)?;
     Ok(rate.is_some())
 }

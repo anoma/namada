@@ -101,8 +101,6 @@ impl PDController {
         max_inflation.to_uint().ok_or(Error::MaxInflationOverflow)
     }
 
-    // TODO: could possibly use I256 instead of Dec here (need to account for
-    // negative vals)
     fn compute_inflation_aux(&self, control: Dec) -> Result<Uint, Error> {
         let last_inflation_amount = Dec::try_from(self.last_inflation_amount)?;
         let new_inflation_amount = checked!(last_inflation_amount + control)?;

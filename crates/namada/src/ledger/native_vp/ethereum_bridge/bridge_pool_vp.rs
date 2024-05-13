@@ -598,8 +598,9 @@ where
             self.determine_escrow_checks(&wnam_address, &transfer)?;
         if !escrow_checks.validate(keys_changed) {
             let error = native_vp::Error::new_const(
-                // TODO: specify which storage changes are missing
-                "Missing storage modifications in the Bridge pool",
+                // TODO(namada#3247): specify which storage changes are missing
+                // or which ones are invalid
+                "Invalid storage modifications in the Bridge pool",
             )
             .into();
             tracing::debug!("{error}");

@@ -39,7 +39,7 @@ pub enum WrapperTxErr {
     DenominatedFeeConversion,
 }
 
-/// A fee is an amount of a specified token
+/// Amount of some specified token to pay for fees.
 #[derive(
     Debug,
     Clone,
@@ -53,10 +53,9 @@ pub enum WrapperTxErr {
     Eq,
 )]
 pub struct Fee {
-    /// amount of fee per gas unit
+    /// Amount of fees paid per gas unit.
     pub amount_per_gas_unit: DenominatedAmount,
-    /// address of the token
-    /// TODO: This should support multi-tokens
+    /// Address of the fee token.
     pub token: Address,
 }
 

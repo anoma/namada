@@ -4,7 +4,6 @@
 use namada_tx_prelude::transaction::pos::MetaDataChange;
 use namada_tx_prelude::*;
 
-// TODO: need to benchmark gas!!!
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;

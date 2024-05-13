@@ -241,7 +241,9 @@ fn governance(c: &mut Criterion) {
     group.finish();
 }
 
-// TODO: uncomment when SlashFund internal address is brought back
+// TODO(namada#2984): uncomment when SlashFund internal
+// address is brought back
+//
 // fn slash_fund(c: &mut Criterion) {
 //      let mut group = c.benchmark_group("vp_slash_fund");
 

@@ -113,7 +113,8 @@ where
     // and if these are sorted in ascending order
     let have_dupes_or_non_sorted = {
         !ext.ethereum_events
-            // TODO: move to `array_windows` when it reaches Rust stable
+            // TODO(rust-lang/rust#75027): move to `array_windows` when it
+            // reaches Rust stable
             .windows(2)
             .all(|evs| evs[0] < evs[1])
     };

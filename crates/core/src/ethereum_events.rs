@@ -38,6 +38,7 @@ use crate::token::Amount;
     BorshDeserializer,
     BorshSchema,
 )]
+#[repr(align(32))]
 pub struct Uint(pub [u64; 4]);
 
 impl PartialOrd for Uint {
@@ -256,42 +257,36 @@ impl From<TransfersToNamada> for EthereumEvent {
     BorshDeserializer,
     BorshSchema,
 )]
+// NOTE: Avoid changing the order of the elements in this struct,
+// to maintain compatibility between Namada versions.
 pub enum EthereumEvent {
     /// Event transferring batches of ether or Ethereum based ERC20 tokens
     /// from Ethereum to wrapped assets on Namada
     TransfersToNamada {
         /// Monotonically increasing nonce
-        #[allow(dead_code)]
         nonce: Uint,
         /// The batch of transfers
-        #[allow(dead_code)]
         transfers: Vec<TransferToNamada>,
     },
     /// A confirmation event that a batch of transfers have been made
     /// from Namada to Ethereum
     TransfersToEthereum {
         /// Monotonically increasing nonce
-        #[allow(dead_code)]
         nonce: Uint,
         /// The batch of transfers
-        #[allow(dead_code)]
         transfers: Vec<TransferToEthereum>,
         /// The Namada address that receives the gas fees
         /// for relaying a batch of transfers
-        #[allow(dead_code)]
         relayer: Address,
     },
     /// Event indication that the validator set has been updated
     /// in the governance contract
     ValidatorSetUpdate {
         /// Monotonically increasing nonce
-        #[allow(dead_code)]
         nonce: Uint,
         /// Hash of the validators in the bridge contract
-        #[allow(dead_code)]
         bridge_validator_hash: KeccakHash,
         /// Hash of the validators in the governance contract
-        #[allow(dead_code)]
         governance_validator_hash: KeccakHash,
     },
 }

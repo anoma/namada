@@ -180,8 +180,6 @@ mod testing {
                 tx_wasm_cache: (),
                 storage_read_past_height_limit: None,
             };
-            // TODO: this is a hack to propagate errors to the caller, we should
-            // really permit error types other than [`std::io::Error`]
             self.rpc.handle(ctx, &request).map_err(|err| {
                 std::io::Error::new(std::io::ErrorKind::Other, err.to_string())
             })
@@ -353,8 +351,6 @@ pub trait Client {
     where
         H: Into<Height> + Send,
     {
-        // TODO(tarcieri): return errors for invalid params before making
-        // request?
         self.perform(blockchain::Request::new(min.into(), max.into()))
             .await
     }
@@ -437,6 +433,8 @@ impl<C: tendermint_rpc::client::Client + std::marker::Sync> Client for C {
         height: Option<BlockHeight>,
         prove: bool,
     ) -> Result<EncodedResponseQuery, Self::Error> {
+        use crate::tendermint::abci::Code;
+
         let data = data.unwrap_or_default();
         let height = height
             .map(|height| {
@@ -444,16 +442,8 @@ impl<C: tendermint_rpc::client::Client + std::marker::Sync> Client for C {
                     .map_err(|_err| Error::InvalidHeight(height))
             })
             .transpose()?;
-        let response = self
-            .abci_query(
-                // TODO open the private Path constructor in tendermint-rpc
-                Some(std::str::FromStr::from_str(&path).unwrap()),
-                data,
-                height,
-                prove,
-            )
-            .await?;
-        use crate::tendermint::abci::Code;
+
+        let response = self.abci_query(Some(path), data, height, prove).await?;
         match response.code {
             Code::Ok => Ok(EncodedResponseQuery {
                 data: response.value,

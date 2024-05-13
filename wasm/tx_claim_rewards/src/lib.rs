@@ -3,7 +3,7 @@
 
 use namada_tx_prelude::*;
 
-#[transaction] // TODO: needs to be benchmarked
+#[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])

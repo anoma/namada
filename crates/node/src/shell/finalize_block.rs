@@ -4573,7 +4573,7 @@ mod test_finalize_block {
         );
 
         // Check the balance of the Slash Pool
-        // TODO: finish once implemented
+        // TODO(namada#2984): finish once implemented
         // let slash_pool_balance: token::Amount = shell
         //     .state
         //     .read(&slash_balance_key)
@@ -4596,7 +4596,7 @@ mod test_finalize_block {
         assert_eq!(current_epoch.0, 10_u64);
 
         // Check the balance of the Slash Pool
-        // TODO: finish once implemented
+        // TODO(namada#2984): finish once implemented
         // let slash_pool_balance: token::Amount = shell
         //     .state
         //     .read(&slash_balance_key)
@@ -4654,7 +4654,7 @@ mod test_finalize_block {
         // dbg!(pre_stake_10 - post_stake_10);
 
         // dbg!(&exp_slashed_during_processing_9);
-        // TODO: finish once implemented
+        // TODO(namada#2984): finish once implemented
         // assert!(
         //     ((pre_stake_11 - post_stake_11).change() -
         // exp_slashed_4.change())         .abs()
@@ -4825,7 +4825,7 @@ mod test_finalize_block {
                 <= Uint::one()
         );
 
-        // TODO: finish once implemented
+        // TODO(namada#2984): finish once implemented
         // Check the balance of the Slash Pool
         // let slash_pool_balance: token::Amount = shell
         //     .state

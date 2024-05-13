@@ -28,7 +28,7 @@ pub mod wasm_loader;
 pub use std;
 
 pub mod facade {
-    // TODO: re-import v0_37 only
+    // TODO(namada#3248): only re-export v037 `tendermint-rs`
     pub use namada::{tendermint, tendermint_proto, tendermint_rpc};
     pub use tendermint_config;
 }

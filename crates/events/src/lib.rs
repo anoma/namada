@@ -299,13 +299,6 @@ pub struct Event {
     attributes: BTreeMap<String, String>,
 }
 
-impl Display for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: print attributes, too
-        write!(f, "{} in {}", self.event_type, self.level)
-    }
-}
-
 /// Errors to do with emitting events.
 #[derive(Error, Debug, Clone)]
 pub enum EventError {
