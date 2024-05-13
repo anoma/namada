@@ -10,6 +10,7 @@ use borsh_ext::BorshSerializeExt;
 use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
+use namada_core::arith::{self, checked};
 use namada_core::internal::KeyVal;
 use namada_core::storage::TX_INDEX_LENGTH;
 use namada_events::{Event, EventTypeBuilder};
@@ -19,8 +20,9 @@ use namada_gas::{
 };
 use namada_state::write_log::{self, WriteLog};
 use namada_state::{
-    DBIter, InMemory, ResultExt, State, StateRead, StorageError, StorageHasher,
-    StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState, DB,
+    DBIter, InMemory, OptionExt, ResultExt, State, StateRead, StorageError,
+    StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
+    DB,
 };
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
@@ -74,7 +76,7 @@ pub enum TxRuntimeError {
     #[error("Address error: {0}")]
     AddressError(address::DecodeError),
     #[error("Numeric conversion error: {0}")]
-    NumConversionError(TryFromIntError),
+    NumConversionError(#[from] TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Missing tx data")]
@@ -85,6 +87,8 @@ pub enum TxRuntimeError {
     NoValueInResultBuffer,
     #[error("VP code is not allowed in allowlist parameter.")]
     DisallowedVp,
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// Result of a tx host env fn call
@@ -217,7 +221,7 @@ where
     }
 
     /// Access state from within a tx
-    pub fn state(&self) -> TxHostEnvState<D, H> {
+    pub fn state(&self) -> TxHostEnvState<'_, D, H> {
         self.ctx.state()
     }
 }
@@ -244,7 +248,7 @@ where
     CA: WasmCacheAccess,
 {
     /// Access state from within a tx
-    pub fn state(&self) -> TxHostEnvState<D, H> {
+    pub fn state(&self) -> TxHostEnvState<'_, D, H> {
         let write_log = unsafe { self.write_log.get() };
         let db = unsafe { self.db.get() };
         let in_mem = unsafe { self.in_mem.get() };
@@ -436,7 +440,7 @@ where
     }
 
     /// Access state from within a VP
-    pub fn state(&self) -> VpHostEnvState<D, H> {
+    pub fn state(&self) -> VpHostEnvState<'_, D, H> {
         self.ctx.state()
     }
 }
@@ -525,7 +529,7 @@ where
     }
 
     /// Access state from within a VP
-    pub fn state(&self) -> VpHostEnvState<D, H> {
+    pub fn state(&self) -> VpHostEnvState<'_, D, H> {
         let write_log = unsafe { self.write_log.get() };
         let db = unsafe { self.db.get() };
         let in_mem = unsafe { self.in_mem.get() };
@@ -577,7 +581,7 @@ where
 
 /// Add a gas cost incured in a transaction
 pub fn tx_charge_gas<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     used_gas: u64,
 ) -> TxResult<()>
 where
@@ -601,7 +605,7 @@ where
 
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     used_gas: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -618,7 +622,7 @@ where
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
 pub fn tx_has_key<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -630,7 +634,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -650,7 +654,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_read<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -662,7 +666,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -693,7 +697,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_read_temp<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -705,7 +709,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -739,7 +743,7 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn tx_result_buffer<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -763,7 +767,7 @@ where
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator, ordered by storage keys.
 pub fn tx_iter_prefix<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> TxResult<u64>
@@ -775,7 +779,7 @@ where
 {
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(prefix_ptr, prefix_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -790,7 +794,10 @@ where
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
-    Ok(iterators.insert(iter).id())
+    Ok(iterators
+        .insert(iter)
+        .ok_or_err_msg("Iterator ID overflow")?
+        .id())
 }
 
 /// Storage prefix iterator next function exposed to the wasm VM Tx environment.
@@ -800,7 +807,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_iter_next<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     iter_id: u64,
 ) -> TxResult<i64>
 where
@@ -822,7 +829,7 @@ where
                     .map_err(TxRuntimeError::StorageDataError)?,
             )
             .into_storage_result()?;
-        tx_charge_gas::<MEM, D, H, CA>(env, iter_gas + log_gas)?;
+        tx_charge_gas::<MEM, D, H, CA>(env, checked!(iter_gas + log_gas)?)?;
         match log_val {
             Some(write_log::StorageModification::Write { ref value }) => {
                 let key_val = borsh::to_vec(&KeyVal {
@@ -865,7 +872,7 @@ where
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
 pub fn tx_write<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
@@ -879,12 +886,12 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let (value, gas) = env
         .memory
-        .read_bytes(val_ptr, val_len as _)
+        .read_bytes(val_ptr, val_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -907,7 +914,7 @@ where
 /// given key/value will be written only to the write log. It will be never
 /// written to the storage.
 pub fn tx_write_temp<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
@@ -921,12 +928,12 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let (value, gas) = env
         .memory
-        .read_bytes(val_ptr, val_len as _)
+        .read_bytes(val_ptr, val_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -945,7 +952,7 @@ where
 }
 
 fn check_address_existence<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key: &Key,
 ) -> TxResult<()>
 where
@@ -992,7 +999,7 @@ where
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
 pub fn tx_delete<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<()>
@@ -1004,7 +1011,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -1022,7 +1029,7 @@ where
 /// Expose the functionality to emit events to the wasm VM's Tx environment.
 /// An emitted event will land in the write log.
 pub fn tx_emit_event<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     event_ptr: u64,
     event_len: u64,
 ) -> TxResult<()>
@@ -1034,7 +1041,7 @@ where
 {
     let (event, gas) = env
         .memory
-        .read_bytes(event_ptr, event_len as _)
+        .read_bytes(event_ptr, event_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let event: Event = BorshDeserialize::try_from_slice(&event)
@@ -1049,7 +1056,7 @@ where
 
 /// Expose the functionality to query events from the wasm VM's Tx environment.
 pub fn tx_get_events<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
 ) -> TxResult<i64>
@@ -1061,7 +1068,7 @@ where
 {
     let (event_type, gas) = env
         .memory
-        .read_string(event_type_ptr, event_type_len as _)
+        .read_string(event_type_ptr, event_type_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let state = env.state();
@@ -1090,7 +1097,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1103,7 +1110,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1140,7 +1147,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1153,7 +1160,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1185,7 +1192,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_temp<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1198,7 +1205,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1233,7 +1240,7 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn vp_result_buffer<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1258,7 +1265,7 @@ where
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
 pub fn vp_has_key_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1271,7 +1278,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1289,7 +1296,7 @@ where
 /// to the wasm VM VP environment. It will try to check the write log first and
 /// if no entry found then the storage.
 pub fn vp_has_key_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1302,7 +1309,7 @@ where
 {
     let (key, gas) = env
         .memory
-        .read_string(key_ptr, key_len as _)
+        .read_string(key_ptr, key_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1321,7 +1328,7 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
@@ -1334,7 +1341,7 @@ where
 {
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(prefix_ptr, prefix_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1349,7 +1356,10 @@ where
     let iter = vp_host_fns::iter_prefix_pre(gas_meter, write_log, db, &prefix)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
-    Ok(iterators.insert(iter).id())
+    Ok(iterators
+        .insert(iter)
+        .ok_or_err_msg("Iterator ID overflow")?
+        .id())
 }
 
 /// Storage prefix iterator function for posterior state (after tx execution)
@@ -1357,7 +1367,7 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
@@ -1370,7 +1380,7 @@ where
 {
     let (prefix, gas) = env
         .memory
-        .read_string(prefix_ptr, prefix_len as _)
+        .read_string(prefix_ptr, prefix_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1386,7 +1396,10 @@ where
         vp_host_fns::iter_prefix_post(gas_meter, write_log, db, &prefix)?;
 
     let iterators = unsafe { env.ctx.iterators.get() };
-    Ok(iterators.insert(iter).id())
+    Ok(iterators
+        .insert(iter)
+        .ok_or_err_msg("Iterator ID overflow")?
+        .id())
 }
 
 /// Storage prefix iterator for prior or posterior state function
@@ -1395,7 +1408,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_iter_next<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     iter_id: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
@@ -1428,7 +1441,7 @@ where
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
 pub fn tx_insert_verifier<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
 ) -> TxResult<()>
@@ -1440,7 +1453,7 @@ where
 {
     let (addr, gas) = env
         .memory
-        .read_string(addr_ptr, addr_len as _)
+        .read_string(addr_ptr, addr_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -1451,7 +1464,10 @@ where
     let verifiers = unsafe { env.ctx.verifiers.get() };
     // This is not a storage write, use the same multiplier used for a storage
     // read
-    tx_charge_gas::<MEM, D, H, CA>(env, addr_len * MEMORY_ACCESS_GAS_PER_BYTE)?;
+    tx_charge_gas::<MEM, D, H, CA>(
+        env,
+        checked!(addr_len * MEMORY_ACCESS_GAS_PER_BYTE)?,
+    )?;
     verifiers.insert(addr);
 
     Ok(())
@@ -1459,7 +1475,7 @@ where
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
 pub fn tx_update_validity_predicate<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
     code_hash_ptr: u64,
@@ -1475,7 +1491,7 @@ where
 {
     let (addr, gas) = env
         .memory
-        .read_string(addr_ptr, addr_len as _)
+        .read_string(addr_ptr, addr_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -1484,7 +1500,7 @@ where
 
     let (code_tag, gas) = env
         .memory
-        .read_bytes(code_tag_ptr, code_tag_len as _)
+        .read_bytes(code_tag_ptr, code_tag_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let code_tag = Option::<String>::try_from_slice(&code_tag)
@@ -1493,7 +1509,7 @@ where
     let key = Key::validity_predicate(&addr);
     let (code_hash, gas) = env
         .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -1510,7 +1526,7 @@ where
 /// Initialize a new account established address.
 #[allow(clippy::too_many_arguments)]
 pub fn tx_init_account<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     code_hash_ptr: u64,
     code_hash_len: u64,
     code_tag_ptr: u64,
@@ -1527,13 +1543,13 @@ where
 {
     let (code_hash, gas) = env
         .memory
-        .read_bytes(code_hash_ptr, code_hash_len as _)
+        .read_bytes(code_hash_ptr, code_hash_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
     let (code_tag, gas) = env
         .memory
-        .read_bytes(code_tag_ptr, code_tag_len as _)
+        .read_bytes(code_tag_ptr, code_tag_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let code_tag = Option::<String>::try_from_slice(&code_tag)
@@ -1543,7 +1559,7 @@ where
 
     let (entropy_source, gas) = env
         .memory
-        .read_bytes(entropy_source_ptr, entropy_source_len as _)
+        .read_bytes(entropy_source_ptr, entropy_source_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
@@ -1566,7 +1582,7 @@ where
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
 pub fn tx_get_chain_id<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1589,7 +1605,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_height<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
@@ -1607,7 +1623,7 @@ where
 /// environment. The index is that of the transaction being applied
 /// in the current block.
 pub fn tx_get_tx_index<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
 ) -> TxResult<u32>
 where
     MEM: VmMemory,
@@ -1617,7 +1633,9 @@ where
 {
     tx_charge_gas::<MEM, D, H, CA>(
         env,
-        TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (TX_INDEX_LENGTH as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     let tx_index = unsafe { env.ctx.tx_index.get() };
     Ok(tx_index.0)
@@ -1627,7 +1645,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_tx_index<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u32>
 where
     MEM: VmMemory,
@@ -1646,7 +1664,7 @@ where
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_epoch<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
@@ -1662,7 +1680,7 @@ where
 
 /// Get predecessor epochs function exposed to the wasm VM Tx environment.
 pub fn tx_get_pred_epochs<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
@@ -1677,9 +1695,10 @@ where
         .len()
         .try_into()
         .map_err(TxRuntimeError::NumConversionError)?;
+    let len_u64 = u64::try_from(len)?;
     tx_charge_gas::<MEM, D, H, CA>(
         env,
-        MEMORY_ACCESS_GAS_PER_BYTE * len as u64,
+        checked!(MEMORY_ACCESS_GAS_PER_BYTE * len_u64)?,
     )?;
     let result_buffer = unsafe { env.ctx.result_buffer.get() };
     result_buffer.replace(bytes);
@@ -1688,7 +1707,7 @@ where
 
 /// Get the native token's address
 pub fn tx_get_native_token<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1700,7 +1719,9 @@ where
     // Gas for getting the native token address from storage
     tx_charge_gas::<MEM, D, H, CA>(
         env,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     let state = env.state();
     let native_token = state.in_mem().native_token.clone();
@@ -1714,7 +1735,7 @@ where
 
 /// Getting the block header function exposed to the wasm VM Tx environment.
 pub fn tx_get_block_header<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     height: u64,
 ) -> TxResult<i64>
 where
@@ -1746,7 +1767,7 @@ where
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1770,7 +1791,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_height<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
@@ -1787,7 +1808,7 @@ where
 
 /// Getting the block header function exposed to the wasm VM VP environment.
 pub fn vp_get_block_header<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     height: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
@@ -1820,7 +1841,7 @@ where
 
 /// Getting the transaction hash function exposed to the wasm VM VP environment.
 pub fn vp_get_tx_code_hash<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1851,7 +1872,7 @@ where
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_epoch<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
@@ -1868,7 +1889,7 @@ where
 
 /// Get predecessor epochs function exposed to the wasm VM VP environment.
 pub fn vp_get_pred_epochs<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
@@ -1892,7 +1913,7 @@ where
 
 /// Expose the functionality to query events from the wasm VM's VP environment.
 pub fn vp_get_events<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1905,7 +1926,7 @@ where
 {
     let (event_type, gas) = env
         .memory
-        .read_string(event_type_ptr, event_type_len as _)
+        .read_string(event_type_ptr, event_type_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
@@ -1926,7 +1947,7 @@ where
 /// performance
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     hash_list_ptr: u64,
     hash_list_len: u64,
     public_keys_map_ptr: u64,
@@ -1946,7 +1967,7 @@ where
 {
     let (hash_list, gas) = env
         .memory
-        .read_bytes(hash_list_ptr, hash_list_len as _)
+        .read_bytes(hash_list_ptr, hash_list_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
 
     let gas_meter = env.ctx.gas_meter();
@@ -1956,7 +1977,7 @@ where
 
     let (public_keys_map, gas) = env
         .memory
-        .read_bytes(public_keys_map_ptr, public_keys_map_len as _)
+        .read_bytes(public_keys_map_ptr, public_keys_map_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     let public_keys_map =
@@ -1967,7 +1988,7 @@ where
 
     let (signer, gas) = env
         .memory
-        .read_bytes(signer_ptr, signer_len as _)
+        .read_bytes(signer_ptr, signer_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     let signer = Address::try_from_slice(&signer)
@@ -1975,7 +1996,7 @@ where
 
     let (max_signatures, gas) = env
         .memory
-        .read_bytes(max_signatures_ptr, max_signatures_len as _)
+        .read_bytes(max_signatures_ptr, max_signatures_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
@@ -2008,7 +2029,7 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn tx_log_string<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     str_ptr: u64,
     str_len: u64,
 ) -> TxResult<()>
@@ -2020,7 +2041,7 @@ where
 {
     let (str, _gas) = env
         .memory
-        .read_string(str_ptr, str_len as _)
+        .read_string(str_ptr, str_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Transaction log: {}", str);
     Ok(())
@@ -2030,7 +2051,7 @@ where
 // Temporarily the IBC tx execution is implemented via a host function to
 // workaround wasm issue.
 pub fn tx_ibc_execute<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
@@ -2072,7 +2093,9 @@ where
     for addr in verifiers.into_iter() {
         tx_charge_gas::<MEM, D, H, CA>(
             env,
-            ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+            (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
+                .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+                .expect("Consts mul that cannot overflow"),
         )?;
         verifiers_in_env.insert(addr);
     }
@@ -2089,7 +2112,7 @@ where
 
 /// Validate a VP WASM code hash in a tx environment.
 fn tx_validate_vp_code_hash<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     code_hash: &[u8],
     code_tag: &Option<String>,
 ) -> TxResult<()>
@@ -2147,8 +2170,9 @@ where
 }
 
 /// Set the sentinel for an invalid tx section commitment
-pub fn tx_set_commitment_sentinel<MEM, D, H, CA>(env: &TxVmEnv<MEM, D, H, CA>)
-where
+pub fn tx_set_commitment_sentinel<MEM, D, H, CA>(
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
+) where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
     MEM: VmMemory,
@@ -2161,7 +2185,7 @@ where
 /// Verify a transaction signature
 #[allow(clippy::too_many_arguments)]
 pub fn tx_verify_tx_section_signature<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     hash_list_ptr: u64,
     hash_list_len: u64,
     public_keys_map_ptr: u64,
@@ -2178,7 +2202,7 @@ where
 {
     let (hash_list, gas) = env
         .memory
-        .read_bytes(hash_list_ptr, hash_list_len as _)
+        .read_bytes(hash_list_ptr, hash_list_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
 
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
@@ -2187,7 +2211,7 @@ where
 
     let (public_keys_map, gas) = env
         .memory
-        .read_bytes(public_keys_map_ptr, public_keys_map_len as _)
+        .read_bytes(public_keys_map_ptr, public_keys_map_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let public_keys_map =
@@ -2200,7 +2224,7 @@ where
 
     let (max_signatures, gas) = env
         .memory
-        .read_bytes(max_signatures_ptr, max_signatures_len as _)
+        .read_bytes(max_signatures_ptr, max_signatures_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
@@ -2233,7 +2257,7 @@ where
 
 /// Appends the new note commitments to the tree in storage
 pub fn tx_update_masp_note_commitment_tree<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     transaction_ptr: u64,
     transaction_len: u64,
 ) -> TxResult<i64>
@@ -2247,7 +2271,7 @@ where
     let _gas_meter = unsafe { env.ctx.gas_meter.get() };
     let (serialized_transaction, gas) = env
         .memory
-        .read_bytes(transaction_ptr, transaction_len as _)
+        .read_bytes(transaction_ptr, transaction_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
 
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
@@ -2270,7 +2294,7 @@ where
 
 /// Yield a byte array value from the guest.
 pub fn tx_yield_value<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &TxVmEnv<'_, MEM, D, H, CA>,
     buf_ptr: u64,
     buf_len: u64,
 ) -> TxResult<()>
@@ -2282,7 +2306,7 @@ where
 {
     let (value_to_yield, gas) = env
         .memory
-        .read_bytes(buf_ptr, buf_len as _)
+        .read_bytes(buf_ptr, buf_len.try_into()?)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let host_buf = unsafe { env.ctx.yielded_value.get() };
@@ -2307,7 +2331,7 @@ where
 {
     let (vp_code_hash, gas) = env
         .memory
-        .read_bytes(vp_code_hash_ptr, vp_code_hash_len as _)
+        .read_bytes(vp_code_hash_ptr, vp_code_hash_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
 
     // The borrowed `gas_meter` must be dropped before eval,
@@ -2318,7 +2342,7 @@ where
 
         let (input_data, gas) = env
             .memory
-            .read_bytes(input_data_ptr, input_data_len as _)
+            .read_bytes(input_data_ptr, input_data_len.try_into()?)
             .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
         vp_host_fns::add_gas(gas_meter, gas)?;
         let tx: Tx = BorshDeserialize::try_from_slice(&input_data)
@@ -2338,7 +2362,7 @@ where
 
 /// Get the native token's address
 pub fn vp_get_native_token<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -2363,7 +2387,7 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn vp_log_string<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     str_ptr: u64,
     str_len: u64,
 ) -> vp_host_fns::EnvResult<()>
@@ -2376,7 +2400,7 @@ where
 {
     let (str, _gas) = env
         .memory
-        .read_string(str_ptr, str_len as _)
+        .read_string(str_ptr, str_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Validity predicate log: {}", str);
     Ok(())
@@ -2384,7 +2408,7 @@ where
 
 /// Yield a byte array value from the guest.
 pub fn vp_yield_value<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &VpVmEnv<'_, MEM, D, H, EVAL, CA>,
     buf_ptr: u64,
     buf_len: u64,
 ) -> vp_host_fns::EnvResult<()>
@@ -2397,7 +2421,7 @@ where
 {
     let (value_to_yield, gas) = env
         .memory
-        .read_bytes(buf_ptr, buf_len as _)
+        .read_bytes(buf_ptr, buf_len.try_into()?)
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(env.ctx.gas_meter(), gas)?;
     let host_buf = unsafe { env.ctx.yielded_value.get() };

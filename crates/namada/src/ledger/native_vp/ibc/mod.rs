@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use context::{PseudoExecutionContext, VpValidationContext};
 use namada_core::address::Address;
+use namada_core::arith::{self, checked};
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
@@ -52,6 +53,8 @@ pub enum Error {
     IbcEvent(String),
     #[error("IBC rate limit: {0}")]
     RateLimit(String),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// IBC functions result
@@ -196,7 +199,7 @@ where
         let epoch_duration = read_epoch_duration_parameter(&self.ctx.post())
             .map_err(Error::NativeVpError)?;
         let unbonding_period_secs =
-            pipeline_len * epoch_duration.min_duration.0;
+            checked!(pipeline_len * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(&chain_id)
                 .map_err(ActionError::ChainId)?,
@@ -388,6 +391,7 @@ pub fn get_dummy_genesis_validator()
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

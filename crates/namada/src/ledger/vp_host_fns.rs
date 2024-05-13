@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
+use namada_core::arith::{self, checked};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
@@ -34,7 +35,7 @@ pub enum RuntimeError {
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]
-    NumConversionError(TryFromIntError),
+    NumConversionError(#[from] TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Invalid transaction code hash")]
@@ -45,6 +46,8 @@ pub enum RuntimeError {
     InvalidSectionSignature(String),
     #[error("{0}")]
     Erased(String), // type erased error
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// VP environment function result
@@ -260,7 +263,12 @@ pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
     tx: &Tx,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
+    add_gas(
+        gas_meter,
+        (HASH_LENGTH as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
+    )?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -290,7 +298,9 @@ pub fn get_tx_index(
 ) -> EnvResult<TxIndex> {
     add_gas(
         gas_meter,
-        TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (TX_INDEX_LENGTH as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     Ok(*tx_index)
 }
@@ -305,7 +315,9 @@ where
 {
     add_gas(
         gas_meter,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     Ok(state.in_mem().native_token.clone())
 }
@@ -318,12 +330,8 @@ pub fn get_pred_epochs<S>(
 where
     S: StateRead + Debug,
 {
-    add_gas(
-        gas_meter,
-        state.in_mem().block.pred_epochs.first_block_heights.len() as u64
-            * 8
-            * MEMORY_ACCESS_GAS_PER_BYTE,
-    )?;
+    let len = state.in_mem().block.pred_epochs.first_block_heights.len() as u64;
+    add_gas(gas_meter, checked!(len * 8 * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
     Ok(state.in_mem().block.pred_epochs.clone())
 }
 
@@ -386,7 +394,7 @@ where
 /// Get the next item in a storage prefix iterator (pre or post).
 pub fn iter_next<DB>(
     gas_meter: &RefCell<VpGasMeter>,
-    iter: &mut namada_state::PrefixIter<DB>,
+    iter: &mut namada_state::PrefixIter<'_, DB>,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,

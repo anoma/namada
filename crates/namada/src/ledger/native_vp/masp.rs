@@ -405,9 +405,8 @@ where
             return Err(error);
         }
 
-        let mut transparent_tx_pool = I128Sum::zero();
         // The Sapling value balance adds to the transparent tx pool
-        transparent_tx_pool += shielded_tx.sapling_value_balance();
+        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
 
         // Check the validity of the keys and get the transfer data
         let transfer =
@@ -459,7 +458,7 @@ where
                     .checked_add(
                         &I128Sum::from_nonnegative(
                             vin.asset_type,
-                            vin.value as i128,
+                            i128::from(vin.value),
                         )
                         .ok()
                         .ok_or_err_msg(
@@ -643,7 +642,7 @@ where
                     .checked_sub(
                         &I128Sum::from_nonnegative(
                             out.asset_type,
-                            out.value as i128,
+                            i128::from(out.value),
                         )
                         .ok()
                         .ok_or_err_msg(

@@ -7,11 +7,12 @@ use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_sdk::arith::{self, checked};
 use namada_tx::Tx;
 use thiserror::Error;
 use wasmer::{
     vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
-    MemoryType, Pages, TableType, Target, Tunables,
+    MemoryType, Pages, TableType, Target, Tunables, WASM_PAGE_SIZE,
 };
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
@@ -35,6 +36,10 @@ pub enum Error {
     UninitializedMemory,
     #[error("Invalid utf8 string read from memory")]
     InvalidUtf8String(Utf8Error),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
+    #[error("{0}")]
+    TryFromInt(#[from] std::num::TryFromIntError),
 }
 
 /// Result of a function that may fail
@@ -128,22 +133,22 @@ pub fn write_vp_inputs(
         data,
         keys_changed,
         verifiers,
-    }: VpInput,
+    }: VpInput<'_>,
 ) -> Result<VpCallInput> {
-    let addr_ptr = 0;
+    let addr_ptr = 0_u64;
     let addr_bytes = addr.serialize_to_vec();
     let addr_len = addr_bytes.len() as _;
 
     let data_bytes = data.serialize_to_vec();
-    let data_ptr = addr_ptr + addr_len;
+    let data_ptr = checked!(addr_ptr + addr_len)?;
     let data_len = data_bytes.len() as _;
 
     let keys_changed_bytes = keys_changed.serialize_to_vec();
-    let keys_changed_ptr = data_ptr + data_len;
+    let keys_changed_ptr = checked!(data_ptr + data_len)?;
     let keys_changed_len = keys_changed_bytes.len() as _;
 
     let verifiers_bytes = verifiers.serialize_to_vec();
-    let verifiers_ptr = keys_changed_ptr + keys_changed_len;
+    let verifiers_ptr = checked!(keys_changed_ptr + keys_changed_len)?;
     let verifiers_len = verifiers_bytes.len() as _;
 
     let bytes = [
@@ -179,7 +184,7 @@ fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
     let desired_offset = base_addr
         .checked_add(offset as u64)
         .and_then(|off| {
-            if off < u32::MAX as u64 {
+            if off < u64::from(u32::MAX) {
                 // wasm pointers are 32 bits wide, therefore we can't
                 // read from/write to offsets past `u32::MAX`
                 Some(off)
@@ -189,18 +194,20 @@ fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
         })
         .ok_or(Error::OverflowingOffset(base_addr, offset))?;
     if memory.data_size() < desired_offset {
-        let cur_pages = memory.size().0;
-        let capacity = cur_pages as usize * wasmer::WASM_PAGE_SIZE;
+        let cur_pages = memory.size().0 as usize;
+        let capacity = checked!(cur_pages * WASM_PAGE_SIZE)?;
         // usizes should be at least 32 bits wide on most architectures,
         // so this cast shouldn't cause panics, given the invariant that
         // `desired_offset` is at most a 32 bit wide value. moreover,
         // `capacity` should not be larger than `memory.data_size()`,
         // so this subtraction should never fail
-        let missing = desired_offset as usize - capacity;
+        let desired_offset = usize::try_from(desired_offset)?;
+        let missing = checked!(desired_offset - capacity)?;
         // extrapolate the number of pages missing to allow addressing
         // the desired memory offset
-        let req_pages = ((missing + wasmer::WASM_PAGE_SIZE - 1)
-            / wasmer::WASM_PAGE_SIZE) as u32;
+        let req_pages =
+            checked!((missing + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE)?;
+        let req_pages: u32 = u32::try_from(req_pages)?;
         tracing::debug!(req_pages, "Attempting to grow wasm memory");
         memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
         tracing::debug!(
@@ -218,8 +225,8 @@ fn read_memory_bytes(
     len: usize,
 ) -> Result<Vec<u8>> {
     check_bounds(memory, offset, len)?;
-    let offset = offset as usize;
-    let vec: Vec<_> = memory.view()[offset..(offset + len)]
+    let offset = usize::try_from(offset)?;
+    let vec: Vec<_> = memory.view()[offset..checked!(offset + len)?]
         .iter()
         .map(|cell| cell.get())
         .collect();
@@ -235,8 +242,8 @@ fn write_memory_bytes(
     let slice = bytes.as_ref();
     let len = slice.len();
     check_bounds(memory, offset, len as _)?;
-    let offset = offset as usize;
-    memory.view()[offset..(offset + len)]
+    let offset = usize::try_from(offset)?;
+    memory.view()[offset..checked!(offset + len)?]
         .iter()
         .zip(slice.iter())
         .for_each(|(cell, v)| cell.set(*v));
@@ -280,7 +287,8 @@ impl VmMemory for WasmMemory {
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         let bytes = read_memory_bytes(memory, offset, len)?;
-        let gas = bytes.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE;
+        let len = bytes.len() as u64;
+        let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
         Ok((bytes, gas))
     }
 
@@ -289,7 +297,8 @@ impl VmMemory for WasmMemory {
         // No need for a separate gas multiplier for writes since we are only
         // writing to memory and we already charge gas for every memory page
         // allocated
-        let gas = bytes.as_ref().len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE;
+        let len = bytes.as_ref().len() as u64;
+        let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
         let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
         write_memory_bytes(memory, offset, bytes)?;
         Ok(gas)
