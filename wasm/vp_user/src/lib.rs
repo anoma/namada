@@ -100,6 +100,7 @@ fn validate_tx(
                 &tx,
                 &addr,
             )?,
+            Action::Masp(_) => (),
         }
     }
 
