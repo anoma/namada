@@ -8,6 +8,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hash::Hash;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
 
@@ -25,6 +26,7 @@ pub enum Action {
     Pos(PosAction),
     Gov(GovAction),
     Pgf(PgfAction),
+    Masp(MaspAction),
 }
 
 /// PoS tx actions.
@@ -59,6 +61,12 @@ pub enum GovAction {
 pub enum PgfAction {
     ResignSteward(Address),
     UpdateStewardCommission(Address),
+}
+
+/// MASP tx action.
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+pub struct MaspAction {
+    pub masp_section_ref: Hash,
 }
 
 /// Read actions from temporary storage
