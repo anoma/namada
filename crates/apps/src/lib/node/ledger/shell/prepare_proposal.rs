@@ -356,7 +356,7 @@ where
 fn compute_min_gas_price<D, H>(
     fee_token: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_state: &TempWlState<D, H>,
+    temp_state: &TempWlState<'_, D, H>,
 ) -> Result<Amount, Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,

@@ -151,10 +151,13 @@ pub fn migrating_state() -> Option<BlockHeight> {
 fn emit_warning_on_non_64bit_cpu() {
     if std::mem::size_of::<usize>() != 8 {
         tracing::warn!("");
-        tracing::warn!(
-            "Your machine has a {}-bit CPU...",
-            8 * std::mem::size_of::<usize>()
-        );
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            tracing::warn!(
+                "Your machine has a {}-bit CPU...",
+                8 * std::mem::size_of::<usize>()
+            );
+        }
         tracing::warn!("");
         tracing::warn!("A majority of nodes will run on 64-bit hardware!");
         tracing::warn!("");
