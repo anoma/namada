@@ -63,8 +63,6 @@ pub enum Error {
     TxRunnerError(vm::wasm::run::Error),
     #[error("{0:?}")]
     ProtocolTxError(#[from] eyre::Error),
-    #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
-    TxTypeError,
     #[error("The atomic batch failed at inner transaction {0}")]
     FailingAtomicBatch(Hash),
     #[error("Gas error: {0}")]
