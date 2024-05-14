@@ -332,6 +332,8 @@ where
                 tx_gas_meter.get_tx_consumed_gas().into(),
             );
 
+            // FIXME: emit masp events with the hash of the masp sections (need
+            // to extend TxResult to get those hashes here)
             match tx_result {
                 Ok(result) => {
                     if result.is_accepted() {

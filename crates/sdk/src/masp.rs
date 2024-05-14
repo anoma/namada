@@ -975,6 +975,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         };
 
         // Expect transaction
+        // FIXME: update this to rely on the masp section hash emitted in the
+        // event instead of deserializing to Transfer
         let tx_data = tx
             .data()
             .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
