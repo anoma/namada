@@ -27,7 +27,9 @@ use namada::core::masp::{
 use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::core::time::DateTimeUtc;
 use namada::core::token::{Amount, DenominatedAmount, Transfer};
-use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
+use namada::events::extend::{
+    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex, MaspTxRef, ValidMaspTxs,
+};
 use namada::events::Event;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::InitProposalData;
@@ -922,12 +924,26 @@ impl Client for BenchShell {
                             .with(MaspTxBlockIndex(TxIndex::must_from_usize(
                                 idx,
                             )))
-                            .with(MaspTxBatchRefs(
-                                vec![
-                                    tx.first_commitments().unwrap().get_hash(),
-                                ]
-                                .into(),
-                            ))
+                            .with(MaspTxBatchRefs(ValidMaspTxs(vec![
+                                MaspTxRef {
+                                    cmt: tx
+                                        .first_commitments()
+                                        .unwrap()
+                                        .get_hash(),
+                                    masp_section_ref: tx
+                                        .sections
+                                        .iter()
+                                        .find_map(|section| {
+                                            if let Section::MaspTx(_) = section
+                                            {
+                                                Some(section.get_hash())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .unwrap(),
+                                },
+                            ])))
                             .into();
                         namada::tendermint::abci::Event::from(event)
                     })

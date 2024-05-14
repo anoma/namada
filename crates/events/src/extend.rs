@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::ops::ControlFlow;
+use std::ops::{ControlFlow, DerefMut};
 use std::str::FromStr;
 
 use namada_core::collections::HashMap;
@@ -498,28 +498,34 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     }
 }
 
-/// A displyable collection of hashes.
-#[derive(Serialize, Deserialize)]
-pub struct DisplayableHashVec(Vec<Hash>);
+//FIXME: move to tx crate?
+/// Reference to a valid masp transaction
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MaspTxRef {
+    //FIXME: actually, are we using the commitment? Probably if I give the masp section ref I don't need the commitment anymore right?
+    //FIXME: If we don't need the commitment then we definetely need to section ref to be in the event and not in the result otherwise we need to loop
+    pub cmt: Hash,
+    pub masp_section_ref: Hash,
+}
 
-impl Display for DisplayableHashVec {
+/// The collection of valid masp transactions
+#[derive(Default, Clone, Serialize, Deserialize)]
+//FIXME: move somewhere else?
+//FIXME: maybe rename
+pub struct ValidMaspTxs(pub Vec<MaspTxRef>);
+
+impl Display for ValidMaspTxs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 
-impl From<Vec<Hash>> for DisplayableHashVec {
-    fn from(value: Vec<Hash>) -> Self {
-        Self(value)
-    }
-}
-
 /// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
-/// inner transactions inside the batch that are valid masp txs.
-pub struct MaspTxBatchRefs(pub DisplayableHashVec);
+/// inner transactions inside the batch that are valid masp txs and the references to the relative masp sections..
+pub struct MaspTxBatchRefs(pub ValidMaspTxs);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
-    type Value = DisplayableHashVec;
+    type Value = ValidMaspTxs;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";
@@ -621,8 +627,8 @@ where
 }
 
 /// Return a new implementation of [`EventAttributeChecker`].
-pub fn attribute_checker<'value, DATA, ATTR>()
--> Box<dyn EventAttributeChecker<'value, ATTR>>
+pub fn attribute_checker<'value, DATA, ATTR>(
+) -> Box<dyn EventAttributeChecker<'value, ATTR>>
 where
     DATA: EventAttributeEntry<'value> + 'static,
     ATTR: AttributesMap,

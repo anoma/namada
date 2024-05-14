@@ -9,7 +9,8 @@ use namada_core::storage;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
-    is_masp_key, masp_commitment_tree_key, masp_nullifier_key,
+    is_masp_key, is_masp_transfer_key, masp_commitment_tree_key,
+    masp_nullifier_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -71,12 +72,4 @@ pub fn handle_masp_tx(
     reveal_nullifiers(ctx, shielded)?;
 
     Ok(())
-}
-
-/// Check if a transaction was a MASP transaction. This means
-/// that at least one key owned by MASP was changed. We cannot
-/// simply check that the MASP VP was triggered, as this can
-/// be manually requested to be triggered by users.
-pub fn is_masp_tx(changed_keys: &BTreeSet<storage::Key>) -> bool {
-    changed_keys.iter().any(is_masp_key)
 }

@@ -1344,3 +1344,28 @@ where
         Ok(())
     }
 }
+
+//FIXME: can join this with FullAccessState?
+impl<D, H> namada_tx::action::Read for WlState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let (log_val, _) = self.write_log().read_temp(key).unwrap();
+        match log_val {
+            Some(value) => {
+                let value =
+                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
+                        .map_err(Error::BorshCodingError)?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+        }
+    }
+}

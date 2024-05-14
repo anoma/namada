@@ -9,17 +9,18 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_events::extend::{
-    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
+    ComposeEvent, Height as HeightAttr, MaspTxRef, TxHash as TxHashAttr
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::StorageWrite;
+use namada_state::{StateRead, StorageWrite};
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada_tx::action::{Action, MaspAction, Read};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, TxResult, TxType, VpStatusFlags, VpsResult,
-    WrapperTx,
+    BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, TxType,
+    VpStatusFlags, VpsResult, WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -163,8 +164,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct DispatchError {
     /// The result of the function call
     pub error: Error,
-    /// The tx result produced. It could produced even in case of an error
-    pub tx_result: Option<TxResult<Error>>,
+    /// The extended tx result produced. It could be produced even in case of an error
+    pub tx_result: Option<ExtendedTxResult<Error>>,
 }
 
 impl From<Error> for DispatchError {
@@ -189,7 +190,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     block_proposer: Option<&Address>,
-) -> std::result::Result<TxResult<Error>, DispatchError>
+) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -218,7 +219,8 @@ where
                         .into_iter()
                         .collect(),
                 ),
-            })
+            }
+            .to_extended_result(None))
         }
         TxType::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
@@ -233,10 +235,11 @@ where
                         .collect(),
                 ),
                 ..Default::default()
-            })
+            }
+            .to_extended_result(None))
         }
         TxType::Wrapper(ref wrapper) => {
-            let mut tx_result = apply_wrapper_tx(
+            let tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 tx_bytes,
@@ -261,6 +264,8 @@ where
                 });
             }
 
+            let mut extended_tx_result = tx_result.to_extended_result(None);
+
             // TODO(namada#2597): handle masp fee payment in the first inner tx
             // if necessary
             for cmt in tx.commitments() {
@@ -276,26 +281,51 @@ where
                 ) {
                     Err(Error::GasError(ref msg)) => {
                         // Gas error aborts the execution of the entire batch
-                        tx_result.gas_used =
+                        extended_tx_result.tx_result.gas_used =
                             tx_gas_meter.borrow().get_tx_consumed_gas();
-                        tx_result.batch_results.0.insert(
+                        extended_tx_result.tx_result.batch_results.0.insert(
                             cmt.get_hash(),
                             Err(Error::GasError(msg.to_owned())),
                         );
                         state.write_log_mut().drop_tx();
                         return Err(DispatchError {
                             error: Error::GasError(msg.to_owned()),
-                            tx_result: Some(tx_result),
+                            tx_result: Some(extended_tx_result),
                         });
                     }
                     res => {
+                        //FIXME: move out to seaparate function, maybe the entire loop
                         let is_accepted =
                             matches!(&res, Ok(result) if result.is_accepted());
 
-                        tx_result.batch_results.0.insert(cmt.get_hash(), res);
-                        tx_result.gas_used =
+                        extended_tx_result
+                            .tx_result
+                            .batch_results
+                            .0
+                            .insert(cmt.get_hash(), res);
+                        extended_tx_result.tx_result.gas_used =
                             tx_gas_meter.borrow().get_tx_consumed_gas();
                         if is_accepted {
+                            // If the transaction was a masp one append the transaction refs for the events
+                            if let Some(masp_section_ref) = state.read_actions().map_err(|e| Error::StateError(e))?.into_iter().find_map(|action| 
+ // In case of multiple masp actions we only get the first one
+                if let Action::Masp(MaspAction{
+                    masp_section_ref,
+                }) = action
+                {
+                                    Some(masp_section_ref)
+
+                } else {
+                    None
+                }
+
+                            ) {
+                                
+                                extended_tx_result.masp_tx_refs.0.push(MaspTxRef {
+                                    cmt: cmt.get_hash(),
+                                    masp_section_ref 
+                                });
+                            }
                             state.write_log_mut().commit_tx_to_batch();
                         } else {
                             state.write_log_mut().drop_tx();
@@ -307,14 +337,14 @@ where
                                     error: Error::FailingAtomicBatch(
                                         cmt.get_hash(),
                                     ),
-                                    tx_result: Some(tx_result),
+                                    tx_result: Some(extended_tx_result),
                                 });
                             }
                         }
                     }
                 };
             }
-            Ok(tx_result)
+            Ok(extended_tx_result)
         }
     }
 }

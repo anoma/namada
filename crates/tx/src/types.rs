@@ -1731,8 +1731,7 @@ impl<'tx> Tx {
 }
 
 /// Represents the pointers of an indexed tx, which are the block height, the
-/// index inside that block and the commitment inside the tx bundle (if inner
-/// tx)
+/// index inside that block and the commitment inside the tx bundle
 #[derive(
     Debug,
     Clone,
@@ -1751,6 +1750,7 @@ pub struct IndexedTx {
     /// The index in the block of the tx
     pub index: TxIndex,
     /// This is a pointer to the inner tx inside the batch
+    //FIXME: do we really need this? Probably not for the masp
     pub inner_tx: TxCommitments,
 }
 
