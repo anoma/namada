@@ -2130,7 +2130,7 @@ dependencies = [
  "dunce",
  "ethers-core",
  "eyre",
- "prettyplease 0.2.15",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -4389,7 +4389,7 @@ dependencies = [
  "eyre",
  "futures",
  "ibc-testkit",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "k256",
  "konst",
  "linkme",
@@ -4506,7 +4506,7 @@ dependencies = [
  "flate2",
  "futures",
  "git2",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "lazy_static",
  "ledger-namada-rs",
  "ledger-transport-hid",
@@ -4652,7 +4652,7 @@ name = "namada_encoding_spec"
 version = "0.35.1"
 dependencies = [
  "borsh 1.2.1",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "lazy_static",
  "madato",
  "namada",
@@ -4668,7 +4668,7 @@ dependencies = [
  "ethabi",
  "ethers",
  "eyre",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "konst",
  "linkme",
  "namada_account",
@@ -4747,7 +4747,7 @@ name = "namada_governance"
 version = "0.35.1"
 dependencies = [
  "borsh 1.2.1",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "konst",
  "linkme",
  "namada_core",
@@ -4831,7 +4831,7 @@ dependencies = [
  "borsh 1.2.1",
  "eyre",
  "ics23",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "linkme",
  "namada_core",
  "namada_macros",
@@ -4870,7 +4870,7 @@ dependencies = [
  "borsh 1.2.1",
  "data-encoding",
  "derivative",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "konst",
  "linkme",
  "namada_account",
@@ -4925,7 +4925,7 @@ dependencies = [
  "eyre",
  "fd-lock",
  "futures",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "jubjub",
  "lazy_static",
  "linkme",
@@ -5004,7 +5004,7 @@ dependencies = [
  "borsh 1.2.1",
  "chrono",
  "ics23",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "linkme",
  "namada_core",
  "namada_events",
@@ -5032,7 +5032,7 @@ name = "namada_storage"
 version = "0.35.1"
 dependencies = [
  "borsh 1.2.1",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "linkme",
  "namada_core",
  "namada_macros",
@@ -5075,7 +5075,7 @@ dependencies = [
  "hyper",
  "ibc-testkit",
  "ics23",
- "itertools 0.10.5",
+ "itertools 0.12.1",
  "lazy_static",
  "namada",
  "namada_apps",
@@ -5980,16 +5980,6 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
-dependencies = [
- "proc-macro2",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "prettyplease"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae005bd773ab59b4725093fd7df83fd7892f7d8eafb48dbd7de6e024e4215f9d"
@@ -6125,22 +6115,22 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.11.9"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "119533552c9a7ffacc21e099c24a0ac8bb19c2a2a3f363de84cd9b844feab270"
+checksum = "c55e02e35260070b6f716a2423c2ff1c3bb1642ddca6f99e1f26d06268a0e2d2"
 dependencies = [
  "bytes",
  "heck",
- "itertools 0.10.5",
- "lazy_static",
+ "itertools 0.11.0",
  "log",
  "multimap",
+ "once_cell",
  "petgraph",
- "prettyplease 0.1.25",
- "prost 0.11.9",
- "prost-types 0.11.9",
+ "prettyplease",
+ "prost 0.12.3",
+ "prost-types 0.12.3",
  "regex",
- "syn 1.0.109",
+ "syn 2.0.52",
  "tempfile",
  "which",
 ]
@@ -8021,15 +8011,15 @@ dependencies = [
 
 [[package]]
 name = "tonic-build"
-version = "0.8.4"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bf5e9b9c0f7e0a7c027dcfaba7b2c60816c7049171f679d99ee2ff65d0de8c4"
+checksum = "be4ef6dd70a610078cb4e338a0f79d06bc759ff1b22d2120c2ff02ae264ba9c2"
 dependencies = [
- "prettyplease 0.1.25",
+ "prettyplease",
  "proc-macro2",
  "prost-build",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.52",
 ]
 
 [[package]]

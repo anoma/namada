@@ -111,7 +111,7 @@ ibc-testkit = {version = "0.52.0", default-features = false}
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
-itertools = "0.10.0"
+itertools = "0.12.1"
 jubjub = "0.10"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 konst = { version = "0.3.8", default-features = false }
@@ -176,7 +176,7 @@ tokio = {version = "1.8.2", default-features = false}
 tokio-test = "0.4.2"
 toml = "0.5.8"
 tonic = "0.8.3"
-tonic-build = "0.8.4"
+tonic-build = "0.11.0"
 tower = "0.4"
 # Also, using the same version of tendermint-rs as we do here.
 # for tendermint-rs v0.35
