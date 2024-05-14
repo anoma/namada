@@ -105,9 +105,9 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "2367cb9b90fbfb4f848b83d5d2a421f81f37e7bd", features = ["serde"]}
-ibc-derive = {git = "https://github.com/cosmos/ibc-rs", rev = "2367cb9b90fbfb4f848b83d5d2a421f81f37e7bd"}
-ibc-testkit = {git = "https://github.com/cosmos/ibc-rs", rev = "2367cb9b90fbfb4f848b83d5d2a421f81f37e7bd", default-features = false}
+ibc = { version = "0.53.0", features = ["serde"] }
+ibc-derive = "0.7.0"
+ibc-testkit = { version = "0.53.0", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
