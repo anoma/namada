@@ -8,7 +8,7 @@ use crate::in_memory::InMemory;
 use crate::write_log::WriteLog;
 use crate::{DBIter, Error, Result, State, StateRead, StorageHasher, DB};
 
-// State with mutable write log and gas metering for tx host env.
+/// State with mutable write log and gas metering for tx host env.
 #[derive(Debug)]
 pub struct TxHostEnvState<'a, D, H>
 where
@@ -17,7 +17,7 @@ where
 {
     /// Write log
     pub write_log: &'a mut WriteLog,
-    // DB
+    /// DB handle
     pub db: &'a D,
     /// State
     pub in_mem: &'a InMemory<H>,
@@ -27,7 +27,7 @@ where
     pub sentinel: &'a RefCell<TxSentinel>,
 }
 
-// Read-only state with gas metering for VP host env.
+/// Read-only state with gas metering for VP host env.
 #[derive(Debug)]
 pub struct VpHostEnvState<'a, D, H>
 where
@@ -36,7 +36,7 @@ where
 {
     /// Write log
     pub write_log: &'a WriteLog,
-    // DB
+    /// DB handle
     pub db: &'a D,
     /// State
     pub in_mem: &'a InMemory<H>,

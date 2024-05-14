@@ -1,3 +1,5 @@
+#![allow(clippy::cast_lossless, clippy::arithmetic_side_effects)]
+
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;

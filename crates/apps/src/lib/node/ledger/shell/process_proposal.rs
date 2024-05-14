@@ -192,7 +192,7 @@ where
         &self,
         tx_bytes: &[u8],
         metadata: &mut ValidationMeta,
-        temp_state: &mut TempWlState<D, H>,
+        temp_state: &mut TempWlState<'_, D, H>,
         block_time: DateTimeUtc,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
@@ -407,7 +407,19 @@ where
                 // Account for the tx's resources
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
-                let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+
+                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        return TxResult {
+                            code: ResultCode::InvalidTx.into(),
+                            info: "The wrapper gas limit overflowed gas \
+                                   representation"
+                                .to_owned(),
+                        };
+                    }
+                };
+                let mut tx_gas_meter = TxGasMeter::new(gas_limit);
                 if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err()
                     || allocated_gas.is_err()
                 {
@@ -503,7 +515,7 @@ fn process_proposal_fee_check<D, H, CA>(
     wrapper_tx_hash: Hash,
     masp_transaction: Option<Transaction>,
     proposer: &Address,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,

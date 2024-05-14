@@ -4614,6 +4614,7 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "signal-hook",
+ "smooth-operator",
  "sparse-merkle-tree",
  "sysinfo",
  "tar",
@@ -5072,6 +5073,7 @@ dependencies = [
  "proptest",
  "rayon",
  "serde 1.0.193",
+ "smooth-operator",
  "test-log",
  "tracing",
 ]
@@ -5101,6 +5103,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "test-log",
  "thiserror",
@@ -5124,6 +5127,7 @@ dependencies = [
  "namada_tx",
  "regex",
  "serde 1.0.193",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -5310,6 +5314,7 @@ dependencies = [
  "namada_ibc",
  "namada_storage",
  "namada_tx",
+ "smooth-operator",
  "thiserror",
 ]
 

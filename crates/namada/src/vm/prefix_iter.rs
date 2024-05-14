@@ -19,12 +19,16 @@ impl<'iter, DB> PrefixIterators<'iter, DB>
 where
     DB: namada_state::DB + namada_state::DBIter<'iter>,
 {
-    /// Insert a new prefix iterator to the temporary storage.
-    pub fn insert(&mut self, iter: PrefixIter<'iter, DB>) -> PrefixIteratorId {
+    /// Insert a new prefix iterator to the temporary storage. Returns `None` on
+    /// prefix iterator ID overflow
+    pub fn insert(
+        &mut self,
+        iter: PrefixIter<'iter, DB>,
+    ) -> Option<PrefixIteratorId> {
         let id = self.index;
         self.iterators.insert(id, iter);
-        self.index = id.next_id();
-        id
+        self.index = id.next_id()?;
+        Some(id)
     }
 
     /// Get the next item in the given prefix iterator.
@@ -71,8 +75,8 @@ impl PrefixIteratorId {
         self.0
     }
 
-    /// Get the ID for the next prefix iterator.
-    fn next_id(&self) -> PrefixIteratorId {
-        PrefixIteratorId(self.0 + 1)
+    /// Get the ID for the next prefix iterator. Returns `None` on overflow
+    fn next_id(&self) -> Option<PrefixIteratorId> {
+        Some(PrefixIteratorId(self.0.checked_add(1)?))
     }
 }

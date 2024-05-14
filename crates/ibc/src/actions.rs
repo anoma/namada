@@ -17,8 +17,9 @@ use namada_events::{EmitEvents, EventTypeBuilder};
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
-    DBIter, Epochs, ResultExt, State, StateRead, StorageError, StorageHasher,
-    StorageRead, StorageResult, StorageWrite, TxHostEnvState, WlState, DB,
+    DBIter, Epochs, OptionExt, ResultExt, State, StateRead, StorageError,
+    StorageHasher, StorageRead, StorageResult, StorageWrite, TxHostEnvState,
+    WlState, DB,
 };
 use namada_token as token;
 use token::DenominatedAmount;
@@ -120,7 +121,10 @@ where
     H: 'static + StorageHasher,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        let gas = self.write_log_mut().emit_event(event);
+        let gas = self
+            .write_log_mut()
+            .emit_event(event)
+            .ok_or_err_msg("Gas overflow")?;
         self.charge_gas(gas).into_storage_result()?;
         Ok(())
     }
@@ -193,6 +197,7 @@ where
     S: State + EmitEvents,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
+        // There's no gas cost for protocol, we can ignore result
         self.state.write_log_mut().emit_event(event);
         Ok(())
     }
@@ -293,6 +298,7 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
+    #[allow(clippy::arithmetic_side_effects)]
     let timeout_timestamp = state
         .in_mem()
         .header

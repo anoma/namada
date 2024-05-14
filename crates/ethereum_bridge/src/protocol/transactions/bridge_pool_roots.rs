@@ -1,3 +1,5 @@
+//! Functions dealing with bridge pool root hash.
+
 use eyre::Result;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};

@@ -1,3 +1,5 @@
+//! Ethereum bridge VP storage
+
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::balance_key;
 use namada_trans_token::Amount;

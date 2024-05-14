@@ -1,8 +1,25 @@
+//! Inflation PD-controller
+
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
+
 use namada_core::arith::{self, checked};
 use namada_core::dec::Dec;
 use namada_core::uint::Uint;
 use thiserror::Error;
 
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct PDController {
     total_native_amount: Uint,
@@ -15,6 +32,7 @@ pub struct PDController {
     last_metric: Dec,
 }
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Arithmetic {0}")]
@@ -28,6 +46,7 @@ pub enum Error {
 }
 
 impl PDController {
+    /// Instantiate a new PD-controller
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         total_native_amount: Uint,
@@ -51,6 +70,7 @@ impl PDController {
         }
     }
 
+    /// Compute inflation amount
     pub fn compute_inflation(
         &self,
         control_coeff: Dec,
@@ -60,10 +80,12 @@ impl PDController {
         self.compute_inflation_aux(control)
     }
 
+    /// Get total native amount as decimal
     pub fn get_total_native_dec(&self) -> Result<Dec, Error> {
         Dec::try_from(self.total_native_amount).map_err(Into::into)
     }
 
+    /// Get epochs per year
     pub fn get_epochs_per_year(&self) -> u64 {
         self.epochs_per_year
     }

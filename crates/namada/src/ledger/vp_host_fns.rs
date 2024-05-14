@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
+use namada_core::arith::{self, checked};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
@@ -12,7 +13,7 @@ use namada_core::storage::{
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
-use namada_state::{write_log, DBIter, StateRead, DB};
+use namada_state::{write_log, DBIter, ResultExt, StateRead, DB};
 use namada_tx::{Section, Tx};
 use thiserror::Error;
 
@@ -25,14 +26,16 @@ use crate::ledger::gas::{GasMetering, VpGasMeter};
 pub enum RuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
+    #[error("State error: {0}")]
+    StateError(namada_state::Error),
     #[error("Storage error: {0}")]
-    StorageError(namada_state::Error),
+    StorageError(#[from] namada_state::StorageError),
     #[error("Storage data error: {0}")]
     StorageDataError(crate::storage::Error),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]
-    NumConversionError(TryFromIntError),
+    NumConversionError(#[from] TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Invalid transaction code hash")]
@@ -43,6 +46,8 @@ pub enum RuntimeError {
     InvalidSectionSignature(String),
     #[error("{0}")]
     Erased(String), // type erased error
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// VP environment function result
@@ -69,7 +74,8 @@ pub fn read_pre<S>(
 where
     S: StateRead + Debug,
 {
-    let (log_val, gas) = state.write_log().read_pre(key);
+    let (log_val, gas) =
+        state.write_log().read_pre(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { ref value }) => {
@@ -88,7 +94,7 @@ where
         None => {
             // When not found in write log, try to read from the storage
             let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StorageError)?;
+                state.db_read(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -106,7 +112,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { value }) => {
@@ -124,7 +130,7 @@ where
             // When not found in write log, try
             // to read from the storage
             let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StorageError)?;
+                state.db_read(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -141,7 +147,8 @@ pub fn read_temp<S>(
 where
     S: StateRead + Debug,
 {
-    let (log_val, gas) = state.write_log().read_temp(key);
+    let (log_val, gas) =
+        state.write_log().read_temp(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     Ok(log_val.cloned())
 }
@@ -157,7 +164,8 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read_pre(key);
+    let (log_val, gas) =
+        state.write_log().read_pre(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(&write_log::StorageModification::Write { .. }) => Ok(true),
@@ -169,7 +177,7 @@ where
         None => {
             // When not found in write log, try to check the storage
             let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+                state.db_has_key(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -187,7 +195,7 @@ where
     S: StateRead + Debug,
 {
     // Try to read from the write log first
-    let (log_val, gas) = state.write_log().read(key);
+    let (log_val, gas) = state.write_log().read(key).into_storage_result()?;
     add_gas(gas_meter, gas)?;
     match log_val {
         Some(write_log::StorageModification::Write { .. }) => Ok(true),
@@ -200,7 +208,7 @@ where
             // When not found in write log, try
             // to check the storage
             let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StorageError)?;
+                state.db_has_key(key).map_err(RuntimeError::StateError)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -244,7 +252,7 @@ where
     S: StateRead + Debug,
 {
     let (header, gas) = StateRead::get_block_header(state, Some(height))
-        .map_err(RuntimeError::StorageError)?;
+        .map_err(RuntimeError::StateError)?;
     add_gas(gas_meter, gas)?;
     Ok(header)
 }
@@ -255,7 +263,12 @@ pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
     tx: &Tx,
 ) -> EnvResult<Option<Hash>> {
-    add_gas(gas_meter, HASH_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
+    add_gas(
+        gas_meter,
+        (HASH_LENGTH as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
+    )?;
     let hash = tx
         .get_section(tx.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
@@ -285,7 +298,9 @@ pub fn get_tx_index(
 ) -> EnvResult<TxIndex> {
     add_gas(
         gas_meter,
-        TX_INDEX_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (TX_INDEX_LENGTH as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     Ok(*tx_index)
 }
@@ -300,7 +315,9 @@ where
 {
     add_gas(
         gas_meter,
-        ESTABLISHED_ADDRESS_BYTES_LEN as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+        (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
+            .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
+            .expect("Consts mul that cannot overflow"),
     )?;
     Ok(state.in_mem().native_token.clone())
 }
@@ -313,12 +330,8 @@ pub fn get_pred_epochs<S>(
 where
     S: StateRead + Debug,
 {
-    add_gas(
-        gas_meter,
-        state.in_mem().block.pred_epochs.first_block_heights.len() as u64
-            * 8
-            * MEMORY_ACCESS_GAS_PER_BYTE,
-    )?;
+    let len = state.in_mem().block.pred_epochs.first_block_heights.len() as u64;
+    add_gas(gas_meter, checked!(len * 8 * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
     Ok(state.in_mem().block.pred_epochs.clone())
 }
 
@@ -354,7 +367,7 @@ pub fn iter_prefix_pre<'a, D>(
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
-    let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix);
+    let (iter, gas) = namada_state::iter_prefix_pre(write_log, db, prefix)?;
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }
@@ -373,7 +386,7 @@ pub fn iter_prefix_post<'a, D>(
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
-    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix);
+    let (iter, gas) = namada_state::iter_prefix_post(write_log, db, prefix)?;
     add_gas(gas_meter, gas)?;
     Ok(iter)
 }
@@ -381,7 +394,7 @@ where
 /// Get the next item in a storage prefix iterator (pre or post).
 pub fn iter_next<DB>(
     gas_meter: &RefCell<VpGasMeter>,
-    iter: &mut namada_state::PrefixIter<DB>,
+    iter: &mut namada_state::PrefixIter<'_, DB>,
 ) -> EnvResult<Option<(String, Vec<u8>)>>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,

@@ -1,7 +1,7 @@
 //! Cryptographic signature keys storage API
 
 use namada_core::storage;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
 
 use super::*;
 
@@ -31,7 +31,7 @@ where
     S: StorageWrite + StorageRead,
 {
     for (index, public_key) in public_keys.iter().enumerate() {
-        let index = index as u8;
+        let index = u8::try_from(index).into_storage_result()?;
         pks_handle(owner).insert(storage, index, public_key.clone())?;
     }
     let threshold_key = threshold_key(owner);
@@ -114,6 +114,7 @@ where
     S: StorageWrite + StorageRead,
 {
     let total_pks = pks_handle(owner).len(storage)?;
+    let total_pks = u8::try_from(total_pks).into_storage_result()?;
     for index in 0..total_pks as u8 {
         pks_handle(owner).remove(storage, &index)?;
     }

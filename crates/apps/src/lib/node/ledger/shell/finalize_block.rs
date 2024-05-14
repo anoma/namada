@@ -82,7 +82,10 @@ where
                 "Will begin a new epoch {} in {} blocks starting at height {}",
                 current_epoch.next(),
                 EPOCH_SWITCH_BLOCKS_DELAY,
-                height.0 + u64::from(EPOCH_SWITCH_BLOCKS_DELAY)
+                height
+                    .0
+                    .checked_add(u64::from(EPOCH_SWITCH_BLOCKS_DELAY))
+                    .expect("Shouldn't overflow")
             );
         }
         tracing::debug!(
@@ -214,7 +217,23 @@ where
                     TxType::Wrapper(wrapper) => {
                         stats.increment_wrapper_txs();
                         let tx_event = new_tx_event(&tx, height.0);
-                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                            Ok(value) => value,
+                            Err(_) => {
+                                response.events.emit(
+                                    new_tx_event(&tx, height.0)
+                                        .with(Code(ResultCode::InvalidTx))
+                                        .with(Info(
+                                            "The wrapper gas limit overflowed \
+                                             gas representation"
+                                                .to_owned(),
+                                        ))
+                                        .with(GasUsed(0.into())),
+                                );
+                                continue;
+                            }
+                        };
+                        let gas_meter = TxGasMeter::new(gas_limit);
                         if let Some(code_sec) = tx
                             .get_section(tx.code_sechash())
                             .and_then(|x| Section::code_sec(x.as_ref()))
@@ -511,8 +530,12 @@ where
 
         // Update the MASP commitment tree anchor if the tree was updated
         let tree_key = token::storage_key::masp_commitment_tree_key();
-        if let Some(StorageModification::Write { value }) =
-            self.state.write_log().read(&tree_key).0
+        if let Some(StorageModification::Write { value }) = self
+            .state
+            .write_log()
+            .read(&tree_key)
+            .expect("Must be able to read masp commitment tree")
+            .0
         {
             let updated_tree = CommitmentTree::<Node>::try_from_slice(value)
                 .into_storage_result()?;
@@ -604,10 +627,20 @@ where
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch =
             self.state.in_mem().block.pred_epochs.first_block_heights
-                [last_epoch.0 as usize]
-                .0;
-        let num_blocks_in_last_epoch =
-            self.state.in_mem().block.height.0 - first_block_of_last_epoch;
+                [usize::try_from(last_epoch.0)
+                    .expect("Last epoch shouldn't exceed `usize::MAX`")]
+            .0;
+        let num_blocks_in_last_epoch = self
+            .state
+            .in_mem()
+            .block
+            .height
+            .0
+            .checked_sub(first_block_of_last_epoch)
+            .expect(
+                "First block of last epoch must always be lower than or equal \
+                 to current block height",
+            );
 
         // PoS inflation
         namada_proof_of_stake::rewards::apply_inflation(
@@ -721,6 +754,7 @@ fn pos_votes_from_abci(
 
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_finalize_block {
     use std::collections::BTreeMap;

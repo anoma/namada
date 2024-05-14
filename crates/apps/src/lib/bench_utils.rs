@@ -1,6 +1,8 @@
 //! Library code for benchmarks provides a wrapper of the ledger's shell
 //! `BenchShell` and helper functions to generate transactions.
 
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fs::{File, OpenOptions};

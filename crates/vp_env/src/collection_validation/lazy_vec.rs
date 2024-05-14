@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
+use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::storage;
 use namada_storage::collections::lazy_vec::{
@@ -113,9 +114,9 @@ where
                         }
                         if post > pre {
                             post_gt_pre = true;
-                            len_diff = post - pre;
+                            len_diff = checked!(post - pre)?;
                         } else {
-                            len_diff = pre - post;
+                            len_diff = checked!(pre - post)?;
                         }
                         len_pre = pre;
                     }
@@ -153,21 +154,21 @@ where
 
         if len_diff != 0
             && !(if post_gt_pre {
-                deleted_len + len_diff == added_len
+                checked!(deleted_len + len_diff)? == added_len
             } else {
-                added_len + len_diff == deleted_len
+                checked!(added_len + len_diff)? == deleted_len
             })
         {
             return Err(ValidationError::InvalidLenDiff).into_storage_result();
         }
 
-        let mut last_added = Option::None;
+        let mut last_added: Option<u64> = Option::None;
         // Iterate additions in increasing order of indices
         for index in added {
             if let Some(last_added) = last_added {
                 // Following additions should be at monotonically increasing
                 // indices
-                let expected = last_added + 1;
+                let expected = checked!(last_added + 1)?;
                 if expected != index {
                     return Err(ValidationError::UnexpectedPushIndex {
                         got: index,
@@ -189,13 +190,13 @@ where
             last_added = Some(index);
         }
 
-        let mut last_deleted = Option::None;
+        let mut last_deleted: Option<u64> = Option::None;
         // Also iterate deletions in increasing order of indices
         for index in deleted {
             if let Some(last_added) = last_deleted {
                 // Following deletions should be at monotonically increasing
                 // indices
-                let expected = last_added + 1;
+                let expected = checked!(last_added + 1)?;
                 if expected != index {
                     return Err(ValidationError::UnexpectedPopIndex {
                         got: index,
@@ -208,7 +209,7 @@ where
         }
         if let Some(index) = last_deleted {
             if len_pre > 0 {
-                let expected = len_pre - 1;
+                let expected = checked!(len_pre - 1)?;
                 if index != expected {
                     // The last deletion must be at the pre length value minus 1
                     return Err(ValidationError::UnexpectedPopIndex {
@@ -223,7 +224,7 @@ where
         // And finally iterate updates
         for index in updated {
             // Update index has to be within the length bounds
-            let max = len_pre + len_diff;
+            let max = checked!(len_pre + len_diff)?;
             if index >= max {
                 return Err(ValidationError::UnexpectedUpdateIndex {
                     got: index,

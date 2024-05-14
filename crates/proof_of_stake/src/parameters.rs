@@ -210,14 +210,18 @@ impl OwnedPosParams {
 
     /// Get the epoch offset from which an unbonded bond can withdrawn
     pub fn withdrawable_epoch_offset(&self) -> u64 {
-        self.pipeline_len
-            + self.unbonding_len
-            + self.cubic_slashing_window_length
+        checked!(
+            self.pipeline_len
+                + self.unbonding_len
+                + self.cubic_slashing_window_length
+        )
+        .expect("Params addition must not overflow")
     }
 
     /// Get the epoch offset for processing slashes
     pub fn slash_processing_epoch_offset(&self) -> u64 {
-        self.unbonding_len + self.cubic_slashing_window_length + 1
+        checked!(self.unbonding_len + self.cubic_slashing_window_length + 1)
+            .expect("Params addition must not overflow")
     }
 
     /// Get the first and the last epoch of a cubic slash window.
@@ -315,6 +319,7 @@ mod tests {
 }
 
 /// Testing helpers
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use proptest::prelude::*;

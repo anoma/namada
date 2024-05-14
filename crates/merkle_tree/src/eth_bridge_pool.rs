@@ -301,7 +301,13 @@ pub struct BridgePoolProof {
 impl BridgePoolProof {
     /// Verify a membership proof matches the provided root
     pub fn verify(&self, root: KeccakHash) -> bool {
-        if self.proof.len() + self.leaves.len() != self.flags.len() + 1 {
+        // Cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
+        let expected_len = self.flags.len() + 1;
+        #[allow(clippy::arithmetic_side_effects)]
+        let actual_len = self.proof.len() + self.leaves.len();
+
+        if actual_len != expected_len {
             return false;
         }
         if self.flags.is_empty() {
@@ -322,6 +328,8 @@ impl BridgePoolProof {
         let mut leaf_pos = 0usize;
         let mut proof_pos = 0usize;
 
+        // At most 2 additions per iter, cannot overflow usize
+        #[allow(clippy::arithmetic_side_effects)]
         for i in 0..total_hashes {
             let (left, prefix) = if leaf_pos < leaf_len {
                 let next = self.leaves[leaf_pos].keccak256();
@@ -383,6 +391,7 @@ impl Encode<3> for BridgePoolProof {
     }
 }
 
+#[allow(clippy::cast_lossless)]
 #[cfg(test)]
 mod test_bridge_pool_tree {
 

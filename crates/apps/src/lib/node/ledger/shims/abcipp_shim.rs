@@ -215,7 +215,9 @@ impl AbciService {
     ) -> (bool, Option<<Self as Service<Req>>::Future>) {
         let hght = match check {
             CheckAction::AlreadySuspended => BlockHeight::from(u64::MAX),
-            CheckAction::Check(hght) => BlockHeight::from(hght as u64),
+            CheckAction::Check(hght) => BlockHeight::from(
+                u64::try_from(hght).expect("Height cannot be negative"),
+            ),
             CheckAction::NoAction => BlockHeight::default(),
         };
         match action_at_height {

@@ -2,6 +2,7 @@
 
 use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
+use namada_core::arith::checked;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
@@ -81,10 +82,10 @@ where
     // the threshold of holdings required in order to receive non-zero rewards.
     // This value should be fixed constant for each asset type. Here we choose
     // a thousandth of the given asset.
-    Ok((
-        10u128.pow(std::cmp::max(u32::from(denomination.0), 3) - 3),
-        denomination,
-    ))
+    let precision_denom = std::cmp::max(u32::from(denomination.0), 3)
+        .checked_sub(3)
+        .expect("Cannot underflow");
+    Ok((checked!(10u128 ^ precision_denom)?, denomination))
 }
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
@@ -181,8 +182,10 @@ where
             })
     };
     let inflation_amount = Amount::from_uint(
-        (total_tokens_in_masp.raw_amount() / precision)
-            * Uint::from(noterized_inflation),
+        checked!(
+            total_tokens_in_masp.raw_amount() / precision.into()
+                * Uint::from(noterized_inflation)
+        )?,
         0,
     )
     .unwrap();
@@ -233,6 +236,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S>(
@@ -385,12 +389,14 @@ where
                     (token.clone(), denom, digit),
                     (MaspAmount::from_pair(
                         old_asset,
-                        -(normed_inflation as i128),
+                        -i128::try_from(normed_inflation)
+                            .into_storage_result()?,
                     )
                     .unwrap()
                         + MaspAmount::from_pair(
                             new_asset,
-                            new_normed_inflation as i128,
+                            i128::try_from(new_normed_inflation)
+                                .into_storage_result()?,
                         )
                         .unwrap())
                     .into(),
@@ -448,15 +454,17 @@ where
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
+                let reward_i128 =
+                    i128::try_from(reward.1).into_storage_result()?;
                 current_convs.insert(
                     (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(old_asset, -(reward.1 as i128))
-                        .unwrap()
-                        + MaspAmount::from_pair(new_asset, reward.1 as i128)
+                    (MaspAmount::from_pair(old_asset, -reward_i128).unwrap()
+                        + MaspAmount::from_pair(new_asset, reward_i128)
                             .unwrap()
                         + MaspAmount::from_pair(
                             reward_assets[digit as usize],
-                            real_reward as i128,
+                            i128::try_from(real_reward)
+                                .into_storage_result()?,
                         )
                         .unwrap())
                     .into(),
@@ -538,6 +546,7 @@ where
     // across multiple cores
     // Merkle trees must have exactly 2^n leaves to be mergeable
     let mut notes_per_thread_rounded = 1;
+    // Cannot overflow
     while notes_per_thread_max > notes_per_thread_rounded * 4 {
         notes_per_thread_rounded *= 2;
     }
@@ -594,6 +603,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

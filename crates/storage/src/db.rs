@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::num::TryFromIntError;
 
 use namada_core::address::EstablishedAddressGen;
 use namada_core::hash::{Error as HashError, Hash};
@@ -7,7 +8,7 @@ use namada_core::storage::{
     Key,
 };
 use namada_core::time::DateTimeUtc;
-use namada_core::{ethereum_events, ethereum_structs};
+use namada_core::{arith, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -39,6 +40,10 @@ pub enum Error {
     NoMerkleTree { height: BlockHeight },
     #[error("Code hash error: {0}")]
     InvalidCodeHash(HashError),
+    #[error("Numeric conversion error: {0}")]
+    NumConversionError(#[from] TryFromIntError),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// A result of a function that may fail
@@ -133,7 +138,7 @@ pub trait DB: Debug {
     /// `is_full_commit` is `true` (typically on a beginning of a new epoch).
     fn add_block_to_batch(
         &self,
-        state: BlockStateWrite,
+        state: BlockStateWrite<'_>,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()>;
@@ -276,8 +281,9 @@ pub trait DB: Debug {
 
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
-    /// The concrete type of the iterator
+    /// Prefix iterator
     type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    /// Pattern iterator
     type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
 
     /// WARNING: This only works for values that have been committed to DB.

@@ -356,7 +356,7 @@ fn run_vp(
     verifiers: &BTreeSet<Address>,
     yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
 ) -> Result<()> {
-    let input: VpInput = VpInput {
+    let input: VpInput<'_> = VpInput {
         addr: address,
         data: input_data,
         keys_changed,

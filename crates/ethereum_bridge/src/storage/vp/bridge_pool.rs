@@ -1,3 +1,5 @@
+//! Ethereum bridge pool VP storage
+
 use namada_core::ethereum_events::Uint;
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::storage_key::balance_key;

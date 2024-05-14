@@ -203,16 +203,22 @@ impl EthereumReceiver {
     where
         F: FnMut(&EthereumEvent) -> bool,
     {
-        let mut new_events = 0;
-        let mut filtered_events = 0;
+        let mut new_events: usize = 0;
+        let mut filtered_events: usize = 0;
         while let Ok(eth_event) = self.channel.try_recv() {
             if keep_event(&eth_event) && self.queue.insert(eth_event) {
-                new_events += 1;
+                new_events =
+                    new_events.checked_add(1).expect("Cannot overflow");
             } else {
-                filtered_events += 1;
+                filtered_events =
+                    filtered_events.checked_add(1).expect("Cannot overflow");
             }
         }
-        if new_events + filtered_events > 0 {
+        if new_events
+            .checked_add(filtered_events)
+            .expect("Cannot overflow")
+            > 0
+        {
             tracing::info!(
                 new_events,
                 filtered_events,
@@ -515,11 +521,15 @@ where
             mode,
             vp_wasm_cache: VpCache::new(
                 vp_wasm_cache_dir,
-                vp_wasm_compilation_cache as usize,
+                usize::try_from(vp_wasm_compilation_cache).expect(
+                    "`vp_wasm_compilation_cache` must not exceed `usize::MAX`",
+                ),
             ),
             tx_wasm_cache: TxCache::new(
                 tx_wasm_cache_dir,
-                tx_wasm_compilation_cache as usize,
+                usize::try_from(tx_wasm_compilation_cache).expect(
+                    "`tx_wasm_compilation_cache` must not exceed `usize::MAX`",
+                ),
             ),
             storage_read_past_height_limit,
             // TODO: config event log params
@@ -1056,7 +1066,17 @@ where
                 }
 
                 // Tx gas limit
-                let mut gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The wrapper gas limit overflowed gas \
+                                        representation"
+                            .to_owned();
+                        return response;
+                    }
+                };
+                let mut gas_meter = TxGasMeter::new(gas_limit);
                 if gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     response.code = ResultCode::TxGasLimit.into();
                     response.log = "{INVALID_MSG}: Wrapper transaction \
@@ -1068,7 +1088,8 @@ where
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
-                );
+                )
+                .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ResultCode::AllocationError.into();
                     response.log = "{INVALID_MSG}: Wrapper transaction \
@@ -1204,7 +1225,7 @@ where
 /// block construction and validation
 pub fn replay_protection_checks<D, H>(
     wrapper: &Tx,
-    temp_state: &mut TempWlState<D, H>,
+    temp_state: &mut TempWlState<'_, D, H>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1244,7 +1265,7 @@ where
 fn mempool_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1276,7 +1297,7 @@ pub fn wrapper_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Option<Transaction>,
     minimum_gas_price: token::Amount,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1319,7 +1340,7 @@ where
 fn fee_unshielding_validation<D, H, CA>(
     wrapper: &WrapperTx,
     masp_transaction: Transaction,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1360,7 +1381,7 @@ where
 // Performs validation on the optional fee unshielding data carried by
 // the wrapper.
 fn check_fee_unshielding<D, H>(
-    temp_state: &TempWlState<D, H>,
+    temp_state: &TempWlState<'_, D, H>,
     unshield: &Transaction,
 ) -> Result<()>
 where
@@ -1420,6 +1441,7 @@ where
 }
 
 /// for the shell
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap)]
 #[cfg(test)]
 mod test_utils {
     use std::ops::{Deref, DerefMut};

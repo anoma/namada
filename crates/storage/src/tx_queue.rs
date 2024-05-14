@@ -1,3 +1,5 @@
+//! Transaction queue
+
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::ethereum_events::EthereumEvent;
 use namada_macros::BorshDeserializer;

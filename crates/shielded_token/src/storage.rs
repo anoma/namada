@@ -1,4 +1,5 @@
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
@@ -31,8 +32,10 @@ where
     storage.write(&masp_kp_gain_key(address), kp_gain_nom)?;
     storage.write(&masp_kd_gain_key(address), kd_gain_nom)?;
 
-    let raw_target = Uint::from(*locked_amount_target)
-        * Uint::from(10).checked_pow(Uint::from(denom.0)).unwrap();
+    let locked_amount_target = Uint::from(*locked_amount_target);
+    let raw_target = checked!(
+        locked_amount_target * (Uint::from(10) ^ Uint::from(denom.0))
+    )?;
     let raw_target = Amount::from_uint(raw_target, 0).into_storage_result()?;
     storage.write(&masp_locked_amount_target_key(address), raw_target)?;
     Ok(())

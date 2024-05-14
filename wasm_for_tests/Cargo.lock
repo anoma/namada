@@ -4063,6 +4063,7 @@ dependencies = [
  "namada_storage",
  "namada_trans_token",
  "serde",
+ "smooth-operator",
  "tracing",
 ]
 
@@ -4086,6 +4087,7 @@ dependencies = [
  "patricia_tree",
  "proptest",
  "sha2 0.9.9",
+ "smooth-operator",
  "sparse-merkle-tree",
  "thiserror",
  "tiny-keccak",
@@ -4106,6 +4108,7 @@ dependencies = [
  "namada_tx",
  "regex",
  "serde",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -4265,6 +4268,7 @@ dependencies = [
  "namada_ibc",
  "namada_storage",
  "namada_tx",
+ "smooth-operator",
  "thiserror",
 ]
 

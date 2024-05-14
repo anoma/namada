@@ -1,5 +1,19 @@
 //! The merkle tree in the storage
 
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
+
 pub mod eth_bridge_pool;
 pub mod ics23_specs;
 
@@ -51,7 +65,7 @@ pub trait SubTreeRead {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        values: Vec<StorageBytes>,
+        values: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof>;
 }
 
@@ -62,7 +76,7 @@ pub trait SubTreeWrite {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: StorageBytes,
+        value: StorageBytes<'_>,
     ) -> Result<Hash>;
     /// Delete a key from the sub-tree
     fn subtree_delete(&mut self, key: &Key) -> Result<Hash>;
@@ -182,7 +196,7 @@ pub enum Store {
 
 impl Store {
     /// Convert to a `StoreRef` with borrowed store
-    pub fn as_ref(&self) -> StoreRef {
+    pub fn as_ref(&self) -> StoreRef<'_> {
         match self {
             Self::Base(store) => StoreRef::Base(store),
             Self::Account(store) => StoreRef::Account(store),
@@ -396,6 +410,7 @@ impl From<Hash> for CommitDataRoot {
 }
 
 impl CommitDataRoot {
+    /// Storage key for commit data
     pub fn get_commit_data_key() -> Key {
         Key::parse("commit_data").expect("Should be able to parse the key.")
     }
@@ -621,7 +636,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     }
 
     /// Get the stores of the base and sub trees
-    pub fn stores(&self) -> MerkleTreeStoresWrite {
+    pub fn stores(&self) -> MerkleTreeStoresWrite<'_> {
         MerkleTreeStoresWrite {
             base: (self.base.root().into(), self.base.store()),
             account: (self.account.root().into(), self.account.store()),
@@ -639,7 +654,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
     pub fn get_sub_tree_existence_proof(
         &self,
         keys: &[Key],
-        values: Vec<StorageBytes>,
+        values: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof> {
         let first_key = keys.iter().next().ok_or_else(|| {
             Error::InvalidMerkleKey(
@@ -814,7 +829,7 @@ impl MerkleTreeStoresRead {
     }
 
     /// Read the backing store of the requested type
-    pub fn get_store(&self, store_type: StoreType) -> StoreRef {
+    pub fn get_store(&self, store_type: StoreType) -> StoreRef<'_> {
         match store_type {
             StoreType::Base => StoreRef::Base(&self.base.1),
             StoreType::Account => StoreRef::Account(&self.account.1),
@@ -862,7 +877,7 @@ impl<'a> MerkleTreeStoresWrite<'a> {
     }
 
     /// Get the store of the given store type
-    pub fn store(&self, store_type: &StoreType) -> StoreRef {
+    pub fn store(&self, store_type: &StoreType) -> StoreRef<'_> {
         match store_type {
             StoreType::Base => StoreRef::Base(self.base.1),
             StoreType::Account => StoreRef::Account(self.account.1),
@@ -961,7 +976,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Smt<H> {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        mut values: Vec<StorageBytes>,
+        mut values: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof> {
         if keys.len() != 1 || values.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
@@ -990,7 +1005,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Smt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: StorageBytes,
+        value: StorageBytes<'_>,
     ) -> Result<Hash> {
         let value = H::hash(value);
         self.update(H::hash(key.to_string()).into(), value.into())
@@ -1034,7 +1049,7 @@ impl<'a, H: StorageHasher + Default> SubTreeRead for &'a Amt<H> {
     fn subtree_membership_proof(
         &self,
         keys: &[Key],
-        _: Vec<StorageBytes>,
+        _: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof> {
         if keys.len() != 1 {
             return Err(Error::Ics23MultiLeaf);
@@ -1061,7 +1076,7 @@ impl<'a, H: StorageHasher + Default> SubTreeWrite for &'a mut Amt<H> {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: StorageBytes,
+        value: StorageBytes<'_>,
     ) -> Result<Hash> {
         let key = StringKey::try_from_bytes(key.to_string().as_bytes())?;
         let value = TreeBytes::from(value.to_vec());
@@ -1103,7 +1118,7 @@ impl<'a> SubTreeRead for &'a BridgePoolTree {
     fn subtree_membership_proof(
         &self,
         _: &[Key],
-        values: Vec<StorageBytes>,
+        values: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof> {
         let values = values
             .iter()
@@ -1119,7 +1134,7 @@ impl<'a> SubTreeWrite for &'a mut BridgePoolTree {
     fn subtree_update(
         &mut self,
         key: &Key,
-        value: StorageBytes,
+        value: StorageBytes<'_>,
     ) -> Result<Hash> {
         let height = BlockHeight::try_from_slice(value)
             .map_err(|err| Error::MerkleTree(err.to_string()))?;
@@ -1156,7 +1171,7 @@ impl<'a> SubTreeRead for &'a CommitDataRoot {
     fn subtree_membership_proof(
         &self,
         _keys: &[Key],
-        _values: Vec<StorageBytes>,
+        _values: Vec<StorageBytes<'_>>,
     ) -> Result<MembershipProof> {
         unimplemented!("Commit data subspace hold only a single hash value.")
     }
@@ -1171,7 +1186,7 @@ impl<'a> SubTreeWrite for &'a mut CommitDataRoot {
     fn subtree_update(
         &mut self,
         _key: &Key,
-        value: StorageBytes,
+        value: StorageBytes<'_>,
     ) -> Result<Hash> {
         self.0 = Hash::sha256(value);
         Ok(self.0)

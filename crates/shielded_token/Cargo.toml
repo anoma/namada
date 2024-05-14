@@ -28,6 +28,7 @@ borsh.workspace = true
 masp_primitives.workspace = true
 rayon = { workspace = true, optional = true }
 serde.workspace = true
+smooth-operator.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

@@ -71,7 +71,7 @@ impl GovernanceEvent {
         }
     }
 
-    /// Create a new proposal event for defaultwithwasm proposal
+    /// Create a new proposal event for default with wasm proposal
     pub fn passed_proposal(
         proposal_id: u64,
         has_proposal_code: bool,
@@ -86,6 +86,7 @@ impl GovernanceEvent {
         }
     }
 
+    /// Event for a reject proposal
     pub fn rejected_proposal(
         proposal_id: u64,
         has_proposal_code: bool,
@@ -101,14 +102,22 @@ impl GovernanceEvent {
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ProposalEventKind {
     /// New proposal event
-    NewProposal { proposal_type: GovProposalType },
+    NewProposal {
+        /// Type of proposal
+        proposal_type: GovProposalType,
+    },
     /// Passed proposal
     Passed {
+        /// Does the proposal contain code?
         has_proposal_code: bool,
+        /// Did the proposal code run successfully?
         is_proposal_code_successful: bool,
     },
     /// Rejected proposal
-    Rejected { has_proposal_code: bool },
+    Rejected {
+        /// Does the proposal contain code?
+        has_proposal_code: bool,
+    },
 }
 
 impl From<GovernanceEvent> for Event {
