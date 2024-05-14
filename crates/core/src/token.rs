@@ -1018,7 +1018,8 @@ impl From<DenominatedAmount> for IbcAmount {
     Serialize,
     Deserialize,
 )]
-pub struct Transfer {
+//FIXME: don't use this anymore outside of this file
+pub struct TransferData {
     /// Source address will spend the tokens
     pub source: Address,
     /// Target address will receive the tokens
@@ -1027,6 +1028,27 @@ pub struct Transfer {
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
+}
+
+/// A multilateral token transfer, optionally involving the MASP
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct Transfer {
+    //FIXME: vec or set
+    /// The list of bilateral transfers
+    pub transfers: Vec<TransferData>,
     /// The unused storage location at which to place TxId
     pub key: Option<String>,
     /// Shielded transaction part
@@ -1080,12 +1102,12 @@ pub mod testing {
             key in option::of("[a-zA-Z0-9_]*"),
         ) -> Transfer {
             Transfer {
-                source,
-                target,
-                token,
-                amount,
+                transfers: vec![TransferData {
+                    source,
+                    target,
+                    token,amount                }],
                 key,
-                shielded: None,
+                shielded: None
             }
         }
     }

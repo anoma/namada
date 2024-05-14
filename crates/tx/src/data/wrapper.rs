@@ -15,7 +15,9 @@ pub mod wrapper_tx {
     use namada_core::hash::Hash;
     use namada_core::key::*;
     use namada_core::storage::Epoch;
-    use namada_core::token::{Amount, DenominatedAmount, Transfer};
+    use namada_core::token::{
+        Amount, DenominatedAmount, Transfer, TransferData,
+    };
     use namada_core::uint::Uint;
     use namada_gas::Gas;
     use namada_macros::BorshDeserializer;
@@ -218,11 +220,14 @@ pub mod wrapper_tx {
                     .into(),
             );
 
-            let transfer = Transfer {
+            let transfer_data = TransferData {
                 source: MASP,
                 target: self.fee_payer(),
                 token: self.fee.token.clone(),
                 amount: self.get_tx_fee()?,
+            };
+            let transfer = Transfer {
+                transfers: vec![transfer_data],
                 key: None,
                 shielded: Some(masp_hash),
             };
