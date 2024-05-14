@@ -1,8 +1,5 @@
 //! Data-Types that are used in transactions.
 
-/// txs that contain decrypted payloads or assertions of
-/// non-decryptability
-pub mod decrypted;
 pub mod eval_vp;
 /// txs to manage pgf
 pub mod pgf;
@@ -18,7 +15,6 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use bitflags::bitflags;
-pub use decrypted::*;
 use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,

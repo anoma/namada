@@ -1794,7 +1794,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     for bytes in txs_bytes {
         let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
         tx.add_wrapper(
-            namada::tx::data::wrapper_tx::Fee {
+            namada::tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
                 token: native_token.clone(),
             },
