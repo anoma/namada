@@ -1798,21 +1798,6 @@ dependencies = [
 
 [[package]]
 name = "ed25519-consensus"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "758e2a0cd8a6cdf483e1d369e7d081647e00b88d8953e34d8f2cbba05ae28368"
-dependencies = [
- "curve25519-dalek-ng",
- "hex",
- "rand_core 0.6.4",
- "serde 1.0.193",
- "sha2 0.9.9",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-consensus"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c8465edc8ee7436ffea81d21a019b16676ee3db267aa8d5a8d729581ecf998b"
@@ -1820,7 +1805,9 @@ dependencies = [
  "curve25519-dalek-ng",
  "hex",
  "rand_core 0.6.4",
+ "serde 1.0.193",
  "sha2 0.9.9",
+ "thiserror",
  "zeroize",
 ]
 
@@ -4510,7 +4497,7 @@ dependencies = [
  "derivative",
  "directories",
  "drain_filter_polyfill",
- "ed25519-consensus 1.2.1",
+ "ed25519-consensus",
  "ethabi",
  "ethbridge-bridge-events",
  "ethbridge-events",
@@ -4618,7 +4605,7 @@ dependencies = [
  "borsh-ext",
  "chrono",
  "data-encoding",
- "ed25519-consensus 1.2.1",
+ "ed25519-consensus",
  "ethabi",
  "ethbridge-structs",
  "eyre",
@@ -7562,7 +7549,7 @@ dependencies = [
  "bytes",
  "digest 0.10.7",
  "ed25519",
- "ed25519-consensus 2.1.0",
+ "ed25519-consensus",
  "flex-error",
  "futures",
  "k256",
@@ -7693,7 +7680,7 @@ version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9921053646fe51d03ebd0c642871b734e2f28437233529d4aa6fbff5e477e924"
 dependencies = [
- "ed25519-consensus 2.1.0",
+ "ed25519-consensus",
  "gumdrop",
  "serde 1.0.193",
  "serde_json",
