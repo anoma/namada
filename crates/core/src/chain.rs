@@ -2,6 +2,7 @@
 // TODO move BlockHash and BlockHeight here from the storage types
 
 use std::fmt;
+use std::io::{self, Read};
 use std::num::NonZeroU64;
 use std::str::FromStr;
 
@@ -32,11 +33,26 @@ pub const CHAIN_ID_PREFIX_SEP: char = '.';
     Hash,
     Debug,
     BorshSerialize,
-    BorshDeserialize,
     BorshDeserializer,
 )]
+#[repr(transparent)]
 pub struct ProposalBytes {
     inner: NonZeroU64,
+}
+
+impl BorshDeserialize for ProposalBytes {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let value: u64 = BorshDeserialize::deserialize_reader(reader)?;
+        Self::new(value).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "ProposalBytes value must be in the range 1 - {}",
+                    Self::RAW_MAX.get()
+                ),
+            )
+        })
+    }
 }
 
 impl Serialize for ProposalBytes {
