@@ -417,8 +417,12 @@ async fn update_tendermint_config(
         // during some round's start
         config.mempool.max_tx_bytes = 1024 * 1024;
 
-        // Hold 50x the max amount of txs in a block
-        config.mempool.max_txs_bytes = 50 * ProposalBytes::MAX.get();
+        // Hold 50x the max amount of txs in a block.
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            // Multiply with consts - cannot overflow
+            config.mempool.max_txs_bytes = 50 * ProposalBytes::MAX.get();
+        }
 
         // Hold up to 4k txs in the mempool
         config.mempool.size = 4000;
@@ -477,7 +481,9 @@ async fn write_tm_genesis(
         // maximum size of a serialized Tendermint block.
         // on Namada, we have a hard-cap of 16 MiB (6 MiB max
         // txs in a block + 10 MiB reserved for evidence data,
-        // block headers and protobuf serialization overhead)
+        // block headers and protobuf serialization overhead).
+        // Addition with consts - cannot overflow.
+        #[allow(clippy::arithmetic_side_effects)]
         max_bytes: EVIDENCE_AND_PROTOBUF_OVERHEAD + ProposalBytes::MAX.get(),
         // gas is metered app-side, so we disable it
         // at the Tendermint level
