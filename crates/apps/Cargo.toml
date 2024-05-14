@@ -106,7 +106,6 @@ eyre.workspace = true
 fd-lock.workspace = true
 flate2.workspace = true
 futures.workspace = true
-hyphenation = "0.8.4"
 itertools.workspace = true
 lazy_static.workspace= true
 ledger-namada-rs.workspace = true
@@ -144,7 +143,7 @@ tar.workspace = true
 tempfile.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc.workspace = true
-textwrap = { version = "0.16.1", features = ["hyphenation"] }
+textwrap-macros = "0.3.0"
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
 toml.workspace = true

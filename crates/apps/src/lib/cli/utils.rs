@@ -8,12 +8,10 @@ use std::sync::Arc;
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER_PERMISSIVE;
-use hyphenation::{Language, Load, Standard};
 use namada::eth_bridge::ethers::core::k256::elliptic_curve::SecretKey as Secp256k1Sk;
 use namada::eth_bridge::ethers::middleware::SignerMiddleware;
 use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
 use namada::eth_bridge::ethers::signers::{Signer, Wallet};
-use textwrap::{Options, WordSplitter};
 
 use super::args;
 use super::context::Context;
@@ -26,10 +24,6 @@ use crate::cli::context::FromContext;
 // namadaw, ledger, or something more secure
 #[cfg_attr(not(feature = "namada-eth-bridge"), allow(dead_code))]
 const RELAYER_KEY_ENV_VAR: &str = "NAMADA_RELAYER_KEY";
-
-/// The number of characters in the CLI menu after which to
-/// wrap the line.
-const LINE_WRAPPING: usize = 60;
 
 // We only use static strings
 pub type App = clap::Command;
@@ -160,41 +154,12 @@ pub const fn arg_multi<T, K>(name: &'static str) -> ArgMulti<T, K> {
     }
 }
 
-pub trait WrappedHelp {
-    fn wrapped_help(self, help: &str) -> Self;
-    #[allow(dead_code)]
-    fn wrapped_long_help(self, help: &str) -> Self;
+#[macro_export]
+macro_rules! wrap {
+    ($text:literal) => {
+        textwrap_macros::fill!($text, 60)
+    };
 }
-
-impl WrappedHelp for ClapArg {
-    fn wrapped_help(self, help: &str) -> Self {
-        let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
-        let options = Options::new(LINE_WRAPPING)
-            .word_splitter(WordSplitter::Hyphenation(dictionary));
-        self.help(textwrap::fill(help, options))
-    }
-
-    fn wrapped_long_help(self, help: &str) -> Self {
-        let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
-        let options = Options::new(LINE_WRAPPING)
-            .word_splitter(WordSplitter::Hyphenation(dictionary));
-        self.long_help(textwrap::fill(help, options))
-    }
-}
-
-pub trait WrappedAbout {
-    fn wrapped_about(self, about: &str) -> Self;
-}
-
-impl WrappedAbout for App {
-    fn wrapped_about(self, about: &str) -> Self {
-        let dictionary = Standard::from_embedded(Language::EnglishUS).unwrap();
-        let options = Options::new(60)
-            .word_splitter(WordSplitter::Hyphenation(dictionary));
-        self.about(textwrap::fill(&textwrap::dedent(about), options))
-    }
-}
-
 impl<T> Arg<T> {
     pub const fn opt(self) -> ArgOpt<T> {
         ArgOpt {
