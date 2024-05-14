@@ -165,9 +165,7 @@ impl DateTimeUtc {
     /// Returns a [`DateTimeUtc`] corresponding to the provided Unix timestamp.
     #[inline]
     pub fn from_unix_timestamp(timestamp: i64) -> Option<Self> {
-        Some(Self(chrono::Utc.from_utc_datetime(
-            &chrono::NaiveDateTime::from_timestamp_opt(timestamp, 0)?,
-        )))
+        Some(Self(chrono::DateTime::<Utc>::from_timestamp(timestamp, 0)?))
     }
 
     /// Returns a [`DateTimeUtc`] corresponding to the Unix epoch.
