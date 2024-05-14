@@ -60,7 +60,7 @@ impl DerivationPath {
     }
 
     /// Check if the path is BIP-0044 conform
-    /// https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#path-levels
+    /// <https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki#path-levels>
     pub fn is_bip44_conform(&self, strict: bool) -> bool {
         // check the path conforms the structure:
         // m / purpose' / coin_type' / account' / change / address_index
@@ -90,7 +90,7 @@ impl DerivationPath {
     }
 
     /// Check if the path is SLIP-0010 conform
-    /// https://github.com/satoshilabs/slips/blob/master/slip-0010.md#child-key-derivation-ckd-functions
+    /// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md#child-key-derivation-ckd-functions>
     pub fn is_slip10_conform(&self, scheme: SchemeType) -> bool {
         match scheme {
             SchemeType::Ed25519 => {
@@ -103,7 +103,7 @@ impl DerivationPath {
     }
 
     /// Check if the path is ZIP-0032 conform
-    /// https://zips.z.cash/zip-0032#sapling-key-path
+    /// <https://zips.z.cash/zip-0032#sapling-key-path>
     pub fn is_zip32_conform(&self) -> bool {
         // check the path conforms one of the structure:
         // m / purpose' / coin_type' / account'
