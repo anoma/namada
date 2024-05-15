@@ -457,7 +457,8 @@ fn ibc(c: &mut Criterion) {
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }
@@ -634,7 +635,8 @@ fn masp(c: &mut Criterion) {
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
-                    .is_ok());
+                    .is_ok()
+                );
             })
         });
     }
@@ -918,7 +920,7 @@ fn customize_masp_tx_data(
     TransactionData<masp_primitives::transaction::Authorized>,
     Transaction,
 )> {
-    let (_, tx) = setup_storage_for_masp_verification("unshielding");
+    let (_, _, tx) = setup_storage_for_masp_verification("unshielding");
     let transaction = tx
         .sections
         .into_iter()
@@ -1087,8 +1089,11 @@ fn masp_batch_validate(c: &mut Criterion) {
                         ctx
                     },
                     |ctx| {
-                        assert!(ctx
-                            .validate(spend_vk, convert_vk, output_vk, OsRng))
+                        assert!(
+                            ctx.validate(
+                                spend_vk, convert_vk, output_vk, OsRng
+                            )
+                        )
                     },
                     BatchSize::SmallInput,
                 )
@@ -1177,7 +1182,8 @@ fn pgf(c: &mut Criterion) {
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }
@@ -1253,7 +1259,8 @@ fn eth_bridge_nut(c: &mut Criterion) {
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
-                .is_ok())
+                .is_ok()
+            )
         })
     });
 }
@@ -1569,7 +1576,8 @@ fn pos(c: &mut Criterion) {
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
-                    .is_ok())
+                    .is_ok()
+                )
             })
         });
     }
