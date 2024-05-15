@@ -154,10 +154,9 @@ pub struct WrapperTx {
 }
 
 impl WrapperTx {
-    /// Create a new wrapper tx from unencrypted tx, the personal keypair,
+    /// Create a new wrapper tx from the personal keypair,
     /// an optional unshielding tx, and the metadata surrounding the
-    /// inclusion of the tx. This method constructs the signature of
-    /// relevant data and encrypts the transaction
+    /// inclusion of the tx.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         fee: Fee,
