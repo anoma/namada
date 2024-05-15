@@ -2861,7 +2861,7 @@ pub async fn build_transfer<N: Namada>(
                 })?
         };
 
-    // TODO: need multiple source/targets here for masp fee payment
+    // TODO(namada#2596): need multiple source/targets here for masp fee payment
     // targets or leave the fees on the MASP balance
     let source = args.source.effective_address();
     let target = args.target.effective_address();
@@ -2911,8 +2911,8 @@ pub async fn build_transfer<N: Namada>(
             (validated_amount, args.token.clone())
         };
 
-    // TODO: this function should also take another arg as the fees token and
-    // amount
+    // TODO(namada#2597): this function should also take another arg as the fees
+    // token and amount
     let shielded_parts = construct_shielded_parts(
         context,
         &args.source,

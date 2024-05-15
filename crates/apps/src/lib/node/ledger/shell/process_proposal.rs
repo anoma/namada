@@ -503,7 +503,7 @@ where
     }
 }
 
-// TODO: check masp fee payment if required
+// TODO(namada#2597): check masp fee payment if required
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,

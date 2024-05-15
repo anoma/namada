@@ -1094,8 +1094,8 @@ where
                     return response;
                 }
 
-                // TODO: validate masp fee payment if normal fee payment fails
-                // Validate wrapper fees
+                // TODO(namada#2597): validate masp fee payment if normal fee
+                // payment fails Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
                     &wrapper,
                     &mut ShellParams::new(
