@@ -118,7 +118,8 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
         self.iter().map(|attr| {
             (
                 attr.key_str().expect("Attribute key is malformed UTF-8"),
-                attr.value_str().expect("Attribute key is malformed UTF-8"),
+                attr.value_str()
+                    .expect("Attribute value is malformed UTF-8"),
             )
         })
     }

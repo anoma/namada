@@ -1249,11 +1249,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let required = value / threshold;
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace = I128Sum::from_pair(asset_type, value % threshold)
-            .expect("the trace should be a valid i128");
+        let trace = I128Sum::from_pair(asset_type, value % threshold);
         let normed_trace =
-            I128Sum::from_pair(normed_asset_type, value % threshold)
-                .expect("the trace should be a valid i128");
+            I128Sum::from_pair(normed_asset_type, value % threshold);
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
@@ -1433,13 +1431,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
                 // The amount contributed by this note before conversion
                 let pre_contr =
-                    I128Sum::from_pair(note.asset_type, note.value as i128)
-                        .map_err(|()| {
-                            Error::Other(
-                                "received note has invalid value or asset type"
-                                    .to_string(),
-                            )
-                        })?;
+                    I128Sum::from_pair(note.asset_type, note.value as i128);
                 let (contr, normed_contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         context.client(),
@@ -1520,12 +1512,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     res += ValueSum::from_pair(
                         pre_asset_type.token,
                         decoded_change,
-                    )
-                    .expect("expected this to fit");
+                    );
                 }
                 None => {
-                    undecoded += ValueSum::from_pair(*asset_type, *val)
-                        .expect("expected this to fit");
+                    undecoded += ValueSum::from_pair(*asset_type, *val);
                 }
                 _ => {}
             }
@@ -1555,11 +1545,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 res += MaspAmount::from_pair(
                     (decoded.epoch, decoded.token),
                     decoded_change,
-                )
-                .expect("unable to construct decoded amount");
+                );
             } else {
-                undecoded += ValueSum::from_pair(*asset_type, *val)
-                    .expect("expected this to fit");
+                undecoded += ValueSum::from_pair(*asset_type, *val);
             }
         }
         (res, undecoded)
@@ -1578,8 +1566,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                res += ValueSum::from_pair((*asset_type, decoded), *val)
-                    .expect("unable to construct decoded amount");
+                res += ValueSum::from_pair((*asset_type, decoded), *val);
             }
         }
         res
@@ -1795,9 +1782,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Anotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
-        let value_balance = builder.value_balance().map_err(|e| {
-            Error::Other(format!("unable to complete value balance: {}", e))
-        })?;
+        let value_balance = builder.value_balance();
         let value_balance = context
             .shielded_mut()
             .await
@@ -1887,8 +1872,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Convert the shortfall into a I128Sum
             let mut shortfall = I128Sum::zero();
             for (asset_type, val) in asset_types.iter().zip(rem_amount) {
-                shortfall += I128Sum::from_pair(*asset_type, val.into())
-                    .expect("unable to construct value sum");
+                shortfall += I128Sum::from_pair(*asset_type, val.into());
             }
             // Return an insufficient ffunds error
             return Result::Err(TransferErr::from(
@@ -1900,16 +1884,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Represents the amount of inputs we are short by
             let mut additional = I128Sum::zero();
-            for (asset_type, amt) in builder
-                .value_balance()
-                .map_err(|e| {
-                    Error::Other(format!(
-                        "unable to complete value balance: {}",
-                        e
-                    ))
-                })?
-                .components()
-            {
+            for (asset_type, amt) in builder.value_balance().components() {
                 match amt.cmp(&0) {
                     Ordering::Greater => {
                         // Send the change in this asset type back to the sender
@@ -2404,7 +2379,7 @@ pub mod testing {
                 binding_sig,
                 |bvk, msg, binding_sig| {
                     bvk.verify_with_zip216(
-                        &msg,
+                        msg,
                         &binding_sig,
                         VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
                         self.zip216_enabled,
