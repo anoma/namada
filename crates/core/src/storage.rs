@@ -53,6 +53,8 @@ pub enum Error {
          {0}"
     )]
     DbColFamily(String),
+    #[error("{0}")]
+    TryFromInt(#[from] std::num::TryFromIntError),
 }
 
 /// Result for functions that may fail
@@ -1086,14 +1088,17 @@ macro_rules! impl_int_key_seg {
                 // get signed int from a unsigned int complemented with a min
                 // value
                 let complemented = <$unsigned>::parse(string)?;
-                let signed = (complemented as $signed) ^ <$signed>::MIN;
+                let signed = <$signed>::try_from(complemented)?;
+                let signed = signed ^ <$signed>::MIN;
                 Ok(signed)
             }
 
             fn raw(&self) -> String {
                 // signed int is converted to unsigned int that preserves the
                 // order by complementing it with a min value
-                let complemented = (*self ^ <$signed>::MIN) as $unsigned;
+                let complemented =
+                    <$unsigned>::try_from(*self ^ <$signed>::MIN)
+                        .expect("Complemented signed int is zero or positive");
                 complemented.raw()
             }
 

@@ -5436,9 +5436,7 @@ mod test_finalize_block {
         );
         // Assert that the last tx didn't run
         assert!(
-            inner_results
-                .get(&batch.commitments()[2].get_hash())
-                .is_none()
+            !inner_results.contains_key(&batch.commitments()[2].get_hash())
         );
 
         // Check storage modifications are missing
@@ -5554,9 +5552,7 @@ mod test_finalize_block {
         );
         // Assert that the last tx didn't run
         assert!(
-            inner_results
-                .get(&batch.commitments()[2].get_hash())
-                .is_none()
+            !inner_results.contains_key(&batch.commitments()[2].get_hash())
         );
 
         // Check storage modifications are missing
@@ -5603,9 +5599,7 @@ mod test_finalize_block {
         );
         // Assert that the last tx didn't run
         assert!(
-            inner_results
-                .get(&batch.commitments()[2].get_hash())
-                .is_none()
+            !inner_results.contains_key(&batch.commitments()[2].get_hash())
         );
 
         // Check storage modifications
