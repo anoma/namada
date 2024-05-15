@@ -378,14 +378,6 @@ where
     total_consensus_stake_handle().set(storage, total, epoch, 0)
 }
 
-/// Used below in `fn unbond_tokens` to update the bond and unbond amounts
-#[derive(Eq, Hash, PartialEq)]
-struct BondAndUnbondUpdates {
-    bond_start: Epoch,
-    new_bond_value: token::Change,
-    unbond_value: token::Change,
-}
-
 /// Unbond tokens that are bonded between a validator and a source (self or
 /// delegator).
 ///

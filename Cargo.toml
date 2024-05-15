@@ -129,7 +129,7 @@ masp_primitives = { git = "https://github.com/anoma/masp", rev = "6fc4692841a224
 masp_proofs = { git = "https://github.com/anoma/masp", rev = "6fc4692841a2241633792c429cc66b42023e5bf3", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
-num-derive = "0.3.3"
+num-derive = "0.4"
 num-rational = "0.4.1"
 num-traits = "0.2.14"
 once_cell = "1.8.0"
