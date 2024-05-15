@@ -2378,8 +2378,13 @@ pub mod testing {
                 sighash_value,
                 binding_sig,
                 |bvk, msg, binding_sig| {
+                    // Compute the signature's message for bvk/binding_sig
+                    let mut data_to_be_signed = [0u8; 64];
+                    data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
+                    data_to_be_signed[32..64].copy_from_slice(msg);
+
                     bvk.verify_with_zip216(
-                        msg,
+                        &data_to_be_signed,
                         &binding_sig,
                         VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
                         self.zip216_enabled,
