@@ -184,7 +184,7 @@ tower = "0.4"
 tower-abci = {git = "https://github.com/penumbra-zone/tower-abci.git", rev = "4b7306578b93a4def9d76abae8e2a46c8ee6952f"}
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
-tracing-log = "0.1.2"
+tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
