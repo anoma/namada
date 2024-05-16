@@ -13,6 +13,7 @@
     clippy::print_stderr
 )]
 
+/// IBC events and storage keys.
 pub mod ibc {
     pub use namada_ibc::event::{IbcEvent, IbcEventType};
     pub use namada_ibc::storage::is_ibc_key;
@@ -53,6 +54,7 @@ pub use {
     namada_tx as tx,
 };
 
+/// SHA-256 hash of given bytes
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
     Hash(*digest.as_ref())
@@ -182,6 +184,8 @@ macro_rules! debug_log {
     }};
 }
 
+/// VP execution context provides access to storage prior and posterior to the
+/// transaction execution and host environment functions.
 #[derive(Debug)]
 pub struct Ctx(());
 
@@ -259,6 +263,7 @@ pub fn reject() -> VpResult {
     Err(VpError::Unspecified)
 }
 
+/// Storage key-val pair iterator
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 

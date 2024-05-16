@@ -1,5 +1,7 @@
 //! Wallet Store information
 
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::str::FromStr;

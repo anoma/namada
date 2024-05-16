@@ -1,3 +1,5 @@
+//! Shielded and transparent tokens related functions
+
 use namada_core::address::Address;
 use namada_events::{EmitEvents, EventLevel};
 #[cfg(any(test, feature = "testing"))]

@@ -82,12 +82,16 @@ use crate::tx::{
 };
 use crate::wallet::{Wallet, WalletIo, WalletStorage};
 
+/// Default gas-limit
 pub const DEFAULT_GAS_LIMIT: u64 = 25_000;
 
+#[allow(missing_docs)]
 #[cfg(not(feature = "async-send"))]
 pub trait MaybeSync {}
 #[cfg(not(feature = "async-send"))]
 impl<T> MaybeSync for T where T: ?Sized {}
+
+#[allow(missing_docs)]
 #[cfg(not(feature = "async-send"))]
 pub trait MaybeSend {}
 #[cfg(not(feature = "async-send"))]
@@ -114,10 +118,12 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn io(&self) -> &Self::Io;
 
     /// Obtain read guard on the wallet
-    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>>;
+    async fn wallet(&self) -> RwLockReadGuard<'_, Wallet<Self::WalletUtils>>;
 
     /// Obtain write guard on the wallet
-    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>>;
+    async fn wallet_mut(
+        &self,
+    ) -> RwLockWriteGuard<'_, Wallet<Self::WalletUtils>>;
 
     /// Obtain the wallet lock
     fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>>;
@@ -125,12 +131,12 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// Obtain read guard on the shielded context
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockReadGuard<'_, ShieldedContext<Self::ShieldedUtils>>;
 
     /// Obtain write guard on the shielded context
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>>;
+    ) -> RwLockWriteGuard<'_, ShieldedContext<Self::ShieldedUtils>>;
 
     /// Return the native token
     fn native_token(&self) -> Address;
@@ -238,7 +244,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         }
     }
 
-    // Make a Redelegation builder for the given minimum set of arguments
+    /// Make a Redelegation builder for the given minimum set of arguments
     fn new_redelegation(
         &self,
         source: Address,
@@ -745,23 +751,25 @@ where
         &self.client
     }
 
-    async fn wallet(&self) -> RwLockReadGuard<Wallet<Self::WalletUtils>> {
+    async fn wallet(&self) -> RwLockReadGuard<'_, Wallet<Self::WalletUtils>> {
         self.wallet.read().await
     }
 
-    async fn wallet_mut(&self) -> RwLockWriteGuard<Wallet<Self::WalletUtils>> {
+    async fn wallet_mut(
+        &self,
+    ) -> RwLockWriteGuard<'_, Wallet<Self::WalletUtils>> {
         self.wallet.write().await
     }
 
     async fn shielded(
         &self,
-    ) -> RwLockReadGuard<ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockReadGuard<'_, ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.read().await
     }
 
     async fn shielded_mut(
         &self,
-    ) -> RwLockWriteGuard<ShieldedContext<Self::ShieldedUtils>> {
+    ) -> RwLockWriteGuard<'_, ShieldedContext<Self::ShieldedUtils>> {
         self.shielded.write().await
     }
 
@@ -789,8 +797,8 @@ where
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
 /// Tests and strategies for transactions
+#[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
@@ -844,7 +852,8 @@ pub mod testing {
 
     #[derive(Debug, Clone)]
     #[allow(clippy::large_enum_variant)]
-    // To facilitate propagating debugging information
+    #[allow(missing_docs)]
+    /// To facilitate propagating debugging information
     pub enum TxData {
         CommissionChange(CommissionChange),
         ConsensusKeyChange(ConsensusKeyChange),
@@ -872,7 +881,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary commitment
+        /// Generate an arbitrary commitment
         pub fn arb_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
@@ -884,7 +893,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary code section
+        /// Generate an arbitrary code section
         pub fn arb_code()(
             salt: [u8; 8],
             code in arb_commitment(),
@@ -899,7 +908,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary uttf8 commitment
+        /// Generate an arbitrary uttf8 commitment
         pub fn arb_utf8_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
@@ -911,7 +920,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary code section
+        /// Generate an arbitrary code section
         pub fn arb_utf8_code()(
             salt: [u8; 8],
             code in arb_utf8_commitment(),
@@ -926,14 +935,14 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate a chain ID
+        /// Generate a chain ID
         pub fn arb_chain_id()(id in "[a-zA-Z0-9_]*") -> ChainId {
             ChainId(id)
         }
     }
 
     prop_compose! {
-        // Generate a date and time
+        /// Generate a date and time
         pub fn arb_date_time_utc()(
             secs in Utc.with_ymd_and_hms(0, 1, 1, 0, 0, 0).unwrap().timestamp()..=Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap().timestamp(),
             nsecs in ..1000000000u32,
@@ -943,7 +952,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary fee
+        /// Generate an arbitrary fee
         pub fn arb_fee()(
             amount_per_gas_unit in arb_denominated_amount(),
             token in arb_established_address().prop_map(Address::Established),
@@ -956,14 +965,14 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary gas limit
+        /// Generate an arbitrary gas limit
         pub fn arb_gas_limit()(multiplier: u64) -> GasLimit {
             multiplier.into()
         }
     }
 
     prop_compose! {
-        // Generate an arbitrary wrapper transaction
+        /// Generate an arbitrary wrapper transaction
         pub fn arb_wrapper_tx()(
             fee in arb_fee(),
             pk in arb_common_pk(),
@@ -980,7 +989,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary decrypted transaction
+        /// Generate an arbitrary decrypted transaction
         pub fn arb_decrypted_tx()(decrypted_tx in prop_oneof![
             Just(DecryptedTx::Decrypted),
             Just(DecryptedTx::Undecryptable),
@@ -990,7 +999,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary transaction type
+        /// Generate an arbitrary transaction type
         pub fn arb_tx_type()(tx_type in prop_oneof![
             Just(TxType::Raw),
             arb_wrapper_tx().prop_map(|x| TxType::Wrapper(Box::new(x))),
@@ -1000,7 +1009,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary header
+        /// Generate an arbitrary header
         pub fn arb_header()(
             chain_id in arb_chain_id(),
             expiration in option::of(arb_date_time_utc()),
@@ -1023,7 +1032,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary transfer transaction
+        /// Generate an arbitrary transfer transaction
         pub fn arb_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1061,7 +1070,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary transfer transaction
+        /// Generate an arbitrary transfer transaction
         pub fn arb_masp_transfer_tx()(transfer in arb_transfer())(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1120,7 +1129,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary bond transaction
+        /// Generate an arbitrary bond transaction
         pub fn arb_bond_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1136,7 +1145,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary bond transaction
+        /// Generate an arbitrary bond transaction
         pub fn arb_unbond_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1152,7 +1161,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary account initialization transaction
+        /// Generate an arbitrary account initialization transaction
         pub fn arb_init_account_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1171,7 +1180,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary account initialization transaction
+        /// Generate an arbitrary account initialization transaction
         pub fn arb_become_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1187,7 +1196,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary proposal initialization transaction
+        /// Generate an arbitrary proposal initialization transaction
         pub fn arb_init_proposal_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1211,7 +1220,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary transaction with maybe a memo
+        /// Generate an arbitrary transaction with maybe a memo
         pub fn arb_memoed_tx()(
             (mut tx, tx_data) in arb_tx(),
             memo in option::of(arb_utf8_code()),
@@ -1229,7 +1238,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary vote proposal transaction
+        /// Generate an arbitrary vote proposal transaction
         pub fn arb_vote_proposal_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1245,7 +1254,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary reveal public key transaction
+        /// Generate an arbitrary reveal public key transaction
         pub fn arb_reveal_pk_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1261,7 +1270,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary account initialization transaction
+        /// Generate an arbitrary account initialization transaction
         pub fn arb_update_account_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1282,7 +1291,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary reveal public key transaction
+        /// Generate an arbitrary reveal public key transaction
         pub fn arb_withdraw_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1298,7 +1307,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary claim rewards transaction
+        /// Generate an arbitrary claim rewards transaction
         pub fn arb_claim_rewards_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1314,7 +1323,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary commission change transaction
+        /// Generate an arbitrary commission change transaction
         pub fn arb_commission_change_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1330,7 +1339,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary commission change transaction
+        /// Generate an arbitrary commission change transaction
         pub fn arb_metadata_change_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1346,7 +1355,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary unjail validator transaction
+        /// Generate an arbitrary unjail validator transaction
         pub fn arb_unjail_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1362,7 +1371,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary deactivate validator transaction
+        /// Generate an arbitrary deactivate validator transaction
         pub fn arb_deactivate_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1378,7 +1387,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary reactivate validator transaction
+        /// Generate an arbitrary reactivate validator transaction
         pub fn arb_reactivate_validator_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1394,7 +1403,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary consensus key change transaction
+        /// Generate an arbitrary consensus key change transaction
         pub fn arb_consensus_key_change_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1410,7 +1419,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary redelegation transaction
+        /// Generate an arbitrary redelegation transaction
         pub fn arb_redelegation_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1426,7 +1435,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary redelegation transaction
+        /// Generate an arbitrary redelegation transaction
         pub fn arb_update_steward_commission_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1442,7 +1451,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary redelegation transaction
+        /// Generate an arbitrary redelegation transaction
         pub fn arb_resign_steward_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1458,7 +1467,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary pending transfer transaction
+        /// Generate an arbitrary pending transfer transaction
         pub fn arb_pending_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1474,7 +1483,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary IBC any transaction
+        /// Generate an arbitrary IBC any transaction
         pub fn arb_ibc_any_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
@@ -1491,7 +1500,7 @@ pub mod testing {
         }
     }
 
-    // Generate an arbitrary tx
+    /// Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
         prop_oneof![
             arb_transfer_tx(),
@@ -1521,7 +1530,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary signature section
+        /// Generate an arbitrary signature section
         pub fn arb_signature(targets: Vec<namada_core::hash::Hash>)(
             targets in Just(targets),
             secret_keys in collection::btree_map(
@@ -1545,7 +1554,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary signed tx
+        /// Generate an arbitrary signed tx
         pub fn arb_signed_tx()(tx in arb_memoed_tx())(
             sigs in collection::vec(arb_signature(tx.0.sechashes()), 0..3),
             mut tx in Just(tx),

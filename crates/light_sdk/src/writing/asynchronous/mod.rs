@@ -26,11 +26,6 @@ pub async fn broadcast_tx(
     )
     .map_err(|e| Error::Other(e.to_string()))?;
 
-    let wrapper_tx_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
-    // on-chain
-    let decrypted_tx_hash = tx.raw_header_hash().to_string();
-
     // TODO: configure an explicit timeout value? we need to hack away at
     // `tendermint-rs` for this, which is currently using a hard-coded 30s
     // timeout.
@@ -40,13 +35,6 @@ pub async fn broadcast_tx(
         .map_err(|e| Error::from(TxSubmitError::TxBroadcast(e)))?;
 
     if response.code == 0.into() {
-        println!("Transaction added to mempool: {:?}", response);
-        // Print the transaction identifiers to enable the extraction of
-        // acceptance/application results later
-        {
-            println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
-        }
         Ok(response)
     } else {
         Err(Error::from(TxSubmitError::TxBroadcast(RpcError::server(

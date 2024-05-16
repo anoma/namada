@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 //! Provides functionality for managing keys and addresses for a user
 pub mod alias;
 mod derivation_path;
@@ -357,7 +359,7 @@ impl<U> Wallet<U> {
     pub fn find_address(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<std::borrow::Cow<Address>> {
+    ) -> Option<std::borrow::Cow<'_, Address>> {
         Alias::is_reserved(alias.as_ref())
             .map(std::borrow::Cow::Owned)
             .or_else(|| {

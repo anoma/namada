@@ -127,6 +127,7 @@ pub type EnvResult<T> = Result<T, Error>;
 /// Transaction result
 pub type TxResult = EnvResult<()>;
 
+/// Storage key-val pair iterator
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 
