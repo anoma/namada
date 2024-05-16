@@ -4,6 +4,7 @@ resolver = "2"
 members = [
   "crates/account",
   "crates/apps",
+  "crates/apps_lib",
   "crates/benches",
   "crates/controller",
   "crates/core",

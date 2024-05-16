@@ -1,0 +1,135 @@
+[package]
+name = "namada_apps_lib"
+description = "Namada CLI apps library code"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = ["migrations"]
+mainnet = [
+  "namada/mainnet",
+]
+# for integration tests and test utilities
+testing = ["namada_test_utils"]
+benches = ["namada_test_utils"]
+integration = []
+jemalloc = ["rocksdb/jemalloc"]
+migrations = [
+  "namada_migrations",
+  "namada_sdk/migrations",
+  "namada/migrations",
+  "linkme",
+]
+namada-eth-bridge = [
+  "namada/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+]
+
+[dependencies]
+namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_macros = {path = "../macros"}
+namada_migrations = {path = "../migrations", optional = true}
+namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
+namada_test_utils = {path = "../test_utils", optional = true}
+
+ark-serialize.workspace = true
+ark-std.workspace = true
+arse-merkle-tree = { workspace = true, features = ["blake2b"] }
+assert_matches.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+bech32.workspace = true
+bimap.workspace = true
+blake2b-rs.workspace = true
+borsh.workspace = true
+borsh-ext.workspace = true
+byte-unit.workspace = true
+byteorder.workspace = true
+clap.workspace = true
+color-eyre.workspace = true
+config.workspace = true
+data-encoding.workspace = true
+derivative.workspace = true
+directories.workspace = true
+drain_filter_polyfill.workspace = true
+ed25519-consensus = { workspace = true, features = ["std"] }
+ethabi.workspace = true
+ethbridge-bridge-events.workspace = true
+ethbridge-events.workspace = true
+eyre.workspace = true
+fd-lock.workspace = true
+flate2.workspace = true
+futures.workspace = true
+itertools.workspace = true
+lazy_static.workspace= true
+ledger-namada-rs.workspace = true
+ledger-transport-hid.workspace = true
+libc.workspace = true
+libloading.workspace = true
+linkme = { workspace = true, optional = true }
+masp_primitives = { workspace = true, features = ["transparent-inputs"] }
+masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
+num_cpus.workspace = true
+num256.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+once_cell.workspace = true
+orion.workspace = true
+pretty_assertions.workspace = true
+prost-types.workspace = true
+prost.workspace = true
+rand_core = { workspace = true, features = ["std"] }
+rand = { workspace = true, features = ["std"] }
+rayon.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+ripemd.workspace = true
+rlimit.workspace = true
+rocksdb.workspace = true
+rpassword.workspace = true
+serde_bytes.workspace = true
+serde_json = {workspace = true, features = ["raw_value"]}
+serde.workspace = true
+sha2.workspace = true
+signal-hook.workspace = true
+smooth-operator.workspace = true
+sysinfo.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+tendermint-config.workspace = true
+tendermint-rpc.workspace = true
+textwrap-macros = "0.3.0"
+thiserror.workspace = true
+tokio = {workspace = true, features = ["full"]}
+toml.workspace = true
+tonic.workspace = true
+tower-abci.workspace = true
+tower.workspace = true
+tracing-appender.workspace = true
+tracing-log.workspace = true
+tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing.workspace = true
+winapi.workspace = true
+zeroize.workspace = true
+warp = "0.3.2"
+bytes = "1.1.0"
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
+namada_test_utils = {path = "../test_utils"}
+bit-set.workspace = true
+proptest.workspace = true
+test-log.workspace = true
+tokio-test.workspace = true
+
+[build-dependencies]
+git2.workspace = true
