@@ -707,6 +707,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         logger: &impl ProgressLogger<IO>,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
+        // NOTE: do not remove this argument, it will be used once the indexer
+        // is ready
+        _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error> {

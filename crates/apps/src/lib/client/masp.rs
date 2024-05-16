@@ -22,6 +22,7 @@ pub async fn syncing<
     mut shielded: ShieldedContext<U>,
     client: &C,
     io: &IO,
+    batch_size: u64,
     start_query_height: Option<BlockHeight>,
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
@@ -43,6 +44,7 @@ pub async fn syncing<
                 &logger,
                 start_query_height,
                 last_query_height,
+                batch_size,
                 sks,
                 fvks,
             )

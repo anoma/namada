@@ -1049,6 +1049,7 @@ impl BenchShieldedCtx {
                 self.shielded,
                 &self.shell,
                 &StdIo,
+                1,
                 None,
                 None,
                 &[spending_key.into()],
