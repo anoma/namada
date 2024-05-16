@@ -1585,7 +1585,6 @@ mod tests {
                 namada_core::key::testing::common_sk_from_simple_seed(0)
                     .to_public(),
                 0.into(),
-                None,
             ),
         )));
         tx.add_code_from_hash(read_code_hash, None);

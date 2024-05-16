@@ -69,7 +69,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::{IndexedTx, IndexedTxType, Tx};
+use namada_tx::{IndexedTx, Tx, TxCommitments};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -146,7 +146,7 @@ pub enum TransferErr {
 }
 
 #[derive(Debug, Clone)]
-struct ExtractedMaspTxs(Vec<(IndexedTxType, Transaction)>);
+struct ExtractedMaspTxs(Vec<(TxCommitments, Transaction)>);
 
 /// MASP verifying keys
 pub struct PVKs {
@@ -839,15 +839,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             for idx in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs =
-                    Self::extract_masp_tx(&tx, true).await?;
+                let extracted_masp_txs = Self::extract_masp_tx(&tx).await?;
                 // Collect the current transactions
-                for (tx_type, transaction) in extracted_masp_txs.0 {
+                for (inner_tx, transaction) in extracted_masp_txs.0 {
                     shielded_txs.insert(
                         IndexedTx {
                             height: height.into(),
                             index: idx,
-                            tx_type,
+                            inner_tx,
                         },
                         transaction,
                     );
@@ -859,36 +858,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx(
-        tx: &Tx,
-        check_header: bool,
-    ) -> Result<ExtractedMaspTxs, Error> {
+    async fn extract_masp_tx(tx: &Tx) -> Result<ExtractedMaspTxs, Error> {
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
         // transaction se we could end up with transactions carrying
         // an unnecessary masp section. We must instead look for the
         // required masp sections in the signed commitments (hashes)
-        // of the transactions' headers/data sections
+        // of the transactions' data sections
         let mut txs = vec![];
-        let wrapper_header = tx
-            .header()
-            .wrapper()
-            .expect("All transactions must have a wrapper");
-        if let (Some(hash), true) =
-            (wrapper_header.unshield_section_hash, check_header)
-        {
-            let masp_transaction = tx
-                .get_section(&hash)
-                .ok_or_else(|| {
-                    Error::Other("Missing expected masp section".to_string())
-                })?
-                .masp_tx()
-                .ok_or_else(|| {
-                    Error::Other("Missing masp transaction".to_string())
-                })?;
-
-            txs.push((IndexedTxType::Wrapper, masp_transaction));
-        }
 
         // Expect transaction
         for cmt in tx.commitments() {
@@ -928,7 +905,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .flatten();
 
             if let Some(transaction) = maybe_masp_tx {
-                txs.push((IndexedTxType::Inner(cmt.to_owned()), transaction));
+                txs.push((cmt.to_owned(), transaction));
             }
         }
 
@@ -1998,7 +1975,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .index
                         .checked_add(1)
                         .expect("Tx index shouldn't overflow"),
-                    tx_type: IndexedTxType::Wrapper,
+                    inner_tx: TxCommitments::default(),
                 }
             });
         self.sync_status = ContextSyncStatus::Speculative;

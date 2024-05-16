@@ -304,7 +304,6 @@ impl Finalized {
             epochs_per_year,
             max_signatures_per_transaction,
             fee_unshielding_gas_limit,
-            fee_unshielding_descriptions_limit,
             max_block_gas,
             minimum_gas_price,
             max_tx_bytes,
@@ -350,7 +349,6 @@ impl Finalized {
             max_proposal_bytes,
             max_signatures_per_transaction,
             fee_unshielding_gas_limit,
-            fee_unshielding_descriptions_limit,
             max_block_gas,
             minimum_gas_price: minimum_gas_price
                 .iter()

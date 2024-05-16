@@ -89,7 +89,6 @@ pub(in crate::transaction) fn attach_fee(
         },
         fee_payer,
         gas_limit,
-        None,
     );
     tx
 }

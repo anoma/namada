@@ -159,7 +159,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             fee_amount: None,
             wrapper_fee_payer: None,
             fee_token: self.native_token(),
-            fee_unshield: None,
             gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
             expiration: Default::default(),
             disposable_signing_key: false,
@@ -687,7 +686,6 @@ where
                 fee_amount: None,
                 wrapper_fee_payer: None,
                 fee_token: native_token,
-                fee_unshield: None,
                 gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
                 expiration: Default::default(),
                 disposable_signing_key: false,
@@ -978,13 +976,11 @@ pub mod testing {
             fee in arb_fee(),
             pk in arb_common_pk(),
             gas_limit in arb_gas_limit(),
-            unshield_section_hash in option::of(arb_hash()),
         ) -> WrapperTx {
             WrapperTx {
                 fee,
                 pk,
                 gas_limit,
-                unshield_section_hash,
             }
         }
     }

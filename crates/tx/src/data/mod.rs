@@ -246,8 +246,6 @@ impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for BatchResults<T> {
 pub struct TxResult<T> {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
-    /// Storage keys touched by the wrapper transaction
-    pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// The results of the batch, indexed by the hash of the specific
     /// [`Commitments`]
     pub batch_results: BatchResults<T>,
@@ -257,7 +255,6 @@ impl<T> Default for TxResult<T> {
     fn default() -> Self {
         Self {
             gas_used: Default::default(),
-            wrapper_changed_keys: Default::default(),
             batch_results: Default::default(),
         }
     }
@@ -279,7 +276,6 @@ impl<T: Display> TxResult<T> {
 
         TxResult {
             gas_used: self.gas_used,
-            wrapper_changed_keys: self.wrapper_changed_keys,
             batch_results: BatchResults(batch_results),
         }
     }
@@ -622,7 +618,6 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             0.into(),
-            None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -650,7 +645,6 @@ mod test_process_tx {
             },
             keypair.ref_to(),
             0.into(),
-            None,
         ))));
         tx.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         tx.set_data(Data::new("transaction data".as_bytes().to_owned()));

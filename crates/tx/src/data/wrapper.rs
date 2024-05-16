@@ -2,14 +2,12 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 
 pub use ark_bls12_381::Bls12_381 as EllipticCurve;
-use masp_primitives::transaction::Transaction;
-use namada_core::address::{Address, MASP};
+use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::hash::Hash;
 use namada_core::key::*;
-use namada_core::token::{Amount, DenominatedAmount, Transfer};
+use namada_core::token::{Amount, DenominatedAmount};
 use namada_core::uint::Uint;
 use namada_gas::Gas;
 use namada_macros::BorshDeserializer;
@@ -18,9 +16,6 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-
-use crate::data::TxType;
-use crate::{Code, Data, Section, Tx};
 
 /// Errors relating to decrypting a wrapper tx and its
 /// encrypted payload from a Tx type
@@ -38,8 +33,6 @@ pub enum WrapperTxErr {
          from that in the WrapperTx"
     )]
     InvalidKeyPair,
-    #[error("The provided unshielding tx is invalid: {0}")]
-    InvalidUnshield(String),
     #[error("The given Tx fee amount overflowed")]
     OverflowingFee,
     #[error("Error while converting the denominated fee amount")]
@@ -156,9 +149,6 @@ pub struct WrapperTx {
     pub pk: common::PublicKey,
     /// Max amount of gas that can be used when executing the inner tx
     pub gas_limit: GasLimit,
-    /// The hash of the optional, unencrypted, unshielding transaction for
-    /// fee payment
-    pub unshield_section_hash: Option<Hash>,
 }
 
 impl WrapperTx {
@@ -170,14 +160,8 @@ impl WrapperTx {
         fee: Fee,
         pk: common::PublicKey,
         gas_limit: GasLimit,
-        unshield_hash: Option<Hash>,
     ) -> WrapperTx {
-        Self {
-            fee,
-            pk,
-            gas_limit,
-            unshield_section_hash: unshield_hash,
-        }
+        Self { fee, pk, gas_limit }
     }
 
     /// Get the address of the implicit account associated
@@ -193,36 +177,6 @@ impl WrapperTx {
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
         hasher
-    }
-
-    /// Generates the fee unshielding tx for execution.
-    pub fn generate_fee_unshielding(
-        &self,
-        transfer_code_hash: Hash,
-        transfer_code_tag: Option<String>,
-        unshield: Transaction,
-    ) -> Result<Tx, WrapperTxErr> {
-        let mut tx = Tx::from_type(TxType::Raw);
-        let masp_section = tx.add_section(Section::MaspTx(unshield));
-        let masp_hash = Hash(
-            masp_section
-                .hash(&mut Sha256::new())
-                .finalize_reset()
-                .into(),
-        );
-
-        let transfer = Transfer {
-            source: MASP,
-            target: self.fee_payer(),
-            token: self.fee.token.clone(),
-            amount: self.get_tx_fee()?,
-            shielded: Some(masp_hash),
-        };
-        let data = transfer.serialize_to_vec();
-        tx.set_data(Data::new(data));
-        tx.set_code(Code::from_hash(transfer_code_hash, transfer_code_tag));
-
-        Ok(tx)
     }
 
     /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
