@@ -1374,7 +1374,7 @@ mod test_utils {
             .expect("Current directory should exist")
             .canonicalize()
             .expect("Current directory should exist");
-        while current_path.file_name().unwrap() != "apps" {
+        while current_path.file_name().unwrap() != "apps_lib" {
             current_path.pop();
         }
         // Two-dirs up to root
