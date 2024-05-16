@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 #[cfg(not(feature = "migrations"))]
 use core::fmt::Formatter;
 #[cfg(feature = "migrations")]
@@ -131,7 +133,7 @@ struct UpdateValueVisitor;
 impl<'de> Visitor<'de> for UpdateValueVisitor {
     type Value = UpdateValue;
 
-    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> core::fmt::Result {
         formatter.write_str(
             "a hex encoded series of bytes that borsh decode to an \
              UpdateValue.",

@@ -18,12 +18,14 @@ const ZIP32_PURPOSE: u32 = 32;
 const ETH_COIN_TYPE: u32 = 60;
 const NAMADA_COIN_TYPE: u32 = 877;
 
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum DerivationPathError {
     #[error("invalid derivation path: {0}")]
     InvalidDerivationPath(String),
 }
 
+/// A key derivation path
 #[derive(Clone, Debug)]
 pub struct DerivationPath(DerivationPathInner);
 
@@ -35,6 +37,7 @@ impl DerivationPath {
         Self(DerivationPathInner::new(path))
     }
 
+    /// Check if the path has a compatible transparent coin type
     pub fn has_transparent_compatible_coin_type(
         &self,
         scheme: SchemeType,
@@ -51,6 +54,7 @@ impl DerivationPath {
         }
     }
 
+    /// Check if the path has a compatible shielded coin type
     pub fn has_shielded_compatible_coin_type(&self) -> bool {
         if let Some(coin_type) = self.0.as_ref().get(1) {
             coin_type.to_u32() == NAMADA_COIN_TYPE
@@ -126,6 +130,7 @@ impl DerivationPath {
         }
     }
 
+    /// Check if the path is compliant with Namada's transparent scheme
     pub fn is_namada_transparent_compliant(&self, scheme: SchemeType) -> bool {
         match scheme {
             SchemeType::Ed25519 => {
@@ -141,6 +146,7 @@ impl DerivationPath {
         }
     }
 
+    /// Check if the path is compliant with Namada's shielded scheme
     pub fn is_namada_shielded_compliant(&self) -> bool {
         self.is_zip32_conform() && self.has_shielded_compatible_coin_type()
     }
@@ -195,15 +201,18 @@ impl DerivationPath {
         )
     }
 
+    /// A default derivation path for transparent scheme
     pub fn default_for_transparent_scheme(scheme: SchemeType) -> Self {
         let path = Self::bip44(scheme, 0, 0, 0);
         path.hardened(scheme)
     }
 
+    /// A default derivation path for shielded scheme
     pub fn default_for_shielded() -> Self {
         Self::zip32(0, None)
     }
 
+    /// Try to parse a derivation path from a string
     pub fn from_path_string(path: &str) -> Result<Self, DerivationPathError> {
         let inner = DerivationPathInner::from_str(path).map_err(|err| {
             DerivationPathError::InvalidDerivationPath(err.to_string())
@@ -211,6 +220,7 @@ impl DerivationPath {
         Ok(Self(inner))
     }
 
+    /// Try to parse a derivation path for transparent scheme from a string
     pub fn from_path_string_for_transparent_scheme(
         scheme: SchemeType,
         path: &str,
@@ -218,13 +228,14 @@ impl DerivationPath {
         Self::from_path_string(path).map(|dp| dp.hardened(scheme))
     }
 
+    /// Get a reference to the path's list of [`ChildIndex`] items
     pub fn path(&self) -> &[ChildIndex] {
         self.0.path()
     }
 }
 
 impl fmt::Display for DerivationPath {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
 }

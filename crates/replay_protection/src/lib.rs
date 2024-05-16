@@ -11,7 +11,10 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_lossless,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::dbg_macro,
+    clippy::print_stdout,
+    clippy::print_stderr
 )]
 
 use namada_core::hash::Hash;

@@ -1,6 +1,9 @@
 //! Traits for implementing IO handlers. This is to enable
 //! generic IO. The defaults are the obvious Rust native
 //! functions.
+
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 use crate::{MaybeSend, MaybeSync};
 
 /// A trait that abstracts out I/O operations

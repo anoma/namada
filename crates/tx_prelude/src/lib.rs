@@ -5,6 +5,13 @@
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::dbg_macro,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 
 pub mod account;
 pub mod ibc;
@@ -120,6 +127,7 @@ pub type EnvResult<T> = Result<T, Error>;
 /// Transaction result
 pub type TxResult = EnvResult<()>;
 
+/// Storage key-val pair iterator
 #[derive(Debug)]
 pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 

@@ -304,7 +304,7 @@ where
             return None;
         };
         let tx_hash: KeccakHash = ev
-            .read_attribute::<BridgePoolTxHash>()
+            .read_attribute::<BridgePoolTxHash<'_>>()
             .expect("The transfer hash must be available");
         if !transfer_hashes.swap_remove(&tx_hash) {
             return None;

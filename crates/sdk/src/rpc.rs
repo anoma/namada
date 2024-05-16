@@ -601,7 +601,7 @@ impl TryFrom<Event> for TxResponse {
     type Error = String;
 
     fn try_from(event: Event) -> Result<Self, Self::Error> {
-        let inner_tx = event.read_attribute::<InnerTxAttr>().ok();
+        let inner_tx = event.read_attribute::<InnerTxAttr<'_>>().ok();
         let hash = event
             .read_attribute::<extend::TxHash>()
             .map_err(|err| err.to_string())?;
@@ -1036,6 +1036,7 @@ pub async fn query_proposal_votes<C: crate::queries::Client + Sync>(
     )
 }
 
+/// Query the information to estimate next epoch start
 pub async fn query_next_epoch_info<C: crate::queries::Client + Sync>(
     client: &C,
 ) -> Result<(BlockHeight, EpochDuration), error::Error> {

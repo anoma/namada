@@ -38,6 +38,7 @@ pub enum Error {
     /// Ethereum bridge related errors
     #[error("{0}")]
     EthereumBridge(#[from] EthereumBridgeError),
+    /// Arithmetic error
     #[error("Arithmetic {0}")]
     Arith(#[from] arith::Error),
     /// Any Other errors that are uncategorized

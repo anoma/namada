@@ -123,6 +123,7 @@ pub struct ShieldedTransfer {
 }
 
 /// Shielded pool data for a token
+#[allow(missing_docs)]
 #[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspTokenRewardData {
     pub name: String,
@@ -412,7 +413,10 @@ where
 /// use the default.
 pub fn get_params_dir() -> PathBuf {
     if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        println!("Using {} as masp parameter folder.", params_dir);
+        #[allow(clippy::print_stdout)]
+        {
+            println!("Using {} as masp parameter folder.", params_dir);
+        }
         PathBuf::from(params_dir)
     } else {
         masp_proofs::default_params_folder().unwrap()
@@ -2414,8 +2418,8 @@ pub mod testing {
         }
     }
 
-    // This function computes `value` in the exponent of the value commitment
-    // base
+    /// This function computes `value` in the exponent of the value commitment
+    /// base
     fn masp_compute_value_balance(
         asset_type: AssetType,
         value: i128,
@@ -2445,8 +2449,8 @@ pub mod testing {
         Some(value_balance.into())
     }
 
-    // A context object for creating the Sapling components of a Zcash
-    // transaction.
+    /// A context object for creating the Sapling components of a Zcash
+    /// transaction.
     pub struct SaplingProvingContext {
         bsk: jubjub::Fr,
         // (sum of the Spend value commitments) - (sum of the Output value
@@ -2454,9 +2458,9 @@ pub mod testing {
         cv_sum: jubjub::ExtendedPoint,
     }
 
-    // An implementation of TxProver that does everything except generating
-    // valid zero-knowledge proofs. Uses the supplied source of randomness to
-    // carry out its operations.
+    /// An implementation of TxProver that does everything except generating
+    /// valid zero-knowledge proofs. Uses the supplied source of randomness to
+    /// carry out its operations.
     pub struct MockTxProver<R: RngCore>(pub Mutex<R>);
 
     impl<R: RngCore> TxProver for MockTxProver<R> {
@@ -2663,7 +2667,7 @@ pub mod testing {
     }
 
     #[derive(Debug, Clone)]
-    // Adapts a CSPRNG from a PRNG for proptesting
+    /// Adapts a CSPRNG from a PRNG for proptesting
     pub struct TestCsprng<R: RngCore>(R);
 
     impl<R: RngCore> CryptoRng for TestCsprng<R> {}
@@ -2690,14 +2694,14 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Expose a random number generator
+        /// Expose a random number generator
         pub fn arb_rng()(rng in Just(()).prop_perturb(|(), rng| rng)) -> TestRng {
             rng
         }
     }
 
     prop_compose! {
-        // Generate an arbitrary output description with the given value
+        /// Generate an arbitrary output description with the given value
         pub fn arb_output_description(
             asset_type: AssetType,
             value: u64,
@@ -2719,7 +2723,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary spend description with the given value
+        /// Generate an arbitrary spend description with the given value
         pub fn arb_spend_description(
             asset_type: AssetType,
             value: u64,
@@ -2779,7 +2783,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP denomination
+        /// Generate an arbitrary MASP denomination
         pub fn arb_masp_digit_pos()(denom in 0..4u8) -> MaspDigitPos {
             MaspDigitPos::from(denom)
         }
@@ -2791,8 +2795,8 @@ pub mod testing {
     const MAX_SPLITS: usize = 3;
 
     prop_compose! {
-        // Arbitrarily partition the given vector of integers into sets and sum
-        // them
+        /// Arbitrarily partition the given vector of integers into sets and sum
+        /// them
         pub fn arb_partition(values: Vec<u64>)(buckets in ((!values.is_empty()) as usize)..=values.len())(
             values in Just(values.clone()),
             assigns in collection::vec(0..buckets, values.len()),
@@ -2807,8 +2811,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary spend descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary spend descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_spend_descriptions(
             asset: AssetData,
             values: Vec<u64>,
@@ -2830,8 +2834,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary output descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary output descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_output_descriptions(
             asset: AssetData,
             values: Vec<u64>,
@@ -2853,8 +2857,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary spend descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary spend descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_txouts(
             asset: AssetData,
             values: Vec<u64>,
@@ -2878,7 +2882,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary shielded MASP transaction builder
+        /// Generate an arbitrary shielded MASP transaction builder
         pub fn arb_shielded_builder(asset_range: impl Into<SizeRange>)(
             assets in collection::hash_map(
                 arb_pre_asset_type(),
@@ -2925,7 +2929,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary pre-asset type
+        /// Generate an arbitrary pre-asset type
         pub fn arb_pre_asset_type()(
             token in arb_address(),
             denom in arb_denomination(),
@@ -2942,7 +2946,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary shielding MASP transaction builder
+        /// Generate an arbitrary shielding MASP transaction builder
         pub fn arb_shielding_builder(
             source: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -2985,7 +2989,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary deshielding MASP transaction builder
+        /// Generate an arbitrary deshielding MASP transaction builder
         pub fn arb_deshielding_builder(
             target: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -3035,7 +3039,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_shielded_transfer(
             asset_range: impl Into<SizeRange>,
         )(asset_range in Just(asset_range.into()))(
@@ -3061,7 +3065,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_shielding_transfer(
             source: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -3091,7 +3095,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_deshielding_transfer(
             target: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -3156,12 +3160,19 @@ pub mod fs {
                 && convert_path.exists()
                 && output_path.exists())
             {
-                println!("MASP parameters not present, downloading...");
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("MASP parameters not present, downloading...");
+                }
                 masp_proofs::download_masp_parameters(None)
                     .expect("MASP parameters not present or downloadable");
-                println!(
-                    "MASP parameter download complete, resuming execution..."
-                );
+                #[allow(clippy::print_stdout)]
+                {
+                    println!(
+                        "MASP parameter download complete, resuming \
+                         execution..."
+                    );
+                }
             }
             // Finally initialize a shielded context with the supplied directory
 
@@ -3287,10 +3298,13 @@ pub mod fs {
 /// whether sync is currently fetch or scanning blocks.
 #[derive(Debug, Copy, Clone)]
 pub enum ProgressType {
+    /// Fetch
     Fetch,
+    /// Scan
     Scan,
 }
 
+#[allow(missing_docs)]
 pub trait ProgressLogger<IO: Io> {
     type Fetch: Iterator<Item = u64>;
     type Scan: Iterator<Item = IndexedNoteEntry>;
@@ -3313,6 +3327,7 @@ pub struct DefaultLogger<'io, IO: Io> {
 }
 
 impl<'io, IO: Io> DefaultLogger<'io, IO> {
+    /// Initialize default logger
     pub fn new(io: &'io IO) -> Self {
         Self { io }
     }

@@ -757,10 +757,12 @@ impl<C: NamadaTypes> TxBuilder<C> for TxBecomeValidator<C> {
 }
 
 impl<C: NamadaTypes> TxBecomeValidator<C> {
+    /// Set the address
     pub fn address(self, address: C::Address) -> Self {
         Self { address, ..self }
     }
 
+    /// Set the commission rate
     pub fn commission_rate(self, commission_rate: Dec) -> Self {
         Self {
             commission_rate,
@@ -768,6 +770,7 @@ impl<C: NamadaTypes> TxBecomeValidator<C> {
         }
     }
 
+    /// Set the max commission rate change
     pub fn max_commission_rate_change(
         self,
         max_commission_rate_change: Dec,
@@ -778,6 +781,7 @@ impl<C: NamadaTypes> TxBecomeValidator<C> {
         }
     }
 
+    /// Set the email
     pub fn email(self, email: String) -> Self {
         Self { email, ..self }
     }
@@ -792,6 +796,7 @@ impl<C: NamadaTypes> TxBecomeValidator<C> {
 }
 
 impl TxBecomeValidator {
+    /// Build the tx
     pub async fn build(
         &self,
         context: &impl Namada,
