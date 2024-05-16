@@ -15,7 +15,6 @@ version.workspace = true
 [features]
 default = []
 mainnet = []
-wasm-runtime = []
 rand = ["dep:rand", "rand_core"]
 ethers-derive = [
   "ethbridge-structs/ethers-derive"

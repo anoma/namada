@@ -19,7 +19,6 @@ default = ["wasm-runtime"]
 mainnet = ["namada_core/mainnet"]
 std = ["namada_sdk/std"]
 wasm-runtime = [
-  "namada_core/wasm-runtime",
   "loupe",
   "parity-wasm",
   "rayon",

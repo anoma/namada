@@ -74,7 +74,7 @@ namada-eth-bridge = [
 namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
+namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 
 
@@ -165,3 +165,6 @@ tokio-test.workspace = true
 
 [build-dependencies]
 git2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winapi.workspace = true

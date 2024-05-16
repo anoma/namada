@@ -4457,6 +4457,7 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "warp",
+ "winapi",
  "zeroize",
 ]
 
