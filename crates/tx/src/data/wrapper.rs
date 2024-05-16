@@ -146,6 +146,7 @@ impl TryFrom<GasLimit> for Gas {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq
 )]
 pub struct WrapperTx {
     /// The fee to be paid for including the tx

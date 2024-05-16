@@ -29,7 +29,7 @@ use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
 use namada_ethereum_bridge::storage::whitelist;
 use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
 use namada_state::{ResultExt, StateRead};
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 
 use crate::address::{Address, InternalAddress};
 use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
@@ -543,7 +543,7 @@ where
 
     fn validate_tx(
         &self,
-        tx: &Tx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<(), Error> {
@@ -566,7 +566,7 @@ where
             )
             .into());
         }
-        let Some(tx_data) = tx.data() else {
+        let Some(tx_data) = batched_tx.tx.data(batched_tx.cmt) else {
             return Err(native_vp::Error::SimpleMessage(
                 "No transaction data found",
             )

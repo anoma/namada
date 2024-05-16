@@ -19,9 +19,10 @@ use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
-    GasLimit, TxResult, TxType, VpStatusFlags, VpsResult, WrapperTx,
+    BatchResults, BatchedTxResult, GasLimit, TxResult, TxType, VpStatusFlags,
+    VpsResult, WrapperTx,
 };
-use namada_tx::{Section, Tx};
+use namada_tx::{BatchedTxRef, Section, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use thiserror::Error;
@@ -49,6 +50,8 @@ use crate::vm::{self, wasm, WasmCacheAccess};
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("No inner transactions were found")]
+    MissingInnerTxs,
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("State error: {0}")]
@@ -63,6 +66,8 @@ pub enum Error {
     ProtocolTxError(#[from] eyre::Error),
     #[error("Txs must either be encrypted or a decryption of an encrypted tx")]
     TxTypeError,
+    #[error("The atomic batch failed at inner transaction {0}")]
+    FailingAtomicBatch(Hash),
     #[error("Fee ushielding error: {0}")]
     FeeUnshieldingError(namada_tx::data::WrapperTxErr),
     #[error("Gas error: {0}")]
@@ -167,13 +172,26 @@ pub struct WrapperArgs<'a> {
     pub is_committed_fee_unshield: bool,
 }
 
+/// The result of a call to [`dispatch_tx`]
+pub struct DispatchError {
+    /// The result of the function call
+    pub error: Error,
+    /// The tx result produced. It could produced even in case of an error
+    pub tx_result: Option<TxResult<Error>>,
+}
+
+impl From<Error> for DispatchError {
+    fn from(error: Error) -> Self {
+        Self {
+            error,
+            tx_result: None,
+        }
+    }
+}
+
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
-///
-/// If the given tx is a successfully decrypted payload apply the necessary
-/// vps. Otherwise, we include the tx on chain with the gas charge added
-/// but no further validations.
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: Tx,
@@ -184,7 +202,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
     wrapper_args: Option<&mut WrapperArgs<'_>>,
-) -> Result<TxResult>
+) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -192,23 +210,49 @@ where
 {
     match tx.header().tx_type {
         // Raw trasaction type is allowed only for governance proposals
-        TxType::Raw => apply_wasm_tx(
-            tx,
-            &tx_index,
-            ShellParams {
-                tx_gas_meter,
-                state,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            },
-        ),
+        TxType::Raw => {
+            // No bundles of governance transactions, just take the first one
+            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
+            let batched_tx_result = apply_wasm_tx(
+                BatchedTxRef { tx: &tx, cmt },
+                &tx_index,
+                ShellParams {
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+            )?;
+
+            Ok(TxResult {
+                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
+                wrapper_changed_keys: Default::default(),
+                batch_results: BatchResults(
+                    [(cmt.get_hash(), Ok(batched_tx_result))]
+                        .into_iter()
+                        .collect(),
+                ),
+            })
+        }
         TxType::Protocol(protocol_tx) => {
-            apply_protocol_tx(protocol_tx.tx, tx.data(), state)
+            // No bundles of protocol transactions, only take the first one
+            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
+            let batched_tx_result =
+                apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
+
+            Ok(TxResult {
+                batch_results: BatchResults(
+                    [(cmt.get_hash(), Ok(batched_tx_result))]
+                        .into_iter()
+                        .collect(),
+                ),
+                ..Default::default()
+            })
         }
         TxType::Wrapper(ref wrapper) => {
             let fee_unshielding_transaction =
                 get_fee_unshielding_transaction(&tx, wrapper);
-            let changed_keys = apply_wrapper_tx(
+            let mut tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 fee_unshielding_transaction,
@@ -222,19 +266,70 @@ where
                 wrapper_args,
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
-            let mut inner_res = apply_wasm_tx(
-                tx,
-                &tx_index,
-                ShellParams {
-                    tx_gas_meter,
-                    state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                },
-            )?;
 
-            inner_res.wrapper_changed_keys = changed_keys;
-            Ok(inner_res)
+            // Replay protection check on the batch
+            let tx_hash = tx.raw_header_hash();
+            if state.write_log().has_replay_protection_entry(&tx_hash) {
+                // If the same batch has already been committed in
+                // this block, skip execution and return
+                return Err(DispatchError {
+                    error: Error::ReplayAttempt(tx_hash),
+                    tx_result: None,
+                });
+            }
+
+            for cmt in tx.commitments() {
+                match apply_wasm_tx(
+                    tx.batch_ref_tx(cmt),
+                    &tx_index,
+                    ShellParams {
+                        tx_gas_meter,
+                        state,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    },
+                ) {
+                    Err(Error::GasError(ref msg)) => {
+                        // Gas error aborts the execution of the entire batch
+                        tx_result.gas_used =
+                            tx_gas_meter.borrow().get_tx_consumed_gas();
+                        tx_result.batch_results.0.insert(
+                            cmt.get_hash(),
+                            Err(Error::GasError(msg.to_owned())),
+                        );
+                        state.write_log_mut().drop_tx();
+                        return Err(DispatchError {
+                            error: Error::GasError(msg.to_owned()),
+                            tx_result: Some(tx_result),
+                        });
+                    }
+                    res => {
+                        let is_accepted =
+                            matches!(&res, Ok(result) if result.is_accepted());
+
+                        tx_result.batch_results.0.insert(cmt.get_hash(), res);
+                        tx_result.gas_used =
+                            tx_gas_meter.borrow().get_tx_consumed_gas();
+                        if is_accepted {
+                            state.write_log_mut().commit_tx_to_batch();
+                        } else {
+                            state.write_log_mut().drop_tx();
+
+                            if tx.header.atomic {
+                                // Stop the execution of an atomic batch at the
+                                // first failed transaction
+                                return Err(DispatchError {
+                                    error: Error::FailingAtomicBatch(
+                                        cmt.get_hash(),
+                                    ),
+                                    tx_result: Some(tx_result),
+                                });
+                            }
+                        }
+                    }
+                };
+            }
+            Ok(tx_result)
         }
     }
 }
@@ -259,8 +354,6 @@ where
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
-///
-/// Returns the set of changed storage keys.
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: Tx,
     wrapper: &WrapperTx,
@@ -268,14 +361,14 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'_, S, D, H, CA>,
     wrapper_args: Option<&mut WrapperArgs<'_>>,
-) -> Result<BTreeSet<Key>>
+) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let mut changed_keys = BTreeSet::default();
+    let mut wrapper_changed_keys = BTreeSet::default();
 
     let wrapper_tx_hash = tx.header_hash();
 
@@ -292,7 +385,7 @@ where
         wrapper_tx_hash,
         fee_unshield_transaction,
         &mut shell_params,
-        &mut changed_keys,
+        &mut wrapper_changed_keys,
         wrapper_args,
     )?;
 
@@ -303,7 +396,11 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(changed_keys)
+    Ok(TxResult {
+        gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
+        wrapper_changed_keys,
+        batch_results: BatchResults::default(),
+    })
 }
 
 /// Retrieve the Masp `Transaction` for fee unshielding from the provided
@@ -345,18 +442,18 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // Unshield funds if requested
+    // Unshield funds if requested. If fee unshielding failed for non-gas
+    // reasons but the fees can still be paid we'll continue with the
+    // execution (this is a different logic from the one we apply in
+    // process_proposal)
     let valid_fee_unshielding = if let Some(transaction) = masp_transaction {
         run_fee_unshielding(wrapper, shell_params, transaction)
     } else {
         Ok(false)
     };
 
-    // Charge or check fees before propagating any possible error coming from
-    // the fee unshielding. If fee unshielding failed for non-gas reasons but
-    // the fees can still be paid we'll continue with the execution (this is a
-    // different logic from the one we apply in process_proposal)
-    match wrapper_args {
+    // Charge or check fees before propagating any possible error
+    let payment_result = match wrapper_args {
         Some(WrapperArgs {
             block_proposer,
             is_committed_fee_unshield: _,
@@ -365,9 +462,12 @@ where
             block_proposer,
             wrapper,
             wrapper_tx_hash,
-        )?,
-        None => check_fees(shell_params.state, wrapper)?,
-    }
+        ),
+        None => {
+            check_fees(shell_params.state, wrapper)?;
+            Ok(())
+        }
+    };
 
     changed_keys
         .extend(shell_params.state.write_log_mut().get_keys_with_precommit());
@@ -381,7 +481,7 @@ where
         args.is_committed_fee_unshield = valid_fee_unshielding?;
     }
 
-    Ok(())
+    payment_result
 }
 
 /// Executes the masp fee unshielding transaction. Returns `true if the unshield
@@ -440,7 +540,13 @@ where
             // be invalid.
             state.write_log_mut().precommit_tx();
             match apply_wasm_tx(
-                fee_unshielding_tx,
+                BatchedTxRef {
+                    tx: &fee_unshielding_tx,
+                    // No bundles for fee unshielding
+                    // Ok to unwrap here because the transaction is built in
+                    // protocol
+                    cmt: fee_unshielding_tx.first_commitments().unwrap(),
+                },
                 &TxIndex::default(),
                 ShellParams {
                     tx_gas_meter: &ref_unshield_gas_meter,
@@ -566,13 +672,11 @@ where
             } else {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
-                // the fee payer. This shouldn't happen as it should be
-                // prevented from mempool/process_proposal.
+                // the fee payer.
                 tracing::error!(
                     "Transfer of tx fee cannot be applied to due to \
                      insufficient funds. Falling back to transferring the \
-                     available balance which is less than the fee. This \
-                     shouldn't happen."
+                     available balance which is less than the fee."
                 );
                 token_transfer(
                     state,
@@ -713,10 +817,10 @@ where
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
 pub fn apply_wasm_tx<'a, S, D, H, CA>(
-    tx: Tx,
+    batched_tx: BatchedTxRef,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -730,15 +834,8 @@ where
         tx_wasm_cache,
     } = shell_params;
 
-    let tx_hash = tx.raw_header_hash();
-    if state.write_log().has_replay_protection_entry(&tx_hash) {
-        // If the same transaction has already been applied in this block, skip
-        // execution and return
-        return Err(Error::ReplayAttempt(tx_hash));
-    }
-
     let verifiers = execute_tx(
-        &tx,
+        &batched_tx,
         tx_index,
         state,
         tx_gas_meter,
@@ -747,7 +844,7 @@ where
     )?;
 
     let vps_result = check_vps(CheckVps {
-        tx: &tx,
+        batched_tx: &batched_tx,
         tx_index,
         state,
         tx_gas_meter: &mut tx_gas_meter.borrow_mut(),
@@ -755,14 +852,11 @@ where
         vp_wasm_cache,
     })?;
 
-    let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
     let initialized_accounts = state.write_log().get_initialized_accounts();
     let changed_keys = state.write_log().get_keys();
     let events = state.write_log_mut().take_events();
 
-    Ok(TxResult {
-        gas_used,
-        wrapper_changed_keys: Default::default(),
+    Ok(BatchedTxResult {
         changed_keys,
         vps_result,
         initialized_accounts,
@@ -780,7 +874,7 @@ pub(crate) fn apply_protocol_tx<D, H>(
     tx: ProtocolTxType,
     data: Option<Vec<u8>>,
     state: &mut WlState<D, H>,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -837,7 +931,7 @@ where
                 "Attempt made to apply an unimplemented protocol transaction, \
                  no actions will be taken"
             );
-            Ok(TxResult::default())
+            Ok(BatchedTxResult::default())
         }
     }
 }
@@ -845,7 +939,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 fn execute_tx<S, D, H, CA>(
-    tx: &Tx,
+    batched_tx: &BatchedTxRef,
     tx_index: &TxIndex,
     state: &mut S,
     tx_gas_meter: &RefCell<TxGasMeter>,
@@ -862,7 +956,8 @@ where
         state,
         tx_gas_meter,
         tx_index,
-        tx,
+        batched_tx.tx,
+        batched_tx.cmt,
         vp_wasm_cache,
         tx_wasm_cache,
     )
@@ -879,7 +974,7 @@ where
     S: State,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    tx: &'a Tx,
+    batched_tx: &'a BatchedTxRef<'a>,
     tx_index: &'a TxIndex,
     state: &'a S,
     tx_gas_meter: &'a mut TxGasMeter,
@@ -890,7 +985,7 @@ where
 /// Check the acceptance of a transaction by validity predicates
 fn check_vps<S, CA>(
     CheckVps {
-        tx,
+        batched_tx: tx,
         tx_index,
         state,
         tx_gas_meter,
@@ -929,7 +1024,7 @@ where
 fn execute_vps<S, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
-    tx: &Tx,
+    batched_tx: &BatchedTxRef,
     tx_index: &TxIndex,
     state: &S,
     tx_gas_meter: &TxGasMeter,
@@ -959,7 +1054,7 @@ where
 
                     wasm::run::vp(
                         vp_code_hash,
-                        tx,
+                        batched_tx,
                         tx_index,
                         addr,
                         state,
@@ -980,7 +1075,8 @@ where
                     let ctx = native_vp::Ctx::new(
                         addr,
                         state,
-                        tx,
+                        batched_tx.tx,
+                        batched_tx.cmt,
                         tx_index,
                         &gas_meter,
                         &keys_changed,
@@ -991,18 +1087,30 @@ where
                     match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVP { ctx };
-                            pos.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::PosNativeVpError)
+                            pos.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::PosNativeVpError)
                         }
                         InternalAddress::Ibc => {
                             let ibc = Ibc { ctx };
-                            ibc.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::IbcNativeVpError)
+                            ibc.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::IbcNativeVpError)
                         }
                         InternalAddress::Parameters => {
                             let parameters = ParametersVp { ctx };
                             parameters
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::ParametersNativeVpError)
                         }
                         InternalAddress::PosSlashPool => Err(
@@ -1011,37 +1119,61 @@ where
                         InternalAddress::Governance => {
                             let governance = GovernanceVp { ctx };
                             governance
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::GovernanceNativeVpError)
                         }
                         InternalAddress::Multitoken => {
                             let multitoken = MultitokenVp { ctx };
                             multitoken
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::MultitokenNativeVpError)
                         }
                         InternalAddress::EthBridge => {
                             let bridge = EthBridge { ctx };
                             bridge
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::EthBridgeNativeVpError)
                         }
                         InternalAddress::EthBridgePool => {
                             let bridge_pool = BridgePoolVp { ctx };
                             bridge_pool
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::BridgePoolNativeVpError)
                         }
                         InternalAddress::Pgf => {
                             let pgf_vp = PgfVp { ctx };
                             pgf_vp
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::PgfNativeVpError)
                         }
                         InternalAddress::Nut(_) => {
                             let non_usable_tokens = NonUsableTokens { ctx };
                             non_usable_tokens
-                                .validate_tx(tx, &keys_changed, &verifiers)
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
                                 .map_err(Error::NutNativeVpError)
                         }
                         internal_addr @ (InternalAddress::IbcToken(_)
@@ -1060,8 +1192,12 @@ where
                         }
                         InternalAddress::Masp => {
                             let masp = MaspVp { ctx };
-                            masp.validate_tx(tx, &keys_changed, &verifiers)
-                                .map_err(Error::MaspNativeVpError)
+                            masp.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::MaspNativeVpError)
                         }
                         InternalAddress::TempStorage => Err(
                             // Temp storage changes must never be committed
@@ -1159,7 +1295,7 @@ mod tests {
     fn apply_eth_tx<D, H>(
         tx: EthereumTxData,
         state: &mut WlState<D, H>,
-    ) -> Result<TxResult>
+    ) -> Result<BatchedTxResult>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
@@ -1353,10 +1489,11 @@ mod tests {
         // gas meter with no gas left
         let gas_meter = TxGasMeter::new(0);
 
+        let batched_tx = dummy_tx.batch_ref_first_tx();
         let result = execute_vps(
             verifiers,
             changed_keys,
-            &dummy_tx,
+            &batched_tx,
             &TxIndex::default(),
             &state,
             &gas_meter,

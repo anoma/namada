@@ -6,7 +6,7 @@ use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
 use namada_state::StateRead;
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
@@ -41,13 +41,13 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         keys_changed.iter().try_for_each(|key| {
             let key_type: KeyType = key.into();
-            let data = if let Some(data) = tx_data.data() {
+            let data = if let Some(data) = batched_tx.tx.data(batched_tx.cmt) {
                 data
             } else {
                 return Err(native_vp::Error::new_const(

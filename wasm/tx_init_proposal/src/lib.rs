@@ -5,11 +5,9 @@ use namada_tx_prelude::governance::event::GovernanceEvent;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
-    let data = tx.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
+    let BatchedTx { tx, cmt: _ } = tx_data;
     let tx_data = governance::InitProposalData::try_from_slice(&data[..])
         .wrap_err("Failed to decode InitProposalData value")?;
 

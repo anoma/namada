@@ -44,7 +44,7 @@ use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
 use namada_sdk::tendermint_rpc::endpoint::status;
-use namada_sdk::tx::display_inner_resp;
+use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{display, display_line, edisplay_line, error, Namada};
 
@@ -1898,7 +1898,7 @@ pub async fn query_result(context: &impl Namada, args: args::QueryResult) {
                     cli::safe_exit(1)
                 }
             };
-            display_inner_resp(context, &resp);
+            display_batch_resp(context, &resp);
         }
         Err(err) => {
             // Print the errors that caused the lookups to fail

@@ -63,7 +63,7 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{args, display_line, rpc, MaybeSend, Namada};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
@@ -520,7 +520,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
                         &target,
                         &args.fee_token,
                         fee_amount,
-                    !(args.dry_run || args.dry_run_wrapper)
+               !(args.dry_run || args.dry_run_wrapper)
                     )
                     .await
                 {
@@ -1072,807 +1072,833 @@ pub async fn to_ledger_vector(
         ..Default::default()
     };
 
-    let code_sec = tx
-        .get_section(tx.code_sechash())
-        .ok_or_else(|| {
-            Error::Other("expected tx code section to be present".to_string())
-        })?
-        .code_sec()
-        .ok_or_else(|| {
-            Error::Other("expected section to have code tag".to_string())
-        })?;
-    tv.output_expert.push(format!(
-        "Code hash : {}",
-        HEXLOWER.encode(&code_sec.code.hash().0)
-    ));
-
-    if code_sec.tag == Some(TX_INIT_ACCOUNT_WASM.to_string()) {
-        let init_account = InitAccount::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-        tv.name = "Init_Account_0".to_string();
-
-        let extra = tx
-            .get_section(&init_account.vp_code_hash)
-            .and_then(|x| Section::extra_data_sec(x.as_ref()))
+    for cmt in tx.commitments() {
+        // FIXME: need to push some string to differentiate between the
+        // different txs of the bundle?
+        let code_sec = tx
+            .get_section(cmt.code_sechash())
             .ok_or_else(|| {
-                Error::Other("unable to load vp code".to_string())
+                Error::Other(
+                    "expected tx code section to be present".to_string(),
+                )
+            })?
+            .code_sec()
+            .ok_or_else(|| {
+                Error::Other("expected section to have code tag".to_string())
             })?;
-        let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
-            "User".to_string()
-        } else {
-            HEXLOWER.encode(&extra.code.hash().0)
-        };
-        tv.output.extend(vec![format!("Type : Init Account")]);
-        tv.output.extend(
-            init_account
-                .public_keys
-                .iter()
-                .map(|k| format!("Public key : {}", k)),
-        );
-        tv.output.extend(vec![
-            format!("Threshold : {}", init_account.threshold),
-            format!("VP type : {}", vp_code),
-        ]);
+        tv.output_expert.push(format!(
+            "Code hash : {}",
+            HEXLOWER.encode(&code_sec.code.hash().0)
+        ));
 
-        tv.output_expert.extend(
-            init_account
-                .public_keys
-                .iter()
-                .map(|k| format!("Public key : {}", k)),
-        );
-        tv.output_expert.extend(vec![
-            format!("Threshold : {}", init_account.threshold),
-            format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
-        ]);
-    } else if code_sec.tag == Some(TX_BECOME_VALIDATOR_WASM.to_string()) {
-        let init_validator = BecomeValidator::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
+        if code_sec.tag == Some(TX_INIT_ACCOUNT_WASM.to_string()) {
+            let init_account = InitAccount::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+            tv.name = "Init_Account_0".to_string();
 
-        tv.name = "Init_Validator_0".to_string();
-
-        tv.output.extend(vec!["Type : Init Validator".to_string()]);
-        tv.output.extend(vec![
-            format!("Address : {}", init_validator.address),
-            format!("Consensus key : {}", init_validator.consensus_key),
-            format!("Ethereum cold key : {}", init_validator.eth_cold_key),
-            format!("Ethereum hot key : {}", init_validator.eth_hot_key),
-            format!("Protocol key : {}", init_validator.protocol_key),
-            format!("Commission rate : {}", init_validator.commission_rate),
-            format!(
-                "Maximum commission rate change : {}",
-                init_validator.max_commission_rate_change,
-            ),
-            format!("Email : {}", init_validator.email),
-        ]);
-        if let Some(description) = &init_validator.description {
-            tv.output.push(format!("Description : {}", description));
-        }
-        if let Some(website) = &init_validator.website {
-            tv.output.push(format!("Website : {}", website));
-        }
-        if let Some(discord_handle) = &init_validator.discord_handle {
-            tv.output
-                .push(format!("Discord handle : {}", discord_handle));
-        }
-
-        tv.output_expert.extend(vec![
-            format!("Address : {}", init_validator.address),
-            format!("Consensus key : {}", init_validator.consensus_key),
-            format!("Ethereum cold key : {}", init_validator.eth_cold_key),
-            format!("Ethereum hot key : {}", init_validator.eth_hot_key),
-            format!("Protocol key : {}", init_validator.protocol_key),
-            format!("Commission rate : {}", init_validator.commission_rate),
-            format!(
-                "Maximum commission rate change : {}",
-                init_validator.max_commission_rate_change
-            ),
-            format!("Email : {}", init_validator.email),
-        ]);
-        if let Some(description) = &init_validator.description {
-            tv.output_expert
-                .push(format!("Description : {}", description));
-        }
-        if let Some(website) = &init_validator.website {
-            tv.output_expert.push(format!("Website : {}", website));
-        }
-        if let Some(discord_handle) = &init_validator.discord_handle {
-            tv.output_expert
-                .push(format!("Discord handle : {}", discord_handle));
-        }
-    } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
-        let init_proposal_data = InitProposalData::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Init_Proposal_0".to_string();
-
-        let extra = tx
-            .get_section(&init_proposal_data.content)
-            .and_then(|x| Section::extra_data_sec(x.as_ref()))
-            .expect("unable to load vp code")
-            .code
-            .hash();
-
-        tv.output.push("Type : Init proposal".to_string());
-        proposal_type_to_ledger_vector(
-            &init_proposal_data.r#type,
-            tx,
-            &mut tv.output,
-        );
-        tv.output.extend(vec![
-            format!("Author : {}", init_proposal_data.author),
-            format!(
-                "Voting start epoch : {}",
-                init_proposal_data.voting_start_epoch
-            ),
-            format!(
-                "Voting end epoch : {}",
-                init_proposal_data.voting_end_epoch
-            ),
-            format!(
-                "Activation epoch : {}",
-                init_proposal_data.activation_epoch
-            ),
-            format!("Content : {}", HEXLOWER.encode(&extra.0)),
-        ]);
-
-        proposal_type_to_ledger_vector(
-            &init_proposal_data.r#type,
-            tx,
-            &mut tv.output_expert,
-        );
-        tv.output_expert.extend(vec![
-            format!("Author : {}", init_proposal_data.author),
-            format!(
-                "Voting start epoch : {}",
-                init_proposal_data.voting_start_epoch
-            ),
-            format!(
-                "Voting end epoch : {}",
-                init_proposal_data.voting_end_epoch
-            ),
-            format!(
-                "Activation epoch : {}",
-                init_proposal_data.activation_epoch
-            ),
-            format!("Content : {}", HEXLOWER.encode(&extra.0)),
-        ]);
-    } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {
-        let vote_proposal = VoteProposalData::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Vote_Proposal_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Vote Proposal"),
-            format!("ID : {}", vote_proposal.id),
-            format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
-            format!("Voter : {}", vote_proposal.voter),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("ID : {}", vote_proposal.id),
-            format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
-            format!("Voter : {}", vote_proposal.voter),
-        ]);
-    } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
-        let public_key = common::PublicKey::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Reveal_Pubkey_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Reveal Pubkey"),
-            format!("Public key : {}", public_key),
-        ]);
-
-        tv.output_expert
-            .extend(vec![format!("Public key : {}", public_key)]);
-    } else if code_sec.tag == Some(TX_UPDATE_ACCOUNT_WASM.to_string()) {
-        let update_account = UpdateAccount::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Update_Account_0".to_string();
-        tv.output.extend(vec![
-            format!("Type : Update Account"),
-            format!("Address : {}", update_account.addr),
-        ]);
-        tv.output.extend(
-            update_account
-                .public_keys
-                .iter()
-                .map(|k| format!("Public key : {}", k)),
-        );
-        if update_account.threshold.is_some() {
-            tv.output.extend(vec![format!(
-                "Threshold : {}",
-                update_account.threshold.unwrap()
-            )])
-        }
-
-        let vp_code_data = match &update_account.vp_code_hash {
-            Some(hash) => {
-                let extra = tx
-                    .get_section(hash)
-                    .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                    .ok_or_else(|| {
-                        Error::Other("unable to load vp code".to_string())
-                    })?;
-                let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
-                    "User".to_string()
-                } else {
-                    HEXLOWER.encode(&extra.code.hash().0)
-                };
-                Some((vp_code, extra.code.hash()))
-            }
-            None => None,
-        };
-        if let Some((vp_code, _)) = &vp_code_data {
-            tv.output.extend(vec![format!("VP type : {}", vp_code)]);
-        }
-        tv.output_expert
-            .extend(vec![format!("Address : {}", update_account.addr)]);
-        tv.output_expert.extend(
-            update_account
-                .public_keys
-                .iter()
-                .map(|k| format!("Public key : {}", k)),
-        );
-        if let Some(threshold) = update_account.threshold {
-            tv.output_expert
-                .extend(vec![format!("Threshold : {}", threshold,)])
-        }
-        if let Some((_, extra_code_hash)) = vp_code_data {
-            tv.output_expert.extend(vec![format!(
-                "VP type : {}",
-                HEXLOWER.encode(&extra_code_hash.0)
-            )]);
-        }
-    } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
-        let transfer = Transfer::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-        // To facilitate lookups of MASP AssetTypes
-        let mut asset_types = HashMap::new();
-        let builder = if let Some(shielded_hash) = transfer.shielded {
-            tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if builder.target == shielded_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            })
-        } else {
-            None
-        };
-
-        tv.name = "Transfer_0".to_string();
-
-        tv.output.push("Type : Transfer".to_string());
-        make_ledger_masp_endpoints(
-            &tokens,
-            &mut tv.output,
-            &transfer,
-            builder,
-            &asset_types,
-        )
-        .await;
-        make_ledger_masp_endpoints(
-            &tokens,
-            &mut tv.output_expert,
-            &transfer,
-            builder,
-            &asset_types,
-        )
-        .await;
-    } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
-        let any_msg = Any::decode(
-            tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
-                .as_ref(),
-        )
-        .map_err(|x| Error::from(EncodingError::Conversion(x.to_string())))?;
-
-        tv.name = "IBC_0".to_string();
-        tv.output.push("Type : IBC".to_string());
-
-        match MsgTransfer::try_from(any_msg.clone()) {
-            Ok(transfer) => {
-                let transfer_token = format!(
-                    "{} {}",
-                    transfer.packet_data.token.amount,
-                    transfer.packet_data.token.denom
-                );
-                tv.output.extend(vec![
-                    format!("Source port : {}", transfer.port_id_on_a),
-                    format!("Source channel : {}", transfer.chan_id_on_a),
-                    format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.packet_data.sender),
-                    format!("Receiver : {}", transfer.packet_data.receiver),
-                    format!(
-                        "Timeout height : {}",
-                        transfer.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("(none)".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-                tv.output_expert.extend(vec![
-                    format!("Source port : {}", transfer.port_id_on_a),
-                    format!("Source channel : {}", transfer.chan_id_on_a),
-                    format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.packet_data.sender),
-                    format!("Receiver : {}", transfer.packet_data.receiver),
-                    format!(
-                        "Timeout height : {}",
-                        transfer.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("(none)".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-            }
-            _ => {
-                for line in format!("{:#?}", any_msg).split('\n') {
-                    let stripped = line.trim_start();
-                    tv.output.push(format!("Part : {}", stripped));
-                    tv.output_expert.push(format!("Part : {}", stripped));
-                }
-            }
-        }
-    } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
-        let bond = pos::Bond::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Bond_0".to_string();
-
-        tv.output.push("Type : Bond".to_string());
-        if let Some(source) = bond.source.as_ref() {
-            tv.output.push(format!("Source : {}", source));
-        }
-        tv.output.extend(vec![
-            format!("Validator : {}", bond.validator),
-            format!(
-                "Amount : NAM {}",
-                to_ledger_decimal(&bond.amount.to_string_native())
-            ),
-        ]);
-
-        if let Some(source) = bond.source.as_ref() {
-            tv.output_expert.push(format!("Source : {}", source));
-        }
-        tv.output_expert.extend(vec![
-            format!("Validator : {}", bond.validator),
-            format!(
-                "Amount : NAM {}",
-                to_ledger_decimal(&bond.amount.to_string_native())
-            ),
-        ]);
-    } else if code_sec.tag == Some(TX_UNBOND_WASM.to_string()) {
-        let unbond = pos::Unbond::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Unbond_0".to_string();
-
-        tv.output.push("Type : Unbond".to_string());
-        if let Some(source) = unbond.source.as_ref() {
-            tv.output.push(format!("Source : {}", source));
-        }
-        tv.output.extend(vec![
-            format!("Validator : {}", unbond.validator),
-            format!(
-                "Amount : NAM {}",
-                to_ledger_decimal(&unbond.amount.to_string_native())
-            ),
-        ]);
-
-        if let Some(source) = unbond.source.as_ref() {
-            tv.output_expert.push(format!("Source : {}", source));
-        }
-        tv.output_expert.extend(vec![
-            format!("Validator : {}", unbond.validator),
-            format!(
-                "Amount : NAM {}",
-                to_ledger_decimal(&unbond.amount.to_string_native())
-            ),
-        ]);
-    } else if code_sec.tag == Some(TX_WITHDRAW_WASM.to_string()) {
-        let withdraw = pos::Withdraw::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Withdraw_0".to_string();
-
-        tv.output.push("Type : Withdraw".to_string());
-        if let Some(source) = withdraw.source.as_ref() {
-            tv.output.push(format!("Source : {}", source));
-        }
-        tv.output
-            .push(format!("Validator : {}", withdraw.validator));
-
-        if let Some(source) = withdraw.source.as_ref() {
-            tv.output_expert.push(format!("Source : {}", source));
-        }
-        tv.output_expert
-            .push(format!("Validator : {}", withdraw.validator));
-    } else if code_sec.tag == Some(TX_CLAIM_REWARDS_WASM.to_string()) {
-        let claim = pos::Withdraw::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Claim_Rewards_0".to_string();
-
-        tv.output.push("Type : Claim Rewards".to_string());
-        if let Some(source) = claim.source.as_ref() {
-            tv.output.push(format!("Source : {}", source));
-        }
-        tv.output.push(format!("Validator : {}", claim.validator));
-
-        if let Some(source) = claim.source.as_ref() {
-            tv.output_expert.push(format!("Source : {}", source));
-        }
-        tv.output_expert
-            .push(format!("Validator : {}", claim.validator));
-    } else if code_sec.tag == Some(TX_CHANGE_COMMISSION_WASM.to_string()) {
-        let commission_change = pos::CommissionChange::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Change_Commission_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Change commission"),
-            format!("New rate : {}", commission_change.new_rate),
-            format!("Validator : {}", commission_change.validator),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("New rate : {}", commission_change.new_rate),
-            format!("Validator : {}", commission_change.validator),
-        ]);
-    } else if code_sec.tag == Some(TX_CHANGE_METADATA_WASM.to_string()) {
-        let metadata_change = pos::MetaDataChange::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Change_MetaData_0".to_string();
-
-        tv.output.extend(vec!["Type : Change metadata".to_string()]);
-
-        let mut other_items = vec![];
-        other_items.push(format!("Validator : {}", metadata_change.validator));
-        if let Some(email) = metadata_change.email {
-            other_items.push(format!("Email : {}", email));
-        }
-        if let Some(description) = metadata_change.description {
-            other_items.push(format!("Description : {}", description));
-        }
-        if let Some(website) = metadata_change.website {
-            other_items.push(format!("Website : {}", website));
-        }
-        if let Some(discord_handle) = metadata_change.discord_handle {
-            other_items.push(format!("Discord handle : {}", discord_handle));
-        }
-        if let Some(avatar) = metadata_change.avatar {
-            other_items.push(format!("Avatar : {}", avatar));
-        }
-        if let Some(commission_rate) = metadata_change.commission_rate {
-            other_items.push(format!("Commission rate : {}", commission_rate));
-        }
-
-        tv.output.extend(other_items.clone());
-        tv.output_expert.extend(other_items);
-    } else if code_sec.tag == Some(TX_CHANGE_CONSENSUS_KEY_WASM.to_string()) {
-        let consensus_key_change = pos::ConsensusKeyChange::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Change_Consensus_Key_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Change consensus key"),
-            format!(
-                "New consensus key : {}",
-                consensus_key_change.consensus_key
-            ),
-            format!("Validator : {}", consensus_key_change.validator),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!(
-                "New consensus key : {}",
-                consensus_key_change.consensus_key
-            ),
-            format!("Validator : {}", consensus_key_change.validator),
-        ]);
-    } else if code_sec.tag == Some(TX_UNJAIL_VALIDATOR_WASM.to_string()) {
-        let address = Address::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Unjail_Validator_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Unjail Validator"),
-            format!("Validator : {}", address),
-        ]);
-
-        tv.output_expert.push(format!("Validator : {}", address));
-    } else if code_sec.tag == Some(TX_DEACTIVATE_VALIDATOR_WASM.to_string()) {
-        let address = Address::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Deactivate_Validator_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Deactivate Validator"),
-            format!("Validator : {}", address),
-        ]);
-
-        tv.output_expert.push(format!("Validator : {}", address));
-    } else if code_sec.tag == Some(TX_REACTIVATE_VALIDATOR_WASM.to_string()) {
-        let address = Address::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Reactivate_Validator_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Reactivate Validator"),
-            format!("Validator : {}", address),
-        ]);
-
-        tv.output_expert.push(format!("Validator : {}", address));
-    } else if code_sec.tag == Some(TX_REDELEGATE_WASM.to_string()) {
-        let redelegation = pos::Redelegation::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Redelegate_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Redelegate"),
-            format!("Source Validator : {}", redelegation.src_validator),
-            format!("Destination Validator : {}", redelegation.dest_validator),
-            format!("Owner : {}", redelegation.owner),
-            format!(
-                "Amount : {}",
-                to_ledger_decimal(&redelegation.amount.to_string_native())
-            ),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("Source Validator : {}", redelegation.src_validator),
-            format!("Destination Validator : {}", redelegation.dest_validator),
-            format!("Owner : {}", redelegation.owner),
-            format!(
-                "Amount : {}",
-                to_ledger_decimal(&redelegation.amount.to_string_native())
-            ),
-        ]);
-    } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string()) {
-        let update = UpdateStewardCommission::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Update_Steward_Commission_0".to_string();
-        tv.output.extend(vec![
-            format!("Type : Update Steward Commission"),
-            format!("Steward : {}", update.steward),
-        ]);
-        for (address, dec) in update.commission.iter() {
-            tv.output.push(format!("Validator : {}", address));
-            tv.output.push(format!("Commission Rate : {}", dec));
-        }
-
-        tv.output_expert
-            .push(format!("Steward : {}", update.steward));
-        for (address, dec) in update.commission.iter() {
-            tv.output_expert.push(format!("Validator : {}", address));
-            tv.output_expert.push(format!("Commission Rate : {}", dec));
-        }
-    } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
-        let address = Address::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Resign_Steward_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Resign Steward"),
-            format!("Steward : {}", address),
-        ]);
-
-        tv.output_expert.push(format!("Steward : {}", address));
-    } else if code_sec.tag == Some(TX_BRIDGE_POOL_WASM.to_string()) {
-        let transfer = PendingTransfer::try_from_slice(
-            &tx.data()
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-        )
-        .map_err(|err| {
-            Error::from(EncodingError::Conversion(err.to_string()))
-        })?;
-
-        tv.name = "Bridge_Pool_Transfer_0".to_string();
-
-        tv.output.extend(vec![
-            format!("Type : Bridge Pool Transfer"),
-            format!("Transfer Kind : {}", transfer.transfer.kind),
-            format!("Transfer Sender : {}", transfer.transfer.sender),
-            format!("Transfer Recipient : {}", transfer.transfer.recipient),
-            format!("Transfer Asset : {}", transfer.transfer.asset),
-            format!("Transfer Amount : {}", transfer.transfer.amount),
-            format!("Gas Payer : {}", transfer.gas_fee.payer),
-            format!("Gas Token : {}", transfer.gas_fee.token),
-            format!("Gas Amount : {}", transfer.gas_fee.amount),
-        ]);
-
-        tv.output_expert.extend(vec![
-            format!("Transfer Kind : {}", transfer.transfer.kind),
-            format!("Transfer Sender : {}", transfer.transfer.sender),
-            format!("Transfer Recipient : {}", transfer.transfer.recipient),
-            format!("Transfer Asset : {}", transfer.transfer.asset),
-            format!("Transfer Amount : {}", transfer.transfer.amount),
-            format!("Gas Payer : {}", transfer.gas_fee.payer),
-            format!("Gas Token : {}", transfer.gas_fee.token),
-            format!("Gas Amount : {}", transfer.gas_fee.amount),
-        ]);
-    } else {
-        tv.name = "Custom_0".to_string();
-        tv.output.push("Type : Custom".to_string());
-    }
-
-    if tx.memo_sechash() != &namada_core::hash::Hash::default() {
-        match tx
-            .get_section(tx.memo_sechash())
-            .unwrap()
-            .extra_data_sec()
-            .unwrap()
-            .code
-        {
-            Commitment::Hash(hash) => {
-                tv.output
-                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
-                tv.output_expert
-                    .push(format!("Memo Hash : {}", HEXLOWER.encode(&hash.0)));
-            }
-            Commitment::Id(id) => {
-                let memo = String::from_utf8(id).map_err(|err| {
-                    Error::from(EncodingError::Conversion(err.to_string()))
+            let extra = tx
+                .get_section(&init_account.vp_code_hash)
+                .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                .ok_or_else(|| {
+                    Error::Other("unable to load vp code".to_string())
                 })?;
-                tv.output.push(format!("Memo : {}", memo));
-                tv.output_expert.push(format!("Memo : {}", memo));
+            let vp_code = if extra.tag == Some(VP_USER_WASM.to_string()) {
+                "User".to_string()
+            } else {
+                HEXLOWER.encode(&extra.code.hash().0)
+            };
+            tv.output.extend(vec![format!("Type : Init Account")]);
+            tv.output.extend(
+                init_account
+                    .public_keys
+                    .iter()
+                    .map(|k| format!("Public key : {}", k)),
+            );
+            tv.output.extend(vec![
+                format!("Threshold : {}", init_account.threshold),
+                format!("VP type : {}", vp_code),
+            ]);
+
+            tv.output_expert.extend(
+                init_account
+                    .public_keys
+                    .iter()
+                    .map(|k| format!("Public key : {}", k)),
+            );
+            tv.output_expert.extend(vec![
+                format!("Threshold : {}", init_account.threshold),
+                format!("VP type : {}", HEXLOWER.encode(&extra.code.hash().0)),
+            ]);
+        } else if code_sec.tag == Some(TX_BECOME_VALIDATOR_WASM.to_string()) {
+            let init_validator = BecomeValidator::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Init_Validator_0".to_string();
+
+            tv.output.extend(vec!["Type : Init Validator".to_string()]);
+            tv.output.extend(vec![
+                format!("Address : {}", init_validator.address),
+                format!("Consensus key : {}", init_validator.consensus_key),
+                format!("Ethereum cold key : {}", init_validator.eth_cold_key),
+                format!("Ethereum hot key : {}", init_validator.eth_hot_key),
+                format!("Protocol key : {}", init_validator.protocol_key),
+                format!("Commission rate : {}", init_validator.commission_rate),
+                format!(
+                    "Maximum commission rate change : {}",
+                    init_validator.max_commission_rate_change,
+                ),
+                format!("Email : {}", init_validator.email),
+            ]);
+            if let Some(description) = &init_validator.description {
+                tv.output.push(format!("Description : {}", description));
+            }
+            if let Some(website) = &init_validator.website {
+                tv.output.push(format!("Website : {}", website));
+            }
+            if let Some(discord_handle) = &init_validator.discord_handle {
+                tv.output
+                    .push(format!("Discord handle : {}", discord_handle));
+            }
+
+            tv.output_expert.extend(vec![
+                format!("Address : {}", init_validator.address),
+                format!("Consensus key : {}", init_validator.consensus_key),
+                format!("Ethereum cold key : {}", init_validator.eth_cold_key),
+                format!("Ethereum hot key : {}", init_validator.eth_hot_key),
+                format!("Protocol key : {}", init_validator.protocol_key),
+                format!("Commission rate : {}", init_validator.commission_rate),
+                format!(
+                    "Maximum commission rate change : {}",
+                    init_validator.max_commission_rate_change
+                ),
+                format!("Email : {}", init_validator.email),
+            ]);
+            if let Some(description) = &init_validator.description {
+                tv.output_expert
+                    .push(format!("Description : {}", description));
+            }
+            if let Some(website) = &init_validator.website {
+                tv.output_expert.push(format!("Website : {}", website));
+            }
+            if let Some(discord_handle) = &init_validator.discord_handle {
+                tv.output_expert
+                    .push(format!("Discord handle : {}", discord_handle));
+            }
+        } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
+            let init_proposal_data = InitProposalData::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Init_Proposal_0".to_string();
+
+            let extra = tx
+                .get_section(&init_proposal_data.content)
+                .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                .expect("unable to load vp code")
+                .code
+                .hash();
+
+            tv.output.push("Type : Init proposal".to_string());
+            proposal_type_to_ledger_vector(
+                &init_proposal_data.r#type,
+                tx,
+                &mut tv.output,
+            );
+            tv.output.extend(vec![
+                format!("Author : {}", init_proposal_data.author),
+                format!(
+                    "Voting start epoch : {}",
+                    init_proposal_data.voting_start_epoch
+                ),
+                format!(
+                    "Voting end epoch : {}",
+                    init_proposal_data.voting_end_epoch
+                ),
+                format!(
+                    "Activation epoch : {}",
+                    init_proposal_data.activation_epoch
+                ),
+                format!("Content : {}", HEXLOWER.encode(&extra.0)),
+            ]);
+
+            proposal_type_to_ledger_vector(
+                &init_proposal_data.r#type,
+                tx,
+                &mut tv.output_expert,
+            );
+            tv.output_expert.extend(vec![
+                format!("Author : {}", init_proposal_data.author),
+                format!(
+                    "Voting start epoch : {}",
+                    init_proposal_data.voting_start_epoch
+                ),
+                format!(
+                    "Voting end epoch : {}",
+                    init_proposal_data.voting_end_epoch
+                ),
+                format!(
+                    "Activation epoch : {}",
+                    init_proposal_data.activation_epoch
+                ),
+                format!("Content : {}", HEXLOWER.encode(&extra.0)),
+            ]);
+        } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {
+            let vote_proposal = VoteProposalData::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Vote_Proposal_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Vote Proposal"),
+                format!("ID : {}", vote_proposal.id),
+                format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
+                format!("Voter : {}", vote_proposal.voter),
+            ]);
+
+            tv.output_expert.extend(vec![
+                format!("ID : {}", vote_proposal.id),
+                format!("Vote : {}", LedgerProposalVote(&vote_proposal.vote)),
+                format!("Voter : {}", vote_proposal.voter),
+            ]);
+        } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
+            let public_key = common::PublicKey::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Reveal_Pubkey_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Reveal Pubkey"),
+                format!("Public key : {}", public_key),
+            ]);
+
+            tv.output_expert
+                .extend(vec![format!("Public key : {}", public_key)]);
+        } else if code_sec.tag == Some(TX_UPDATE_ACCOUNT_WASM.to_string()) {
+            let update_account = UpdateAccount::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Update_Account_0".to_string();
+            tv.output.extend(vec![
+                format!("Type : Update Account"),
+                format!("Address : {}", update_account.addr),
+            ]);
+            tv.output.extend(
+                update_account
+                    .public_keys
+                    .iter()
+                    .map(|k| format!("Public key : {}", k)),
+            );
+            if update_account.threshold.is_some() {
+                tv.output.extend(vec![format!(
+                    "Threshold : {}",
+                    update_account.threshold.unwrap()
+                )])
+            }
+
+            let vp_code_data = match &update_account.vp_code_hash {
+                Some(hash) => {
+                    let extra = tx
+                        .get_section(hash)
+                        .and_then(|x| Section::extra_data_sec(x.as_ref()))
+                        .ok_or_else(|| {
+                            Error::Other("unable to load vp code".to_string())
+                        })?;
+                    let vp_code = if extra.tag == Some(VP_USER_WASM.to_string())
+                    {
+                        "User".to_string()
+                    } else {
+                        HEXLOWER.encode(&extra.code.hash().0)
+                    };
+                    Some((vp_code, extra.code.hash()))
+                }
+                None => None,
+            };
+            if let Some((vp_code, _)) = &vp_code_data {
+                tv.output.extend(vec![format!("VP type : {}", vp_code)]);
+            }
+            tv.output_expert
+                .extend(vec![format!("Address : {}", update_account.addr)]);
+            tv.output_expert.extend(
+                update_account
+                    .public_keys
+                    .iter()
+                    .map(|k| format!("Public key : {}", k)),
+            );
+            if let Some(threshold) = update_account.threshold {
+                tv.output_expert
+                    .extend(vec![format!("Threshold : {}", threshold,)])
+            }
+            if let Some((_, extra_code_hash)) = vp_code_data {
+                tv.output_expert.extend(vec![format!(
+                    "VP type : {}",
+                    HEXLOWER.encode(&extra_code_hash.0)
+                )]);
+            }
+        } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
+            let transfer = Transfer::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+            // To facilitate lookups of MASP AssetTypes
+            let mut asset_types = HashMap::new();
+            let builder = if let Some(shielded_hash) = transfer.shielded {
+                tx.sections.iter().find_map(|x| match x {
+                    Section::MaspBuilder(builder)
+                        if builder.target == shielded_hash =>
+                    {
+                        for decoded in &builder.asset_types {
+                            match decoded.encode() {
+                                Err(_) => None,
+                                Ok(asset) => {
+                                    asset_types.insert(asset, decoded.clone());
+                                    Some(builder)
+                                }
+                            }?;
+                        }
+                        Some(builder)
+                    }
+                    _ => None,
+                })
+            } else {
+                None
+            };
+
+            tv.name = "Transfer_0".to_string();
+
+            tv.output.push("Type : Transfer".to_string());
+            make_ledger_masp_endpoints(
+                &tokens,
+                &mut tv.output,
+                &transfer,
+                builder,
+                &asset_types,
+            )
+            .await;
+            make_ledger_masp_endpoints(
+                &tokens,
+                &mut tv.output_expert,
+                &transfer,
+                builder,
+                &asset_types,
+            )
+            .await;
+        } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
+            let any_msg = Any::decode(
+                tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
+                    .as_ref(),
+            )
+            .map_err(|x| {
+                Error::from(EncodingError::Conversion(x.to_string()))
+            })?;
+
+            tv.name = "IBC_0".to_string();
+            tv.output.push("Type : IBC".to_string());
+
+            match MsgTransfer::try_from(any_msg.clone()) {
+                Ok(transfer) => {
+                    let transfer_token = format!(
+                        "{} {}",
+                        transfer.packet_data.token.amount,
+                        transfer.packet_data.token.denom
+                    );
+                    tv.output.extend(vec![
+                        format!("Source port : {}", transfer.port_id_on_a),
+                        format!("Source channel : {}", transfer.chan_id_on_a),
+                        format!("Token : {}", transfer_token),
+                        format!("Sender : {}", transfer.packet_data.sender),
+                        format!("Receiver : {}", transfer.packet_data.receiver),
+                        format!(
+                            "Timeout height : {}",
+                            transfer.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("(none)".to_string(), |time| time
+                                    .to_rfc3339())
+                        ),
+                    ]);
+                    tv.output_expert.extend(vec![
+                        format!("Source port : {}", transfer.port_id_on_a),
+                        format!("Source channel : {}", transfer.chan_id_on_a),
+                        format!("Token : {}", transfer_token),
+                        format!("Sender : {}", transfer.packet_data.sender),
+                        format!("Receiver : {}", transfer.packet_data.receiver),
+                        format!(
+                            "Timeout height : {}",
+                            transfer.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("(none)".to_string(), |time| time
+                                    .to_rfc3339())
+                        ),
+                    ]);
+                }
+                _ => {
+                    for line in format!("{:#?}", any_msg).split('\n') {
+                        let stripped = line.trim_start();
+                        tv.output.push(format!("Part : {}", stripped));
+                        tv.output_expert.push(format!("Part : {}", stripped));
+                    }
+                }
+            }
+        } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
+            let bond = pos::Bond::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Bond_0".to_string();
+
+            tv.output.push("Type : Bond".to_string());
+            if let Some(source) = bond.source.as_ref() {
+                tv.output.push(format!("Source : {}", source));
+            }
+            tv.output.extend(vec![
+                format!("Validator : {}", bond.validator),
+                format!(
+                    "Amount : NAM {}",
+                    to_ledger_decimal(&bond.amount.to_string_native())
+                ),
+            ]);
+
+            if let Some(source) = bond.source.as_ref() {
+                tv.output_expert.push(format!("Source : {}", source));
+            }
+            tv.output_expert.extend(vec![
+                format!("Validator : {}", bond.validator),
+                format!(
+                    "Amount : NAM {}",
+                    to_ledger_decimal(&bond.amount.to_string_native())
+                ),
+            ]);
+        } else if code_sec.tag == Some(TX_UNBOND_WASM.to_string()) {
+            let unbond = pos::Unbond::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Unbond_0".to_string();
+
+            tv.output.push("Type : Unbond".to_string());
+            if let Some(source) = unbond.source.as_ref() {
+                tv.output.push(format!("Source : {}", source));
+            }
+            tv.output.extend(vec![
+                format!("Validator : {}", unbond.validator),
+                format!(
+                    "Amount : NAM {}",
+                    to_ledger_decimal(&unbond.amount.to_string_native())
+                ),
+            ]);
+
+            if let Some(source) = unbond.source.as_ref() {
+                tv.output_expert.push(format!("Source : {}", source));
+            }
+            tv.output_expert.extend(vec![
+                format!("Validator : {}", unbond.validator),
+                format!(
+                    "Amount : NAM {}",
+                    to_ledger_decimal(&unbond.amount.to_string_native())
+                ),
+            ]);
+        } else if code_sec.tag == Some(TX_WITHDRAW_WASM.to_string()) {
+            let withdraw = pos::Withdraw::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Withdraw_0".to_string();
+
+            tv.output.push("Type : Withdraw".to_string());
+            if let Some(source) = withdraw.source.as_ref() {
+                tv.output.push(format!("Source : {}", source));
+            }
+            tv.output
+                .push(format!("Validator : {}", withdraw.validator));
+
+            if let Some(source) = withdraw.source.as_ref() {
+                tv.output_expert.push(format!("Source : {}", source));
+            }
+            tv.output_expert
+                .push(format!("Validator : {}", withdraw.validator));
+        } else if code_sec.tag == Some(TX_CLAIM_REWARDS_WASM.to_string()) {
+            let claim = pos::Withdraw::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Claim_Rewards_0".to_string();
+
+            tv.output.push("Type : Claim Rewards".to_string());
+            if let Some(source) = claim.source.as_ref() {
+                tv.output.push(format!("Source : {}", source));
+            }
+            tv.output.push(format!("Validator : {}", claim.validator));
+
+            if let Some(source) = claim.source.as_ref() {
+                tv.output_expert.push(format!("Source : {}", source));
+            }
+            tv.output_expert
+                .push(format!("Validator : {}", claim.validator));
+        } else if code_sec.tag == Some(TX_CHANGE_COMMISSION_WASM.to_string()) {
+            let commission_change = pos::CommissionChange::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Change_Commission_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Change commission"),
+                format!("New rate : {}", commission_change.new_rate),
+                format!("Validator : {}", commission_change.validator),
+            ]);
+
+            tv.output_expert.extend(vec![
+                format!("New rate : {}", commission_change.new_rate),
+                format!("Validator : {}", commission_change.validator),
+            ]);
+        } else if code_sec.tag == Some(TX_CHANGE_METADATA_WASM.to_string()) {
+            let metadata_change = pos::MetaDataChange::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Change_MetaData_0".to_string();
+
+            tv.output.extend(vec!["Type : Change metadata".to_string()]);
+
+            let mut other_items = vec![];
+            other_items
+                .push(format!("Validator : {}", metadata_change.validator));
+            if let Some(email) = metadata_change.email {
+                other_items.push(format!("Email : {}", email));
+            }
+            if let Some(description) = metadata_change.description {
+                other_items.push(format!("Description : {}", description));
+            }
+            if let Some(website) = metadata_change.website {
+                other_items.push(format!("Website : {}", website));
+            }
+            if let Some(discord_handle) = metadata_change.discord_handle {
+                other_items
+                    .push(format!("Discord handle : {}", discord_handle));
+            }
+            if let Some(avatar) = metadata_change.avatar {
+                other_items.push(format!("Avatar : {}", avatar));
+            }
+            if let Some(commission_rate) = metadata_change.commission_rate {
+                other_items
+                    .push(format!("Commission rate : {}", commission_rate));
+            }
+
+            tv.output.extend(other_items.clone());
+            tv.output_expert.extend(other_items);
+        } else if code_sec.tag == Some(TX_CHANGE_CONSENSUS_KEY_WASM.to_string())
+        {
+            let consensus_key_change = pos::ConsensusKeyChange::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Change_Consensus_Key_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Change consensus key"),
+                format!(
+                    "New consensus key : {}",
+                    consensus_key_change.consensus_key
+                ),
+                format!("Validator : {}", consensus_key_change.validator),
+            ]);
+
+            tv.output_expert.extend(vec![
+                format!(
+                    "New consensus key : {}",
+                    consensus_key_change.consensus_key
+                ),
+                format!("Validator : {}", consensus_key_change.validator),
+            ]);
+        } else if code_sec.tag == Some(TX_UNJAIL_VALIDATOR_WASM.to_string()) {
+            let address = Address::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Unjail_Validator_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Unjail Validator"),
+                format!("Validator : {}", address),
+            ]);
+
+            tv.output_expert.push(format!("Validator : {}", address));
+        } else if code_sec.tag == Some(TX_DEACTIVATE_VALIDATOR_WASM.to_string())
+        {
+            let address = Address::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Deactivate_Validator_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Deactivate Validator"),
+                format!("Validator : {}", address),
+            ]);
+
+            tv.output_expert.push(format!("Validator : {}", address));
+        } else if code_sec.tag == Some(TX_REACTIVATE_VALIDATOR_WASM.to_string())
+        {
+            let address = Address::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Reactivate_Validator_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Reactivate Validator"),
+                format!("Validator : {}", address),
+            ]);
+
+            tv.output_expert.push(format!("Validator : {}", address));
+        } else if code_sec.tag == Some(TX_REDELEGATE_WASM.to_string()) {
+            let redelegation = pos::Redelegation::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Redelegate_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Redelegate"),
+                format!("Source Validator : {}", redelegation.src_validator),
+                format!(
+                    "Destination Validator : {}",
+                    redelegation.dest_validator
+                ),
+                format!("Owner : {}", redelegation.owner),
+                format!(
+                    "Amount : {}",
+                    to_ledger_decimal(&redelegation.amount.to_string_native())
+                ),
+            ]);
+
+            tv.output_expert.extend(vec![
+                format!("Source Validator : {}", redelegation.src_validator),
+                format!(
+                    "Destination Validator : {}",
+                    redelegation.dest_validator
+                ),
+                format!("Owner : {}", redelegation.owner),
+                format!(
+                    "Amount : {}",
+                    to_ledger_decimal(&redelegation.amount.to_string_native())
+                ),
+            ]);
+        } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string())
+        {
+            let update = UpdateStewardCommission::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Update_Steward_Commission_0".to_string();
+            tv.output.extend(vec![
+                format!("Type : Update Steward Commission"),
+                format!("Steward : {}", update.steward),
+            ]);
+            for (address, dec) in update.commission.iter() {
+                tv.output.push(format!("Validator : {}", address));
+                tv.output.push(format!("Commission Rate : {}", dec));
+            }
+
+            tv.output_expert
+                .push(format!("Steward : {}", update.steward));
+            for (address, dec) in update.commission.iter() {
+                tv.output_expert.push(format!("Validator : {}", address));
+                tv.output_expert.push(format!("Commission Rate : {}", dec));
+            }
+        } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
+            let address = Address::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Resign_Steward_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Resign Steward"),
+                format!("Steward : {}", address),
+            ]);
+
+            tv.output_expert.push(format!("Steward : {}", address));
+        } else if code_sec.tag == Some(TX_BRIDGE_POOL_WASM.to_string()) {
+            let transfer = PendingTransfer::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
+
+            tv.name = "Bridge_Pool_Transfer_0".to_string();
+
+            tv.output.extend(vec![
+                format!("Type : Bridge Pool Transfer"),
+                format!("Transfer Kind : {}", transfer.transfer.kind),
+                format!("Transfer Sender : {}", transfer.transfer.sender),
+                format!("Transfer Recipient : {}", transfer.transfer.recipient),
+                format!("Transfer Asset : {}", transfer.transfer.asset),
+                format!("Transfer Amount : {}", transfer.transfer.amount),
+                format!("Gas Payer : {}", transfer.gas_fee.payer),
+                format!("Gas Token : {}", transfer.gas_fee.token),
+                format!("Gas Amount : {}", transfer.gas_fee.amount),
+            ]);
+
+            tv.output_expert.extend(vec![
+                format!("Transfer Kind : {}", transfer.transfer.kind),
+                format!("Transfer Sender : {}", transfer.transfer.sender),
+                format!("Transfer Recipient : {}", transfer.transfer.recipient),
+                format!("Transfer Asset : {}", transfer.transfer.asset),
+                format!("Transfer Amount : {}", transfer.transfer.amount),
+                format!("Gas Payer : {}", transfer.gas_fee.payer),
+                format!("Gas Token : {}", transfer.gas_fee.token),
+                format!("Gas Amount : {}", transfer.gas_fee.amount),
+            ]);
+        } else {
+            tv.name = "Custom_0".to_string();
+            tv.output.push("Type : Custom".to_string());
+        }
+
+        if cmt.memo_sechash() != &namada_core::hash::Hash::default() {
+            match tx
+                .get_section(cmt.memo_sechash())
+                .unwrap()
+                .extra_data_sec()
+                .unwrap()
+                .code
+            {
+                Commitment::Hash(hash) => {
+                    tv.output.push(format!(
+                        "Memo Hash : {}",
+                        HEXLOWER.encode(&hash.0)
+                    ));
+                    tv.output_expert.push(format!(
+                        "Memo Hash : {}",
+                        HEXLOWER.encode(&hash.0)
+                    ));
+                }
+                Commitment::Id(id) => {
+                    let memo = String::from_utf8(id).map_err(|err| {
+                        Error::from(EncodingError::Conversion(err.to_string()))
+                    })?;
+                    tv.output.push(format!("Memo : {}", memo));
+                    tv.output_expert.push(format!("Memo : {}", memo));
+                }
             }
         }
-    }
 
-    if let Some(wrapper) = tx.header.wrapper() {
-        let fee_amount_per_gas_unit =
-            to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
-        tv.output_expert.extend(vec![
-            format!("Timestamp : {}", tx.header.timestamp.0),
-            format!("Pubkey : {}", wrapper.pk),
-            format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
-        ]);
-        if let Some(token) = tokens.get(&wrapper.fee.token) {
-            tv.output_expert.push(format!(
-                "Fees/gas unit : {} {}",
-                token.to_uppercase(),
-                fee_amount_per_gas_unit,
-            ));
-        } else {
+        if let Some(wrapper) = tx.header.wrapper() {
+            let fee_amount_per_gas_unit =
+                to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
             tv.output_expert.extend(vec![
-                format!("Fee token : {}", wrapper.fee.token),
-                format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
+                format!("Timestamp : {}", tx.header.timestamp.0),
+                format!("Pubkey : {}", wrapper.pk),
+                format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
+            if let Some(token) = tokens.get(&wrapper.fee.token) {
+                tv.output_expert.push(format!(
+                    "Fees/gas unit : {} {}",
+                    token.to_uppercase(),
+                    fee_amount_per_gas_unit,
+                ));
+            } else {
+                tv.output_expert.extend(vec![
+                    format!("Fee token : {}", wrapper.fee.token),
+                    format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
+                ]);
+            }
         }
     }
 

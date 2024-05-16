@@ -465,14 +465,62 @@ impl EventAttributeEntry<'static> for Info {
     }
 }
 
-/// Extend an [`Event`] with `is_valid_masp_tx` data.
-pub struct ValidMaspTx(pub TxIndex);
+/// Extend an [`Event`] with `masp_tx_block_index` data, indicating that the tx
+/// at the specified index in the block contains a valid masp transaction.
+pub struct MaspTxBlockIndex(pub TxIndex);
 
-impl EventAttributeEntry<'static> for ValidMaspTx {
+impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     type Value = TxIndex;
     type ValueOwned = Self::Value;
 
-    const KEY: &'static str = "is_valid_masp_tx";
+    const KEY: &'static str = "masp_tx_block_index";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+// TODO: remove when fee unshielding is gone
+/// Extend an [`Event`] with `is_wrapper_valid_masp_tx` data, indicating that
+/// the wrapper tx is a valid masp txs.
+pub struct MaspTxWrapper;
+
+impl EventAttributeEntry<'static> for MaspTxWrapper {
+    type Value = String;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "is_wrapper_valid_masp_tx";
+
+    fn into_value(self) -> Self::Value {
+        String::new()
+    }
+}
+
+/// A displyable collection of hashes.
+#[derive(Serialize, Deserialize)]
+pub struct DisplayableHashVec(Vec<Hash>);
+
+impl Display for DisplayableHashVec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl From<Vec<Hash>> for DisplayableHashVec {
+    fn from(value: Vec<Hash>) -> Self {
+        Self(value)
+    }
+}
+
+/// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
+/// inner transactions inside the batch that are valid masp txs.
+pub struct MaspTxBatchRefs(pub DisplayableHashVec);
+
+impl EventAttributeEntry<'static> for MaspTxBatchRefs {
+    type Value = DisplayableHashVec;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "masp_tx_batch_refs";
 
     fn into_value(self) -> Self::Value {
         self.0

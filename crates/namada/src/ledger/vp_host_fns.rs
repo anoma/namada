@@ -14,7 +14,7 @@ use namada_events::{Event, EventTypeBuilder};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, ResultExt, StateRead, DB};
-use namada_tx::{Section, Tx};
+use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
 
 use crate::ledger::gas;
@@ -261,7 +261,7 @@ where
 /// current transaction is being applied.
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
-    tx: &Tx,
+    batched_tx: &BatchedTxRef,
 ) -> EnvResult<Option<Hash>> {
     add_gas(
         gas_meter,
@@ -269,8 +269,8 @@ pub fn get_tx_code_hash(
             .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
             .expect("Consts mul that cannot overflow"),
     )?;
-    let hash = tx
-        .get_section(tx.code_sechash())
+    let hash = batched_tx.tx
+        .get_section(batched_tx.cmt.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .map(|x| x.code.hash());
     Ok(hash)

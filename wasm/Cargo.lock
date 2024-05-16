@@ -3877,6 +3877,7 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
@@ -3937,6 +3938,7 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_token",
+ "namada_tx",
  "primitive-types",
  "proptest",
  "prost 0.12.3",
@@ -4112,6 +4114,7 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
+ "namada_tx",
  "serde",
  "smooth-operator",
  "tracing",

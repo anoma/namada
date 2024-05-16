@@ -17,7 +17,7 @@ fn process_tx(c: &mut Criterion) {
     shell.state.in_mem_mut().last_block.as_mut().unwrap().height =
         BlockHeight(2);
 
-    let mut tx = shell.generate_tx(
+    let mut batched_tx = shell.generate_tx(
         TX_TRANSFER_WASM,
         Transfer {
             source: defaults::albert_address(),
@@ -31,25 +31,29 @@ fn process_tx(c: &mut Criterion) {
         vec![&defaults::albert_keypair()],
     );
 
-    tx.update_header(namada::tx::data::TxType::Wrapper(Box::new(
-        WrapperTx::new(
-            Fee {
-                token: address::testing::nam(),
-                amount_per_gas_unit: DenominatedAmount::native(1.into()),
-            },
-            defaults::albert_keypair().ref_to(),
-            1_000_000.into(),
-            // NOTE: The unshield operation has to be gas-free so don't include
-            // it here
+    batched_tx
+        .tx
+        .update_header(namada::tx::data::TxType::Wrapper(Box::new(
+            WrapperTx::new(
+                Fee {
+                    token: address::testing::nam(),
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                },
+                defaults::albert_keypair().ref_to(),
+                1_000_000.into(),
+                // NOTE: The unshield operation has to be gas-free so don't
+                // include it here
+                None,
+            ),
+        )));
+    batched_tx
+        .tx
+        .add_section(namada::tx::Section::Authorization(Authorization::new(
+            batched_tx.tx.sechashes(),
+            [(0, defaults::albert_keypair())].into_iter().collect(),
             None,
-        ),
-    )));
-    tx.add_section(namada::tx::Section::Authorization(Authorization::new(
-        tx.sechashes(),
-        [(0, defaults::albert_keypair())].into_iter().collect(),
-        None,
-    )));
-    let wrapper = tx.to_bytes();
+        )));
+    let wrapper = batched_tx.tx.to_bytes();
 
     #[allow(clippy::disallowed_methods)]
     let datetime = DateTimeUtc::now();

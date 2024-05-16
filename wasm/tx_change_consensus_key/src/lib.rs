@@ -5,9 +5,8 @@ use namada_tx_prelude::transaction::pos::ConsensusKeyChange;
 use namada_tx_prelude::*;
 
 #[transaction] // TODO: need to benchmark this gas
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let ConsensusKeyChange {
         validator,
         consensus_key,
@@ -15,7 +14,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
         .wrap_err("Failed to decode ConsensusKeyChange value")?;
 
     // Check that the tx has been signed with the new consensus key
-    verify_signatures_of_pks(ctx, &signed, vec![consensus_key.clone()])
+    verify_signatures_of_pks(ctx, &tx_data.tx, vec![consensus_key.clone()])
         .true_or_else(|| {
             const ERR_MSG: &str =
                 "Consensus key ownership signature verification failed";

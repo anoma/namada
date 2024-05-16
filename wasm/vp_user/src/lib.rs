@@ -18,7 +18,7 @@ use namada_vp_prelude::*;
 #[validity_predicate]
 fn validate_tx(
     ctx: &Ctx,
-    tx: Tx,
+    tx: BatchedTx,
     addr: Address,
     keys_changed: BTreeSet<storage::Key>,
     verifiers: BTreeSet<Address>,
@@ -30,9 +30,10 @@ fn validate_tx(
         verifiers
     );
 
+    let BatchedTx { tx, ref cmt } = tx;
     // Check if this is a governance proposal first
     let is_gov_proposal = tx
-        .data()
+        .data(cmt)
         .and_then(|tx_data| {
             let proposal_id = u64::try_from_slice(&tx_data).ok()?;
             Some(is_proposal_accepted(ctx, proposal_id))
@@ -246,7 +247,14 @@ mod tests {
         vp_host_env::init();
 
         assert!(
-            validate_tx(&CTX, tx_data, addr, keys_changed, verifiers).is_ok()
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                addr,
+                keys_changed,
+                verifiers
+            )
+            .is_ok()
         );
     }
 
@@ -305,8 +313,14 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_ok()
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers
+            )
+            .is_ok()
         );
     }
 
@@ -361,7 +375,13 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                validate_tx(
+                    &CTX,
+                    tx_data.batch_first_tx(),
+                    vp_owner,
+                    keys_changed,
+                    verifiers,
+                )
             })
             .err()
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -419,7 +439,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -427,8 +447,8 @@ mod tests {
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -515,7 +535,13 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                validate_tx(
+                    &CTX,
+                    tx_data.batch_first_tx(),
+                    vp_owner,
+                    keys_changed,
+                    verifiers,
+                )
             })
             .err()
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -642,8 +668,8 @@ mod tests {
             pks_map.index_secret_keys(vec![sk3]),
             None,
         )));
-        let signed_tx = tx_data.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx_data.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
 
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
@@ -662,7 +688,7 @@ mod tests {
         assert!(
             validate_tx(
                 &CTX,
-                signed_tx.clone(),
+                signed_tx,
                 validator3,
                 keys_changed.clone(),
                 verifiers.clone()
@@ -753,7 +779,13 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                validate_tx(
+                    &CTX,
+                    tx_data.batch_first_tx(),
+                    vp_owner,
+                    keys_changed,
+                    verifiers,
+                )
             })
             .err()
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -850,7 +882,13 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, validator, keys_changed, verifiers)
+                validate_tx(
+                    &CTX,
+                    tx_data.batch_first_tx(),
+                    validator,
+                    keys_changed,
+                    verifiers,
+                )
             })
             .err()
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -934,7 +972,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -942,8 +980,8 @@ mod tests {
             pks_map.index_secret_keys(vec![secret_key]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -1030,7 +1068,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -1038,8 +1076,8 @@ mod tests {
             pks_map.index_secret_keys(vec![secret_key]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -1137,7 +1175,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -1145,8 +1183,8 @@ mod tests {
             pks_map.index_secret_keys(vec![secret_key]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -1203,8 +1241,14 @@ mod tests {
         let verifiers: BTreeSet<Address> = BTreeSet::default();
         vp_host_env::set(vp_env);
         assert!(
-            validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
-                .is_ok()
+            validate_tx(
+                &CTX,
+                tx_data.batch_first_tx(),
+                vp_owner,
+                keys_changed,
+                verifiers
+            )
+            .is_ok()
         );
     }
 
@@ -1260,7 +1304,7 @@ mod tests {
             vp_host_env::set(vp_env);
             assert!(
                 panic::catch_unwind(|| {
-                    validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                    validate_tx(&CTX, tx_data.batch_first_tx(), vp_owner, keys_changed, verifiers)
                 })
                 .err()
                 .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -1304,7 +1348,7 @@ mod tests {
             let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
             let mut vp_env = vp_host_env::take();
-            let mut tx = vp_env.tx.clone();
+            let mut tx = vp_env.batched_tx.tx.clone();
             tx.set_code(Code::new(vec![], None));
             tx.set_data(Data::new(vec![]));
             tx.add_section(Section::Authorization(Authorization::new(
@@ -1312,8 +1356,8 @@ mod tests {
                 pks_map.index_secret_keys(vec![keypair]),
                 None,
             )));
-            let signed_tx = tx.clone();
-            vp_env.tx = signed_tx.clone();
+            let signed_tx = tx.batch_first_tx();
+            vp_env.batched_tx= signed_tx.clone();
             let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
             let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -1356,7 +1400,13 @@ mod tests {
         vp_host_env::set(vp_env);
         assert!(
             panic::catch_unwind(|| {
-                validate_tx(&CTX, tx_data, vp_owner, keys_changed, verifiers)
+                validate_tx(
+                    &CTX,
+                    tx_data.batch_first_tx(),
+                    vp_owner,
+                    keys_changed,
+                    verifiers,
+                )
             })
             .err()
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
@@ -1396,7 +1446,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -1404,8 +1454,8 @@ mod tests {
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();
@@ -1452,7 +1502,7 @@ mod tests {
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
 
         let mut vp_env = vp_host_env::take();
-        let mut tx = vp_env.tx.clone();
+        let mut tx = vp_env.batched_tx.tx.clone();
         tx.set_data(Data::new(vec![]));
         tx.set_code(Code::new(vec![], None));
         tx.add_section(Section::Authorization(Authorization::new(
@@ -1460,8 +1510,8 @@ mod tests {
             pks_map.index_secret_keys(vec![keypair]),
             None,
         )));
-        let signed_tx = tx.clone();
-        vp_env.tx = signed_tx.clone();
+        let signed_tx = tx.batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
         let keys_changed: BTreeSet<storage::Key> =
             vp_env.all_touched_storage_keys();
         let verifiers: BTreeSet<Address> = BTreeSet::default();

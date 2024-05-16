@@ -10,7 +10,7 @@ use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
-use namada_tx::data::TxResult;
+use namada_tx::data::BatchedTxResult;
 use namada_tx::Signed;
 use namada_vote_ext::bridge_pool_roots::{self, MultiSignedVext, SignedVext};
 
@@ -61,13 +61,13 @@ where
 pub fn apply_derived_tx<D, H>(
     state: &mut WlState<D, H>,
     vext: MultiSignedVext,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     if vext.is_empty() {
-        return Ok(TxResult::default());
+        return Ok(BatchedTxResult::default());
     }
     tracing::info!(
         bp_root_sigs = vext.len(),
@@ -88,7 +88,7 @@ where
             ?partial_proof,
             "Bridge pool root tally is already complete"
         );
-        return Ok(TxResult::default());
+        return Ok(BatchedTxResult::default());
     }
 
     // apply updates to the bridge pool root.
@@ -132,7 +132,7 @@ where
         }
     }
 
-    Ok(TxResult {
+    Ok(BatchedTxResult {
         changed_keys: changed,
         ..Default::default()
     })
@@ -343,7 +343,7 @@ mod test_apply_bp_roots_to_storage {
                 .sig,
         }
         .sign(&keys[&validators[0]].protocol);
-        let TxResult { changed_keys, .. } =
+        let BatchedTxResult { changed_keys, .. } =
             apply_derived_tx(&mut state, vext.into()).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
@@ -360,7 +360,7 @@ mod test_apply_bp_roots_to_storage {
         }
         .sign(&keys[&validators[2]].protocol);
 
-        let TxResult { changed_keys, .. } =
+        let BatchedTxResult { changed_keys, .. } =
             apply_derived_tx(&mut state, vext.into()).expect("Test failed");
 
         let expected: BTreeSet<Key> =
@@ -400,7 +400,7 @@ mod test_apply_bp_roots_to_storage {
         }
         .sign(&keys[&validators[1]].protocol);
         vexts.insert(vext);
-        let TxResult { changed_keys, .. } =
+        let BatchedTxResult { changed_keys, .. } =
             apply_derived_tx(&mut state, vexts).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
@@ -442,7 +442,7 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
-        let TxResult { changed_keys, .. } =
+        let BatchedTxResult { changed_keys, .. } =
             apply_derived_tx(&mut state, vext.into()).expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),

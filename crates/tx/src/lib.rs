@@ -28,9 +28,10 @@ pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
-    standalone_signature, verify_standalone_sig, Authorization, Code,
-    Commitment, CompressedAuthorization, Data, DecodeError, Header,
-    MaspBuilder, Memo, Section, Signed, Signer, Tx, TxError, VerifySigError,
+    standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
+    BatchedTxRef, Code, Commitment, CompressedAuthorization, Data, DecodeError,
+    Header, IndexedTx, IndexedTxType, MaspBuilder, Memo, Section, Signed,
+    Signer, Tx, TxCommitments, TxError, VerifySigError,
 };
 
 #[cfg(test)]

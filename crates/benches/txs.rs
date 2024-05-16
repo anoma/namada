@@ -102,8 +102,8 @@ fn ibc(c: &mut Criterion) {
                                 TransferSource::Address(defaults::albert_address()),
                                 TransferTarget::PaymentAddress(albert_payment_addr),
                             );
-                            shielded_ctx.shell.execute_tx(&shield_tx);
-                            shielded_ctx.shell.commit_masp_tx(shield_tx);
+                            shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
+                            shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
                             shielded_ctx.shell.commit_block();
 
                             shielded_ctx.generate_shielded_action(
@@ -116,7 +116,7 @@ fn ibc(c: &mut Criterion) {
                     };
                     (shielded_ctx, signed_tx)
                 },
-                |(shielded_ctx, signed_tx)| shielded_ctx.shell.execute_tx(signed_tx),
+                |(shielded_ctx, signed_tx)| shielded_ctx.shell.execute_tx(&signed_tx.to_ref()),
                 criterion::BatchSize::SmallInput,
             )
         });

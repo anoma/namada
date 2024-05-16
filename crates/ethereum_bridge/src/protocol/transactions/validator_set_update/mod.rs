@@ -7,7 +7,7 @@ use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::Amount;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_tx::data::TxResult;
+use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::validator_set_update;
 
 use super::ChangedKeys;
@@ -72,7 +72,7 @@ pub fn aggregate_votes<D, H>(
     state: &mut WlState<D, H>,
     ext: validator_set_update::VextDigest,
     signing_epoch: Epoch,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -109,7 +109,7 @@ where
         voting_powers,
     )?;
 
-    Ok(TxResult {
+    Ok(BatchedTxResult {
         changed_keys,
         ..Default::default()
     })
