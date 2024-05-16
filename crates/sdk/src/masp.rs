@@ -30,6 +30,9 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
     RngBuildParams, SaplingMetadata,
 };
+use masp_primitives::transaction::components::sapling::{
+    Authorized as SaplingAuthorized, Bundle as SaplingBundle,
+};
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
     I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
@@ -70,6 +73,7 @@ use rand::rngs::StdRng;
 use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
@@ -288,15 +292,7 @@ where
     let mut ctx = testing::MockBatchValidator::default();
 
     // Charge gas before check bundle
-    let spends_len = sapling_bundle.shielded_spends.len() as u64;
-    let converts_len = sapling_bundle.shielded_converts.len() as u64;
-    let outputs_len = sapling_bundle.shielded_outputs.len() as u64;
-    charge_masp_check_bundle_gas(
-        spends_len,
-        converts_len,
-        outputs_len,
-        &consume_verify_gas,
-    )?;
+    charge_masp_check_bundle_gas(sapling_bundle, &consume_verify_gas)?;
 
     if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
     {
@@ -306,12 +302,7 @@ where
     tracing::debug!("passed check bundle");
 
     // Charge gas before final validation
-    charge_masp_validate_gas(
-        spends_len,
-        converts_len,
-        outputs_len,
-        consume_verify_gas,
-    )?;
+    charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
     if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
         return Err(StorageError::SimpleMessage(
             "Invalid proofs or signatures",
@@ -322,113 +313,75 @@ where
 
 // Charge gas for the check_bundle operation which does not leverage concurrency
 fn charge_masp_check_bundle_gas<F>(
-    spends_len: u64,
-    converts_len: u64,
-    outputs_len: u64,
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
     consume_verify_gas: F,
 ) -> Result<(), namada_state::StorageError>
 where
     F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
 {
-    consume_verify_gas(
-        spends_len
-            .checked_mul(namada_gas::MASP_SPEND_CHECK_GAS)
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas calculation",
-            ))?,
-    )?;
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_spends.len() as u64)
+            * namada_gas::MASP_SPEND_CHECK_GAS
+    )?)?;
 
-    consume_verify_gas(
-        converts_len
-            .checked_mul(namada_gas::MASP_CONVERT_CHECK_GAS)
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas calculation",
-            ))?,
-    )?;
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_converts.len() as u64)
+            * namada_gas::MASP_CONVERT_CHECK_GAS
+    )?)?;
 
-    consume_verify_gas(
-        outputs_len
-            .checked_mul(namada_gas::MASP_OUTPUT_CHECK_GAS)
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas calculation",
-            ))?,
-    )?;
-
-    Ok(())
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_outputs.len() as u64)
+            * namada_gas::MASP_OUTPUT_CHECK_GAS
+    )?)
 }
 
 // Charge gas for the final validation, taking advtange of concurrency for
-// proofs verification but not for signature (because of the fallback)
+// proofs verification but not for signatures
 fn charge_masp_validate_gas<F>(
-    spends_len: u64,
-    converts_len: u64,
-    outputs_len: u64,
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
     consume_verify_gas: F,
 ) -> Result<(), namada_state::StorageError>
 where
     F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
 {
-    // Signatures pay the entire cost (no discount because of the possible
-    // fallback)
-    consume_verify_gas(
-        spends_len
-            // Add one for the binding signature
-            .checked_add(1)
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas calculation",
-            ))?
-            .checked_mul(namada_gas::MASP_VERIFY_SIG_GAS)
-            .ok_or(namada_state::StorageError::SimpleMessage(
-                "Overflow in gas calculation",
-            ))?,
-    )?;
+    // Signatures gas
+    consume_verify_gas(checked!(
+        // Add one for the binding signature
+        ((sapling_bundle.shielded_spends.len() as u64) + 1)
+            * namada_gas::MASP_VERIFY_SIG_GAS
+    )?)?;
 
     // If at least one note is present charge the fixed costs. Then charge the
-    // variable cost for every note, amortized on the fixed expected number of
-    // cores
-    if spends_len != 0 {
+    // variable cost for every other note, amortized on the fixed expected
+    // number of cores
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_spends.len().checked_sub(1)
+    {
         consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
-        consume_verify_gas(
-            namada_gas::MASP_VARIABLE_SPEND_GAS
-                .checked_mul(spends_len)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?
-                .checked_div(namada_gas::MASP_PARALLEL_GAS_DIVIDER)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?,
-        )?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
 
-    if converts_len != 0 {
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_converts.len().checked_sub(1)
+    {
         consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
-        consume_verify_gas(
-            namada_gas::MASP_VARIABLE_CONVERT_GAS
-                .checked_mul(converts_len)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?
-                .checked_div(namada_gas::MASP_PARALLEL_GAS_DIVIDER)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?,
-        )?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
 
-    if outputs_len != 0 {
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_outputs.len().checked_sub(1)
+    {
         consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
-        consume_verify_gas(
-            namada_gas::MASP_VARIABLE_OUTPUT_GAS
-                .checked_mul(outputs_len)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?
-                .checked_div(namada_gas::MASP_PARALLEL_GAS_DIVIDER)
-                .ok_or(namada_state::StorageError::SimpleMessage(
-                    "Overflow in gas calculation",
-                ))?,
-        )?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
 
     Ok(())
