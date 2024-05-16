@@ -52,7 +52,7 @@ where
 
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -202,7 +202,7 @@ where
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(
         &self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {

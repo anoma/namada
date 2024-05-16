@@ -163,6 +163,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
+/// The set of inner tx results indexed by the inner tx hash
 // The generic is only used to return typed errors in protocol for error
 // management with regards to replay protection, whereas for logging we use
 // strings
@@ -207,7 +208,7 @@ where
 {
     type Value = BatchResults<T>;
 
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("BatchResult")
     }
 
@@ -263,6 +264,7 @@ impl<T> Default for TxResult<T> {
 }
 
 impl<T: Display> TxResult<T> {
+    /// Convert the batched result to a string
     pub fn to_result_string(self) -> TxResult<String> {
         let mut batch_results: BTreeMap<Hash, Result<BatchedTxResult, String>> =
             BTreeMap::new();

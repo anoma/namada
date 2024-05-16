@@ -238,7 +238,8 @@ impl WriteLog {
     pub fn read_pre(
         &self,
         key: &storage::Key,
-    ) -> std::result::Result<((Option<&StorageModification>, u64), arith::Error> {
+    ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
+    {
         for bucket in self
             .batch_write_log
             .iter()
@@ -256,7 +257,10 @@ impl WriteLog {
                         checked!(key.len() + vp_code_hash.len())?
                     }
                 } as u64;
-                return Ok((Some(v), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?));
+                return Ok((
+                    Some(v),
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?,
+                ));
             }
         }
         let gas = key.len() as u64;
@@ -295,7 +299,6 @@ impl WriteLog {
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
         let len = value.len();
-        let gas = key.len() + len;
         if self.tx_write_log.tx_temp_log.contains_key(key) {
             return Err(Error::UpdateTemporaryValue);
         }
@@ -512,9 +515,17 @@ impl WriteLog {
         if gas_cost.as_ref().is_some() {
             let event_type = event.kind().to_string();
             if !self.tx_write_log.events.tree.contains_key(&event_type) {
-                self.tx_write_log.events.tree.insert(&event_type, HashSet::new());
+                self.tx_write_log
+                    .events
+                    .tree
+                    .insert(&event_type, HashSet::new());
             }
-            self.tx_write_log.events.tree.get_mut(&event_type).unwrap().insert(event);
+            self.tx_write_log
+                .events
+                .tree
+                .get_mut(&event_type)
+                .unwrap()
+                .insert(event);
         }
         gas_cost
     }
@@ -681,6 +692,7 @@ impl WriteLog {
         self.batch_write_log = Default::default();
     }
 
+    /// Commit the tx write log to the block write log.
     pub fn commit_tx(&mut self) {
         // First precommit everything
         self.precommit_tx();

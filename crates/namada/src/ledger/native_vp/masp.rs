@@ -387,7 +387,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &BatchedTxRef,
+        tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<()> {

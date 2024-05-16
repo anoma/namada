@@ -51,7 +51,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &BatchedTxRef,
+        tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -280,7 +280,10 @@ where
     }
 
     /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter(&self, batched_tx: &BatchedTxRef) -> Result<()> {
+    pub fn is_valid_parameter(
+        &self,
+        batched_tx: &BatchedTxRef<'_>,
+    ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(

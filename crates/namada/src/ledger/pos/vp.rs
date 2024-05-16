@@ -55,7 +55,7 @@ where
 
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {

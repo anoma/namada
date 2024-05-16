@@ -261,7 +261,7 @@ where
 /// current transaction is being applied.
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
-    batched_tx: &BatchedTxRef,
+    batched_tx: &BatchedTxRef<'_>,
 ) -> EnvResult<Option<Hash>> {
     add_gas(
         gas_meter,
@@ -269,7 +269,8 @@ pub fn get_tx_code_hash(
             .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
             .expect("Consts mul that cannot overflow"),
     )?;
-    let hash = batched_tx.tx
+    let hash = batched_tx
+        .tx
         .get_section(batched_tx.cmt.code_sechash())
         .and_then(|x| Section::code_sec(x.as_ref()))
         .map(|x| x.code.hash());

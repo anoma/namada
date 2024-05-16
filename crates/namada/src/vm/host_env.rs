@@ -389,7 +389,7 @@ pub trait VpEvaluator {
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
         vp_code_hash: Hash,
-        input_data: BatchedTxRef,
+        input_data: BatchedTxRef<'_>,
     ) -> HostEnvResult;
 }
 

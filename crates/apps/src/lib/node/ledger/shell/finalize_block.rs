@@ -214,29 +214,27 @@ where
                 continue;
             }
 
-            let (mut tx_event, tx_gas_meter, mut wrapper_args) =
-                match &tx_header.tx_type {
-                    TxType::Wrapper(wrapper) => {
-                        stats.increment_wrapper_txs();
-                        let tx_event = new_tx_event(&tx, height.0);
-                        let gas_limit = match Gas::try_from(wrapper.gas_limit) {
-                            Ok(value) => value,
-                            Err(_) => {
-                                response.events.emit(
-                                    new_tx_event(&tx, height.0)
-                                        .with(Code(ResultCode::InvalidTx))
-                                        .with(Info(
-                                            "The wrapper gas limit overflowed \
-                                             gas representation"
-                                                .to_owned(),
-                                        ))
-                                        .with(GasUsed(0.into())),
-                                );
-                                continue;
-                            }
-                        };
-                        let gas_meter = TxGasMeter::new(gas_limit);
-                        for cmt in tx.commitments() {
+            let (tx_gas_meter, mut wrapper_args) = match &tx_header.tx_type {
+                TxType::Wrapper(wrapper) => {
+                    stats.increment_wrapper_txs();
+                    let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                        Ok(value) => value,
+                        Err(_) => {
+                            response.events.emit(
+                                new_tx_event(&tx, height.0)
+                                    .with(Code(ResultCode::InvalidTx))
+                                    .with(Info(
+                                        "The wrapper gas limit overflowed gas \
+                                         representation"
+                                            .to_owned(),
+                                    ))
+                                    .with(GasUsed(0.into())),
+                            );
+                            continue;
+                        }
+                    };
+                    let gas_meter = TxGasMeter::new(gas_limit);
+                    for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
                             .get_section(cmt.code_sechash())
                             .and_then(|x| Section::code_sec(x.as_ref()))
@@ -245,8 +243,8 @@ where
                                 code_sec.code.hash().to_string(),
                             );
                         }
-                        }
                     }
+
                     (
                         gas_meter,
                         Some(WrapperArgs {
@@ -544,8 +542,8 @@ where
             namada::tx::data::TxResult<protocol::Error>,
             DispatchError,
         >,
-        tx_data: TxData,
-        mut tx_logs: TxLogs,
+        tx_data: TxData<'_>,
+        mut tx_logs: TxLogs<'_>,
     ) {
         // Check the commitment of the fee unshielding regardless of the
         // result, it could be committed even in case of errors
@@ -628,8 +626,8 @@ where
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         tx_result: namada::tx::data::TxResult<protocol::Error>,
-        tx_data: TxData,
-        tx_logs: &mut TxLogs,
+        tx_data: TxData<'_>,
+        tx_logs: &mut TxLogs<'_>,
     ) {
         let mut temp_log = TempTxLogs::new_from_tx_logs(tx_logs);
 
@@ -646,8 +644,13 @@ where
         if tx_data.is_atomic_batch && is_any_tx_invalid {
             // Atomic batches need custom handling when even a single tx fails,
             // since we need to drop everything
-            let unrun_txs = tx_data.commitments_len
-                - tx_result.batch_results.0.len() as u64;
+            let unrun_txs = tx_data
+                .commitments_len
+                .checked_sub(
+                    u64::try_from(tx_result.batch_results.0.len())
+                        .expect("Should be able to convert to u64"),
+                )
+                .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
             temp_log.commit_stats_only(tx_logs);
             self.state.write_log_mut().drop_batch();
@@ -687,8 +690,8 @@ where
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
         tx_result: namada::tx::data::TxResult<protocol::Error>,
-        tx_data: TxData,
-        tx_logs: &mut TxLogs,
+        tx_data: TxData<'_>,
+        tx_logs: &mut TxLogs<'_>,
     ) {
         let mut temp_log = TempTxLogs::new_from_tx_logs(tx_logs);
 
@@ -702,8 +705,13 @@ where
             tx_data.height,
         );
 
-        let unrun_txs =
-            tx_data.commitments_len - tx_result.batch_results.0.len() as u64;
+        let unrun_txs = tx_data
+            .commitments_len
+            .checked_sub(
+                u64::try_from(tx_result.batch_results.0.len())
+                    .expect("Should be able to convert to u64"),
+            )
+            .expect("Shouldn't underflow");
 
         if tx_data.is_atomic_batch {
             tx_logs.stats.set_failing_atomic_batch(unrun_txs);
@@ -735,7 +743,7 @@ where
             .extend(Batch(&tx_result.to_result_string()));
     }
 
-    fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData) {
+    fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
         // If user transaction didn't fail because of out of gas nor
         // invalid section commitment, commit its hash to prevent
         // replays
@@ -801,7 +809,7 @@ struct TempTxLogs {
 }
 
 impl TempTxLogs {
-    fn new_from_tx_logs(tx_logs: &TxLogs) -> Self {
+    fn new_from_tx_logs(tx_logs: &TxLogs<'_>) -> Self {
         Self {
             tx_event: Event::new(
                 tx_logs.tx_event.kind().to_owned(),
@@ -3095,7 +3103,7 @@ mod test_finalize_block {
         assert_eq!(*event[0].kind(), APPLIED_TX);
         let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let first_tx_result = inner_tx_result
             .batch_results
             .0
@@ -3246,7 +3254,7 @@ mod test_finalize_block {
         assert_eq!(*event[1].kind(), APPLIED_TX);
         let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[1].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[1].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
             .0
@@ -3256,7 +3264,7 @@ mod test_finalize_block {
         assert_eq!(*event[2].kind(), APPLIED_TX);
         let code = event[2].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[2].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[2].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
             .0
@@ -3271,7 +3279,7 @@ mod test_finalize_block {
         assert_eq!(*event[3].kind(), APPLIED_TX);
         let code = event[3].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[3].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[3].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
             .0
@@ -3476,7 +3484,7 @@ mod test_finalize_block {
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event.read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event.read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
             .0
@@ -5399,7 +5407,7 @@ mod test_finalize_block {
 
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
         for cmt in batch.commitments() {
@@ -5444,7 +5452,7 @@ mod test_finalize_block {
 
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
         assert!(
@@ -5494,7 +5502,7 @@ mod test_finalize_block {
 
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
         assert!(
@@ -5562,7 +5570,7 @@ mod test_finalize_block {
 
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
         assert!(
@@ -5611,7 +5619,7 @@ mod test_finalize_block {
 
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
-        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
         assert!(

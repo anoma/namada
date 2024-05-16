@@ -543,7 +543,7 @@ where
 
     fn validate_tx(
         &self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> Result<(), Error> {

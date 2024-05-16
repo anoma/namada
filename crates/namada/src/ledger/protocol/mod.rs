@@ -817,7 +817,7 @@ where
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
 pub fn apply_wasm_tx<'a, S, D, H, CA>(
-    batched_tx: BatchedTxRef,
+    batched_tx: BatchedTxRef<'_>,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
@@ -939,7 +939,7 @@ where
 /// Execute a transaction code. Returns verifiers requested by the transaction.
 #[allow(clippy::too_many_arguments)]
 fn execute_tx<S, D, H, CA>(
-    batched_tx: &BatchedTxRef,
+    batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     state: &mut S,
     tx_gas_meter: &RefCell<TxGasMeter>,
@@ -1024,7 +1024,7 @@ where
 fn execute_vps<S, CA>(
     verifiers: BTreeSet<Address>,
     keys_changed: BTreeSet<storage::Key>,
-    batched_tx: &BatchedTxRef,
+    batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     state: &S,
     tx_gas_meter: &TxGasMeter,

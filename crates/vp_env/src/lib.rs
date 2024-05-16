@@ -117,7 +117,7 @@ where
     fn eval(
         &self,
         vp_code: Hash,
-        input_data: BatchedTxRef,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<(), namada_storage::Error>;
 
     /// Get a tx hash
@@ -126,7 +126,7 @@ where
     /// Get the masp tx part of the shielded action
     fn get_shielded_action(
         &self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
     ) -> Result<Transaction, namada_storage::Error> {
         let data = batched_tx
             .tx
