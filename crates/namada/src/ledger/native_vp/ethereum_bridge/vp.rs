@@ -93,7 +93,7 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        _: &BatchedTxRef,
+        _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {

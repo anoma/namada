@@ -367,7 +367,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: BatchedTxRef,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<(), StorageError> {
         let input_data_bytes = input_data.serialize_to_vec();
 

@@ -107,7 +107,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Returns [`Error::DisallowedTx`] when the given tx is a user tx and its code
 /// `Hash` is not included in the `tx_allowlist` parameter.
-pub fn check_tx_allowed<S>(batched_tx: &BatchedTxRef, storage: &S) -> Result<()>
+pub fn check_tx_allowed<S>(
+    batched_tx: &BatchedTxRef<'_>,
+    storage: &S,
+) -> Result<()>
 where
     S: StorageRead,
 {
@@ -282,7 +285,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn vp<S, CA>(
     vp_code_hash: Hash,
-    batched_tx: &BatchedTxRef,
+    batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     address: &Address,
     state: &S,
@@ -353,7 +356,7 @@ fn run_vp(
     module: wasmer::Module,
     vp_imports: wasmer::ImportObject,
     vp_code_hash: &Hash,
-    input_data: &BatchedTxRef,
+    input_data: &BatchedTxRef<'_>,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,

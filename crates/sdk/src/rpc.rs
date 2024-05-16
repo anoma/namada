@@ -620,7 +620,7 @@ impl TryFrom<Event> for TxResponse {
     type Error = String;
 
     fn try_from(event: Event) -> Result<Self, Self::Error> {
-        let batch = event.read_attribute::<BatchAttr>().ok();
+        let batch = event.read_attribute::<BatchAttr<'_>>().ok();
         let hash = event
             .read_attribute::<extend::TxHash>()
             .map_err(|err| err.to_string())?;

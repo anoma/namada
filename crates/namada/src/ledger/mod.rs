@@ -23,6 +23,7 @@ pub use {
 mod dry_run_tx {
     use std::cell::RefCell;
 
+    use namada_gas::Gas;
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
     use namada_tx::data::{GasLimit, TxResult};

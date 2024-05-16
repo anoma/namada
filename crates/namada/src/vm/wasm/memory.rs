@@ -90,7 +90,7 @@ pub struct TxCallInput {
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
     memory: &wasmer::Memory,
-    tx_data: &BatchedTxRef,
+    tx_data: &BatchedTxRef<'_>,
 ) -> Result<TxCallInput> {
     let tx_data_ptr = 0;
     let tx_data_bytes = tx_data.serialize_to_vec();

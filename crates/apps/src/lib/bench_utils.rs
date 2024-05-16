@@ -404,7 +404,7 @@ impl BenchShell {
     /// Execute the tx and return a set of verifiers inserted by the tx.
     pub fn execute_tx(
         &mut self,
-        batched_tx: &BatchedTxRef,
+        batched_tx: &BatchedTxRef<'_>,
     ) -> BTreeSet<Address> {
         let gas_meter =
             RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));

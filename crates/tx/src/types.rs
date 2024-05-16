@@ -935,6 +935,7 @@ impl TxCommitments {
         &self.memo_hash
     }
 
+    /// Hash the commitments to the transaction's sections
     pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
         hasher.update(self.serialize_to_vec());
         hasher
@@ -1691,26 +1692,31 @@ impl Tx {
         self
     }
 
+    /// Get the references to the inner transactions
     pub fn commitments(&self) -> &HashSet<TxCommitments> {
         &self.header.batch
     }
 
+    /// Get the reference to the first inner transaction
     pub fn first_commitments(&self) -> Option<&TxCommitments> {
         self.header.batch.first()
     }
 
+    /// Creates a batched tx from one or more inner transactions
     pub fn batch_tx(self, cmt: TxCommitments) -> BatchedTx {
         BatchedTx { tx: self, cmt }
     }
 
+    /// Creates a batched tx along with the reference to the first inner tx
     #[cfg(any(test, feature = "testing"))]
-    pub fn batch_ref_first_tx(&self) -> BatchedTxRef {
+    pub fn batch_ref_first_tx(&self) -> BatchedTxRef<'_> {
         BatchedTxRef {
             tx: self,
             cmt: self.first_commitments().unwrap(),
         }
     }
 
+    /// Creates a batched tx along with a copy of the first inner tx
     #[cfg(any(test, feature = "testing"))]
     pub fn batch_first_tx(self) -> BatchedTx {
         let cmt = self.first_commitments().unwrap().to_owned();
@@ -1719,6 +1725,7 @@ impl Tx {
 }
 
 impl<'tx> Tx {
+    /// Creates a batched tx along with the reference to one or more inner txs
     pub fn batch_ref_tx(
         &'tx self,
         cmt: &'tx TxCommitments,
@@ -1742,7 +1749,9 @@ impl<'tx> Tx {
     Hash,
 )]
 pub enum IndexedTxType {
+    /// Wrapper (outer) tx
     Wrapper,
+    /// Inner tx with commitment
     Inner(TxCommitments),
 }
 
@@ -1784,7 +1793,9 @@ impl Default for IndexedTx {
 /// transaction of the batch
 #[derive(Debug, BorshSerialize)]
 pub struct BatchedTxRef<'tx> {
+    /// The transaction
     pub tx: &'tx Tx,
+    /// The reference to the inner transaction
     pub cmt: &'tx TxCommitments,
 }
 
@@ -1794,12 +1805,15 @@ pub struct BatchedTxRef<'tx> {
     Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
 )]
 pub struct BatchedTx {
+    /// The transaction
     pub tx: Tx,
+    /// The reference to the inner transaction
     pub cmt: TxCommitments,
 }
 
 impl BatchedTx {
-    pub fn to_ref(&self) -> BatchedTxRef {
+    /// Convert owned version to a referenced one
+    pub fn to_ref(&self) -> BatchedTxRef<'_> {
         BatchedTxRef {
             tx: &self.tx,
             cmt: &self.cmt,
