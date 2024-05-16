@@ -29,7 +29,7 @@ namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dev-dependencies]
 masp_proofs = { workspace = true, default-features = false, features = ["local-prover", "download-params"] }
-namada_apps = {path = "../crates/apps", features = ["migrations"]}
+namada_apps_lib = {path = "../crates/apps_lib", features = ["migrations"]}
 namada_macros = {path = "../crates/macros"}
 namada_migrations = {path = "../crates/migrations"}
 namada_parameters = { path = "../crates/parameters"}

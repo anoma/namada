@@ -68,17 +68,17 @@ use namada::sdk::events::extend::ReadFromEventAttributes;
 use namada::state::Sha256Hasher;
 use namada::tendermint::abci::Event as AbciEvent;
 use namada::tendermint::block::Height as TmHeight;
-use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps::client::rpc::{
+use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
+use namada_apps_lib::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
 };
-use namada_apps::client::utils::id_from_pk;
-use namada_apps::config::genesis::{chain, templates};
-use namada_apps::config::utils::set_port;
-use namada_apps::config::{ethereum_bridge, TendermintMode};
-use namada_apps::facade::tendermint::block::Header as TmHeader;
-use namada_apps::facade::tendermint::merkle::proof::ProofOps as TmProof;
-use namada_apps::facade::tendermint_rpc::{Client, HttpClient, Url};
+use namada_apps_lib::client::utils::id_from_pk;
+use namada_apps_lib::config::genesis::{chain, templates};
+use namada_apps_lib::config::utils::set_port;
+use namada_apps_lib::config::{ethereum_bridge, TendermintMode};
+use namada_apps_lib::facade::tendermint::block::Header as TmHeader;
+use namada_apps_lib::facade::tendermint::merkle::proof::ProofOps as TmProof;
+use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_test_utils::TestWasms;
@@ -877,7 +877,7 @@ fn setup_two_single_node_nets(
     let genesis_b_dir = test_b
         .test_dir
         .path()
-        .join(namada_apps::client::utils::NET_ACCOUNTS_DIR)
+        .join(namada_apps_lib::client::utils::NET_ACCOUNTS_DIR)
         .join("validator-0");
     let mut genesis_b = chain::Finalized::read_toml_files(
         &genesis_b_dir.join(test_b.net.chain_id.as_str()),
@@ -917,7 +917,7 @@ fn setup_two_single_node_nets(
         .write_toml_files(&genesis_b_dir.join(test_b.net.chain_id.as_str()))
         .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
     // modify chain b to use different ports for cometbft
-    let mut config = namada_apps::config::Config::load(
+    let mut config = namada_apps_lib::config::Config::load(
         &genesis_b_dir,
         &test_b.net.chain_id,
         Some(TendermintMode::Validator),

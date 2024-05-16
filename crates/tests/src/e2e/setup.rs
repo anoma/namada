@@ -19,14 +19,16 @@ use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
 use itertools::{Either, Itertools};
 use namada::core::chain::ChainId;
-use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps::client::utils::{
+use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
+use namada_apps_lib::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
-use namada_apps::config::genesis::utils::read_toml;
-use namada_apps::config::genesis::{templates, transactions, GenesisAddress};
-use namada_apps::config::{ethereum_bridge, genesis, Config};
-use namada_apps::{config, wallet};
+use namada_apps_lib::config::genesis::utils::read_toml;
+use namada_apps_lib::config::genesis::{
+    templates, transactions, GenesisAddress,
+};
+use namada_apps_lib::config::{ethereum_bridge, genesis, Config};
+use namada_apps_lib::{config, wallet};
 use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::key::{RefTo, SchemeType};
@@ -48,7 +50,7 @@ use crate::e2e::helpers::{
 /// process
 pub static INIT: Once = Once::new();
 
-pub const APPS_PACKAGE: &str = "namada_apps";
+pub const APPS_PACKAGE: &str = "namada_apps_lib";
 
 /// Env. var for running E2E tests in debug mode
 pub const ENV_VAR_DEBUG: &str = "NAMADA_E2E_DEBUG";
@@ -179,7 +181,7 @@ where
             });
         println!("alias: {}, pk: {}", alias, sk.ref_to());
         let validator_address = {
-            use namada_apps::config::genesis::chain::DeriveEstablishedAddress;
+            use namada_apps_lib::config::genesis::chain::DeriveEstablishedAddress;
             let pre_genesis_tx = transactions::EstablishedAccountTx {
                 vp: "vp_user".to_string(),
                 threshold: 1,
@@ -453,7 +455,7 @@ pub fn network(
     // Set the network archive dir to make it available for `join-network`
     // commands
     std::env::set_var(
-        namada_apps::client::utils::ENV_VAR_NETWORK_CONFIGS_DIR,
+        namada_apps_lib::client::utils::ENV_VAR_NETWORK_CONFIGS_DIR,
         archive_dir,
     );
 
@@ -777,7 +779,7 @@ impl Test {
 
     pub fn get_cometbft_home(&self, who: Who) -> PathBuf {
         self.get_chain_dir(who)
-            .join(namada_apps::config::COMETBFT_DIR)
+            .join(namada_apps_lib::config::COMETBFT_DIR)
     }
 
     /// Get an async runtime.

@@ -6,10 +6,12 @@ use color_eyre::owo_colors::OwoColorize;
 use namada::state::{StorageRead, StorageWrite};
 use namada::token::storage_key::masp_token_map_key;
 use namada::token::{self, DenominatedAmount};
-use namada_apps::node::ledger::shell::testing::client::run;
-use namada_apps::node::ledger::shell::testing::node::NodeResults;
-use namada_apps::node::ledger::shell::testing::utils::{Bin, CapturedOutput};
-use namada_apps::wallet::defaults::christel_keypair;
+use namada_apps_lib::node::ledger::shell::testing::client::run;
+use namada_apps_lib::node::ledger::shell::testing::node::NodeResults;
+use namada_apps_lib::node::ledger::shell::testing::utils::{
+    Bin, CapturedOutput,
+};
+use namada_apps_lib::wallet::defaults::christel_keypair;
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -939,7 +941,7 @@ fn spend_unconverted_asset_type() -> Result<()> {
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Uncomment for better debugging
-    // let _log_guard = namada_apps::logging::init_from_env_or(
+    // let _log_guard = namada_apps_lib::logging::init_from_env_or(
     //     tracing::level_filters::LevelFilter::INFO,
     // )?;
     // This address doesn't matter for tests. But an argument is required.

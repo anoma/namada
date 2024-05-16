@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
-use namada_apps::cli;
-use namada_apps::cli::api::{CliApi, CliIo};
+use namada_apps_lib::cli;
+use namada_apps_lib::cli::api::{CliApi, CliIo};
 
 #[tokio::main]
 pub async fn main() -> Result<()> {

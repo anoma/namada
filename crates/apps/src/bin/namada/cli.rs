@@ -9,7 +9,7 @@ use std::env;
 use std::process::Command;
 
 use eyre::Result;
-use namada_apps::cli;
+use namada_apps_lib::cli;
 
 pub fn main() -> Result<()> {
     let (cmd, raw_sub_cmd) = cli::namada_cli();

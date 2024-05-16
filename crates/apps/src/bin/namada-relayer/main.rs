@@ -1,7 +1,7 @@
 use color_eyre::eyre::Result;
 use namada::tendermint_rpc::HttpClient;
-use namada_apps::cli::api::{CliApi, CliIo};
-use namada_apps::{cli, logging};
+use namada_apps_lib::cli::api::{CliApi, CliIo};
+use namada_apps_lib::{cli, logging};
 use tracing_subscriber::filter::LevelFilter;
 
 #[tokio::main]

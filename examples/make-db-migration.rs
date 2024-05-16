@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::{HEXLOWER, HEXUPPER};
-use namada_apps::wasm_loader::read_wasm;
+use namada_apps_lib::wasm_loader::read_wasm;
 use namada_macros::BorshDeserializer;
 use namada_parameters::storage;
 use namada_sdk::address::Address;

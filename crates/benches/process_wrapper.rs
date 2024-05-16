@@ -6,9 +6,9 @@ use namada::core::time::DateTimeUtc;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Authorization;
-use namada_apps::bench_utils::{BenchShell, TX_TRANSFER_WASM};
-use namada_apps::node::ledger::shell::process_proposal::ValidationMeta;
-use namada_apps::wallet::defaults;
+use namada_apps_lib::bench_utils::{BenchShell, TX_TRANSFER_WASM};
+use namada_apps_lib::node::ledger::shell::process_proposal::ValidationMeta;
+use namada_apps_lib::wallet::defaults;
 
 fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();

@@ -13,12 +13,6 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-name = "namada_apps"
-path = "src/lib/mod.rs"
-
 # Namada CLI that aggregates some common commands for the node and the client
 [[bin]]
 doc = false
@@ -50,123 +44,38 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = ["migrations"]
-mainnet = [
-  "namada/mainnet",
-]
-# for integration tests and test utilities
-testing = ["namada_test_utils"]
-benches = ["namada_test_utils"]
-integration = []
-jemalloc = ["rocksdb/jemalloc"]
-migrations = [
-  "namada_migrations",
-  "namada_sdk/migrations",
-  "namada/migrations",
-  "linkme",
-]
-namada-eth-bridge = [
-  "namada/namada-eth-bridge",
-  "namada_sdk/namada-eth-bridge",
-]
+default = ["namada/mainnet", "migrations"]
+mainnet = ["namada_apps_lib/mainnet"]
+jemalloc = ["namada_apps_lib/jemalloc"]
+migrations = ["namada/migrations", "namada_apps_lib/migrations"]
+namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
 [dependencies]
-namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
-namada_macros = {path = "../macros"}
-namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
-namada_test_utils = {path = "../test_utils", optional = true}
+namada = {path = "../namada"}
+namada_apps_lib = {path = "../apps_lib"}
 
-
-ark-serialize.workspace = true
-ark-std.workspace = true
-arse-merkle-tree = { workspace = true, features = ["blake2b"] }
-async-trait.workspace = true
-base64.workspace = true
-bech32.workspace = true
-bimap.workspace = true
-blake2b-rs.workspace = true
-borsh.workspace = true
-borsh-ext.workspace = true
-byte-unit.workspace = true
-byteorder.workspace = true
-clap.workspace = true
 color-eyre.workspace = true
-config.workspace = true
-data-encoding.workspace = true
-derivative.workspace = true
-directories.workspace = true
-drain_filter_polyfill.workspace = true
-ed25519-consensus = { workspace = true, features = ["std"] }
-ethabi.workspace = true
-ethbridge-bridge-events.workspace = true
-ethbridge-events.workspace = true
 eyre.workspace = true
-fd-lock.workspace = true
-flate2.workspace = true
-futures.workspace = true
-itertools.workspace = true
-lazy_static.workspace= true
-ledger-namada-rs.workspace = true
-ledger-transport-hid.workspace = true
-libc.workspace = true
-libloading.workspace = true
-linkme = { workspace = true, optional = true }
-masp_primitives = { workspace = true, features = ["transparent-inputs"] }
-masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
-num_cpus.workspace = true
-num256.workspace = true
-num-rational.workspace = true
-num-traits.workspace = true
-once_cell.workspace = true
-orion.workspace = true
-prost-types.workspace = true
-prost.workspace = true
-rand_core = { workspace = true, features = ["std"] }
-rand = { workspace = true, features = ["std"] }
-rayon.workspace = true
-regex.workspace = true
-reqwest.workspace = true
-ripemd.workspace = true
-rlimit.workspace = true
-rocksdb.workspace = true
-rpassword.workspace = true
-serde_bytes.workspace = true
-serde_json = {workspace = true, features = ["raw_value"]}
-serde.workspace = true
-sha2.workspace = true
-smooth-operator.workspace = true
-sysinfo.workspace = true
-tar.workspace = true
-tempfile.workspace = true
-tendermint-config.workspace = true
-tendermint-rpc.workspace = true
-textwrap-macros = "0.3.0"
-thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
 toml.workspace = true
-tower-abci.workspace = true
-tower.workspace = true
-tracing-appender.workspace = true
-tracing-log.workspace = true
 tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true
 zeroize.workspace = true
 warp = "0.3.2"
 bytes = "1.1.0"
 
+[target.'cfg(windows)'.dependencies]
+winapi.workspace = true
+
 [dev-dependencies]
 namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
-assert_matches.workspace = true
+
+assert_matches = "1.5.0"
 bit-set.workspace = true
-pretty_assertions.workspace = true
 proptest.workspace = true
 test-log.workspace = true
 tokio-test.workspace = true
 
 [build-dependencies]
 git2.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-winapi.workspace = true

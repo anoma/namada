@@ -19,7 +19,7 @@ use namada::ledger::eth_bridge::{
     ContractVersion, Contracts, EthereumBridgeParams, MinimumConfirmations,
     UpgradeableContract,
 };
-use namada_apps::config::ethereum_bridge;
+use namada_apps_lib::config::ethereum_bridge;
 use namada_core::address::Address;
 use namada_core::ethereum_events::{
     EthereumEvent, TransferToEthereum, TransferToNamada,

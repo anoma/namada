@@ -2,9 +2,9 @@
 
 use eyre::{Context, Result};
 use namada::core::time::{DateTimeUtc, Utc};
-use namada_apps::cli::{self, cmds};
-use namada_apps::config::{Action, ActionAtHeight, ValidatorLocalConfig};
-use namada_apps::node::ledger;
+use namada_apps_lib::cli::{self, cmds};
+use namada_apps_lib::config::{Action, ActionAtHeight, ValidatorLocalConfig};
+use namada_apps_lib::node::ledger;
 #[cfg(not(feature = "migrations"))]
 use namada_sdk::display_line;
 

@@ -7,22 +7,22 @@ use std::sync::{Arc, Mutex};
 use color_eyre::eyre::{eyre, Result};
 use namada::core::dec::Dec;
 use namada::token;
-use namada_apps::cli::args;
-use namada_apps::client::utils::PRE_GENESIS_DIR;
-use namada_apps::config;
-use namada_apps::config::genesis::chain::Finalized;
-use namada_apps::config::genesis::templates;
-use namada_apps::config::genesis::templates::load_and_validate;
-use namada_apps::config::TendermintMode;
-use namada_apps::facade::tendermint::Timeout;
-use namada_apps::facade::tendermint_proto::google::protobuf::Timestamp;
-use namada_apps::node::ledger::shell::testing::node::{
+use namada_apps_lib::cli::args;
+use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
+use namada_apps_lib::config;
+use namada_apps_lib::config::genesis::chain::Finalized;
+use namada_apps_lib::config::genesis::templates;
+use namada_apps_lib::config::genesis::templates::load_and_validate;
+use namada_apps_lib::config::TendermintMode;
+use namada_apps_lib::facade::tendermint::Timeout;
+use namada_apps_lib::facade::tendermint_proto::google::protobuf::Timestamp;
+use namada_apps_lib::node::ledger::shell::testing::node::{
     mock_services, MockNode, MockServicesCfg, MockServicesController,
     MockServicesPackage,
 };
-use namada_apps::node::ledger::shell::testing::utils::TestDir;
-use namada_apps::node::ledger::shell::Shell;
-use namada_apps::wallet::pre_genesis;
+use namada_apps_lib::node::ledger::shell::testing::utils::TestDir;
+use namada_apps_lib::node::ledger::shell::Shell;
+use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
 use namada_sdk::wallet::alias::Alias;
@@ -95,7 +95,7 @@ pub fn initialize_genesis(
 
     // Create genesis chain release archive
     let release_archive_path =
-        namada_apps::client::utils::init_network(args::InitNetwork {
+        namada_apps_lib::client::utils::init_network(args::InitNetwork {
             templates_path: genesis_path,
             wasm_checksums_path,
             chain_id_prefix,
@@ -161,7 +161,7 @@ fn finalize_wallet(
         });
 
     // Try to load pre-genesis wallet
-    let pre_genesis_wallet = namada_apps::wallet::load(&pre_genesis_path);
+    let pre_genesis_wallet = namada_apps_lib::wallet::load(&pre_genesis_path);
     let chain_dir = global_args
         .base_dir
         .join(global_args.chain_id.as_ref().unwrap().as_str());
@@ -171,7 +171,7 @@ fn finalize_wallet(
         pre_genesis_wallet,
         validator_alias_and_pre_genesis_wallet,
     );
-    namada_apps::wallet::save(&wallet).unwrap();
+    namada_apps_lib::wallet::save(&wallet).unwrap();
 }
 
 /// Create a mock ledger node.
@@ -222,7 +222,7 @@ fn create_node(
         auto_drive_services,
     };
     let init_req =
-        namada_apps::facade::tendermint::v0_37::abci::request::InitChain {
+        namada_apps_lib::facade::tendermint::v0_37::abci::request::InitChain {
             time: Timestamp {
                 seconds: 0,
                 nanos: 0,
@@ -230,23 +230,23 @@ fn create_node(
             .try_into().unwrap(),
             chain_id: chain_id.to_string(),
             consensus_params:
-                namada_apps::facade::tendermint::consensus::params::Params {
-                    block: namada_apps::facade::tendermint::block::Size {
+                namada_apps_lib::facade::tendermint::consensus::params::Params {
+                    block: namada_apps_lib::facade::tendermint::block::Size {
                         max_bytes: 0,
                         max_gas: 0,
                         time_iota_ms: 0,
                     },
                     evidence:
-                     namada_apps::facade::tendermint::evidence::Params {
+                     namada_apps_lib::facade::tendermint::evidence::Params {
                         max_age_num_blocks:  0,
-                        max_age_duration: namada_apps::facade::tendermint::evidence::Duration(core::time::Duration::MAX),
+                        max_age_duration: namada_apps_lib::facade::tendermint::evidence::Duration(core::time::Duration::MAX),
                         max_bytes: 0,
                     },
-                    validator: namada_apps::facade::tendermint::consensus::params::ValidatorParams {
+                    validator: namada_apps_lib::facade::tendermint::consensus::params::ValidatorParams {
                         pub_key_types: vec![]
                     },
                     version: None,
-                    abci: namada_apps::facade::tendermint::consensus::params::AbciParams {
+                    abci: namada_apps_lib::facade::tendermint::consensus::params::AbciParams {
                         vote_extensions_enable_height: None,
                     },
                 },

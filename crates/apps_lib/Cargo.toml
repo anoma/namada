@@ -37,7 +37,7 @@ namada-eth-bridge = [
 namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["wasm-runtime", "download-params", "std", "rand"]}
+namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils", optional = true}
 
 ark-serialize.workspace = true
@@ -99,7 +99,6 @@ serde_bytes.workspace = true
 serde_json = {workspace = true, features = ["raw_value"]}
 serde.workspace = true
 sha2.workspace = true
-signal-hook.workspace = true
 smooth-operator.workspace = true
 sysinfo.workspace = true
 tar.workspace = true
@@ -110,7 +109,6 @@ textwrap-macros = "0.3.0"
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
 toml.workspace = true
-tonic.workspace = true
 tower-abci.workspace = true
 tower.workspace = true
 tracing-appender.workspace = true

@@ -1,7 +1,7 @@
 mod cli;
 
 use color_eyre::eyre::Result;
-use namada_apps::logging;
+use namada_apps_lib::logging;
 use tracing_subscriber::filter::LevelFilter;
 
 fn main() -> Result<()> {
