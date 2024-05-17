@@ -5,8 +5,7 @@
 
 use namada_state::{DBIter, StorageHasher, DB};
 use wasmer::{
-    Function, HostEnvInitError, ImportObject, Instance, Memory, Store,
-    WasmerEnv,
+    Function, HostEnvInitError, ImportObject, Instance, Store, WasmerEnv,
 };
 
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
@@ -47,7 +46,6 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
     wasm_store: &Store,
-    initial_memory: Memory,
     env: TxVmEnv<'static, WasmMemory, D, H, CA>,
 ) -> ImportObject
 where
@@ -58,7 +56,6 @@ where
     wasmer::imports! {
         // default namespace
         "env" => {
-            "memory" => initial_memory,
             // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
             "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
@@ -96,7 +93,6 @@ where
 /// validity predicate code
 pub fn vp_imports<D, H, EVAL, CA>(
     wasm_store: &Store,
-    initial_memory: Memory,
     env: VpVmEnv<'static, WasmMemory, D, H, EVAL, CA>,
 ) -> ImportObject
 where
@@ -108,7 +104,6 @@ where
     wasmer::imports! {
         // default namespace
         "env" => {
-            "memory" => initial_memory,
             // Wasm middleware gas injection hook
             "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
             "namada_vp_read_pre" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_read_pre),
