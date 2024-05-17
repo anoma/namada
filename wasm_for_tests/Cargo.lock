@@ -3942,6 +3942,7 @@ dependencies = [
  "namada_macros",
  "serde",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

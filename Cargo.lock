@@ -4853,6 +4853,7 @@ dependencies = [
  "namada_migrations",
  "serde 1.0.201",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
