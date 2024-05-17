@@ -12,11 +12,11 @@ use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
-impl<D, H, CA> WasmerEnv for TxVmEnv<'_, WasmMemory, D, H, CA>
+impl<D, H, CA> WasmerEnv for TxVmEnv<WasmMemory, D, H, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     fn init_with_instance(
         &mut self,
@@ -26,12 +26,12 @@ where
     }
 }
 
-impl<D, H, EVAL, CA> WasmerEnv for VpVmEnv<'_, WasmMemory, D, H, EVAL, CA>
+impl<D, H, EVAL, CA> WasmerEnv for VpVmEnv<WasmMemory, D, H, EVAL, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    EVAL: VpEvaluator + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     fn init_with_instance(
         &mut self,
@@ -46,12 +46,12 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
     wasm_store: &Store,
-    env: TxVmEnv<'static, WasmMemory, D, H, CA>,
+    env: TxVmEnv<WasmMemory, D, H, CA>,
 ) -> ImportObject
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     wasmer::imports! {
         // default namespace
@@ -93,13 +93,13 @@ where
 /// validity predicate code
 pub fn vp_imports<D, H, EVAL, CA>(
     wasm_store: &Store,
-    env: VpVmEnv<'static, WasmMemory, D, H, EVAL, CA>,
+    env: VpVmEnv<WasmMemory, D, H, EVAL, CA>,
 ) -> ImportObject
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA>,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     wasmer::imports! {
         // default namespace

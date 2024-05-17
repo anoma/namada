@@ -1,7 +1,7 @@
 //! Virtual machine modules for running transactions and validity predicates.
 
-use std::ffi::c_void;
 use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 use wasmparser::{Validator, WasmFeatures};
 
@@ -71,80 +71,99 @@ impl WasmCacheAccess for WasmCacheRoAccess {
     }
 }
 
-/// This is used to attach the Ledger's host structures to wasm environment,
-/// which is used for implementing some host calls. It wraps an immutable
-/// reference, so the access is thread-safe, but because of the unsafe
-/// reference conversion, care must be taken that while this reference is
-/// borrowed, no other process can modify it.
-#[derive(Clone, Debug)]
-pub struct HostRef<'a, T: 'a> {
-    data: *const c_void,
-    phantom: PhantomData<&'a T>,
-}
-unsafe impl<T> Send for HostRef<'_, T> {}
-unsafe impl<T> Sync for HostRef<'_, T> {}
+/// Read-only access to host data.
+#[derive(Debug)]
+pub enum RoAccess {}
 
-impl<'a, T: 'a> HostRef<'a, &T> {
-    /// Wrap a reference for VM environment.
+/// Read and write access to host data.
+#[derive(Debug)]
+pub enum RwAccess {}
+
+/// Reference to host environment data, to be used from wasm
+/// to implement host functions.
+#[derive(Debug)]
+pub struct HostRef<ACCESS, T> {
+    data: NonNull<T>,
+    _access: PhantomData<*const ACCESS>,
+}
+
+impl<ACCESS, T> Clone for HostRef<ACCESS, T> {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<ACCESS, T> Copy for HostRef<ACCESS, T> {}
+
+/// [`HostRef`] with read-write access.
+pub type RwHostRef<T> = HostRef<RwAccess, T>;
+
+/// [`HostRef`] with read-only access.
+pub type RoHostRef<T> = HostRef<RoAccess, T>;
+
+// TODO: ensure `T` is `Send` and `Sync`
+unsafe impl<ACCESS, T> Send for HostRef<ACCESS, T> {}
+unsafe impl<ACCESS, T> Sync for HostRef<ACCESS, T> {}
+
+impl<T> HostRef<RoAccess, T> {
+    /// Wrap a reference to the VM environment.
     ///
     /// # Safety
     ///
-    /// Because this is unsafe, care must be taken that while this reference
-    /// is borrowed, no other process can modify it.
+    /// The caller must ensure the reference to the VM environment
+    /// is valid and non-null.
     pub unsafe fn new(host_structure: &T) -> Self {
         Self {
-            data: host_structure as *const T as *const c_void,
-            phantom: PhantomData,
+            data: NonNull::new_unchecked(host_structure as *const _ as *mut _),
+            _access: PhantomData,
         }
     }
 
-    /// Get a reference from VM environment.
+    /// Get a reference from the VM environment.
     ///
     /// # Safety
     ///
-    /// Because this is unsafe, care must be taken that while this reference
-    /// is borrowed, no other process can modify it.
-    pub unsafe fn get(&self) -> &'a T {
-        &*(self.data as *const T)
+    /// The caller must ensure the reference to the VM environment
+    /// is still valid.
+    pub unsafe fn get<'a>(&self) -> &'a T {
+        self.data.as_ref()
     }
 }
 
-/// This is used to attach the Ledger's host structures to wasm environment,
-/// which is used for implementing some host calls. Because it's mutable, it's
-/// not thread-safe. Also, care must be taken that while this reference is
-/// borrowed, no other process can read or modify it.
-#[derive(Clone, Debug)]
-pub struct MutHostRef<'a, T: 'a> {
-    data: *mut c_void,
-    phantom: PhantomData<&'a T>,
-}
-unsafe impl<T> Send for MutHostRef<'_, T> {}
-unsafe impl<T> Sync for MutHostRef<'_, T> {}
-
-impl<'a, T: 'a> MutHostRef<'a, &T> {
-    /// Wrap a mutable reference for VM environment.
+impl<T> HostRef<RwAccess, T> {
+    /// Wrap a mutable reference to the VM environment.
     ///
     /// # Safety
     ///
-    /// This is not thread-safe. Also, because this is unsafe, care must be
-    /// taken that while this reference is borrowed, no other process can read
-    /// or modify it.
+    /// The caller must ensure the reference to the VM environment
+    /// is valid and non-null.
     pub unsafe fn new(host_structure: &mut T) -> Self {
         Self {
-            data: host_structure as *mut T as *mut c_void,
-            phantom: PhantomData,
+            data: NonNull::new_unchecked(host_structure as *mut _),
+            _access: PhantomData,
         }
     }
 
-    /// Get a mutable reference from VM environment.
+    /// Get a reference from the VM environment.
     ///
     /// # Safety
     ///
-    /// This is not thread-safe. Also, because this is unsafe, care must be
-    /// taken that while this reference is borrowed, no other process can read
-    /// or modify it.
-    pub unsafe fn get(&self) -> &'a mut T {
-        &mut *(self.data as *mut T)
+    /// The caller must ensure the reference to the VM environment
+    /// is still valid.
+    pub unsafe fn get<'a>(&self) -> &'a T {
+        self.data.as_ref()
+    }
+
+    /// Get a mutable reference from the VM environment.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure the reference to the VM environment
+    /// is still valid. Moreover, the caller must guarantee that the
+    /// returned reference is not aliased, to avoid data races.
+    pub unsafe fn get_mut<'a>(&self) -> &'a mut T {
+        &mut *self.data.as_ptr()
     }
 }
 
