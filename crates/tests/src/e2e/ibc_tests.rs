@@ -1017,10 +1017,15 @@ fn wait_for_packet_relay(
         // Check no pending packet
         if hermes
             .exp_string(
-                "\"dst\":{\"unreceived_acks\":[],\"unreceived_packets\":[]},\"\
-                 src\":{\"unreceived_acks\":[],\"unreceived_packets\":[]}",
+                "\"dst\":{\"unreceived_acks\":[],\"unreceived_packets\":[]},",
             )
             .is_ok()
+            && hermes
+                .exp_string(
+                    "\"src\":{\"unreceived_acks\":[],\"unreceived_packets\":\
+                     []}",
+                )
+                .is_ok()
         {
             return Ok(());
         }
