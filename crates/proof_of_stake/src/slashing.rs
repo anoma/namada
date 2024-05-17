@@ -5,18 +5,21 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
+use namada_core::arith::{self, checked};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::tm_raw_hash_to_string;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use namada_core::token;
+use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{
     Collectable, NestedMap, NestedSubKey, SubKey,
 };
 use namada_storage::collections::LazyMap;
-use namada_storage::{StorageRead, StorageWrite};
+use namada_storage::{OptionExt, ResultExt, StorageRead, StorageWrite};
 
+use crate::event::PosEvent;
 use crate::storage::{
     enqueued_slashes_handle, read_pos_params, read_validator_last_slash_epoch,
     read_validator_stake, total_bonded_handle, total_unbonded_handle,
@@ -67,9 +70,10 @@ where
                 };
             // Disregard evidences that should have already been processed
             // at this time
-            if evidence_epoch + pos_params.slash_processing_epoch_offset()
-                - pos_params.cubic_slashing_window_length
-                <= current_epoch
+            if checked!(
+                evidence_epoch + pos_params.slash_processing_epoch_offset()
+                    - pos_params.cubic_slashing_window_length
+            )? <= current_epoch
             {
                 tracing::info!(
                     "Skipping outdated evidence from epoch {evidence_epoch}"
@@ -157,7 +161,7 @@ where
     };
     // Need `+1` because we process at the beginning of a new epoch
     let processing_epoch =
-        evidence_epoch + params.slash_processing_epoch_offset();
+        checked!(evidence_epoch + params.slash_processing_epoch_offset())?;
 
     // Add the slash to the list of enqueued slashes to be processed at a later
     // epoch. If a slash at the same block height already exists, return early.
@@ -201,6 +205,7 @@ where
 /// validators.
 pub fn process_slashes<S>(
     storage: &mut S,
+    events: &mut impl EmitEvents,
     current_epoch: Epoch,
 ) -> namada_storage::Result<()>
 where
@@ -212,7 +217,7 @@ where
         return Ok(());
     }
     let infraction_epoch =
-        current_epoch - params.slash_processing_epoch_offset();
+        checked!(current_epoch - params.slash_processing_epoch_offset())?;
 
     // Slashes to be processed in the current epoch
     let enqueued_slashes = enqueued_slashes_handle().at(&current_epoch);
@@ -266,7 +271,8 @@ where
         cur_slashes.push(updated_slash);
         let cur_rate =
             eager_validator_slash_rates.entry(validator).or_default();
-        *cur_rate = cmp::min(Dec::one(), *cur_rate + slash_rate);
+        let new_rate = checked!(cur_rate + slash_rate)?;
+        *cur_rate = cmp::min(Dec::one(), new_rate);
     }
 
     // Update the epochs of enqueued slashes in storage
@@ -314,22 +320,28 @@ where
                     storage,
                     &params,
                     &validator,
-                    -slash_amount.change(),
+                    checked!(-slash_amount.change())?,
                     epoch,
                     Some(0),
                 )?;
+
+                events.emit(PosEvent::Slash {
+                    validator: validator.clone(),
+                    amount: slash_amount,
+                });
             }
         }
         // Then update validator and total deltas
         for (epoch, slash_amount) in slash_amounts {
-            let slash_delta = slash_amount - slash_acc;
-            slash_acc += slash_delta;
+            let slash_delta = checked!(slash_amount - slash_acc)?;
+            slash_acc = checked!(slash_acc + slash_delta)?;
 
+            let neg_slash_delta = checked!(-slash_delta.change())?;
             update_validator_deltas(
                 storage,
                 &params,
                 &validator,
-                -slash_delta.change(),
+                neg_slash_delta,
                 epoch,
                 Some(0),
             )?;
@@ -343,7 +355,7 @@ where
             update_total_deltas(
                 storage,
                 &params,
-                -slash_delta.change(),
+                neg_slash_delta,
                 epoch,
                 Some(0),
                 !is_jailed_or_inactive,
@@ -398,7 +410,7 @@ where
     S: StorageRead,
 {
     let infraction_epoch =
-        current_epoch - params.slash_processing_epoch_offset();
+        checked!(current_epoch - params.slash_processing_epoch_offset())?;
 
     for res in outgoing_redelegations.iter(storage)? {
         let (
@@ -465,13 +477,13 @@ where
     );
 
     let infraction_epoch =
-        current_epoch - params.slash_processing_epoch_offset();
+        checked!(current_epoch - params.slash_processing_epoch_offset())?;
 
     // Slash redelegation destination validator from the next epoch only
     // as they won't be jailed
     let set_update_epoch = current_epoch.next();
 
-    let mut init_tot_unbonded =
+    let redelegated_unbonded: Vec<token::Amount> =
         Epoch::iter_bounds_inclusive(infraction_epoch.next(), set_update_epoch)
             .map(|epoch| {
                 let redelegated_unbonded = total_redelegated_unbonded
@@ -480,9 +492,12 @@ where
                     .at(src_validator)
                     .get(storage, &bond_start)?
                     .unwrap_or_default();
-                Ok(redelegated_unbonded)
+                Ok::<_, namada_storage::Error>(redelegated_unbonded)
             })
-            .sum::<namada_storage::Result<token::Amount>>()?;
+            .collect::<namada_storage::Result<_>>()?;
+    let mut init_tot_unbonded =
+        token::Amount::sum(redelegated_unbonded.into_iter())
+            .ok_or_err_msg("token amount overflow")?;
 
     for epoch in Epoch::iter_range(set_update_epoch, params.pipeline_len) {
         let updated_total_unbonded = {
@@ -492,7 +507,7 @@ where
                 .at(src_validator)
                 .get(storage, &bond_start)?
                 .unwrap_or_default();
-            init_tot_unbonded + redelegated_unbonded
+            checked!(init_tot_unbonded + redelegated_unbonded)?
         };
 
         let list_slashes = slashes
@@ -504,7 +519,7 @@ where
                     params.redelegation_start_epoch_from_end(redel_bond_start),
                     redel_bond_start,
                 ) && bond_start <= slash.epoch
-                    && slash.epoch + params.slash_processing_epoch_offset()
+                    && slash.epoch.unchecked_add(params.slash_processing_epoch_offset())
                     // We're looking for slashes that were processed before or in the epoch
                     // in which slashes that are currently being processed
                     // occurred. Because we're slashing in the beginning of an
@@ -520,8 +535,8 @@ where
             .unwrap_or_default();
 
         let slashed =
-            apply_list_slashes(params, &list_slashes, slashable_amount)
-                .mul_ceil(slash_rate);
+            apply_list_slashes(params, &list_slashes, slashable_amount)?
+                .mul_ceil(slash_rate)?;
 
         let list_slashes = slashes
             .iter(storage)?
@@ -536,14 +551,14 @@ where
             .collect::<Vec<_>>();
 
         let slashable_stake =
-            apply_list_slashes(params, &list_slashes, slashable_amount)
-                .mul_ceil(slash_rate);
+            apply_list_slashes(params, &list_slashes, slashable_amount)?
+                .mul_ceil(slash_rate)?;
 
         init_tot_unbonded = updated_total_unbonded;
         let to_slash = cmp::min(slashed, slashable_stake);
         if !to_slash.is_zero() {
             let map_value = slashed_amounts.entry(epoch).or_default();
-            *map_value += to_slash;
+            *map_value = checked!(map_value + to_slash)?;
         }
     }
 
@@ -575,7 +590,7 @@ where
 {
     tracing::debug!("Slashing validator {} at rate {}", validator, slash_rate);
     let infraction_epoch =
-        current_epoch - params.slash_processing_epoch_offset();
+        checked!(current_epoch - params.slash_processing_epoch_offset())?;
 
     let total_unbonded = total_unbonded_handle(validator);
     let total_redelegated_unbonded =
@@ -618,10 +633,10 @@ where
         .iter_range(params.pipeline_len)
         .collect::<Vec<_>>();
     for epoch in eps.into_iter().rev() {
-        let amount = tot_bonds.iter().fold(
+        let amount = tot_bonds.iter().try_fold(
             token::Amount::zero(),
             |acc, (bond_start, bond_amount)| {
-                acc + compute_slash_bond_at_epoch(
+                let slashed = compute_slash_bond_at_epoch(
                     storage,
                     params,
                     validator,
@@ -631,10 +646,12 @@ where
                     *bond_amount,
                     redelegated_bonds.get(bond_start),
                     slash_rate,
-                )
-                .unwrap()
+                )?;
+                Ok::<token::Amount, namada_storage::Error>(checked!(
+                    acc + slashed
+                )?)
             },
-        );
+        )?;
 
         let new_bonds = total_unbonded.at(&epoch);
         tot_bonds = new_bonds
@@ -664,16 +681,20 @@ where
         redelegated_bonds = new_redelegated_bonds;
 
         // `newSum`
-        sum += amount;
+        sum = checked!(sum + amount)?;
 
         // `newSlashesMap`
         let cur = slashed_amounts.entry(epoch).or_default();
-        *cur += sum;
+        *cur = checked!(cur + sum)?;
     }
     // Hack - should this be done differently? (think this is safe)
-    let pipeline_epoch = current_epoch + params.pipeline_len;
+    let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
     let last_amt = slashed_amounts
-        .get(&pipeline_epoch.prev())
+        .get(
+            &pipeline_epoch
+                .prev()
+                .expect("Pipeline epoch must have prev"),
+        )
         .cloned()
         .unwrap();
     slashed_amounts.insert(pipeline_epoch, last_amt);
@@ -704,12 +725,16 @@ where
         .map(Result::unwrap)
         .filter(|slash| {
             start <= slash.epoch
-                && slash.epoch + params.slash_processing_epoch_offset() <= epoch
+                && slash
+                    .epoch
+                    .unchecked_add(params.slash_processing_epoch_offset())
+                    <= epoch
         })
         .collect::<Vec<_>>();
 
-    let slash_epoch_filter =
-        |e: Epoch| e + params.slash_processing_epoch_offset() <= epoch;
+    let slash_epoch_filter = |e: Epoch| {
+        e.unchecked_add(params.slash_processing_epoch_offset()) <= epoch
+    };
 
     let result_fold = redelegated_bonds
         .map(|redelegated_bonds| {
@@ -722,13 +747,17 @@ where
                 slash_epoch_filter,
             )
         })
+        .transpose()?
         .unwrap_or_default();
 
-    let total_not_redelegated = amount - result_fold.total_redelegated;
+    let total_not_redelegated =
+        checked!(amount - result_fold.total_redelegated)?;
     let after_not_redelegated =
-        apply_list_slashes(params, &list_slashes, total_not_redelegated);
+        apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
 
-    Ok(after_not_redelegated + result_fold.total_after_slashing)
+    Ok(checked!(
+        after_not_redelegated + result_fold.total_after_slashing
+    )?)
 }
 
 /// Uses `fn compute_bond_at_epoch` to compute the token amount to slash in
@@ -757,7 +786,7 @@ where
         bond_amount,
         redelegated_bonds,
     )?
-    .mul_ceil(slash_rate);
+    .mul_ceil(slash_rate)?;
     let slashable_amount = compute_bond_at_epoch(
         storage,
         params,
@@ -789,7 +818,8 @@ where
             && end.map(|end| slash.epoch < end).unwrap_or(true)
         {
             let cur_rate = slashes.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(*cur_rate + slash.rate, Dec::one());
+            let new_rate = checked!(cur_rate + slash.rate)?;
+            *cur_rate = cmp::min(new_rate, Dec::one());
         }
     }
     Ok(slashes)
@@ -805,17 +835,17 @@ pub fn apply_list_slashes(
     params: &OwnedPosParams,
     slashes: &[Slash],
     amount: token::Amount,
-) -> token::Amount {
+) -> Result<token::Amount, arith::Error> {
     let mut final_amount = amount;
     let mut computed_slashes = BTreeMap::<Epoch, token::Amount>::new();
     for slash in slashes {
         let slashed_amount =
-            compute_slashable_amount(params, slash, amount, &computed_slashes);
+            compute_slashable_amount(params, slash, amount, &computed_slashes)?;
         final_amount =
             final_amount.checked_sub(slashed_amount).unwrap_or_default();
         computed_slashes.insert(slash.epoch, slashed_amount);
     }
-    final_amount
+    Ok(final_amount)
 }
 
 /// Computes how much is left from a bond or unbond after applying a slash given
@@ -826,7 +856,7 @@ pub fn compute_slashable_amount(
     slash: &Slash,
     amount: token::Amount,
     computed_slashes: &BTreeMap<Epoch, token::Amount>,
-) -> token::Amount {
+) -> Result<token::Amount, arith::Error> {
     let updated_amount = computed_slashes
         .iter()
         .filter(|(&epoch, _)| {
@@ -834,7 +864,8 @@ pub fn compute_slashable_amount(
             // current slash occurred. We use `<=` because slashes processed at
             // `slash.epoch` (at the start of the epoch) are also processed
             // before this slash occurred.
-            epoch + params.slash_processing_epoch_offset() <= slash.epoch
+            epoch.unchecked_add(params.slash_processing_epoch_offset())
+                <= slash.epoch
         })
         .fold(amount, |acc, (_, &amnt)| {
             acc.checked_sub(amnt).unwrap_or_default()
@@ -942,8 +973,9 @@ pub fn get_slashed_amount(
         for (ix, slashed_amount) in computed_amounts.iter().enumerate() {
             // Update amount with slashes that happened more than unbonding_len
             // epochs before this current slash
-            if slashed_amount.epoch + params.slash_processing_epoch_offset()
-                <= infraction_epoch
+            if checked!(
+                slashed_amount.epoch + params.slash_processing_epoch_offset()
+            )? <= infraction_epoch
             {
                 updated_amount = updated_amount
                     .checked_sub(slashed_amount.amount)
@@ -958,15 +990,15 @@ pub fn get_slashed_amount(
             computed_amounts.remove(item.0);
         }
         computed_amounts.push(SlashedAmount {
-            amount: updated_amount.mul_ceil(slash_rate),
+            amount: updated_amount.mul_ceil(slash_rate)?,
             epoch: infraction_epoch,
         });
     }
 
-    let total_computed_amounts = computed_amounts
-        .into_iter()
-        .map(|slashed| slashed.amount)
-        .sum();
+    let total_computed_amounts = token::Amount::sum(
+        computed_amounts.into_iter().map(|slashed| slashed.amount),
+    )
+    .ok_or_err_msg("token amount overflow")?;
 
     let final_amount = updated_amount
         .checked_sub(total_computed_amounts)
@@ -1007,7 +1039,7 @@ where
                 start_epoch,
                 &list_slashes,
                 |_| true,
-            )
+            )?
         } else {
             FoldRedelegatedBondsResult::default()
         };
@@ -1017,12 +1049,13 @@ where
             .unwrap_or_default();
         // `val afterNoRedelegated`
         let after_not_redelegated =
-            apply_list_slashes(params, &list_slashes, total_not_redelegated);
+            apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
         // `val amountAfterSlashing`
         let amount_after_slashing =
-            after_not_redelegated + result_fold.total_after_slashing;
+            checked!(after_not_redelegated + result_fold.total_after_slashing)?;
         // Accumulation step
-        result_slashing.sum += amount_after_slashing;
+        result_slashing.sum =
+            checked!(result_slashing.sum + amount_after_slashing)?;
         result_slashing
             .epoch_map
             .insert(start_epoch, amount_after_slashing);
@@ -1052,9 +1085,11 @@ where
     {
         // TODO: check if slashes in the same epoch can be
         // folded into one effective slash
-        let end_epoch = *withdraw_epoch
-            - params.unbonding_len
-            - params.cubic_slashing_window_length;
+        let end_epoch = checked!(
+            withdraw_epoch
+                - params.unbonding_len
+                - params.cubic_slashing_window_length
+        )?;
         // Find slashes that apply to `start_epoch..end_epoch`
         let list_slashes = slashes
             .iter()
@@ -1075,19 +1110,21 @@ where
             *start_epoch,
             &list_slashes,
             |_| true,
-        );
+        )?;
 
         // Unbond amount that didn't come from a redelegation
-        let total_not_redelegated = *amount - result_fold.total_redelegated;
+        let total_not_redelegated =
+            checked!(amount - result_fold.total_redelegated)?;
         // Find how much remains after slashing non-redelegated amount
         let after_not_redelegated =
-            apply_list_slashes(params, &list_slashes, total_not_redelegated);
+            apply_list_slashes(params, &list_slashes, total_not_redelegated)?;
 
         // Add back the unbond and redelegated unbond amount after slashing
         let amount_after_slashing =
-            after_not_redelegated + result_fold.total_after_slashing;
+            checked!(after_not_redelegated + result_fold.total_after_slashing)?;
 
-        result_slashing.sum += amount_after_slashing;
+        result_slashing.sum =
+            checked!(result_slashing.sum + amount_after_slashing)?;
         result_slashing
             .epoch_map
             .insert(*start_epoch, amount_after_slashing);
@@ -1205,13 +1242,15 @@ where
 
     for epoch in Epoch::iter_bounds_inclusive(start_epoch, end_epoch) {
         let consensus_stake =
-            Dec::from(get_total_consensus_stake(storage, epoch, params)?);
+            Dec::try_from(get_total_consensus_stake(storage, epoch, params)?)
+                .into_storage_result()?;
         tracing::debug!(
             "Total consensus stake in epoch {}: {}",
             epoch,
             consensus_stake
         );
-        let processing_epoch = epoch + params.slash_processing_epoch_offset();
+        let processing_epoch =
+            checked!(epoch + params.slash_processing_epoch_offset())?;
         let slashes = enqueued_slashes_handle().at(&processing_epoch);
         let infracting_stake =
             slashes.iter(storage)?.try_fold(Dec::zero(), |acc, res| {
@@ -1228,14 +1267,15 @@ where
                 // tracing::debug!("Val {} stake: {}", &validator,
                 // validator_stake);
 
-                Ok::<Dec, namada_storage::Error>(
-                    acc + Dec::from(validator_stake),
-                )
+                let stake =
+                    Dec::try_from(validator_stake).into_storage_result()?;
+                Ok::<Dec, namada_storage::Error>(checked!(acc + stake)?)
             })?;
-        sum_vp_fraction += infracting_stake / consensus_stake;
+        sum_vp_fraction =
+            checked!(sum_vp_fraction + (infracting_stake / consensus_stake))?;
     }
-    let cubic_rate =
-        Dec::new(9, 0).unwrap() * sum_vp_fraction * sum_vp_fraction;
+    let nine = Dec::from(9_u64);
+    let cubic_rate = checked!(nine * sum_vp_fraction * sum_vp_fraction)?;
     tracing::debug!("Cubic slash rate: {}", cubic_rate);
     Ok(cubic_rate)
 }

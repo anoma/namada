@@ -37,7 +37,7 @@ where
         return Ok(HashSet::new());
     }
 
-    let mut delegation_targets = HashSet::<Address>::new();
+    let mut delegation_targets = HashSet::new();
 
     for validator in validators.iter(storage)? {
         let (
@@ -56,7 +56,7 @@ where
                     delegation_targets.insert(val);
                 }
             } else {
-                // this is bond is currently held
+                // this bond is currently held
                 delegation_targets.insert(val);
             }
         } else {
@@ -147,11 +147,7 @@ where
 {
     let max_epoch = Epoch(u64::MAX);
     let delegations = find_delegations(storage, source, &max_epoch)?;
-    Ok(!delegations
-        .values()
-        .cloned()
-        .sum::<token::Amount>()
-        .is_zero())
+    Ok(!delegations.values().all(token::Amount::is_zero))
 }
 
 /// Find raw bond deltas for the given source and validator address.
@@ -440,7 +436,10 @@ fn make_bond_details(
     for slash in slashes {
         if slash.epoch >= start {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(Dec::one(), *cur_rate + slash.rate);
+            *cur_rate = cmp::min(
+                Dec::one(),
+                cur_rate.checked_add(slash.rate).unwrap_or_else(Dec::one),
+            );
 
             if !prev_applied_slashes.iter().any(|s| s == slash) {
                 validator_slashes.push(slash.clone());
@@ -454,7 +453,11 @@ fn make_bond_details(
         let amount_after_slashing =
             get_slashed_amount(params, deltas_sum, &slash_rates_by_epoch)
                 .unwrap();
-        Some(deltas_sum - amount_after_slashing)
+        Some(
+            deltas_sum
+                .checked_sub(amount_after_slashing)
+                .unwrap_or_default(),
+        )
     };
 
     BondDetails {
@@ -492,7 +495,10 @@ fn make_unbond_details(
                     .unwrap_or_default()
         {
             let cur_rate = slash_rates_by_epoch.entry(slash.epoch).or_default();
-            *cur_rate = cmp::min(Dec::one(), *cur_rate + slash.rate);
+            *cur_rate = cmp::min(
+                Dec::one(),
+                cur_rate.checked_add(slash.rate).unwrap_or_else(Dec::one),
+            );
 
             if !prev_applied_slashes.iter().any(|s| s == slash) {
                 validator_slashes.push(slash.clone());
@@ -505,7 +511,11 @@ fn make_unbond_details(
     } else {
         let amount_after_slashing =
             get_slashed_amount(params, amount, &slash_rates_by_epoch).unwrap();
-        Some(amount - amount_after_slashing)
+        Some(
+            amount
+                .checked_sub(amount_after_slashing)
+                .unwrap_or_default(),
+        )
     };
 
     UnbondDetails {

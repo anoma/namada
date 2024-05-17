@@ -1,7 +1,7 @@
 use namada::core::collections::HashMap;
 use namada::core::encode;
-use namada::core::event::EmitEvents;
 use namada::core::storage::Epoch;
+use namada::governance::event::GovernanceEvent;
 use namada::governance::pgf::storage::keys as pgf_storage;
 use namada::governance::pgf::storage::steward::StewardDetail;
 use namada::governance::pgf::{storage as pgf, ADDRESS};
@@ -17,14 +17,16 @@ use namada::governance::{
 };
 use namada::ibc;
 use namada::ledger::events::extend::{ComposeEvent, Height};
-use namada::ledger::governance::utils::ProposalEvent;
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::{
     read_total_active_stake, validator_state_handle,
 };
 use namada::proof_of_stake::types::{BondId, ValidatorState};
+use namada::sdk::events::{EmitEvents, EventLevel};
 use namada::state::StorageWrite;
+use namada::token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada::token::read_balance;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
 
@@ -113,20 +115,29 @@ where
             votes,
             total_active_voting_power,
             tally_type,
-        );
+        )
+        .expect("Proposal result calculation must not over/underflow");
         gov_api::write_proposal_result(&mut shell.state, id, proposal_result)?;
 
         let transfer_address = match proposal_result.result {
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
+                        let proposal_code =
+                            gov_api::get_proposal_code(&shell.state, id)?
+                                .unwrap_or_default();
+                        let _result = execute_default_proposal(
+                            shell,
+                            id,
+                            proposal_code.clone(),
+                        )?;
                         tracing::info!(
                             "Default Governance proposal {} has been executed \
                              and passed.",
                             id,
                         );
 
-                        ProposalEvent::default_proposal_event(id, false, false)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                     ProposalType::DefaultWithWasm(_) => {
                         let proposal_code =
@@ -144,10 +155,10 @@ where
                             if result { "successful" } else { "unsuccessful" }
                         );
 
-                        ProposalEvent::default_proposal_event(id, true, result)
+                        GovernanceEvent::passed_proposal(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let result = execute_pgf_steward_proposal(
+                        let _result = execute_pgf_steward_proposal(
                             &mut shell.state,
                             stewards,
                         )?;
@@ -157,12 +168,13 @@ where
                             id
                         );
 
-                        ProposalEvent::pgf_steward_proposal_event(id, result)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
-                        let result = execute_pgf_funding_proposal(
+                        let _result = execute_pgf_funding_proposal(
                             &mut shell.state,
+                            events,
                             native_token,
                             payments,
                             id,
@@ -173,7 +185,7 @@ where
                             id
                         );
 
-                        ProposalEvent::pgf_payments_proposal_event(id, result)
+                        GovernanceEvent::passed_proposal(id, false, false)
                     }
                 };
                 events.emit(proposal_event);
@@ -181,11 +193,17 @@ where
 
                 // Take events that could have been emitted by PGF
                 // over IBC, governance proposal execution, etc
-                for event in shell.state.write_log_mut().take_ibc_events() {
-                    events.emit(event.with(Height(
-                        shell.state.in_mem().get_last_block_height() + 1,
-                    )));
-                }
+                let current_height =
+                    shell.state.in_mem().get_last_block_height().next_height();
+
+                events.emit_many(
+                    shell
+                        .state
+                        .write_log_mut()
+                        .take_events()
+                        .into_iter()
+                        .map(|event| event.with(Height(current_height))),
+                );
 
                 gov_api::get_proposal_author(&shell.state, id)?
             }
@@ -207,7 +225,10 @@ where
                         );
                     }
                 }
-                let proposal_event = ProposalEvent::rejected_proposal_event(id);
+                let proposal_event = GovernanceEvent::rejected_proposal(
+                    id,
+                    matches!(proposal_type, ProposalType::DefaultWithWasm(_)),
+                );
                 events.emit(proposal_event);
                 proposals_result.rejected.push(id);
 
@@ -229,6 +250,26 @@ where
                 &address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-refund";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
+            let final_target_balance =
+                read_balance(&shell.state, &native_token, &address)?.into();
+
+            events.emit(TokenEvent {
+                descriptor: DESCRIPTOR.into(),
+                level: EventLevel::Block,
+                token: native_token.clone(),
+                operation: TokenOperation::Transfer {
+                    amount: funds.into(),
+                    source: UserAccount::Internal(gov_address),
+                    target: UserAccount::Internal(address),
+                    source_post_balance: final_gov_balance,
+                    target_post_balance: Some(final_target_balance),
+                },
+            });
         } else {
             token::burn_tokens(
                 &mut shell.state,
@@ -236,6 +277,22 @@ where
                 &gov_address,
                 funds,
             )?;
+
+            const DESCRIPTOR: &str = "governance-locked-funds-burn";
+
+            let final_gov_balance =
+                read_balance(&shell.state, &native_token, &gov_address)?.into();
+
+            events.emit(TokenEvent {
+                descriptor: DESCRIPTOR.into(),
+                level: EventLevel::Block,
+                token: native_token.clone(),
+                operation: TokenOperation::Burn {
+                    amount: funds.into(),
+                    target_account: UserAccount::Internal(gov_address),
+                    post_balance: final_gov_balance,
+                },
+            });
         }
     }
 
@@ -269,10 +326,20 @@ where
         let validator = vote.validator.clone();
         let validator_state =
             validator_state_handle(&validator).get(storage, epoch, params)?;
+
         if matches!(
             validator_state,
             Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
         ) {
+            continue;
+        }
+        if validator_state.is_none() {
+            tracing::error!(
+                "While computing votes for proposal id {proposal_id} in epoch \
+                 {epoch}, encountered validator {validator} that has no \
+                 stored state. Please report this as a bug. Skipping this \
+                 vote."
+            );
             continue;
         }
 
@@ -393,6 +460,7 @@ where
 
 fn execute_pgf_funding_proposal<D, H>(
     state: &mut WlState<D, H>,
+    events: &mut impl EmitEvents,
     token: &Address,
     fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
@@ -431,25 +499,68 @@ where
                 }
             },
             PGFAction::Retro(target) => {
-                let result = match &target {
-                    PGFTarget::Internal(target) => token::transfer(
-                        state,
-                        token,
-                        &ADDRESS,
-                        &target.target,
-                        target.amount,
+                let (result, event) = match &target {
+                    PGFTarget::Internal(target) => (
+                        token::transfer(
+                            state,
+                            token,
+                            &ADDRESS,
+                            &target.target,
+                            target.amount,
+                        ),
+                        TokenEvent {
+                            descriptor: "pgf-payments".into(),
+                            level: EventLevel::Block,
+                            token: token.clone(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::Internal(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: Some(
+                                    read_balance(state, token, &target.target)?
+                                        .into(),
+                                ),
+                            },
+                        },
                     ),
-                    PGFTarget::Ibc(target) => {
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target)
-                    }
+                    PGFTarget::Ibc(target) => (
+                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        TokenEvent {
+                            descriptor: "pgf-payments-over-ibc".into(),
+                            level: EventLevel::Block,
+                            token: token.clone(),
+                            operation: TokenOperation::Transfer {
+                                amount: target.amount.into(),
+                                source: UserAccount::Internal(ADDRESS),
+                                target: UserAccount::External(
+                                    target.target.clone(),
+                                ),
+                                source_post_balance: read_balance(
+                                    state, token, &ADDRESS,
+                                )?
+                                .into(),
+                                target_post_balance: None,
+                            },
+                        },
+                    ),
                 };
                 match result {
-                    Ok(()) => tracing::info!(
-                        "Execute RetroPgf from proposal id {}: sent {} to {}.",
-                        proposal_id,
-                        target.amount().to_string_native(),
-                        target.target()
-                    ),
+                    Ok(()) => {
+                        tracing::info!(
+                            "Execute RetroPgf from proposal id {}: sent {} to \
+                             {}.",
+                            proposal_id,
+                            target.amount().to_string_native(),
+                            target.target()
+                        );
+                        events.emit(event);
+                    }
                     Err(e) => tracing::warn!(
                         "Error in RetroPgf transfer from proposal id {}, \
                          amount {} to {}: {}",

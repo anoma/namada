@@ -14,10 +14,12 @@ version.workspace = true
 
 [features]
 default = []
+testing = ["namada_core/testing", "namada_token/testing"]
 
 [dependencies]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
@@ -33,3 +35,6 @@ borsh.workspace = true
 masp_primitives.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+namada_token = { path = "../token", features = ["testing"] }

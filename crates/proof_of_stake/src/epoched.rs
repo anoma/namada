@@ -1,11 +1,12 @@
 //! [`Epoched`] and [`EpochedDelta`] are structures for data that is set for
 //! future (and possibly past) epochs.
 
+use std::cmp;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::{cmp, ops};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::arith::{checked, CheckedAdd};
 use namada_core::collections::HashMap;
 use namada_core::storage::{self, Epoch};
 use namada_macros::BorshDeserializer;
@@ -106,7 +107,7 @@ where
             Some(last_update) => {
                 let data_handler = self.get_data_handler();
                 let future_most_epoch =
-                    last_update + FutureEpochs::value(params);
+                    last_update.unchecked_add(FutureEpochs::value(params));
                 // Epoch can be a lot greater than the epoch where
                 // a value is recorded, we check the upper bound
                 // epoch of the LazyMap data
@@ -158,7 +159,7 @@ where
         S: StorageWrite + StorageRead,
     {
         let data_handler = self.get_data_handler();
-        let epoch = current_epoch + offset;
+        let epoch = current_epoch.unchecked_add(offset);
         let _prev = data_handler.insert(storage, epoch, value)?;
         Ok(())
     }
@@ -186,7 +187,7 @@ where
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
             if oldest_epoch < oldest_to_keep {
-                let diff = u64::from(oldest_to_keep - oldest_epoch);
+                let diff = u64::from(checked!(oldest_to_keep - oldest_epoch)?);
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
@@ -421,7 +422,7 @@ where
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
             if oldest_epoch < oldest_to_keep {
-                let diff = u64::from(oldest_to_keep - oldest_epoch);
+                let diff = u64::from(checked!(oldest_to_keep - oldest_epoch)?);
                 // Go through the epochs before the expected oldest epoch and
                 // keep the latest one
                 tracing::debug!(
@@ -465,8 +466,8 @@ where
     PastEpochs: EpochOffset,
     Data: BorshSerialize
         + BorshDeserialize
-        + ops::Add<Output = Data>
-        + ops::AddAssign
+        + Copy
+        + CheckedAdd<Output = Data>
         + 'static
         + Debug,
 {
@@ -525,7 +526,7 @@ where
                 let data_handler = self.get_data_handler();
                 let start_epoch = Self::sub_past_epochs(params, last_update);
                 let future_most_epoch =
-                    last_update + FutureEpochs::value(params);
+                    last_update.unchecked_add(FutureEpochs::value(params));
 
                 // Epoch can be a lot greater than the epoch where
                 // a value is recorded, we check the upper bound
@@ -538,7 +539,7 @@ where
                         data_handler.get(storage, &Epoch(ep))?
                     {
                         match sum.as_mut() {
-                            Some(sum) => *sum += delta,
+                            Some(sum) => *sum = checked!(sum + delta)?,
                             None => sum = Some(delta),
                         }
                     }
@@ -564,9 +565,10 @@ where
         let params = read_pos_params(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         let cur_value = self
-            .get_delta_val(storage, current_epoch + offset)?
+            .get_delta_val(storage, current_epoch.unchecked_add(offset))?
             .unwrap_or_default();
-        self.set_at_epoch(storage, cur_value + value, current_epoch, offset)
+        let new_value = checked!(cur_value + value)?;
+        self.set_at_epoch(storage, new_value, current_epoch, offset)
     }
 
     /// Initialize or set the value at the given epoch offset.
@@ -596,7 +598,7 @@ where
         S: StorageWrite + StorageRead,
     {
         let data_handler = self.get_data_handler();
-        let epoch = current_epoch + offset;
+        let epoch = current_epoch.unchecked_add(offset);
         let _prev = data_handler.insert(storage, epoch, value)?;
         Ok(())
     }
@@ -622,7 +624,7 @@ where
                 .checked_sub(PastEpochs::value(params))
                 .unwrap_or_default();
             if oldest_epoch < oldest_to_keep {
-                let diff = u64::from(oldest_to_keep - oldest_epoch);
+                let diff = u64::from(checked!(oldest_to_keep - oldest_epoch)?);
                 // Go through the epochs before the expected oldest epoch and
                 // sum them into it
                 tracing::debug!(
@@ -639,7 +641,7 @@ where
                             "Removed delta value at epoch {epoch}: {removed:?}"
                         );
                         match sum.as_mut() {
-                            Some(sum) => *sum += removed,
+                            Some(sum) => *sum = checked!(sum + removed)?,
                             None => sum = Some(removed),
                         }
                     }
@@ -649,7 +651,9 @@ where
                         Self::sub_past_epochs(params, current_epoch);
                     let new_oldest_epoch_data =
                         match data_handler.get(storage, &new_oldest_epoch)? {
-                            Some(oldest_epoch_data) => oldest_epoch_data + sum,
+                            Some(oldest_epoch_data) => {
+                                checked!(oldest_epoch_data + sum)?
+                            }
                             None => sum,
                         };
                     tracing::debug!(

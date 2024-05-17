@@ -25,8 +25,10 @@ where
         .expect("Epochs per year should exist in storage");
     let total_supply = get_effective_total_native_supply(storage)?;
 
-    let pgf_inflation_amount =
-        (pgf_parameters.pgf_inflation_rate * total_supply) / epochs_per_year;
+    let pgf_inflation_amount = total_supply
+        .mul_floor(pgf_parameters.pgf_inflation_rate)?
+        .checked_div_u64(epochs_per_year)
+        .unwrap_or_default();
 
     credit_tokens(
         storage,
@@ -82,13 +84,15 @@ where
 
     // Pgf steward inflation
     let stewards = get_stewards(storage)?;
-    let pgf_steward_inflation = (pgf_parameters.stewards_inflation_rate
-        * total_supply)
-        / epochs_per_year;
+    let pgf_steward_inflation = total_supply
+        .mul_floor(pgf_parameters.stewards_inflation_rate)?
+        .checked_div_u64(epochs_per_year)
+        .unwrap_or_default();
 
     for steward in stewards {
         for (address, percentage) in steward.reward_distribution {
-            let pgf_steward_reward = percentage * pgf_steward_inflation;
+            let pgf_steward_reward =
+                pgf_steward_inflation.mul_floor(percentage)?;
 
             if credit_tokens(
                 storage,

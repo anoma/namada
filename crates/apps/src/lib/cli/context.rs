@@ -621,8 +621,11 @@ impl ArgFromMutContext for BalanceOwner {
                 ExtendedViewingKey::arg_from_mut_ctx(ctx, raw)
                     .map(Self::FullViewingKey)
             })
-            .or_else(|_| {
-                PaymentAddress::arg_from_ctx(ctx, raw).map(Self::PaymentAddress)
+            .map_err(|_| {
+                format!(
+                    "Could not find {raw} in the wallet, nor parse it as a \
+                     transparent address or as a MASP viewing key"
+                )
             })
     }
 }

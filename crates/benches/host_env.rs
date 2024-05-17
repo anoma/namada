@@ -22,7 +22,6 @@ fn tx_section_signature_validation(c: &mut Criterion) {
         target: defaults::bertha_address(),
         token: address::testing::nam(),
         amount: Amount::native_whole(500).native_denominated(),
-        key: None,
         shielded: None,
     };
     let tx = shell.generate_tx(

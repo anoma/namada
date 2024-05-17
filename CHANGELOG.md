@@ -1,5 +1,64 @@
 # CHANGELOG
 
+## v0.35.1
+
+Namada 0.35.1 is a patch release that fixes a couple build issues with the last minor release.
+
+## v0.35.0
+
+Namada 0.35.0 is a minor release that refactors events, widely implements checked arithmetics, refactors balances, and makes various other improvements across MASP and other crates needed for mainnet readiness.`
+
+### BUG FIXES
+
+- Resolved the frozen IBC client issue by updating ibc-rs to 0.52
+  ([\#3011](https://github.com/anoma/namada/issues/3011))
+- Set the height for abci_query response
+  ([\#3065](https://github.com/anoma/namada/issues/3065))
+- Wasm transactions are now governable via proposals.
+  ([\#3100](https://github.com/anoma/namada/pull/3100))
+- Verify the checksum of dowloaded wasm artifacts, before completing the ledger's
+  bootup procedure. ([\#3119](https://github.com/anoma/namada/pull/3119))
+- Fixed a race condition in pre-compiled WASM cache.
+  ([\#3181](https://github.com/anoma/namada/pull/3181))
+
+### IMPROVEMENTS
+
+- Removed the MASP pin key.
+  ([\#2675](https://github.com/anoma/namada/issues/2675))
+- Refactor CliToSdk to propagate errors from fallible conversions
+  ([\#2832](https://github.com/anoma/namada/pull/2832))
+- Remove the epoch field from the wrapper tx.
+  ([\#2946](https://github.com/anoma/namada/pull/2946))
+- Refactor and modularize the token balance and supply API.
+  ([\#3029](https://github.com/anoma/namada/pull/3029))
+- Prohibit unchecked arithmetics and conversions in the core crate.
+  ([\#3074](https://github.com/anoma/namada/pull/3074))
+- Emit core events (i.e. `namada_core::event::Event`) from tx wasms.
+  ([\#3088](https://github.com/anoma/namada/pull/3088))
+- Move event types to their appropriate crates.
+  ([\#3102](https://github.com/anoma/namada/pull/3102))
+- Refactor governance events.
+  ([\#3104](https://github.com/anoma/namada/pull/3104))
+- Emit balance change events for various protocol actions.
+  ([\#3141](https://github.com/anoma/namada/pull/3141))
+- Client improvements related to valid thresholds for mutlisig accounts and PGF
+  steward submissions. ([\#3154](https://github.com/anoma/namada/pull/3154))
+- Remove unbounded `token` and `owner` balance queries from the CLI, in
+  an attempt to reduce strain on the RPC servers of full/validator nodes.
+  ([\#3171](https://github.com/anoma/namada/pull/3171))
+- Removed the unused `delta_map` from the shielded context.
+  ([\#3172](https://github.com/anoma/namada/pull/3172))
+
+### IMRPOVEMENTS
+
+- Improve vote proposal logic transaction.
+  ([\#3120](https://github.com/anoma/namada/pull/3120))
+
+### TESTING
+
+- Add IBC E2E test with Gaia
+  ([\#2232](https://github.com/anoma/namada/issues/2232))
+
 ## v0.34.0
 
 Namada 0.34.0 is a minor release that makes many different improvements to the protocol, transaction format, and user experience essential for the mainnet candidate software.
@@ -175,6 +234,8 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 - For inflation computations and the relevant RPC, don't
   include the PGF balance in the total native supply
   ([\#3002](https://github.com/anoma/namada/pull/3002))
+- Erase protocol specific details from the core API of events in Namada.
+  ([\#3032](https://github.com/anoma/namada/pull/3032))
 
 ### MISCELLANEOUS
 
@@ -185,6 +246,9 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
+
+### SDK
+
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.

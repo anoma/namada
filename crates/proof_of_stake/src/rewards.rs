@@ -2,6 +2,7 @@
 
 use namada_controller::PDController;
 use namada_core::address::{self, Address};
+use namada_core::arith::{self, checked};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
@@ -48,6 +49,10 @@ pub enum RewardsError {
     /// rewards coefficients are not set
     #[error("Rewards coefficients are not properly set.")]
     CoeffsNotSet,
+    #[error("Arith {0}")]
+    Arith(#[from] arith::Error),
+    #[error("Dec {0}")]
+    Dec(#[from] namada_core::dec::Error),
 }
 
 /// Compute PoS inflation amount
@@ -73,10 +78,16 @@ pub fn compute_inflation(
         target_ratio,
         last_ratio,
     );
-    let metric = Dec::from(locked_amount) / Dec::from(total_native_amount);
-    let control_coeff = controller.get_total_native_dec() * max_reward_rate
-        / controller.get_epochs_per_year();
-    let amount_uint = controller.compute_inflation(control_coeff, metric);
+    let locked_amount = Dec::try_from(locked_amount).into_storage_result()?;
+    let total_native_dec =
+        controller.get_total_native_dec().into_storage_result()?;
+    let metric = checked!(locked_amount / total_native_dec)?;
+    let control_coeff = checked!(
+        total_native_dec * max_reward_rate / controller.get_epochs_per_year()
+    )?;
+    let amount_uint = controller
+        .compute_inflation(control_coeff, metric)
+        .into_storage_result()?;
     token::Amount::from_uint(amount_uint, 0).into_storage_result()
 }
 
@@ -125,12 +136,17 @@ impl PosRewardsCalculator {
         }
 
         // Logic for determining the coefficients.
-        let proposer_coeff =
-            Dec::from(proposer_reward * (signing_stake - votes_needed))
-                / Dec::from(total_stake)
-                + MIN_PROPOSER_REWARD;
+        let proposer_reward_coeff = Dec::try_from(
+            checked!(signing_stake - votes_needed)?
+                .mul_floor(proposer_reward)?,
+        )?;
+        let total_stake_dec = Dec::try_from(total_stake)?;
+        let proposer_coeff = checked!(
+            proposer_reward_coeff / total_stake_dec + MIN_PROPOSER_REWARD
+        )?;
         let signer_coeff = signer_reward;
-        let active_val_coeff = Dec::one() - proposer_coeff - signer_coeff;
+        let active_val_coeff =
+            checked!(Dec::one() - proposer_coeff - signer_coeff)?;
 
         let coeffs = PosRewards {
             proposer_coeff,
@@ -145,11 +161,12 @@ impl PosRewardsCalculator {
     fn get_min_required_votes(&self) -> Amount {
         (self
             .total_stake
-            .checked_mul(2.into())
+            .checked_mul(2_u64)
             .expect("Amount overflow while computing minimum required votes")
             .checked_add((3u64 - 1u64).into())
             .expect("Amount overflow while computing minimum required votes"))
-            / 3u64
+        .checked_div_u64(3u64)
+        .expect("Div by non-zero cannot fail")
     }
 }
 
@@ -172,7 +189,7 @@ where
             log_block_rewards_aux(
                 storage,
                 if new_epoch {
-                    current_epoch.prev()
+                    current_epoch.prev().expect("New epoch must have prev")
                 } else {
                     current_epoch
                 },
@@ -254,7 +271,8 @@ where
         }
 
         signer_set.insert(validator_address);
-        total_signing_stake += stake_from_deltas;
+        total_signing_stake =
+            checked!(total_signing_stake + stake_from_deltas)?;
     }
 
     // Get the block rewards coefficients (proposing, signing/voting,
@@ -280,8 +298,10 @@ where
 
     // Compute the fractional block rewards for each consensus validator and
     // update the reward accumulators
-    let consensus_stake_unscaled: Dec = total_consensus_stake.into();
-    let signing_stake_unscaled: Dec = total_signing_stake.into();
+    let consensus_stake_unscaled: Dec =
+        Dec::try_from(total_consensus_stake).into_storage_result()?;
+    let signing_stake_unscaled: Dec =
+        Dec::try_from(total_signing_stake).into_storage_result()?;
     let mut values: HashMap<Address, Dec> = HashMap::new();
     for validator in consensus_validators.iter(storage)? {
         let (
@@ -297,7 +317,7 @@ where
         }
 
         let mut rewards_frac = Dec::zero();
-        let stake_unscaled: Dec = stake.into();
+        let stake_unscaled: Dec = Dec::try_from(stake).into_storage_result()?;
         // tracing::debug!(
         //     "NAMADA VALIDATOR STAKE (LOGGING BLOCK REWARDS) OF EPOCH {} =
         // {}",     epoch, stake
@@ -305,24 +325,31 @@ where
 
         // Proposer reward
         if address == *proposer_address {
-            rewards_frac += coeffs.proposer_coeff;
+            rewards_frac = checked!(rewards_frac + coeffs.proposer_coeff)?;
         }
+
         // Signer reward
         if signer_set.contains(&address) {
-            let signing_frac = stake_unscaled / signing_stake_unscaled;
-            rewards_frac += coeffs.signer_coeff * signing_frac;
+            let signing_frac =
+                checked!(stake_unscaled / signing_stake_unscaled)?;
+            rewards_frac =
+                checked!(rewards_frac + (coeffs.signer_coeff * signing_frac))?;
         }
         // Consensus validator reward
-        rewards_frac += coeffs.active_val_coeff
-            * (stake_unscaled / consensus_stake_unscaled);
+        rewards_frac = checked!(
+            rewards_frac
+                + (coeffs.active_val_coeff
+                    * (stake_unscaled / consensus_stake_unscaled))
+        )?;
 
         // To be added to the rewards accumulator
         values.insert(address, rewards_frac);
     }
     for (address, value) in values.into_iter() {
         // Update the rewards accumulator
-        rewards_accumulator_handle().update(storage, address, |prev| {
-            prev.unwrap_or_default() + value
+        rewards_accumulator_handle().try_update(storage, address, |prev| {
+            let prev = prev.unwrap_or_default();
+            Ok(checked!(prev + value)?)
         })?;
     }
 
@@ -387,9 +414,9 @@ where
 
     // Write new rewards parameters that will be used for the inflation of
     // the current new epoch
-    let locked_amount = Dec::from(locked_amount);
-    let total_amount = Dec::from(total_tokens);
-    let locked_ratio = locked_amount / total_amount;
+    let locked_amount = Dec::try_from(locked_amount).into_storage_result()?;
+    let total_amount = Dec::try_from(total_tokens).into_storage_result()?;
+    let locked_ratio = checked!(locked_amount / total_amount)?;
 
     write_last_staked_ratio(storage, locked_ratio)?;
     write_last_pos_inflation_amount(storage, inflation)?;
@@ -426,16 +453,17 @@ where
     let mut accumulators_sum = Dec::zero();
     for acc in rewards_accumulator_handle().iter(storage)? {
         let (validator, value) = acc?;
-        accumulators_sum += value;
+        accumulators_sum = checked!(accumulators_sum + value)?;
 
         // Get reward token amount for this validator
-        let fractional_claim = value / num_blocks_in_last_epoch;
-        let reward_tokens = fractional_claim * inflation;
+        let fractional_claim = checked!(value / num_blocks_in_last_epoch)?;
+        let reward_tokens = inflation.mul_floor(fractional_claim)?;
 
         // Get validator stake at the last epoch
-        let stake = Dec::from(read_validator_stake(
+        let stake = Dec::try_from(read_validator_stake(
             storage, params, &validator, last_epoch,
-        )?);
+        )?)
+        .into_storage_result()?;
 
         let commission_rate = validator_commission_rate_handle(&validator)
             .get(storage, last_epoch, params)?
@@ -446,13 +474,16 @@ where
         // a single product, we're also taking out commission on validator's
         // self-bonds, but it is then included in the rewards claimable by the
         // validator so they get it back.
-        let product =
-            (Dec::one() - commission_rate) * Dec::from(reward_tokens) / stake;
+        let reward_tokens_dec =
+            Dec::try_from(reward_tokens).into_storage_result()?;
+        let product = checked!(
+            (Dec::one() - commission_rate) * reward_tokens_dec / stake
+        )?;
 
         // Tally the commission tokens earned by the validator.
         // TODO: think abt Dec rounding and if `new_product` should be used
         // instead of `reward_tokens`
-        let commissions = commission_rate * reward_tokens;
+        let commissions = reward_tokens.mul_floor(commission_rate)?;
 
         new_rewards_products.insert(
             validator,
@@ -462,7 +493,8 @@ where
             },
         );
 
-        reward_tokens_remaining -= reward_tokens;
+        reward_tokens_remaining =
+            checked!(reward_tokens_remaining - reward_tokens)?;
     }
     for (
         validator,
@@ -479,7 +511,7 @@ where
     }
 
     // Mint tokens to the PoS account for the last epoch's inflation
-    let pos_reward_tokens = inflation - reward_tokens_remaining;
+    let pos_reward_tokens = checked!(inflation - reward_tokens_remaining)?;
     tracing::info!(
         "Minting tokens for PoS rewards distribution into the PoS account. \
          Amount: {}. Total inflation: {}. Total native supply: {}. Number of \
@@ -546,8 +578,9 @@ where
     // rewards are computed at the end of an epoch
     let (claim_start, claim_end) = (
         last_claim_epoch.unwrap_or_default(),
-        // Safe because of the check above
-        current_epoch.prev(),
+        current_epoch
+            .prev()
+            .expect("Safe because of the check above"),
     );
     let bond_amounts = bond_amounts_for_rewards(
         storage,
@@ -564,8 +597,8 @@ where
         debug_assert!(ep >= claim_start);
         debug_assert!(ep <= claim_end);
         let rp = rewards_products.get(storage, &ep)?.unwrap_or_default();
-        let reward = rp * bond_amount;
-        reward_tokens += reward;
+        let reward = bond_amount.mul_floor(rp)?;
+        reward_tokens = checked!(reward_tokens + reward)?;
     }
 
     Ok(reward_tokens)
@@ -584,7 +617,7 @@ where
     let key = storage_key::rewards_counter_key(source, validator);
     let current_rewards =
         storage.read::<token::Amount>(&key)?.unwrap_or_default();
-    storage.write(&key, current_rewards + new_rewards)
+    storage.write(&key, checked!(current_rewards + new_rewards)?)
 }
 
 /// Take tokens from a rewards counter. Deletes the record after reading.
@@ -645,8 +678,8 @@ mod tests {
             Dec::from_str("0.5").unwrap(),
         )
         .unwrap();
-        let locked_ratio_0 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_0 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
 
         println!(
             "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
@@ -673,8 +706,8 @@ mod tests {
 
         // BUG: DIDN'T ADD TO TOTAL AMOUNT
 
-        let locked_ratio_1 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_1 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
 
         println!(
             "Round 1: Locked ratio: {locked_ratio_1}, inflation: {inflation_1}"
@@ -701,8 +734,8 @@ mod tests {
         )
         .unwrap();
 
-        let locked_ratio_2 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_2 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
         println!(
             "Round 2: Locked ratio: {locked_ratio_2}, inflation: {inflation_2}",
         );
@@ -735,8 +768,8 @@ mod tests {
             Dec::from_str("0.9").unwrap(),
         )
         .unwrap();
-        let locked_ratio_0 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_0 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
 
         println!(
             "Round 0: Locked ratio: {locked_ratio_0}, inflation: {inflation_0}"
@@ -763,8 +796,8 @@ mod tests {
 
         // BUG: DIDN'T ADD TO TOTAL AMOUNT
 
-        let locked_ratio_1 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_1 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
 
         println!(
             "Round 1: Locked ratio: {locked_ratio_1}, inflation: {inflation_1}"
@@ -791,8 +824,8 @@ mod tests {
         )
         .unwrap();
 
-        let locked_ratio_2 =
-            Dec::from(locked_amount) / Dec::from(total_native_amount);
+        let locked_ratio_2 = Dec::try_from(locked_amount).unwrap()
+            / Dec::try_from(total_native_amount).unwrap();
         println!(
             "Round 2: Locked ratio: {locked_ratio_2}, inflation: {inflation_2}",
         );
@@ -839,11 +872,12 @@ mod tests {
                 last_locked_ratio,
             )
             .unwrap();
-            let locked_ratio =
-                Dec::from(locked_amount) / Dec::from(total_native_tokens);
+            let locked_ratio = Dec::try_from(locked_amount).unwrap()
+                / Dec::try_from(total_native_tokens).unwrap();
 
-            let rate = Dec::from(inflation) * Dec::from(epochs_per_year)
-                / Dec::from(total_native_tokens);
+            let rate = Dec::try_from(inflation).unwrap()
+                * Dec::from(epochs_per_year)
+                / Dec::try_from(total_native_tokens).unwrap();
             println!(
                 "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
                  {rate}",
@@ -862,7 +896,7 @@ mod tests {
             let tot_tokens =
                 Dec::try_from(total_native_tokens.raw_amount()).unwrap();
             let change_staked_tokens =
-                token::Amount::from(staking_growth * tot_tokens);
+                token::Amount::try_from(staking_growth * tot_tokens).unwrap();
 
             locked_amount = std::cmp::min(
                 total_native_tokens,

@@ -3,6 +3,7 @@
 use namada_core::dec::Dec;
 use namada_core::{key, token};
 pub use namada_proof_of_stake::parameters::PosParams;
+pub use namada_proof_of_stake::queries::find_delegation_validators;
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_proof_of_stake::types::{ResultSlashing, ValidatorMetaData};
 use namada_proof_of_stake::{
@@ -197,6 +198,7 @@ impl Ctx {
             website,
             discord_handle,
             avatar,
+            name,
         }: BecomeValidator,
     ) -> EnvResult<Address> {
         let current_epoch = self.get_block_epoch()?;
@@ -229,6 +231,7 @@ impl Ctx {
                     website,
                     discord_handle,
                     avatar,
+                    name,
                 },
                 offset_opt: None,
             },
@@ -273,6 +276,7 @@ impl Ctx {
         website: Option<String>,
         discord_handle: Option<String>,
         avatar: Option<String>,
+        name: Option<String>,
         commission_rate: Option<Dec>,
     ) -> TxResult {
         // The tx must be authorized by the source address
@@ -291,6 +295,7 @@ impl Ctx {
             website,
             discord_handle,
             avatar,
+            name,
             commission_rate,
             current_epoch,
         )

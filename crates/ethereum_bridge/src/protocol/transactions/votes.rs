@@ -92,7 +92,9 @@ pub trait EpochedVotingPowerExt {
         // arbitrarily faulty nodes. Therefore, we can consider a tally secure
         // if has accumulated an amount of stake greater than the threshold
         // stake of S_max - F = 2/3 S_max.
-        let threshold = FractionalVotingPower::TWO_THIRDS * max_voting_power;
+        let threshold = FractionalVotingPower::TWO_THIRDS
+            .checked_mul_amount(max_voting_power)
+            .expect("Cannot overflow");
         self.tallied_stake() > threshold
     }
 }
@@ -115,7 +117,8 @@ impl EpochedVotingPowerExt for EpochedVotingPower {
     }
 
     fn tallied_stake(&self) -> token::Amount {
-        self.values().copied().sum::<token::Amount>()
+        token::Amount::sum(self.values().copied())
+            .expect("Talling stake shouldn't overflow")
     }
 }
 
@@ -168,7 +171,9 @@ where
                 let aggregated = seen_by_voting_power
                     .entry(epoch)
                     .or_insert_with(token::Amount::zero);
-                *aggregated += voting_power;
+                *aggregated = aggregated
+                    .checked_add(voting_power)
+                    .ok_or_else(|| eyre!("Aggregated voting power overflow"))?;
             }
             None => {
                 return Err(eyre!(

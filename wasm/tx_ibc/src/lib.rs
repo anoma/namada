@@ -35,11 +35,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
             })
             .transpose()?;
         if let Some(shielded) = shielded {
-            token::utils::handle_masp_tx(
-                ctx,
-                &shielded,
-                transfer.key.as_deref(),
-            )?;
+            token::utils::handle_masp_tx(ctx, &shielded)?;
             update_masp_note_commitment_tree(&shielded)?;
         }
     }

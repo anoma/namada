@@ -97,7 +97,7 @@ where
         // the end of an epoch, and even if we cross an epoch boundary without
         // a complete proof, we should get one shortly after.
         .expect("The first block height of the signing epoch should be known")
-        + 1;
+        .next_height();
     let voting_powers =
         utils::get_voting_powers(state, (&ext, epoch_2nd_height))?;
     let changed_keys = apply_update(

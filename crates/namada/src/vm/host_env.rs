@@ -12,6 +12,7 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::internal::KeyVal;
 use namada_core::storage::TX_INDEX_LENGTH;
+use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,
     MEMORY_ACCESS_GAS_PER_BYTE,
@@ -33,7 +34,6 @@ use super::wasm::VpCache;
 use super::WasmCacheAccess;
 use crate::address::{self, Address};
 use crate::hash::Hash;
-use crate::ibc::IbcEvent;
 use crate::internal::HostEnvResult;
 use crate::ledger::vp_host_fns;
 use crate::storage::{BlockHeight, Key, TxIndex};
@@ -1014,9 +1014,9 @@ where
     state.delete(&key).map_err(TxRuntimeError::StorageError)
 }
 
-/// Emitting an IBC event function exposed to the wasm VM Tx environment.
-/// The given IBC event will be set to the write log.
-pub fn tx_emit_ibc_event<MEM, D, H, CA>(
+/// Expose the functionality to emit events to the wasm VM's Tx environment.
+/// An emitted event will land in the write log.
+pub fn tx_emit_event<MEM, D, H, CA>(
     env: &TxVmEnv<MEM, D, H, CA>,
     event_ptr: u64,
     event_len: u64,
@@ -1032,15 +1032,15 @@ where
         .read_bytes(event_ptr, event_len as _)
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let event: IbcEvent = BorshDeserialize::try_from_slice(&event)
+    let event: Event = BorshDeserialize::try_from_slice(&event)
         .map_err(TxRuntimeError::EncodingError)?;
     let mut state = env.state();
-    let gas = state.write_log_mut().emit_ibc_event(event);
+    let gas = state.write_log_mut().emit_event(event);
     tx_charge_gas::<MEM, D, H, CA>(env, gas)
 }
 
-/// Getting an IBC event function exposed to the wasm VM Tx environment.
-pub fn tx_get_ibc_events<MEM, D, H, CA>(
+/// Expose the functionality to query events from the wasm VM's Tx environment.
+pub fn tx_get_events<MEM, D, H, CA>(
     env: &TxVmEnv<MEM, D, H, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -1057,14 +1057,16 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let state = env.state();
-    let events: Vec<IbcEvent> = state
-        .write_log()
-        .get_ibc_events()
-        .iter()
-        .filter(|event| event.event_type == event_type)
-        .cloned()
-        .collect();
-    let value = events.serialize_to_vec();
+    let value = {
+        let event_type = EventTypeBuilder::new_with_type(event_type).build();
+
+        let events: Vec<_> = state
+            .write_log()
+            .lookup_events_with_prefix(&event_type)
+            .collect();
+
+        events.serialize_to_vec()
+    };
     let len: i64 = value
         .len()
         .try_into()
@@ -1880,8 +1882,8 @@ where
     Ok(len)
 }
 
-/// Getting the IBC event function exposed to the wasm VM VP environment.
-pub fn vp_get_ibc_events<MEM, D, H, EVAL, CA>(
+/// Expose the functionality to query events from the wasm VM's VP environment.
+pub fn vp_get_events<MEM, D, H, EVAL, CA>(
     env: &VpVmEnv<MEM, D, H, EVAL, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
@@ -1901,7 +1903,7 @@ where
     vp_host_fns::add_gas(gas_meter, gas)?;
 
     let state = env.state();
-    let events = vp_host_fns::get_ibc_events(gas_meter, &state, event_type)?;
+    let events = vp_host_fns::get_events(gas_meter, &state, event_type)?;
     let value = events.serialize_to_vec();
     let len: i64 = value
         .len()

@@ -490,6 +490,7 @@ pub fn make_dev_genesis(
                     website: None,
                     discord_handle: None,
                     avatar: None,
+                    name: None,
                 },
                 net_address: SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),

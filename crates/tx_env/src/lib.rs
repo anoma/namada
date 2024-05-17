@@ -3,8 +3,8 @@
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::ibc::IbcEvent;
 use namada_core::storage;
+use namada_events::{Event, EventToEmit, EventType};
 use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
 
 /// Transaction host functions
@@ -73,17 +73,14 @@ pub trait TxEnv: StorageRead + StorageWrite {
         code_tag: &Option<String>,
     ) -> Result<()>;
 
-    /// Emit an IBC event. On multiple calls, these emitted event will be added.
-    fn emit_ibc_event(&mut self, event: &IbcEvent) -> Result<()>;
+    /// Emit an [`Event`] from a transaction.
+    fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<()>;
 
     /// Request to charge the provided amount of gas for the current transaction
     fn charge_gas(&mut self, used_gas: u64) -> Result<()>;
 
-    /// Get IBC events with a event type
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>>;
+    /// Get events with a given [`EventType`].
+    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>>;
 
     /// Set the sentinel for an invalid section commitment
     fn set_commitment_sentinel(&mut self);

@@ -4,15 +4,16 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_core::address::{Address, InternalAddress};
+use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
 use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::{IbcEvent, MsgTransfer};
+use namada_core::ibc::MsgTransfer;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
+use namada_events::{EmitEvents, EventTypeBuilder};
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
@@ -22,14 +23,14 @@ use namada_state::{
 use namada_token as token;
 use token::DenominatedAmount;
 
-use crate::{IbcActions, IbcCommonContext, IbcStorageContext};
+use crate::event::IbcEvent;
+use crate::{
+    storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
+};
 
 /// IBC protocol context
 #[derive(Debug)]
-pub struct IbcProtocolContext<'a, S>
-where
-    S: State,
-{
+pub struct IbcProtocolContext<'a, S> {
     state: &'a mut S,
 }
 
@@ -119,7 +120,7 @@ where
     H: 'static + StorageHasher,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        let gas = self.write_log_mut().emit_ibc_event(event);
+        let gas = self.write_log_mut().emit_event(event);
         self.charge_gas(gas).into_storage_result()?;
         Ok(())
     }
@@ -128,12 +129,14 @@ where
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, StorageError> {
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type)
+            .build();
+
         Ok(self
             .write_log()
-            .get_ibc_events()
-            .iter()
-            .filter(|event| event.event_type == event_type.as_ref())
-            .cloned()
+            .lookup_events_with_prefix(&event_type)
+            .filter_map(|event| IbcEvent::try_from(event).ok())
             .collect())
     }
 
@@ -150,9 +153,8 @@ where
     fn handle_masp_tx(
         &mut self,
         shielded: &masp_primitives::transaction::Transaction,
-        pin_key: Option<&str>,
     ) -> Result<(), StorageError> {
-        namada_token::utils::handle_masp_tx(self, shielded, pin_key)?;
+        namada_token::utils::handle_masp_tx(self, shielded)?;
         namada_token::utils::update_note_commitment_tree(self, shielded)
     }
 
@@ -162,9 +164,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self, token, target, amount)?;
-        let minter_key = token::storage_key::minter_key(token);
-        self.write(&minter_key, Address::Internal(InternalAddress::Ibc))
+        ibc_storage::mint_tokens(self, target, token, amount)
     }
 
     fn burn_token(
@@ -173,7 +173,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self, token, target, amount)
+        ibc_storage::burn_tokens(self, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -190,10 +190,10 @@ where
 
 impl<S> IbcStorageContext for IbcProtocolContext<'_, S>
 where
-    S: State,
+    S: State + EmitEvents,
 {
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        self.state.write_log_mut().emit_ibc_event(event);
+        self.state.write_log_mut().emit_event(event);
         Ok(())
     }
 
@@ -202,13 +202,15 @@ where
         &self,
         event_type: impl AsRef<str>,
     ) -> Result<Vec<IbcEvent>, StorageError> {
+        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
+            .with_segment(event_type)
+            .build();
+
         Ok(self
             .state
             .write_log()
-            .get_ibc_events()
-            .iter()
-            .filter(|event| event.event_type == event_type.as_ref())
-            .cloned()
+            .lookup_events_with_prefix(&event_type)
+            .filter_map(|event| IbcEvent::try_from(event).ok())
             .collect())
     }
 
@@ -227,7 +229,6 @@ where
     fn handle_masp_tx(
         &mut self,
         _shielded: &masp_primitives::transaction::Transaction,
-        _pin_key: Option<&str>,
     ) -> Result<(), StorageError> {
         unimplemented!("No MASP transfer in an IBC protocol transaction")
     }
@@ -239,10 +240,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::credit_tokens(self.state, token, target, amount)?;
-        let minter_key = token::storage_key::minter_key(token);
-        self.state
-            .write(&minter_key, Address::Internal(InternalAddress::Ibc))
+        ibc_storage::mint_tokens(self.state, target, token, amount)
     }
 
     /// Burn token
@@ -252,7 +250,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::burn_tokens(self.state, token, target, amount)
+        ibc_storage::burn_tokens(self.state, target, token, amount)
     }
 
     fn log_string(&self, message: String) {
@@ -260,7 +258,10 @@ where
     }
 }
 
-impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where S: State {}
+impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where
+    S: State + EmitEvents
+{
+}
 
 /// Transfer tokens over IBC
 pub fn transfer_over_ibc<D, H>(

@@ -18,6 +18,7 @@ default = []
 [dependencies]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
+namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }

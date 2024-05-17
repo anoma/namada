@@ -50,8 +50,17 @@ pub fn compute_inflation(
 
     let metric = Dec::try_from(locked_amount)
         .expect("Should not fail to convert Uint to Dec");
-    let control_coeff = max_reward_rate / controller.get_epochs_per_year();
-    controller.compute_inflation(control_coeff, metric)
+    let control_coeff = max_reward_rate
+        .checked_div(controller.get_epochs_per_year())
+        .expect("Control coefficient overflow");
+
+    tracing::debug!(
+        "Shielded token inflation inputs: {controller:#?}, metric: {metric}, \
+         coefficient: {control_coeff}"
+    );
+    controller
+        .compute_inflation(control_coeff, metric)
+        .expect("Inflation calculation overflow")
 }
 
 /// Compute the precision of MASP rewards for the given token. This function
@@ -243,7 +252,7 @@ where
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
-    use namada_storage::ResultExt;
+    use namada_storage::{Error, ResultExt};
     use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
@@ -272,7 +281,7 @@ where
         }
     });
     // The total transparent value of the rewards being distributed
-    let mut total_reward = Amount::native_whole(0);
+    let mut total_reward = Amount::zero();
 
     // Construct MASP asset type for rewards. Always deflate and timestamp
     // reward tokens with the zeroth epoch to minimize the number of convert
@@ -319,10 +328,10 @@ where
 
     // Reward all tokens according to above reward rates
     let epoch = storage.get_block_epoch()?;
-    if epoch == Epoch::default() {
-        return Ok(());
-    }
-    let prev_epoch = epoch.prev();
+    let prev_epoch = match epoch.prev() {
+        Some(epoch) => epoch,
+        None => return Ok(()),
+    };
     for token in &masp_reward_keys {
         let (reward, denom) = calculate_masp_rewards(storage, token)?;
         masp_reward_denoms.insert(token.clone(), denom);
@@ -387,14 +396,28 @@ where
                 if digit == MaspDigitPos::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    let native_reward =
-                        addr_bal * (new_normed_inflation, normed_inflation);
-                    total_reward += native_reward
-                        .0
-                        .checked_add(native_reward.1)
-                        .unwrap_or(Amount::max())
-                        .checked_sub(addr_bal)
-                        .unwrap_or_default();
+                    let native_reward = addr_bal
+                        .u128_eucl_div_rem((
+                            new_normed_inflation,
+                            normed_inflation,
+                        ))
+                        .ok_or_else(|| {
+                            Error::new_const("Three digit reward overflow")
+                        })?;
+                    total_reward = total_reward
+                        .checked_add(
+                            native_reward
+                                .0
+                                .checked_add(native_reward.1)
+                                .unwrap_or(Amount::max())
+                                .checked_sub(addr_bal)
+                                .unwrap_or_default(),
+                        )
+                        .ok_or_else(|| {
+                            Error::new_const(
+                                "Three digit total reward overflow",
+                            )
+                        })?;
                     // Save the new normed inflation
 
                     let _ = storage
@@ -436,7 +459,20 @@ where
                 if digit == MaspDigitPos::Three {
                     // The reward for each reward.1 units of the current asset
                     // is reward.0 units of the reward token
-                    total_reward += (addr_bal * (reward.0, reward.1)).0;
+                    total_reward = total_reward
+                        .checked_add(
+                            addr_bal
+                                .u128_eucl_div_rem(reward)
+                                .ok_or_else(|| {
+                                    Error::new_const(
+                                        "Total reward calculation overflow",
+                                    )
+                                })?
+                                .0,
+                        )
+                        .ok_or_else(|| {
+                            Error::new_const("Total reward overflow")
+                        })?;
                 }
             }
             // Add a conversion from the previous asset type
@@ -488,7 +524,9 @@ where
     // is sufficiently backed to redeem rewards
     let reward_key = balance_key(&native_token, &masp_addr);
     let addr_bal: Amount = storage.read(&reward_key)?.unwrap_or_default();
-    let new_bal = addr_bal + total_reward;
+    let new_bal = addr_bal
+        .checked_add(total_reward)
+        .ok_or_else(|| Error::new_const("Balance with reward overflow"))?;
     storage.write(&reward_key, new_bal)?;
     // Try to distribute Merkle tree construction as evenly as possible
     // across multiple cores

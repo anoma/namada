@@ -35,15 +35,14 @@ use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::chain::ChainId;
 use namada::core::ethereum_events::EthereumEvent;
+use namada::core::hints;
 use namada::core::key::*;
 use namada::core::storage::{BlockHeight, Key, TxIndex};
 use namada::core::time::DateTimeUtc;
-use namada::core::{address, hints};
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
 use namada::ledger::events::log::EventLog;
-use namada::ledger::events::Event;
 use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
@@ -417,7 +416,7 @@ where
             any(test, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
-        let native_token = address::testing::nam();
+        let native_token = namada::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
             any(test, feature = "testing", feature = "benches"),
@@ -1431,6 +1430,7 @@ mod test_utils {
     use namada::core::keccak::KeccakHash;
     use namada::core::key::*;
     use namada::core::storage::{Epoch, Header};
+    use namada::ledger::events::Event;
     use namada::proof_of_stake::parameters::PosParams;
     use namada::proof_of_stake::storage::validator_consensus_key_handle;
     use namada::state::mockdb::MockDB;
@@ -1958,7 +1958,6 @@ mod test_utils {
 mod shell_tests {
     use namada::core::storage::Epoch;
     use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::replay_protection;
     use namada::token::read_denom;
     use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada::tx::data::Fee;
@@ -1966,6 +1965,7 @@ mod shell_tests {
     use namada::vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
+    use namada::{address, replay_protection};
 
     use super::*;
     use crate::node::ledger::shell::token::DenominatedAmount;
@@ -2305,7 +2305,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -2344,7 +2343,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -2418,7 +2416,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2571,7 +2568,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 (block_gas_limit + 1).into(),
                 None,
             ))));
@@ -2604,7 +2600,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -2643,7 +2638,6 @@ mod shell_tests {
                     token: address::testing::apfel(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2678,7 +2672,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2714,7 +2707,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 150_000.into(),
                 None,
             ))));
@@ -2750,7 +2742,6 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 GAS_LIMIT_MULTIPLIER.into(),
                 None,
             ))));
@@ -2797,7 +2788,6 @@ mod shell_tests {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    Epoch(0),
                     GAS_LIMIT_MULTIPLIER.into(),
                     None,
                 ))));

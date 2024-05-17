@@ -17,6 +17,7 @@ getrandom.workspace = true
 namada = {path = "../../crates/namada"}
 namada_tests = {path = "../../crates/tests"}
 namada_test_utils = {path = "../../crates/test_utils"}
+namada_tx_prelude = { workspace = true, features = ["testing"] }
 namada_vp_prelude = {path = "../../crates/vp_prelude"}
 
 proptest = "1.4.0"

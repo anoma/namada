@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 
 use namada_account::protocol_pk_key;
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::{common, tm_consensus_key_raw_hash};
@@ -14,7 +15,6 @@ use namada_governance::storage::get_max_proposal_period;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::collections::{LazyCollection, LazySet};
 use namada_storage::{Result, StorageRead, StorageWrite};
-use num_traits::CheckedAdd;
 
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
@@ -446,6 +446,19 @@ where
     storage.write(&key, inflation)
 }
 
+/// Read the validator state
+pub fn read_validator_state<S>(
+    storage: &S,
+    validator: &Address,
+    epoch: &Epoch,
+) -> namada_storage::Result<Option<ValidatorState>>
+where
+    S: StorageRead,
+{
+    let params = read_pos_params(storage)?;
+    validator_state_handle(validator).get(storage, *epoch, &params)
+}
+
 /// Read PoS validator's delta value.
 pub fn read_validator_deltas_value<S>(
     storage: &S,
@@ -496,12 +509,13 @@ where
 {
     let handle = validator_deltas_handle(validator);
     let offset = offset_opt.unwrap_or(params.pipeline_len);
+    let offset_epoch = checked!(current_epoch + offset)?;
     let val = handle
-        .get_delta_val(storage, current_epoch + offset)?
+        .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
     handle.set(
         storage,
-        val.checked_add(&delta)
+        val.checked_add(delta)
             .expect("Validator deltas updated amount should not overflow"),
         current_epoch,
         offset,
@@ -704,15 +718,16 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
     let total_deltas = total_deltas_handle();
     let total_active_deltas = total_active_deltas_handle();
+    let offset_epoch = checked!(current_epoch + offset)?;
 
     // Update total deltas
     let total_deltas_val = total_deltas
-        .get_delta_val(storage, current_epoch + offset)?
+        .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
     total_deltas.set(
         storage,
         total_deltas_val
-            .checked_add(&delta)
+            .checked_add(delta)
             .expect("Total deltas updated amount should not overflow"),
         current_epoch,
         offset,
@@ -721,11 +736,11 @@ where
     // Update total active voting power
     if update_active_voting_power {
         let active_delta = total_active_deltas
-            .get_delta_val(storage, current_epoch + offset)?
+            .get_delta_val(storage, offset_epoch)?
             .unwrap_or_default();
         total_active_deltas.set(
             storage,
-            active_delta.checked_add(&delta).expect(
+            active_delta.checked_add(delta).expect(
                 "Total active voting power updated amount should not overflow",
             ),
             current_epoch,
@@ -881,6 +896,34 @@ where
     }
 }
 
+/// Read PoS validator's name.
+pub fn read_validator_name<S>(
+    storage: &S,
+    validator: &Address,
+) -> namada_storage::Result<Option<String>>
+where
+    S: StorageRead,
+{
+    storage.read(&storage_key::validator_name_key(validator))
+}
+
+/// Write PoS validator's name. If the provided arg is an empty
+/// string, remove the data.
+pub fn write_validator_name<S>(
+    storage: &mut S,
+    validator: &Address,
+    validator_name: &String,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let key = storage_key::validator_name_key(validator);
+    if validator_name.is_empty() {
+        storage.delete(&key)
+    } else {
+        storage.write(&key, validator_name)
+    }
+}
 /// Write validator's metadata.
 pub fn write_validator_metadata<S>(
     storage: &mut S,
@@ -904,6 +947,9 @@ where
     }
     if let Some(avatar) = metadata.avatar.as_ref() {
         write_validator_avatar(storage, validator, avatar)?;
+    }
+    if let Some(name) = metadata.name.as_ref() {
+        write_validator_name(storage, validator, name)?;
     }
     Ok(())
 }

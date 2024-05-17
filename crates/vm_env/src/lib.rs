@@ -86,11 +86,11 @@ pub mod tx {
             result_ptr: u64,
         );
 
-        // Emit an IBC event
-        pub fn namada_tx_emit_ibc_event(event_ptr: u64, event_len: u64);
+        // Emit an event
+        pub fn namada_tx_emit_event(event_ptr: u64, event_len: u64);
 
-        // Get IBC events
-        pub fn namada_tx_get_ibc_events(
+        // Get events
+        pub fn namada_tx_get_events(
             event_type_ptr: u64,
             event_type_len: u64,
         ) -> i64;
@@ -231,8 +231,8 @@ pub mod vp {
         // Get the native token address
         pub fn namada_vp_get_native_token(result_ptr: u64);
 
-        // Get the IBC event
-        pub fn namada_vp_get_ibc_events(
+        // Get events emitted by the current tx
+        pub fn namada_vp_get_events(
             event_type_ptr: u64,
             event_type_len: u64,
         ) -> i64;

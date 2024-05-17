@@ -60,12 +60,14 @@ migrations = [
   "namada_account/migrations",
   "namada_core/migrations",
   "namada_ethereum_bridge/migrations",
+  "namada_events/migrations",
   "namada_governance/migrations",
   "namada_proof_of_stake/migrations",
   "namada_state/migrations",
   "namada_storage/migrations",
   "namada_tx/migrations",
   "namada_vote_ext/migrations",
+  "namada_gas/migrations",
   "linkme",
 ]
 
@@ -73,6 +75,7 @@ migrations = [
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
+namada_events = { path = "../events" }
 namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
@@ -111,6 +114,7 @@ orion.workspace = true
 owo-colors = "3.5.0"
 parse_duration = "2.1.1"
 paste.workspace = true
+patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand = { workspace = true, optional = true }
@@ -120,6 +124,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
+smooth-operator.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, optional = true }
 thiserror.workspace = true

@@ -11,7 +11,6 @@ use eyre::Result;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::ethereum_events::EthereumEvent;
-use namada_core::ethereum_structs::EthBridgeEvent;
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch, Key};
 use namada_core::token::Amount;
@@ -22,6 +21,7 @@ use namada_tx::data::TxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
 
 use super::ChangedKeys;
+use crate::event::EthBridgeEvent;
 use crate::protocol::transactions::utils;
 use crate::protocol::transactions::votes::update::NewVotes;
 use crate::protocol::transactions::votes::{self, calculate_new};
@@ -121,7 +121,10 @@ where
 
     Ok(TxResult {
         changed_keys,
-        eth_bridge_events,
+        events: eth_bridge_events
+            .into_iter()
+            .map(|event| event.into())
+            .collect(),
         ..Default::default()
     })
 }
@@ -520,7 +523,6 @@ mod tests {
         assert!(tx_result.vps_result.rejected_vps.is_empty());
         assert!(tx_result.vps_result.errors.is_empty());
         assert!(tx_result.initialized_accounts.is_empty());
-        assert!(tx_result.ibc_events.is_empty());
     }
 
     /// Test calling apply_derived_tx for an event that isn't backed by enough

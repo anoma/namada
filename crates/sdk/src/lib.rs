@@ -6,8 +6,9 @@ pub use namada_core::*;
 pub use tendermint_rpc;
 pub use {
     bip39, masp_primitives, masp_proofs, namada_account as account,
-    namada_governance as governance, namada_proof_of_stake as proof_of_stake,
-    namada_state as state, namada_storage as storage, zeroize,
+    namada_gas as gas, namada_governance as governance,
+    namada_proof_of_stake as proof_of_stake, namada_state as state,
+    namada_storage as storage, zeroize,
 };
 
 pub mod eth_bridge;
@@ -356,6 +357,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            name: None,
             commission_rate: None,
             tx_code_path: PathBuf::from(TX_CHANGE_METADATA_WASM),
             tx: self.tx_builder(),
@@ -392,6 +394,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            name: None,
         }
     }
 
@@ -424,6 +427,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             website: None,
             discord_handle: None,
             avatar: None,
+            name: None,
         }
     }
 
@@ -787,7 +791,6 @@ pub mod testing {
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
-    use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
     use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
@@ -950,14 +953,12 @@ pub mod testing {
         // Generate an arbitrary wrapper transaction
         pub fn arb_wrapper_tx()(
             fee in arb_fee(),
-            epoch in arb_epoch(),
             pk in arb_common_pk(),
             gas_limit in arb_gas_limit(),
             unshield_section_hash in option::of(arb_hash()),
         ) -> WrapperTx {
             WrapperTx {
                 fee,
-                epoch,
                 pk,
                 gas_limit,
                 unshield_section_hash,

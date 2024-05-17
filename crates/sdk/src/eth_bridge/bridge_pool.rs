@@ -9,6 +9,7 @@ use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
@@ -22,7 +23,6 @@ use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
 use namada_tx::Tx;
-use num_traits::ops::checked::CheckedSub;
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
@@ -110,7 +110,6 @@ pub async fn build_bridge_pool_tx(
     .add_data(transfer);
 
     prepare_tx(
-        context.client(),
         &tx_args,
         &mut tx,
         unshield,
@@ -246,7 +245,7 @@ async fn validate_bridge_pool_tx(
             ));
         }
 
-        if flow_control.exceeds_token_caps(transfer.transfer.amount) {
+        if flow_control.exceeds_token_caps(transfer.transfer.amount)? {
             return Err(Error::EthereumBridge(
                 EthereumBridgeError::Erc20TokenCapsExceeded(wnam_addr),
             ));
@@ -255,7 +254,8 @@ async fn validate_bridge_pool_tx(
 
     // validate balances
     let maybe_balance_error = if token_addr == transfer.gas_fee.token {
-        let expected_debit = transfer.transfer.amount + transfer.gas_fee.amount;
+        let expected_debit =
+            checked!(transfer.transfer.amount + transfer.gas_fee.amount)?;
         let balance: Amount = query_storage_value(
             context.client(),
             &balance_key(&token_addr, &transfer.transfer.sender),
@@ -939,7 +939,7 @@ mod recommendations {
         // This is the gas cost for hashing the validator set and
         // checking a quorum of signatures (in gwei).
         let validator_gas = signature_fee()
-            * signature_checks(voting_powers, &bp_root.signatures)
+            * signature_checks(voting_powers, &bp_root.signatures)?
             + valset_fee() * valset_size;
 
         // we don't recommend transfers that have already been relayed
@@ -1007,13 +1007,16 @@ mod recommendations {
     fn signature_checks<T>(
         voting_powers: VotingPowersMap,
         sigs: &HashMap<EthAddrBook, T>,
-    ) -> Uint {
+    ) -> Result<Uint, Error> {
         let voting_powers = voting_powers.get_sorted();
-        let total_power = voting_powers.iter().map(|(_, &y)| y).sum::<Amount>();
+        let total_power = Amount::sum(voting_powers.iter().map(|(_, &y)| y))
+            .ok_or_else(|| {
+                Error::Other("Voting power sum overflow".to_owned())
+            })?;
 
         // Find the total number of signature checks Ethereum will make
         let mut power = FractionalVotingPower::NULL;
-        Uint::from_u64(
+        Ok(Uint::from_u64(
             voting_powers
                 .iter()
                 .filter_map(|(a, &p)| sigs.get(*a).map(|_| p))
@@ -1033,7 +1036,7 @@ mod recommendations {
                     }
                 })
                 .count() as u64,
-        )
+        ))
     }
 
     /// Generate eligible recommendations.
@@ -1095,7 +1098,7 @@ mod recommendations {
                         .map_err(|err| err.to_string())
                         .and_then(|amt_of_earned_gwei| {
                             transfer_fee()
-                                .checked_sub(&amt_of_earned_gwei)
+                                .checked_sub(amt_of_earned_gwei)
                                 .ok_or_else(|| {
                                     "Underflowed calculating relaying cost"
                                         .into()
@@ -1157,8 +1160,8 @@ mod recommendations {
             pending_transfer: transfer,
         } in contents.into_iter()
         {
-            let next_total_gas = total_gas + unsigned_transfer_fee();
-            let next_total_cost = total_cost + cost;
+            let next_total_gas = checked!(total_gas + unsigned_transfer_fee())?;
+            let next_total_cost = checked!(total_cost + cost)?;
             if cost.is_negative() {
                 if next_total_gas <= max_gas && next_total_cost <= max_cost {
                     state.feasible_region = true;
@@ -1190,7 +1193,7 @@ mod recommendations {
             Some(RecommendedBatch {
                 transfer_hashes: recommendation,
                 ethereum_gas_fees: total_gas,
-                net_profit: -total_cost,
+                net_profit: checked!(-total_cost)?,
                 bridge_pool_gas_fees: total_fees,
             })
         } else {
@@ -1394,7 +1397,7 @@ mod recommendations {
                 (address_book(2), 0),
                 (address_book(3), 0),
             ]);
-            let checks = signature_checks(voting_powers, &signatures);
+            let checks = signature_checks(voting_powers, &signatures).unwrap();
             assert_eq!(checks, uint::ONE)
         }
 
@@ -1411,7 +1414,7 @@ mod recommendations {
                 (address_book(3), 0),
                 (address_book(4), 0),
             ]);
-            let checks = signature_checks(voting_powers, &signatures);
+            let checks = signature_checks(voting_powers, &signatures).unwrap();
             assert_eq!(checks, Uint::from_u64(3))
         }
 

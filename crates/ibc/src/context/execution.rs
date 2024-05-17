@@ -21,7 +21,7 @@ use namada_core::ibc::core::host::types::path::{
 use namada_core::ibc::core::host::ExecutionContext;
 use namada_core::ibc::primitives::Timestamp;
 
-use super::client::{AnyClientState, AnyConsensusState};
+use super::client::AnyClientState;
 use super::common::IbcCommonContext;
 use super::IbcContext;
 use crate::storage;
@@ -30,14 +30,12 @@ impl<C> ClientExecutionContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
-    type AnyClientState = AnyClientState;
-    type AnyConsensusState = AnyConsensusState;
-    type V = Self;
+    type ClientStateMut = AnyClientState;
 
     fn store_client_state(
         &mut self,
         client_state_path: ClientStatePath,
-        client_state: Self::AnyClientState,
+        client_state: Self::ClientStateRef,
     ) -> Result<(), ContextError> {
         self.inner
             .borrow_mut()
@@ -47,7 +45,7 @@ where
     fn store_consensus_state(
         &mut self,
         consensus_state_path: ClientConsensusStatePath,
-        consensus_state: Self::AnyConsensusState,
+        consensus_state: Self::ConsensusStateRef,
     ) -> Result<(), ContextError> {
         let client_id = consensus_state_path.client_id;
         let height = Height::new(
@@ -75,42 +73,26 @@ where
             .delete_consensus_state(&client_id, height)
     }
 
-    fn store_update_time(
+    fn store_update_meta(
         &mut self,
         client_id: ClientId,
         _height: Height,
-        timestamp: Timestamp,
-    ) -> Result<(), ContextError> {
-        self.inner
-            .borrow_mut()
-            .store_update_time(&client_id, timestamp)
-    }
-
-    fn store_update_height(
-        &mut self,
-        client_id: ClientId,
-        _height: Height,
+        host_timestamp: Timestamp,
         host_height: Height,
     ) -> Result<(), ContextError> {
-        self.inner
-            .borrow_mut()
-            .store_update_height(&client_id, host_height)
+        self.inner.borrow_mut().store_update_meta(
+            &client_id,
+            host_timestamp,
+            host_height,
+        )
     }
 
-    fn delete_update_time(
+    fn delete_update_meta(
         &mut self,
         client_id: ClientId,
         _height: Height,
     ) -> Result<(), ContextError> {
-        self.inner.borrow_mut().delete_update_time(&client_id)
-    }
-
-    fn delete_update_height(
-        &mut self,
-        client_id: ClientId,
-        _height: Height,
-    ) -> Result<(), ContextError> {
-        self.inner.borrow_mut().delete_update_height(&client_id)
+        self.inner.borrow_mut().delete_update_meta(&client_id)
     }
 }
 
@@ -118,6 +100,8 @@ impl<C> ExecutionContext for IbcContext<C>
 where
     C: IbcCommonContext,
 {
+    type E = Self;
+
     fn get_client_execution_context(&mut self) -> &mut Self::E {
         self
     }

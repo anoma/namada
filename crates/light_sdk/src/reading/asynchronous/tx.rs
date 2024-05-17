@@ -50,15 +50,8 @@ pub async fn query_tx_response(
     tendermint_addr: &str,
     tx_hash: &str,
 ) -> Result<TxResponse, Error> {
-    let client = HttpClient::new(
-        TendermintAddress::from_str(tendermint_addr)
-            .map_err(|e| Error::Other(e.to_string()))?,
-    )
-    .map_err(|e| Error::Other(e.to_string()))?;
-    let tx_query = TxEventQuery::Applied(tx_hash);
-    rpc::query_tx_response(&client, tx_query)
-        .await
-        .map_err(|e| Error::Other(e.to_string()))
+    let event = query_tx_status(tendermint_addr, tx_hash).await?;
+    event.try_into().map_err(Error::Other)
 }
 
 /// Query the status of a given transaction.

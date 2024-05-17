@@ -410,6 +410,10 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                             match wasm::run::prepare_wasm_code(code) {
                                 Ok(code) => match compile(code) {
                                     Ok((module, store)) => {
+                                        // Write the file
+                                        file_write_module(&dir, &module, &hash);
+
+                                        // Update progress
                                         let mut progress =
                                             progress.write().unwrap();
                                         progress
@@ -430,7 +434,6 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                                 N::name()
                                             )
                                         }
-                                        file_write_module(&dir, &module, &hash);
                                         (module, store)
                                     }
                                     Err(err) => {

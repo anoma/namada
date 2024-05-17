@@ -175,7 +175,9 @@ where
         let aggregated = voting_power_post
             .entry(epoch)
             .or_insert_with(token::Amount::zero);
-        *aggregated += voting_power;
+        *aggregated = aggregated
+            .checked_add(voting_power)
+            .ok_or_else(|| eyre!("Aggregated voting power overflow"))?;
     }
 
     let seen_post = voting_power_post.has_majority_quorum(state);

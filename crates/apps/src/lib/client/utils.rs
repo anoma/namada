@@ -430,7 +430,10 @@ pub fn init_network(
             if tm_votes_per_token > Dec::from(1) {
                 Uint::one()
             } else {
-                (Dec::from(1) / tm_votes_per_token).ceil().abs()
+                (Dec::from(1).checked_div(tm_votes_per_token).unwrap())
+                    .ceil()
+                    .unwrap()
+                    .abs()
             },
             token::NATIVE_MAX_DECIMAL_PLACES,
         )
@@ -809,6 +812,7 @@ pub fn init_genesis_validator(
         website,
         discord_handle,
         avatar,
+        name,
         tx_path,
         address,
     }: args::InitGenesisValidator,
@@ -888,6 +892,7 @@ pub fn init_genesis_validator(
             website,
             discord_handle,
             avatar,
+            name,
         },
         &validator_wallet,
     );

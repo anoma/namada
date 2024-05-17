@@ -6,11 +6,10 @@ use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
 use namada_core::storage;
-use namada_core::storage::IndexedTx;
 use namada_storage::{Error, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
-    is_masp_key, masp_commitment_tree_key, masp_nullifier_key, masp_pin_tx_key,
+    is_masp_key, masp_commitment_tree_key, masp_nullifier_key,
 };
 
 // Writes the nullifiers of the provided masp transaction to storage
@@ -64,25 +63,12 @@ pub fn update_note_commitment_tree(
 pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
     shielded: &Transaction,
-    pin_key: Option<&str>,
 ) -> Result<()> {
     // TODO: temporarily disabled because of the node aggregation issue in WASM.
     // Using the host env tx_update_masp_note_commitment_tree or directly the
     // update_note_commitment_tree function as a  workaround instead
     // update_note_commitment_tree(ctx, shielded)?;
     reveal_nullifiers(ctx, shielded)?;
-
-    // If storage key has been supplied, then pin this transaction to it
-    if let Some(key) = pin_key {
-        ctx.write(
-            &masp_pin_tx_key(key),
-            IndexedTx {
-                height: ctx.get_block_height()?,
-                index: ctx.get_tx_index()?,
-                is_wrapper: false,
-            },
-        )?;
-    }
 
     Ok(())
 }

@@ -511,7 +511,6 @@ where
                 continue;
             };
 
-            let mut total_token_balance = token::Amount::zero();
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
                     namada::account::init_account_storage(
@@ -535,15 +534,7 @@ where
                     balance.amount(),
                 )
                 .expect("Couldn't credit initial balance");
-                total_token_balance += balance.amount();
             }
-            // Write the total amount of tokens for the ratio
-            self.state
-                .write(
-                    &token::storage_key::minted_balance_key(token_address),
-                    total_token_balance,
-                )
-                .unwrap();
         }
         self.proceed_with(())
     }
@@ -1202,7 +1193,7 @@ mod test {
                 token::Amount::from_uint(1, 6).unwrap(),
                 6.into(),
             ),
-            "Insufficient source balance".to_string(),
+            format!("{albert_address_str} has insufficient balance"),
         )];
         assert_eq!(expected, initializer.warnings);
         initializer.warnings.clear();

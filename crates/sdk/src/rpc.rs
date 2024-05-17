@@ -3,7 +3,6 @@
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use masp_primitives::asset_type::AssetType;
@@ -11,6 +10,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
@@ -22,6 +22,8 @@ use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::{storage, token};
+use namada_gas::event::GasUsed as GasUsedAttr;
+use namada_gas::Gas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -39,12 +41,13 @@ use namada_proof_of_stake::types::{
 };
 use namada_state::LastBlock;
 use namada_tx::data::{ResultCode, TxResult};
+use namada_tx::event::{Code as CodeAttr, InnerTx as InnerTxAttr};
 use serde::Serialize;
 
 use crate::args::InputAmount;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
-use crate::events::Event;
+use crate::events::{extend, Event};
 use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::masp::MaspTokenRewardData;
@@ -54,20 +57,21 @@ use crate::queries::vp::pos::{
 use crate::queries::{Client, RPC};
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
-use crate::tendermint_rpc::error::Error as TError;
 use crate::tendermint_rpc::query::Query;
-use crate::tendermint_rpc::Order;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
 
-/// Query the status of a given transaction.
-///
-/// If a response is not delivered until `deadline`, we exit the cli with an
-/// error.
-pub async fn query_tx_status(
-    context: &impl Namada,
+/// Identical to [`query_tx_status`], but does not need a [`Namada`]
+/// context.
+pub async fn query_tx_status2<C, IO>(
+    client: &C,
+    io: &IO,
     status: TxEventQuery<'_>,
     deadline: time::Instant,
-) -> Result<Event, Error> {
+) -> Result<Event, Error>
+where
+    C: crate::queries::Client + Sync,
+    IO: crate::io::Io + crate::MaybeSend + crate::MaybeSync,
+{
     time::Sleep {
         strategy: time::LinearBackoff {
             delta: time::Duration::from_secs(1),
@@ -75,8 +79,7 @@ pub async fn query_tx_status(
     }
     .timeout(deadline, || async {
         tracing::debug!(query = ?status, "Querying tx status");
-        let maybe_event = match query_tx_events(context.client(), status).await
-        {
+        let maybe_event = match query_tx_events(client, status).await {
             Ok(response) => response,
             Err(err) => {
                 tracing::debug!(
@@ -103,7 +106,7 @@ pub async fn query_tx_status(
     .await
     .map_err(|_| {
         edisplay_line!(
-            context.io(),
+            io,
             "Transaction status query deadline of {deadline:?} exceeded"
         );
         match status {
@@ -112,6 +115,18 @@ pub async fn query_tx_status(
             }
         }
     })
+}
+
+/// Query the status of a given transaction.
+///
+/// If a response is not delivered until `deadline`, we exit the cli with an
+/// error.
+pub async fn query_tx_status(
+    context: &impl Namada,
+    status: TxEventQuery<'_>,
+    deadline: time::Instant,
+) -> Result<Event, Error> {
+    query_tx_status2(context.client(), context.io(), status, deadline).await
 }
 
 /// Query the epoch of the last committed block
@@ -565,11 +580,11 @@ pub struct TxResponse {
     /// Block height
     pub height: BlockHeight,
     /// Transaction height
-    pub hash: String,
+    pub hash: Hash,
     /// Response code
     pub code: ResultCode,
     /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
-    pub gas_used: String,
+    pub gas_used: Gas,
 }
 
 /// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
@@ -586,39 +601,25 @@ impl TryFrom<Event> for TxResponse {
     type Error = String;
 
     fn try_from(event: Event) -> Result<Self, Self::Error> {
-        fn missing_field_err(field: &str) -> String {
-            format!("Field \"{field}\" not present in event")
-        }
-
-        let inner_tx = event
-            .get("inner_tx")
-            .map(|s| TxResult::from_str(s).unwrap());
+        let inner_tx = event.read_attribute::<InnerTxAttr>().ok();
         let hash = event
-            .get("hash")
-            .ok_or_else(|| missing_field_err("hash"))?
-            .clone();
+            .read_attribute::<extend::TxHash>()
+            .map_err(|err| err.to_string())?;
         let info = event
-            .get("info")
-            .ok_or_else(|| missing_field_err("info"))?
-            .clone();
+            .read_attribute::<extend::Info>()
+            .map_err(|err| err.to_string())?;
         let log = event
-            .get("log")
-            .ok_or_else(|| missing_field_err("log"))?
-            .clone();
-        let height = BlockHeight::from_str(
-            event
-                .get("height")
-                .ok_or_else(|| missing_field_err("height"))?,
-        )
-        .map_err(|e| e.to_string())?;
-        let code = ResultCode::from_str(
-            event.get("code").ok_or_else(|| missing_field_err("code"))?,
-        )
-        .map_err(|e| e.to_string())?;
+            .read_attribute::<extend::Log>()
+            .map_err(|err| err.to_string())?;
+        let height = event
+            .read_attribute::<extend::Height>()
+            .map_err(|err| err.to_string())?;
+        let code = event
+            .read_attribute::<CodeAttr>()
+            .map_err(|err| err.to_string())?;
         let gas_used = event
-            .get("gas_used")
-            .ok_or_else(|| missing_field_err("gas_used"))?
-            .clone();
+            .read_attribute::<GasUsedAttr>()
+            .map_err(|err| err.to_string())?;
 
         Ok(TxResponse {
             inner_tx,
@@ -653,86 +654,6 @@ impl TxResponse {
             InnerTxResult::OtherFailure
         }
     }
-}
-
-/// Lookup the full response accompanying the specified transaction event
-// TODO: maybe remove this in favor of `query_tx_status`
-pub async fn query_tx_response<C: crate::queries::Client + Sync>(
-    client: &C,
-    tx_query: TxEventQuery<'_>,
-) -> Result<TxResponse, TError> {
-    // Find all blocks that apply a transaction with the specified hash
-    let blocks = &client
-        .block_search(tx_query.into(), 1, 255, Order::Ascending)
-        .await
-        .expect("Unable to query for transaction with given hash")
-        .blocks;
-    // Get the block results corresponding to a block to which
-    // the specified transaction belongs
-    let block = &blocks
-        .first()
-        .ok_or_else(|| {
-            TError::server(
-                "Unable to find a block applying the given transaction"
-                    .to_string(),
-            )
-        })?
-        .block;
-    let response_block_results = client
-        .block_results(block.header.height)
-        .await
-        .expect("Unable to retrieve block containing transaction");
-    // Search for the event where the specified transaction is
-    // applied to the blockchain
-    let query_event_opt =
-        response_block_results.end_block_events.and_then(|events| {
-            events
-                .iter()
-                .find(|event| {
-                    event.kind == tx_query.event_type()
-                        && event.attributes.iter().any(|tag| {
-                            &tag.key == "hash"
-                                && tag.value == tx_query.tx_hash()
-                        })
-                })
-                .cloned()
-        });
-    let query_event = query_event_opt.ok_or_else(|| {
-        TError::server(
-            "Unable to find the event corresponding to the specified \
-             transaction"
-                .to_string(),
-        )
-    })?;
-    // Reformat the event attributes so as to ease value extraction
-    let event_map: namada_core::collections::HashMap<&str, &str> = query_event
-        .attributes
-        .iter()
-        .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
-        .collect();
-    // Summarize the transaction results that we were searching for
-    let inner_tx = event_map
-        .get("inner_tx")
-        .map(|s| {
-            TxResult::from_str(s).map_err(|_| {
-                TError::parse("Error parsing TxResult".to_string())
-            })
-        })
-        .transpose()?;
-    let code = ResultCode::from_str(event_map["code"])
-        .map_err(|_| TError::parse("Error parsing ResultCode".to_string()))?;
-    let height = BlockHeight::from_str(event_map["height"])
-        .map_err(|_| TError::parse("Error parsing BlockHeight".to_string()))?;
-    let result = TxResponse {
-        inner_tx,
-        info: event_map["info"].to_string(),
-        log: event_map["log"].to_string(),
-        height,
-        hash: event_map["hash"].to_string(),
-        code,
-        gas_used: event_map["gas_used"].to_string(),
-    };
-    Ok(result)
 }
 
 /// Get the PoS parameters
@@ -1015,7 +936,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                 proposal_votes,
                 total_staked_token,
                 tally_type,
-            )
+            )?
         }
     };
     Ok(Some(proposal_result))
@@ -1035,11 +956,11 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable += amount;
+            total_withdrawable = checked!(total_withdrawable + amount)?;
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();
-            *withdrawable_amount += amount;
+            *withdrawable_amount = checked!(withdrawable_amount + amount)?;
         }
     }
     if !total_withdrawable.is_zero() {

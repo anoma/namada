@@ -2,7 +2,6 @@ use borsh_ext::BorshSerializeExt;
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError};
@@ -22,7 +21,6 @@ impl Transfer {
         target: Address,
         token: Address,
         amount: DenominatedAmount,
-        key: Option<String>,
         // FIXME: handle masp here
         shielded: Option<Hash>,
         args: GlobalArgs,
@@ -32,7 +30,6 @@ impl Transfer {
             target,
             token,
             amount,
-            key,
             shielded,
         };
 
@@ -65,10 +62,9 @@ impl Transfer {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign

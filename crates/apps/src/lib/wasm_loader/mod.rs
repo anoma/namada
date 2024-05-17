@@ -25,6 +25,8 @@ pub enum Error {
     WasmNotFound(String),
     #[error("Error while downloading {0}: {1}")]
     ServerError(String, String),
+    #[error("Checksum mismatch in downloaded wasm: {0}")]
+    ChecksumMismatch(String),
 }
 
 /// A hash map where keys are simple file names and values their full file name
@@ -119,6 +121,26 @@ fn wasm_url(wasm_name: &str) -> String {
     format!("{}/{}", prefix_url, wasm_name)
 }
 
+fn valid_wasm_checksum(
+    wasm_payload: &[u8],
+    name: &str,
+    full_name: &str,
+) -> Result<(), String> {
+    let mut hasher = Sha256::new();
+    hasher.update(wasm_payload);
+    let result = HEXLOWER.encode(&hasher.finalize());
+    let derived_name = format!(
+        "{}.{}.wasm",
+        &name.split('.').collect::<Vec<&str>>()[0],
+        result
+    );
+    if full_name == derived_name {
+        Ok(())
+    } else {
+        Err(derived_name)
+    }
+}
+
 /// Download all the pre-built wasms, or if they're already downloaded, verify
 /// their checksums.
 pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
@@ -135,26 +157,20 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the file exist, first check the hash. If not matching
                 // download it again.
                 Ok(bytes) => {
-                    let mut hasher = Sha256::new();
-                    hasher.update(bytes);
-                    let result = HEXLOWER.encode(&hasher.finalize());
-                    let derived_name = format!(
-                        "{}.{}.wasm",
-                        &name.split('.').collect::<Vec<&str>>()[0],
-                        result
-                    );
-                    if full_name == derived_name {
+                    if let Err(derived_name) =
+                        valid_wasm_checksum(&bytes, &name, &full_name)
+                    {
+                        tracing::info!(
+                            "WASM checksum mismatch: Got {}, expected {}. \
+                             Fetching new version...",
+                            derived_name,
+                            full_name
+                        );
+                    } else {
                         return;
                     }
-                    tracing::info!(
-                        "WASM checksum mismatch: Got {}, expected {}. \
-                         Fetching new version...",
-                        &derived_name,
-                        &full_name
-                    );
 
-                    let url = wasm_url(&full_name);
-                    match download_wasm(url).await {
+                    match download_wasm(&name, &full_name).await {
                         Ok(bytes) => {
                             if let Err(e) =
                                 tokio::fs::write(wasm_path, &bytes).await
@@ -175,8 +191,7 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
                 // if the doesn't file exist, download it.
                 Err(err) => match err.kind() {
                     std::io::ErrorKind::NotFound => {
-                        let url = wasm_url(&full_name);
-                        match download_wasm(url).await {
+                        match download_wasm(&name, &full_name).await {
                             Ok(bytes) => {
                                 if let Err(e) =
                                     tokio::fs::write(wasm_path, &bytes).await
@@ -256,15 +271,23 @@ pub fn read_wasm_or_exit(
     }
 }
 
-async fn download_wasm(url: String) -> Result<Vec<u8>, Error> {
-    tracing::info!("Downloading WASM {}...", url);
+async fn download_wasm(name: &str, full_name: &str) -> Result<Vec<u8>, Error> {
+    let url = wasm_url(full_name);
+
+    tracing::info!("Downloading WASM {url}...");
+
     let response = reqwest::get(&url).await;
+
     match response {
         Ok(body) => {
             let status = body.status();
             if status.is_success() {
                 let bytes = body.bytes().await.unwrap();
                 let bytes: &[u8] = bytes.borrow();
+
+                valid_wasm_checksum(bytes, name, full_name)
+                    .map_err(Error::ChecksumMismatch)?;
+
                 let bytes: Vec<u8> = bytes.to_owned();
 
                 Ok(bytes)

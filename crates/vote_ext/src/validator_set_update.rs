@@ -203,8 +203,10 @@ pub trait VotingPowersMapExt {
     fn get_abi_encoded(&self) -> (Vec<Token>, Vec<Token>) {
         let sorted = self.get_sorted();
 
-        let total_voting_power: token::Amount =
-            sorted.iter().map(|&(_, &voting_power)| voting_power).sum();
+        let total_voting_power: token::Amount = token::Amount::sum(
+            sorted.iter().map(|&(_, &voting_power)| voting_power),
+        )
+        .expect("Voting power sum must not overflow");
 
         // split the vec into two portions
         sorted
@@ -219,7 +221,10 @@ pub trait VotingPowersMapExt {
                         "Voting power in map can't be larger than the total \
                          voting power",
                     )
-                    .into();
+                    .try_into()
+                    .expect(
+                        "Must be able to convert to eth bridge voting power",
+                    );
 
                 let &EthAddrBook {
                     hot_key_addr,

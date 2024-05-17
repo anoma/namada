@@ -1,0 +1,1 @@
+Namada 0.35.0 is a minor release that refactors events, widely implements checked arithmetics, refactors balances, and makes various other improvements across MASP and other crates needed for mainnet readiness.`

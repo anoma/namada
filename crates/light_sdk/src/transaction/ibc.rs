@@ -5,7 +5,6 @@ use namada_sdk::hash::Hash;
 pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
 use namada_sdk::ibc::primitives::ToProto;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
@@ -63,10 +62,9 @@ impl IbcTransfer {
         fee: DenominatedAmount,
         token: Address,
         fee_payer: common::PublicKey,
-        epoch: Epoch,
         gas_limit: GasLimit,
     ) -> Self {
-        Self(attach_fee(self.0, fee, token, fee_payer, epoch, gas_limit))
+        Self(attach_fee(self.0, fee, token, fee_payer, gas_limit))
     }
 
     /// Get the bytes of the fee data to sign

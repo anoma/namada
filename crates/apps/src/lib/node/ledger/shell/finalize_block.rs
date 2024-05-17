@@ -4,11 +4,12 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockResults, Epoch, Header};
-use namada::gas::event::WithGasUsed;
+use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
-use namada::ledger::events::extend::{ComposeEvent, Height, Info, ValidMaspTx};
-use namada::ledger::events::EmitEvents;
+use namada::ledger::events::extend::{
+    ComposeEvent, Height, Info, TxHash, ValidMaspTx,
+};
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
@@ -17,6 +18,7 @@ use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
+use namada::sdk::events::EmitEvents;
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::token::utils::is_masp_tx;
@@ -179,7 +181,7 @@ where
                             "Tx rejected: {}",
                             &processed_tx.result.info
                         )))
-                        .with(WithGasUsed(0.into())),
+                        .with(GasUsed(0.into())),
                 );
                 continue;
             }
@@ -202,7 +204,7 @@ where
                             "Tx rejected: {}",
                             &processed_tx.result.info
                         )))
-                        .with(WithGasUsed(0.into())),
+                        .with(GasUsed(0.into())),
                 );
                 continue;
             }
@@ -311,11 +313,7 @@ where
             let tx_result = protocol::dispatch_tx(
                 tx.clone(),
                 processed_tx.tx.as_ref(),
-                TxIndex(
-                    tx_index
-                        .try_into()
-                        .expect("transaction index out of bounds"),
-                ),
+                TxIndex::must_from_usize(tx_index),
                 &tx_gas_meter,
                 &mut self.state,
                 &mut self.vp_wasm_cache,
@@ -340,12 +338,16 @@ where
                             .unwrap_or_default()
                             || is_masp_tx(&result.changed_keys)
                         {
-                            tx_event.extend(ValidMaspTx(tx_index));
+                            tx_event.extend(ValidMaspTx(
+                                TxIndex::must_from_usize(tx_index),
+                            ));
                         }
                         tracing::trace!(
                             "all VPs accepted transaction {} storage \
                              modification {:#?}",
-                            tx_event["hash"],
+                            tx_event
+                                .raw_read_attribute::<TxHash>()
+                                .unwrap_or("<unknown>"),
                             result
                         );
 
@@ -358,7 +360,7 @@ where
                         self.commit_inner_tx_hash(replay_protection_hashes);
 
                         self.state.commit_tx();
-                        if !tx_event.contains_key("code") {
+                        if !tx_event.has_attribute::<Code>() {
                             tx_event.extend(Code(ResultCode::Ok));
                             self.state
                                 .in_mem_mut()
@@ -367,29 +369,19 @@ where
                                 .accept(tx_index);
                         }
                         // events from other sources
-                        response.events.extend(
-                            // ibc events
-                            result
-                                .ibc_events
-                                .iter()
-                                .cloned()
-                                .map(|ibc_event| {
-                                    ibc_event.with(Height(height)).into()
-                                })
-                                // eth bridge events
-                                .chain(
-                                    result
-                                        .eth_bridge_events
-                                        .iter()
-                                        .map(Event::from),
-                                ),
+                        response.events.emit_many(
+                            result.events.iter().map(|event| {
+                                event.clone().with(Height(height))
+                            }),
                         );
                     } else {
                         // this branch can only be reached by inner txs
                         tracing::trace!(
                             "some VPs rejected transaction {} storage \
                              modification {:#?}",
-                            tx_event["hash"],
+                            tx_event
+                                .raw_read_attribute::<TxHash>()
+                                .unwrap_or("<unknown>"),
                             result.vps_result.rejected_vps
                         );
                         // The fee unshield operation could still have been
@@ -398,7 +390,9 @@ where
                             .map(|args| args.is_committed_fee_unshield)
                             .unwrap_or_default()
                         {
-                            tx_event.extend(ValidMaspTx(tx_index));
+                            tx_event.extend(ValidMaspTx(
+                                TxIndex::must_from_usize(tx_index),
+                            ));
                         }
 
                         // If an inner tx failed for any reason but invalid
@@ -417,7 +411,7 @@ where
                         tx_event.extend(Code(ResultCode::InvalidTx));
                     }
                     tx_event
-                        .extend(WithGasUsed(result.gas_used))
+                        .extend(GasUsed(result.gas_used))
                         .extend(Info("Check inner_tx for result.".to_string()))
                         .extend(InnerTx(&result));
                 }
@@ -426,18 +420,22 @@ where
                 ))) => {
                     tracing::info!(
                         "Wrapper transaction {} failed with: {}",
-                        tx_event["hash"],
+                        tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
                         msg,
                     );
                     tx_event
-                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()))
                         .extend(Code(ResultCode::InvalidTx));
                 }
                 Err(msg) => {
                     tracing::info!(
                         "Transaction {} failed with: {}",
-                        tx_event["hash"],
+                        tx_event
+                            .raw_read_attribute::<TxHash>()
+                            .unwrap_or("<unknown>"),
                         msg
                     );
 
@@ -478,7 +476,7 @@ where
                     self.state.drop_tx();
 
                     tx_event
-                        .extend(WithGasUsed(tx_gas_meter.get_tx_consumed_gas()))
+                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
                         .extend(Info(msg.to_string()));
 
                     // If wrapper, invalid tx error code
@@ -489,7 +487,9 @@ where
                         .map(|args| args.is_committed_fee_unshield)
                         .unwrap_or_default()
                     {
-                        tx_event.extend(ValidMaspTx(tx_index));
+                        tx_event.extend(ValidMaspTx(TxIndex::must_from_usize(
+                            tx_index,
+                        )));
                     }
                     tx_event.extend(Code(ResultCode::WasmRuntimeError));
                 }
@@ -545,7 +545,7 @@ where
     /// if necessary. Returns a bool indicating if a new epoch began and the
     /// height of the new block.
     fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
-        let height = self.state.in_mem().get_last_block_height() + 1;
+        let height = self.state.in_mem().get_last_block_height().next_height();
 
         self.state
             .in_mem_mut()
@@ -597,7 +597,9 @@ where
         current_epoch: Epoch,
         events: &mut impl EmitEvents,
     ) -> Result<()> {
-        let last_epoch = current_epoch.prev();
+        let last_epoch = current_epoch
+            .prev()
+            .expect("Must have a prev epoch when applying inflation");
 
         // Get the number of blocks in the last epoch
         let first_block_of_last_epoch =
@@ -620,14 +622,11 @@ where
             namada::ibc::transfer_over_ibc,
         )?;
 
-        // Take IBC events that may be emitted from PGF
-        for ibc_event in self.state.write_log_mut().take_ibc_events() {
-            // Add the height for IBC event query
-            events.emit(
-                ibc_event.with(Height(
-                    self.state.in_mem().get_last_block_height() + 1,
-                )),
-            );
+        // Take events that may be emitted from PGF
+        for event in self.state.write_log_mut().take_events() {
+            events.emit(event.with(Height(
+                self.state.in_mem().get_last_block_height().next_height(),
+            )));
         }
 
         Ok(())
@@ -764,12 +763,18 @@ mod test_finalize_block {
         BondId, SlashType, ValidatorState, WeightedValidator,
     };
     use namada::proof_of_stake::{unjail_validator, ADDRESS as pos_address};
-    use namada::replay_protection;
+    use namada::sdk::events::Event;
     use namada::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
-    use namada::token::{Amount, DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+    use namada::token::{
+        read_balance, update_balance, Amount, DenominatedAmount,
+        NATIVE_MAX_DECIMAL_PLACES,
+    };
     use namada::tx::data::Fee;
+    use namada::tx::event::types::APPLIED as APPLIED_TX;
+    use namada::tx::event::Code as CodeAttr;
     use namada::tx::{Authorization, Code, Data};
     use namada::vote_ext::ethereum_events;
+    use namada::{address, replay_protection};
     use namada_sdk::eth_bridge::storage::vote_tallies::BridgePoolRoot;
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::governance::ProposalVote;
@@ -805,7 +810,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -842,14 +846,14 @@ mod test_finalize_block {
         let mut processed_txs = vec![];
 
         // Add unshielded balance for fee payment
-        let balance_key = token::storage_key::balance_key(
-            &shell.state.in_mem().native_token,
+        let native_token = shell.state.in_mem().native_token.clone();
+        update_balance(
+            &mut shell.state,
+            &native_token,
             &Address::from(&keypair.ref_to()),
-        );
-        shell
-            .state
-            .write(&balance_key, Amount::native_whole(1000))
-            .unwrap();
+            |_| Ok(Amount::native_whole(1000)),
+        )
+        .unwrap();
 
         // create some wrapper txs
         for i in 0u64..4 {
@@ -868,9 +872,12 @@ mod test_finalize_block {
             .iter()
             .enumerate()
         {
-            assert_eq!(event.event_type.to_string(), String::from("applied"));
-            let code = event.attributes.get("code").expect("Test failed");
-            assert_eq!(code, &index.rem_euclid(2).to_string());
+            assert_eq!(*event.kind(), APPLIED_TX);
+            let code = event
+                .read_attribute::<CodeAttr>()
+                .expect("Test failed")
+                .to_usize();
+            assert_eq!(code, index.rem_euclid(2));
         }
     }
 
@@ -903,9 +910,9 @@ mod test_finalize_block {
         let mut resp = shell.finalize_block(req).expect("Test failed");
         assert_eq!(resp.len(), 1);
         let event = resp.remove(0);
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed");
-        assert_eq!(code, &String::from(ResultCode::InvalidTx));
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
     }
 
     /// Test that once a validator's vote for an Ethereum event lands
@@ -979,9 +986,9 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type.to_string(), String::from("applied"));
-        let code = result.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*result.kind(), APPLIED_TX);
+        let code = result.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
@@ -1038,9 +1045,9 @@ mod test_finalize_block {
             .expect("Test failed")
             .try_into()
             .expect("Test failed");
-        assert_eq!(result.event_type.to_string(), String::from("applied"));
-        let code = result.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*result.kind(), APPLIED_TX);
+        let code = result.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         // --- The event is removed from the queue
         assert!(shell.new_ethereum_events().is_empty());
@@ -1143,14 +1150,14 @@ mod test_finalize_block {
             // add bertha's gas fees the pool
             {
                 let amt: Amount = 999_999_u64.into();
-                let pool_balance_key = token::storage_key::balance_key(
-                    &shell.state.in_mem().native_token,
+                let native_token = shell.state.in_mem().native_token.clone();
+                update_balance(
+                    &mut shell.state,
+                    &native_token,
                     &bridge_pool::BRIDGE_POOL_ADDRESS,
-                );
-                shell
-                    .state
-                    .write(&pool_balance_key, amt)
-                    .expect("Test failed");
+                    |_| Ok(amt),
+                )
+                .expect("Test failed");
             }
             // write transfer to storage
             let transfer = {
@@ -1264,8 +1271,8 @@ mod test_finalize_block {
 
             namada::governance::init_proposal(
                 &mut shell.state,
-                proposal,
-                Vec::<u8>::new(),
+                &proposal,
+                vec![],
                 None,
             )
             .unwrap();
@@ -1274,11 +1281,15 @@ mod test_finalize_block {
                 id: proposal_id,
                 vote,
                 voter: validator,
-                delegation_validators: vec![],
             };
             // Vote to accept the proposal (there's only one validator, so its
             // vote decides)
-            namada::governance::vote_proposal(&mut shell.state, vote).unwrap();
+            namada::governance::vote_proposal(
+                &mut shell.state,
+                vote,
+                HashSet::new(),
+            )
+            .unwrap();
         };
 
         // Add a proposal to be accepted and one to be rejected.
@@ -1912,7 +1923,8 @@ mod test_finalize_block {
         // The total rewards claimed should be approximately equal to the total
         // minted inflation, minus (unbond_amount / initial_stake) * rewards
         // from the unbond epoch and the following epoch (the missed_rewards)
-        let ratio = Dec::from(unbond_amount) / Dec::from(init_stake);
+        let ratio = Dec::try_from(unbond_amount).unwrap()
+            / Dec::try_from(init_stake).unwrap();
         let lost_rewards = ratio * missed_rewards;
         let uncertainty = Dec::from_str("0.07").unwrap();
         let token_uncertainty = uncertainty * lost_rewards;
@@ -2076,8 +2088,8 @@ mod test_finalize_block {
         ));
 
         // Check that the commission earned is expected
-        let del_stake = Dec::from(del_amount);
-        let tot_stake = Dec::from(init_stake + del_amount);
+        let del_stake = Dec::try_from(del_amount).unwrap();
+        let tot_stake = Dec::try_from(init_stake + del_amount).unwrap();
         let stake_ratio = del_stake / tot_stake;
         let del_rewards_no_commission = stake_ratio * inflation_3;
         let commission = commission_rate * del_rewards_no_commission;
@@ -2438,9 +2450,9 @@ mod test_finalize_block {
                 ..Default::default()
             })
             .expect("Test failed")[0];
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         // the merkle tree root should not change after finalize_block
         let root_post = shell.shell.state.in_mem().block.tree.root();
@@ -2541,7 +2553,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -2556,7 +2567,6 @@ mod test_finalize_block {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
-            Epoch(0),
             WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
@@ -2596,12 +2606,12 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for wrapper in [&wrapper, &new_wrapper] {
             assert!(
@@ -2652,7 +2662,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -2676,7 +2685,6 @@ mod test_finalize_block {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
-            Epoch(0),
             WRAPPER_GAS_LIMIT.into(),
             None,
         ))));
@@ -2728,12 +2736,12 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         // This hash must be present as succesfully added by the second
         // transaction
@@ -2758,7 +2766,6 @@ mod test_finalize_block {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    Epoch(0),
                     0.into(),
                     None,
                 ))));
@@ -2790,7 +2797,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -2871,18 +2877,18 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[1].event_type.to_string(), String::from("applied"));
-        let code = event[1].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        assert_eq!(event[2].event_type.to_string(), String::from("applied"));
-        let code = event[2].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
-        assert_eq!(event[3].event_type.to_string(), String::from("applied"));
-        let code = event[3].attributes.get("code").unwrap().as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(*event[1].kind(), APPLIED_TX);
+        let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(*event[2].kind(), APPLIED_TX);
+        let code = event[2].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::WasmRuntimeError);
+        assert_eq!(*event[3].kind(), APPLIED_TX);
+        let code = event[3].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for valid_wrapper in [
             &out_of_gas_wrapper,
@@ -2964,7 +2970,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 0.into(),
                 None,
             ))));
@@ -3004,13 +3009,9 @@ mod test_finalize_block {
         let root_post = shell.shell.state.in_mem().block.tree.root();
         assert_eq!(root_pre.0, root_post.0);
 
-        assert_eq!(event[0].event_type.to_string(), String::from("applied"));
-        let code = event[0]
-            .attributes
-            .get("code")
-            .expect("Test failed")
-            .as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
+        assert_eq!(*event[0].kind(), APPLIED_TX);
+        let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
 
         assert!(
             shell
@@ -3040,7 +3041,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -3083,9 +3083,9 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::WasmRuntimeError).as_str());
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::WasmRuntimeError);
 
         let new_signer_balance = namada::token::read_balance(
             &shell.state,
@@ -3117,12 +3117,12 @@ mod test_finalize_block {
             initial_balance,
         )
         .unwrap();
-        let balance_key = token::storage_key::balance_key(
+        let balance = read_balance(
+            &shell.state,
             &native_token,
             &Address::from(&keypair.to_public()),
-        );
-        let balance: Amount =
-            shell.state.read(&balance_key).unwrap().unwrap_or_default();
+        )
+        .unwrap();
         assert_eq!(balance, initial_balance);
 
         let mut wrapper =
@@ -3132,7 +3132,6 @@ mod test_finalize_block {
                     token: native_token.clone(),
                 },
                 keypair.ref_to(),
-                Epoch(0),
                 WRAPPER_GAS_LIMIT.into(),
                 None,
             ))));
@@ -3175,11 +3174,15 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check balance of fee payer is 0
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::InvalidTx).as_str());
-        let balance: Amount =
-            shell.state.read(&balance_key).unwrap().unwrap_or_default();
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::InvalidTx);
+        let balance = read_balance(
+            &shell.state,
+            &native_token,
+            &Address::from(&keypair.to_public()),
+        )
+        .unwrap();
 
         assert_eq!(balance, 0.into())
     }
@@ -3223,7 +3226,6 @@ mod test_finalize_block {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
-                Epoch(0),
                 5_000_000.into(),
                 None,
             ))));
@@ -3270,9 +3272,9 @@ mod test_finalize_block {
             .expect("Test failed")[0];
 
         // Check fee payment
-        assert_eq!(event.event_type.to_string(), String::from("applied"));
-        let code = event.attributes.get("code").expect("Test failed").as_str();
-        assert_eq!(code, String::from(ResultCode::Ok).as_str());
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
 
         let new_proposer_balance = namada::token::read_balance(
             &shell.state,
@@ -3591,7 +3593,7 @@ mod test_finalize_block {
         let total_stake =
             read_total_stake(&shell.state, &params, pipeline_epoch)?;
 
-        let expected_slashed = initial_stake.mul_ceil(cubic_rate);
+        let expected_slashed = initial_stake.mul_ceil(cubic_rate).unwrap();
 
         println!(
             "Initial stake = {}\nCubic rate = {}\nExpected slashed = {}\n",
@@ -3701,15 +3703,12 @@ mod test_finalize_block {
 
         // Slash pool balance
         let nam_address = shell.state.in_mem().native_token.clone();
-        let slash_balance_key = token::storage_key::balance_key(
+        let slash_pool_balance_init = read_balance(
+            &shell.state,
             &nam_address,
             &namada_proof_of_stake::SLASH_POOL_ADDRESS,
-        );
-        let slash_pool_balance_init: token::Amount = shell
-            .state
-            .read(&slash_balance_key)
-            .expect("must be able to read")
-            .unwrap_or_default();
+        )
+        .unwrap();
         debug_assert_eq!(slash_pool_balance_init, token::Amount::zero());
 
         let consensus_set: Vec<WeightedValidator> =
@@ -4117,8 +4116,10 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let vp_frac_3 = Dec::from(val_stake_3) / Dec::from(tot_stake_3);
-        let vp_frac_4 = Dec::from(val_stake_4) / Dec::from(tot_stake_4);
+        let vp_frac_3 = Dec::try_from(val_stake_3).unwrap()
+            / Dec::try_from(tot_stake_3).unwrap();
+        let vp_frac_4 = Dec::try_from(val_stake_4).unwrap()
+            / Dec::try_from(tot_stake_4).unwrap();
         let tot_frac = Dec::two() * vp_frac_3 + vp_frac_4;
         let cubic_rate = std::cmp::min(
             Dec::one(),
@@ -4128,7 +4129,7 @@ mod test_finalize_block {
 
         let equal_enough = |rate1: Dec, rate2: Dec| -> bool {
             let tolerance = Dec::new(1, 9).unwrap();
-            rate1.abs_diff(&rate2) < tolerance
+            rate1.abs_diff(rate2).unwrap() < tolerance
         };
 
         // There should be 2 slashes processed for the validator, each with rate
@@ -4164,7 +4165,8 @@ mod test_finalize_block {
             - del_unbond_1_amount
             + self_bond_1_amount
             - self_unbond_2_amount)
-            .mul_ceil(slash_rate_3);
+            .mul_ceil(slash_rate_3)
+            .unwrap();
         assert!(
             ((pre_stake_10 - post_stake_10).change()
                 - exp_slashed_during_processing_9.change())
@@ -4178,22 +4180,27 @@ mod test_finalize_block {
         // Check that we can compute the stake at the pipeline epoch
         // NOTE: may be off. by 1 namnam due to rounding;
         let exp_pipeline_stake = (Dec::one() - slash_rate_3)
-            * Dec::from(
+            * Dec::try_from(
                 initial_stake + del_1_amount
                     - self_unbond_1_amount
                     - del_unbond_1_amount
                     + self_bond_1_amount
                     - self_unbond_2_amount,
             )
-            + Dec::from(del_2_amount);
+            .unwrap()
+            + Dec::try_from(del_2_amount).unwrap();
 
         assert!(
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10))
+            exp_pipeline_stake
+                .abs_diff(Dec::try_from(post_stake_10).unwrap())
+                .unwrap()
                 <= Dec::new(2, NATIVE_MAX_DECIMAL_PLACES).unwrap(),
             "Expected {}, got {} (with less than 2 err), diff {}",
             exp_pipeline_stake,
             post_stake_10.to_string_native(),
-            exp_pipeline_stake.abs_diff(&Dec::from(post_stake_10)),
+            exp_pipeline_stake
+                .abs_diff(Dec::try_from(post_stake_10).unwrap())
+                .unwrap(),
         );
 
         // Check the balance of the Slash Pool
@@ -4420,6 +4427,7 @@ mod test_finalize_block {
             (self_details.unbonds[1].slashed_amount.unwrap().change()
                 - (self_unbond_2_amount - self_bond_1_amount)
                     .mul_ceil(rate)
+                    .unwrap()
                     .change())
             .abs()
                 <= Uint::from(1)
@@ -4440,7 +4448,7 @@ mod test_finalize_block {
         .unwrap();
 
         let exp_del_withdraw_slashed_amount =
-            del_unbond_1_amount.mul_ceil(slash_rate_3);
+            del_unbond_1_amount.mul_ceil(slash_rate_3).unwrap();
         assert!(
             (del_withdraw
                 - (del_unbond_1_amount - exp_del_withdraw_slashed_amount))
@@ -4858,14 +4866,8 @@ mod test_finalize_block {
         // NOTE: assumed that the only change in pos address balance by
         // advancing to the next epoch is minted inflation - no change occurs
         // due to slashing
-        let pos_balance_pre = shell
-            .state
-            .read::<token::Amount>(&token::storage_key::balance_key(
-                &staking_token,
-                &pos_address,
-            ))
-            .unwrap()
-            .unwrap_or_default();
+        let pos_balance_pre =
+            read_balance(&shell.state, &staking_token, &pos_address).unwrap();
         loop {
             next_block_for_inflation(
                 shell,
@@ -4877,14 +4879,8 @@ mod test_finalize_block {
                 break;
             }
         }
-        let pos_balance_post = shell
-            .state
-            .read::<token::Amount>(&token::storage_key::balance_key(
-                &staking_token,
-                &pos_address,
-            ))
-            .unwrap()
-            .unwrap_or_default();
+        let pos_balance_post =
+            read_balance(&shell.state, &staking_token, &pos_address).unwrap();
 
         (
             shell.state.in_mem().block.epoch,

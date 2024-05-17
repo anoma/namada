@@ -14,21 +14,21 @@ use std::fmt::Debug;
 use std::ops::{Add, Neg, Not, Sub};
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::arith::{CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd};
 use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_core::uint::Uint;
+use namada_events::{Event, EventType};
 use namada_gas::GasMetering;
 use namada_token::{Amount, MaspDigitPos};
 use namada_tx::Tx;
 pub use namada_vp_env::VpEnv;
-use num_traits::{CheckedAdd, CheckedNeg, CheckedSub};
 use state::StateRead;
 use uint::construct_uint;
 
 use super::vp_host_fns;
 use crate::address::Address;
 use crate::hash::Hash;
-use crate::ibc::IbcEvent;
 use crate::ledger::gas::VpGasMeter;
 use crate::state;
 use crate::state::{ResultExt, StorageRead};
@@ -387,12 +387,16 @@ where
             .into_storage_result()
     }
 
-    fn get_ibc_events(
+    fn get_events(
         &self,
-        event_type: String,
-    ) -> Result<Vec<IbcEvent>, state::StorageError> {
-        vp_host_fns::get_ibc_events(self.gas_meter, self.state, event_type)
-            .into_storage_result()
+        event_type: &EventType,
+    ) -> Result<Vec<Event>, state::StorageError> {
+        vp_host_fns::get_events(
+            self.gas_meter,
+            self.state,
+            event_type.to_string(),
+        )
+        .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
@@ -667,14 +671,15 @@ construct_uint! {
 )]
 pub struct SignedAmount(SignedAmountInt);
 
-impl<T> Add<T> for SignedAmount
+impl<T> OverflowingAdd<T> for SignedAmount
 where
     T: Into<SignedAmount>,
 {
     type Output = Self;
 
-    fn add(self, other: T) -> Self {
-        Self(self.0.overflowing_add(other.into().0).0)
+    fn overflowing_add(self, other: T) -> (Self, bool) {
+        let (res, overflow) = self.0.overflowing_add(other.into().0);
+        (Self(res), overflow)
     }
 }
 
@@ -806,20 +811,24 @@ impl Neg for SignedAmount {
     type Output = Self;
 
     fn neg(self) -> Self {
-        !self + Self::one()
+        (!self).overflowing_add(Self::one()).0
     }
 }
 
 impl CheckedNeg for SignedAmount {
-    fn checked_neg(&self) -> Option<Self> {
-        let neg = -*self;
-        (neg != *self).then_some(neg)
+    type Output = SignedAmount;
+
+    fn checked_neg(self) -> Option<Self::Output> {
+        let neg = -self;
+        (neg != self).then_some(neg)
     }
 }
 
 impl CheckedAdd for SignedAmount {
-    fn checked_add(&self, rhs: &Self) -> Option<Self> {
-        let res = *self + *rhs;
+    type Output = SignedAmount;
+
+    fn checked_add(self, rhs: Self) -> Option<Self::Output> {
+        let res = self.overflowing_add(rhs).0;
         ((self.is_negative() != rhs.is_negative())
             || (self.is_negative() == res.is_negative()))
         .then_some(res)
@@ -827,8 +836,10 @@ impl CheckedAdd for SignedAmount {
 }
 
 impl CheckedSub for SignedAmount {
-    fn checked_sub(&self, rhs: &Self) -> Option<Self> {
-        let res = *self + -*rhs;
+    type Output = SignedAmount;
+
+    fn checked_sub(self, rhs: Self) -> Option<Self::Output> {
+        let res = self.overflowing_add(-rhs).0;
         ((self.is_negative() == rhs.is_negative())
             || (res.is_negative() == self.is_negative()))
         .then_some(res)
