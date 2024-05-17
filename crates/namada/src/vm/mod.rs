@@ -2,7 +2,6 @@
 
 use std::ffi::c_void;
 use std::marker::PhantomData;
-use std::slice;
 
 use wasmparser::{Validator, WasmFeatures};
 
@@ -111,46 +110,6 @@ impl<'a, T: 'a> HostRef<'a, &T> {
 }
 
 /// This is used to attach the Ledger's host structures to wasm environment,
-/// which is used for implementing some host calls. It wraps an immutable
-/// slice, so the access is thread-safe, but because of the unsafe slice
-/// conversion, care must be taken that while this slice is borrowed, no other
-/// process can modify it.
-#[derive(Clone)]
-pub struct HostSlice<'a, T: 'a> {
-    data: *const c_void,
-    len: usize,
-    phantom: PhantomData<&'a T>,
-}
-unsafe impl<T> Send for HostSlice<'_, T> {}
-unsafe impl<T> Sync for HostSlice<'_, T> {}
-
-impl<'a, T: 'a> HostSlice<'a, &[T]> {
-    /// Wrap a slice for VM environment.
-    ///
-    /// # Safety
-    ///
-    /// Because this is unsafe, care must be taken that while this slice is
-    /// borrowed, no other process can modify it.
-    pub unsafe fn new(host_structure: &[T]) -> Self {
-        Self {
-            data: host_structure as *const [T] as *const c_void,
-            len: host_structure.len(),
-            phantom: PhantomData,
-        }
-    }
-
-    /// Get a slice from VM environment.
-    ///
-    /// # Safety
-    ///
-    /// Because this is unsafe, care must be taken that while this slice is
-    /// borrowed, no other process can modify it.
-    pub unsafe fn get(&self) -> &'a [T] {
-        slice::from_raw_parts(self.data as *const T, self.len)
-    }
-}
-
-/// This is used to attach the Ledger's host structures to wasm environment,
 /// which is used for implementing some host calls. Because it's mutable, it's
 /// not thread-safe. Also, care must be taken that while this reference is
 /// borrowed, no other process can read or modify it.
@@ -186,47 +145,6 @@ impl<'a, T: 'a> MutHostRef<'a, &T> {
     /// or modify it.
     pub unsafe fn get(&self) -> &'a mut T {
         &mut *(self.data as *mut T)
-    }
-}
-
-/// This is used to attach the Ledger's host structures to wasm environment,
-/// which is used for implementing some host calls. It wraps an mutable
-/// slice, so the access is thread-safe, but because of the unsafe slice
-/// conversion, care must be taken that while this slice is borrowed, no other
-/// process can modify it.
-#[derive(Clone)]
-pub struct MutHostSlice<'a, T: 'a> {
-    data: *mut c_void,
-    len: usize,
-    phantom: PhantomData<&'a T>,
-}
-unsafe impl<T> Send for MutHostSlice<'_, T> {}
-unsafe impl<T> Sync for MutHostSlice<'_, T> {}
-
-impl<'a, T: 'a> MutHostSlice<'a, &[T]> {
-    /// Wrap a slice for VM environment.
-    ///
-    /// # Safety
-    ///
-    /// Because this is unsafe, care must be taken that while this slice is
-    /// borrowed, no other process can modify it.
-    #[allow(dead_code)]
-    pub unsafe fn new(host_structure: &mut [T]) -> Self {
-        Self {
-            data: host_structure as *mut [T] as *mut c_void,
-            len: host_structure.len(),
-            phantom: PhantomData,
-        }
-    }
-
-    /// Get a slice from VM environment.
-    ///
-    /// # Safety
-    ///
-    /// Because this is unsafe, care must be taken that while this slice is
-    /// borrowed, no other process can modify it.
-    pub unsafe fn get(&self) -> &'a mut [T] {
-        slice::from_raw_parts_mut(self.data as *mut T, self.len)
     }
 }
 
