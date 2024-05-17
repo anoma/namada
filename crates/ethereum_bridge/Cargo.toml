@@ -51,7 +51,6 @@ serde_json.workspace = true
 rand.workspace = true
 tendermint = {workspace = true}
 tendermint-proto = {workspace = true}
-tendermint-rpc = {workspace = true}
 thiserror.workspace = true
 tracing = "0.1.30"
 

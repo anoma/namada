@@ -27,8 +27,6 @@ rand = ["dep:rand", "rand_core", "namada_core/rand"]
 # tendermint-rpc support
 tendermint-rpc = ["async-client", "dep:tendermint-rpc"]
 
-wasm-runtime = ["namada_core/wasm-runtime"]
-
 # Enable queries support for an async client
 async-client = ["async-trait"]
 
@@ -89,7 +87,7 @@ namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
 namada_vote_ext = { path = "../vote_ext" }
 
-async-trait = { version = "0.1.51", optional = true }
+async-trait = { workspace = true, optional = true }
 bimap.workspace = true
 bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
@@ -97,6 +95,7 @@ borsh-ext.workspace = true
 circular-queue.workspace = true
 data-encoding.workspace = true
 derivation-path.workspace = true
+duration-str.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
@@ -111,14 +110,14 @@ masp_proofs.workspace = true
 num256.workspace = true
 num-traits.workspace = true
 orion.workspace = true
-owo-colors = "3.5.0"
-parse_duration = "2.1.1"
+owo-colors.workspace = true
 paste.workspace = true
 patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
 rand = { workspace = true, optional = true }
 rand_core = { workspace = true, optional = true }
+regex.workspace = true
 ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -133,7 +132,6 @@ tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
 zeroize.workspace = true
-regex = "1.10.2"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }
