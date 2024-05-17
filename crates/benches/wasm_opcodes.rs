@@ -410,12 +410,11 @@ impl Display for WatBuilder {
 // optimizations that would compile out the benchmarks since most of them are
 // trivial operations
 fn get_wasm_store() -> Store {
-    wasmer::Store::new(
-        &wasmer_engine_universal::Universal::new(
-            wasmer_compiler_singlepass::Singlepass::default(),
-        )
-        .engine(),
-    )
+    Store::new(<wasmer::Engine as wasmer::NativeEngineExt>::new(
+        Box::new(wasmer_compiler_singlepass::Singlepass::default()),
+        wasmer::Target::default(),
+        wasmer::sys::Features::default(),
+    ))
 }
 
 // An empty wasm module to serve as the base reference for all the other
@@ -428,12 +427,13 @@ fn empty_module(c: &mut Criterion) {
         )
         "#,
     );
-    let module = Module::new(&get_wasm_store(), module_wat).unwrap();
-    let instance = Instance::new(&module, &imports! {}).unwrap();
+    let mut store = get_wasm_store();
+    let module = Module::new(&store, module_wat).unwrap();
+    let instance = Instance::new(&mut store, &module, &imports! {}).unwrap();
     let function = instance.exports.get_function(ENTRY_POINT).unwrap();
 
     c.bench_function("empty_module", |b| {
-        b.iter(|| function.call(&[Value::I32(0)]).unwrap());
+        b.iter(|| function.call(&mut store, &[Value::I32(0)]).unwrap());
     });
 }
 
@@ -441,16 +441,19 @@ fn ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("wasm_opts");
 
     for builder in bench_functions() {
-        let module =
-            Module::new(&get_wasm_store(), builder.to_string()).unwrap();
-        let instance = Instance::new(&module, &imports! {}).unwrap();
+        let mut store = get_wasm_store();
+        let module = Module::new(&store, builder.to_string()).unwrap();
+        let instance =
+            Instance::new(&mut store, &module, &imports! {}).unwrap();
         let function = instance.exports.get_function(ENTRY_POINT).unwrap();
 
         group.bench_function(format!("{}", builder.instruction), |b| {
             if let Unreachable = builder.instruction {
-                b.iter(|| function.call(&[Value::I32(0)]).unwrap_err());
+                b.iter(|| {
+                    function.call(&mut store, &[Value::I32(0)]).unwrap_err()
+                });
             } else {
-                b.iter(|| function.call(&[Value::I32(0)]).unwrap());
+                b.iter(|| function.call(&mut store, &[Value::I32(0)]).unwrap());
             }
         });
     }
