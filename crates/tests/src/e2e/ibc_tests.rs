@@ -747,7 +747,9 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         // expect an error of the throughput limit
-        Some("Transaction was rejected by VPs"),
+        Some(
+            "Transfer exceeding the per-epoch throughput limit is not allowed",
+        ),
         false,
     )?;
 
