@@ -62,20 +62,21 @@ where
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 pub fn vp_imports<D, H, EVAL, CA>(
-    wasm_store: &Store,
+    wasm_store: &mut Store,
     env: VpVmEnv<WasmMemory, D, H, EVAL, CA>,
-) -> ImportObject
+) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,
     H: StorageHasher + 'static,
     EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
     CA: WasmCacheAccess + 'static,
 {
+    let env = FunctionEnv::new(wasm_store, env);
     wasmer::imports! {
         // default namespace
         "env" => {
             // Wasm middleware gas injection hook
-            "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::vp_charge_gas),
+            "gas" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_charge_gas),
             // VP Host functions
             "namada_vp_eval" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_eval),
             "namada_vp_get_block_header" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_block_header),
