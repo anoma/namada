@@ -88,19 +88,22 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
         K: Into<String>,
         V: Into<String>,
     {
-        self.push(namada_core::tendermint::abci::EventAttribute {
-            key: key.into(),
-            value: value.into(),
-            index: true,
-        });
+        self.push((key, value, true).into());
     }
 
     #[inline]
     fn retrieve_attribute(&self, key: &str) -> Option<&str> {
-        self.iter().find_map(|attr| {
-            if attr.key == key {
-                Some(attr.value.as_str())
-            } else {
+        self.iter().find_map(|attr| match attr.key_str() {
+            Ok(k) if k == key => match attr.value_str() {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::debug!("Attribute value is malformed UTF-8: {e}");
+                    None
+                }
+            },
+            Ok(_) => None,
+            Err(e) => {
+                tracing::debug!("Attribute key is malformed UTF-8: {e}");
                 None
             }
         })
@@ -108,13 +111,28 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
 
     #[inline]
     fn is_attribute(&self, key: &str) -> bool {
-        self.iter().any(|attr| attr.key == key)
+        self.iter().any(|attr| match attr.key_str() {
+            Ok(k) => k == key,
+            Err(e) => {
+                tracing::debug!("Attribute key is malformed UTF-8: {e}");
+                false
+            }
+        })
     }
 
     #[inline]
     fn iter_attributes(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.iter()
-            .map(|attr| (attr.key.as_str(), attr.value.as_str()))
+        self.iter().filter_map(|attr| {
+            match (attr.key_str(), attr.value_str()) {
+                (Ok(k), Ok(v)) => Some((k, v)),
+                _ => {
+                    tracing::debug!(
+                        "Attribute key or value is malformed UTF-8",
+                    );
+                    None
+                }
+            }
+        })
     }
 }
 

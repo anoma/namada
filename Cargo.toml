@@ -106,9 +106,9 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = {version = "0.52.0", features = ["serde"]}
+ibc = { version = "0.53.0", features = ["serde"] }
 ibc-derive = "0.7.0"
-ibc-testkit = {version = "0.52.0", default-features = false}
+ibc-testkit = { version = "0.53.0", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
@@ -123,8 +123,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
 # branch = "main"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "16fae96bbf6c14f2459ac11bf1add27b94b52572" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "16fae96bbf6c14f2459ac11bf1add27b94b52572", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "b5e87a01c5928ce341f2d2a63a6fa6c4033be395" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "b5e87a01c5928ce341f2d2a63a6fa6c4033be395", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.3.3"
@@ -164,11 +164,11 @@ smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint = {version = "0.35.0", features = ["secp256k1"]}
-tendermint-config = "0.35.0"
-tendermint-light-client = "0.35.0"
-tendermint-proto = "0.35.0"
-tendermint-rpc = {version = "0.35.0", default-features = false}
+tendermint = {version = "0.36.0", features = ["secp256k1"]}
+tendermint-config = "0.36.0"
+tendermint-light-client = "0.36.0"
+tendermint-proto = "0.36.0"
+tendermint-rpc = {version = "0.36.0", default-features = false}
 test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = {git = "https://github.com/heliaxdev/tiny-hderive.git", rev = "173ae03abed0cd25d88a5a13efac00af96b75b87"}
@@ -180,9 +180,7 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-# Using the same version of tendermint-rs as we do (v0.35)
-# Based on tower-abci 0.12 (upstreamed in https://github.com/penumbra-zone/tower-abci/pull/47)
-tower-abci = { git = "https://github.com/heliaxdev/tower-abci", rev = "52382f4d2bab1022a66b06958a605da946b75144" }
+tower-abci = "0.14.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
