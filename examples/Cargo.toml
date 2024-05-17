@@ -44,4 +44,4 @@ serde_json.workspace = true
 tokio = {workspace = true, default-features = false}
 
 [dependencies]
-regex = "1.10.2"
+regex.workspace = true
