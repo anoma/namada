@@ -11,9 +11,9 @@ use namada::vote_ext::ethereum_tx_data_variants;
 use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
 use crate::facade::tendermint_proto::v0_37::abci::RequestProcessProposal;
-use crate::node::ledger::shell::block_alloc::{AllocFailure, TxBin};
-use crate::node::ledger::shims::abcipp_shim_types::shim::response::ProcessProposal;
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::shell::block_alloc::{AllocFailure, TxBin};
+use crate::shims::abcipp_shim_types::shim::response::ProcessProposal;
+use crate::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Validation metadata, to keep track of used resources or
 /// transaction numbers, in a block proposal.
@@ -564,14 +564,14 @@ mod test_process_proposal {
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
     use namada::{address, replay_protection};
+    use namada_apps_lib::wallet;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::{
+    use crate::shell::test_utils::{
         deactivate_bridge, gen_keypair, get_bp_bytes_to_sign, ProcessProposal,
         TestError, TestShell,
     };
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::ProcessedTx;
-    use crate::wallet;
+    use crate::shims::abcipp_shim_types::shim::request::ProcessedTx;
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
 
@@ -1035,7 +1035,7 @@ mod test_process_proposal {
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
         // reduce address balance to match the 100 token min fee
         let balance_key = token::storage_key::balance_key(
             &shell.state.in_mem().native_token,
@@ -1100,7 +1100,7 @@ mod test_process_proposal {
     fn test_raw_tx_rejected() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         let mut tx = Tx::new(shell.chain_id.clone(), None);
         tx.add_code("wasm_code".as_bytes().to_owned(), None)
@@ -1139,7 +1139,7 @@ mod test_process_proposal {
     fn test_wrapper_tx_hash() {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1199,7 +1199,7 @@ mod test_process_proposal {
     fn test_wrapper_tx_hash_same_block() {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         // Add unshielded balance for fee payment
         let balance_key = token::storage_key::balance_key(
@@ -1259,7 +1259,7 @@ mod test_process_proposal {
     fn test_inner_tx_hash() {
         let (mut shell, _recv, _, _) = test_utils::setup();
 
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1319,8 +1319,8 @@ mod test_process_proposal {
     fn test_inner_tx_hash_same_block() {
         let (shell, _recv, _, _) = test_utils::setup();
 
-        let keypair = crate::wallet::defaults::daewon_keypair();
-        let keypair_2 = crate::wallet::defaults::albert_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
+        let keypair_2 = namada_apps_lib::wallet::defaults::albert_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1370,7 +1370,7 @@ mod test_process_proposal {
     #[test]
     fn test_wrong_chain_id() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1432,7 +1432,7 @@ mod test_process_proposal {
     #[test]
     fn test_expired_wrapper() {
         let (shell, _recv, _, _) = test_utils::setup();
-        let keypair = crate::wallet::defaults::daewon_keypair();
+        let keypair = namada_apps_lib::wallet::defaults::daewon_keypair();
 
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -1570,7 +1570,7 @@ mod test_process_proposal {
                     ),
                     token: address::testing::apfel(),
                 },
-                crate::wallet::defaults::albert_keypair().ref_to(),
+                namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1578,7 +1578,7 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())]
+            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
                 .into_iter()
                 .collect(),
             None,
@@ -1611,7 +1611,7 @@ mod test_process_proposal {
                     amount_per_gas_unit: DenominatedAmount::native(0.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
-                crate::wallet::defaults::albert_keypair().ref_to(),
+                namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1619,7 +1619,7 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())]
+            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
                 .into_iter()
                 .collect(),
             None,
@@ -1654,7 +1654,7 @@ mod test_process_proposal {
                     ),
                     token: shell.state.in_mem().native_token.clone(),
                 },
-                crate::wallet::defaults::albert_keypair().ref_to(),
+                namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
                 150_000.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1662,7 +1662,7 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())]
+            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
                 .into_iter()
                 .collect(),
             None,
@@ -1697,7 +1697,7 @@ mod test_process_proposal {
                     ),
                     token: shell.state.in_mem().native_token.clone(),
                 },
-                crate::wallet::defaults::albert_keypair().ref_to(),
+                namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -1705,7 +1705,7 @@ mod test_process_proposal {
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
-            [(0, crate::wallet::defaults::albert_keypair())]
+            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
                 .into_iter()
                 .collect(),
             None,

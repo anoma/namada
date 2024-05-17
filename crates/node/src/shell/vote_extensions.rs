@@ -15,7 +15,7 @@ use namada::vote_ext::{
 };
 
 use super::*;
-use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+use crate::shims::abcipp_shim_types::shim::TxBytes;
 
 /// Message to be passed to `.expect()` calls in this module.
 const VALIDATOR_EXPECT_MSG: &str = "Only validators receive this method call.";

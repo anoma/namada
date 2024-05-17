@@ -9,7 +9,7 @@ pub mod shim {
     use crate::facade::tendermint::v0_37::abci::{
         request as tm_request, response as tm_response,
     };
-    use crate::node::ledger::shell;
+    use crate::shell;
 
     pub type TxBytes = prost::bytes::Bytes;
 

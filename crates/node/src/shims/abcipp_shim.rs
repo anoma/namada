@@ -22,7 +22,7 @@ use crate::facade::tendermint::v0_37::abci::{
     request, Request as Req, Response as Resp,
 };
 use crate::facade::tower_abci::BoxError;
-use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
+use crate::shell::{EthereumOracleChannels, Shell};
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used

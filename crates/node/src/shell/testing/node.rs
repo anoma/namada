@@ -42,28 +42,28 @@ use namada_sdk::queries::Client;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::tx::data::ResultCode;
 use regex::Regex;
-use tendermint_rpc::endpoint::block;
-use tendermint_rpc::SimpleRequest;
 use tokio::sync::mpsc;
 
-use crate::facade::tendermint;
+use crate::ethereum_oracle::test_tools::mock_web3_client::{
+    TestOracle, Web3Client, Web3Controller,
+};
+use crate::ethereum_oracle::{
+    control, last_processed_block, try_process_eth_events,
+};
 use crate::facade::tendermint_proto::v0_37::abci::{
     RequestPrepareProposal, RequestProcessProposal,
 };
+use crate::facade::tendermint_rpc::endpoint::block;
 use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
-    TestOracle, Web3Client, Web3Controller,
-};
-use crate::node::ledger::ethereum_oracle::{
-    control, last_processed_block, try_process_eth_events,
-};
-use crate::node::ledger::shell::testing::utils::TestDir;
-use crate::node::ledger::shell::{EthereumOracleChannels, Shell};
-use crate::node::ledger::shims::abcipp_shim_types::shim::request::{
+use crate::facade::tendermint_rpc::SimpleRequest;
+use crate::facade::{tendermint, tendermint_rpc};
+use crate::shell::testing::utils::TestDir;
+use crate::shell::{EthereumOracleChannels, Shell};
+use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
-use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::node::ledger::storage;
+use crate::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::storage;
 
 /// Mock Ethereum oracle used for testing purposes.
 struct MockEthOracle {

@@ -1,13 +1,15 @@
 use clap::Command as App;
 use eyre::Report;
 use namada::io::Io;
+use namada_apps_lib::cli::api::{CliApi, CliClient};
+use namada_apps_lib::cli::args::Global;
+use namada_apps_lib::cli::{
+    args, cmds, Cmd, Context, NamadaClient, NamadaRelayer,
+};
 use namada_sdk::error::Error as SdkError;
 
 use super::node::MockNode;
-use crate::cli::api::{CliApi, CliClient};
-use crate::cli::args::Global;
-use crate::cli::{args, cmds, Cmd, Context, NamadaClient, NamadaRelayer};
-use crate::node::ledger::shell::testing::utils::{Bin, TestingIo};
+use crate::shell::testing::utils::{Bin, TestingIo};
 
 pub fn run(
     node: &MockNode,
@@ -92,7 +94,7 @@ pub fn run(
 
 #[async_trait::async_trait(?Send)]
 impl<'a> CliClient for &'a MockNode {
-    fn from_tendermint_address(_: &tendermint_rpc::Url) -> Self {
+    fn from_tendermint_address(_: &crate::facade::tendermint_rpc::Url) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 

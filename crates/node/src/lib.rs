@@ -1,10 +1,28 @@
+//! Library code for a Namada node.
+
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
+
 mod abortable;
+#[cfg(feature = "benches")]
+pub mod bench_utils;
 mod broadcaster;
 pub mod ethereum_oracle;
 pub mod shell;
 pub mod shims;
 pub mod storage;
 pub mod tendermint_node;
+pub mod utils;
 
 use std::convert::TryInto;
 use std::net::SocketAddr;
@@ -20,6 +38,11 @@ use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::state::DB;
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
+use namada_apps_lib::cli::args;
+use namada_apps_lib::config::utils::{
+    convert_tm_addr_to_socket_addr, num_of_threads,
+};
+use namada_apps_lib::{config, wasm_loader};
 use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -31,17 +54,22 @@ use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
 use self::shell::EthereumOracleChannels;
 use self::shims::abcipp_shim::AbciService;
-use crate::cli::args;
-use crate::config::utils::{convert_tm_addr_to_socket_addr, num_of_threads};
+use crate::broadcaster::Broadcaster;
 use crate::config::{ethereum_bridge, TendermintMode};
+use crate::ethereum_oracle as oracle;
 use crate::facade::tendermint::v0_37::abci::response;
 use crate::facade::tower_abci::{split, Server};
-use crate::node::ledger::broadcaster::Broadcaster;
-use crate::node::ledger::ethereum_oracle as oracle;
-use crate::node::ledger::shell::{Error, MempoolTxType, Shell};
-use crate::node::ledger::shims::abcipp_shim::AbcippShim;
-use crate::node::ledger::shims::abcipp_shim_types::shim::{Request, Response};
-use crate::{config, wasm_loader};
+use crate::shell::{Error, MempoolTxType, Shell};
+use crate::shims::abcipp_shim::AbcippShim;
+use crate::shims::abcipp_shim_types::shim::{Request, Response};
+
+pub mod facade {
+    pub use namada_apps_lib::facade::*;
+    pub mod tower_abci {
+        pub use tower_abci::v037::*;
+        pub use tower_abci::BoxError;
+    }
+}
 
 /// Env. var to set a number of Tokio RT worker threads
 const ENV_VAR_TOKIO_THREADS: &str = "NAMADA_TOKIO_THREADS";

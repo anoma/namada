@@ -18,7 +18,7 @@ mainnet = [
   "namada/mainnet",
 ]
 wasm-runtime = ["namada/wasm-runtime"]
-integration = ["namada_apps_lib/integration"]
+integration = ["namada_node/integration", "namada_apps_lib/integration"]
 migrations = [
   "namada/migrations",
   "namada_sdk/migrations",
@@ -33,10 +33,11 @@ namada-eth-bridge = [
 [dependencies]
 namada = {path = "../namada", features = ["testing"]}
 namada_core = {path = "../core", features = ["testing"]}
+namada_node = { path = "../node", features = ["testing"] }
 namada_sdk = {path = "../sdk", default-features = false, features = ["tendermint-rpc", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils"}
-namada_vp_prelude = {path = "../vp_prelude"}
 namada_tx_prelude = {path = "../tx_prelude"}
+namada_vp_prelude = {path = "../vp_prelude"}
 async-trait.workspace = true
 chrono.workspace = true
 concat-idents.workspace = true

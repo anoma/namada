@@ -85,6 +85,10 @@ use namada::tx::{
 };
 use namada::vm::wasm::run;
 use namada::{proof_of_stake, tendermint};
+use namada_apps_lib::cli;
+use namada_apps_lib::cli::context::FromContext;
+use namada_apps_lib::cli::Context;
+use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::masp::{
     self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
 };
@@ -108,15 +112,13 @@ use rand_core::OsRng;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
-use crate::cli::context::FromContext;
-use crate::cli::Context;
 use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint::v0_37::abci::request::InitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::node::ledger::shell::Shell;
-use crate::wallet::{defaults, CliWalletUtils};
+use crate::facade::tendermint_rpc;
+use crate::shell::Shell;
 
 pub const WASM_DIR: &str = "../../wasm";
 
@@ -959,12 +961,12 @@ impl Default for BenchShieldedCtx {
         // needed in `Context::new`
         let config = GlobalConfig::new(shell.inner.chain_id.clone());
         config.write(&base_dir).unwrap();
-        let wallet = crate::wallet::CliWalletUtils::new(
+        let wallet = namada_apps_lib::wallet::CliWalletUtils::new(
             base_dir.join(shell.inner.chain_id.as_str()),
         );
         wallet.save().unwrap();
 
-        let ctx = Context::new::<StdIo>(crate::cli::args::Global {
+        let ctx = Context::new::<StdIo>(cli::args::Global {
             is_pre_genesis: false,
             chain_id: Some(shell.inner.chain_id.clone()),
             base_dir,
@@ -987,7 +989,7 @@ impl Default for BenchShieldedCtx {
             true,
             &mut OsRng,
         );
-        crate::wallet::save(&chain_ctx.wallet).unwrap();
+        namada_apps_lib::wallet::save(&chain_ctx.wallet).unwrap();
 
         // Generate payment addresses for both Albert and Bertha
         for (alias, viewing_alias) in [
@@ -1021,7 +1023,7 @@ impl Default for BenchShieldedCtx {
                 .unwrap();
         }
 
-        crate::wallet::save(&chain_ctx.wallet).unwrap();
+        namada_apps_lib::wallet::save(&chain_ctx.wallet).unwrap();
 
         Self {
             shielded: ShieldedContext::default(),
@@ -1045,7 +1047,7 @@ impl BenchShieldedCtx {
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
         self.shielded = async_runtime
-            .block_on(crate::client::masp::syncing(
+            .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
                 &self.shell,
                 &StdIo,

@@ -5,7 +5,7 @@ use super::{
     BuildingNormalTxBatch, BuildingProtocolTxBatch, NextStateImpl, TryAlloc,
     WithNormalTxs,
 };
-use crate::node::ledger::shell::block_alloc::TxBin;
+use crate::shell::block_alloc::TxBin;
 
 impl<T> TryAlloc for BlockAllocator<BuildingProtocolTxBatch<T>> {
     type Resources<'tx> = &'tx [u8];

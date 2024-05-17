@@ -306,7 +306,7 @@ pub mod eth_events {
         use namada::eth_bridge::ethers::contract::EthEvent;
 
         use super::*;
-        use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
+        use crate::ethereum_oracle::test_tools::event_log::GetLog;
 
         /// Test that for Ethereum events for which a custom number of
         /// confirmations may be specified, if a value lower than the

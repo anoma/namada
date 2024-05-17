@@ -16,15 +16,15 @@ use namada_apps_lib::config::genesis::templates::load_and_validate;
 use namada_apps_lib::config::TendermintMode;
 use namada_apps_lib::facade::tendermint::Timeout;
 use namada_apps_lib::facade::tendermint_proto::google::protobuf::Timestamp;
-use namada_apps_lib::node::ledger::shell::testing::node::{
-    mock_services, MockNode, MockServicesCfg, MockServicesController,
-    MockServicesPackage,
-};
-use namada_apps_lib::node::ledger::shell::testing::utils::TestDir;
-use namada_apps_lib::node::ledger::shell::Shell;
 use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
+use namada_node::shell::testing::node::{
+    mock_services, MockNode, MockServicesCfg, MockServicesController,
+    MockServicesPackage,
+};
+use namada_node::shell::testing::utils::TestDir;
+use namada_node::shell::Shell;
 use namada_sdk::wallet::alias::Alias;
 
 use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};

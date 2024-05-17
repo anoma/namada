@@ -78,8 +78,8 @@ mod test_queries {
     use namada_sdk::eth_bridge::SendValsetUpd;
 
     use super::*;
-    use crate::node::ledger::shell::test_utils::get_pkh_from_address;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+    use crate::shell::test_utils::get_pkh_from_address;
+    use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     macro_rules! test_must_send_valset_upd {
         (epoch_assertions: $epoch_assertions:expr $(,)?) => {

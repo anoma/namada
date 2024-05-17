@@ -29,7 +29,7 @@ use crate::config::utils::{set_ip, set_port};
 use crate::config::{Config, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
 use crate::facade::tendermint_config::net::Address as TendermintAddress;
-use crate::node::ledger::tendermint_node::id_from_pk;
+use crate::tendermint_node::id_from_pk;
 use crate::wallet::{Alias, CliWalletUtils};
 use crate::wasm_loader;
 

@@ -159,8 +159,8 @@ mod test_vote_extensions {
     use namada_sdk::storage::StorageWrite;
 
     use super::validate_eth_events_vext;
-    use crate::node::ledger::shell::test_utils::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
+    use crate::shell::test_utils::*;
+    use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test validating Ethereum events.
     #[test]

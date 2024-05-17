@@ -23,7 +23,7 @@ use tokio::task::LocalSet;
 
 use self::events::PendingEvent;
 use super::abortable::AbortableSpawner;
-use crate::node::ledger::oracle::control::Command;
+use crate::oracle::control::Command;
 
 /// The default amount of time the oracle will wait between processing blocks
 const DEFAULT_BACKOFF: Duration = Duration::from_millis(500);
@@ -631,8 +631,8 @@ mod test_oracle {
     use tokio::time::timeout;
 
     use super::*;
-    use crate::node::ledger::ethereum_oracle::test_tools::event_log::GetLog;
-    use crate::node::ledger::ethereum_oracle::test_tools::mock_web3_client::{
+    use crate::ethereum_oracle::test_tools::event_log::GetLog;
+    use crate::ethereum_oracle::test_tools::mock_web3_client::{
         event_signature, TestCmd, TestOracle, Web3Client, Web3Controller,
     };
 

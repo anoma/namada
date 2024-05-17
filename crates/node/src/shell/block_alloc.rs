@@ -50,7 +50,7 @@ use namada::state::{self, WlState};
 
 #[allow(unused_imports)]
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
-use crate::node::ledger::shell::block_alloc::states::WithNormalTxs;
+use crate::shell::block_alloc::states::WithNormalTxs;
 
 /// Block allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -357,7 +357,7 @@ mod tests {
         BuildingNormalTxBatch, BuildingProtocolTxBatch, NextState, TryAlloc,
     };
     use super::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::TxBytes;
+    use crate::shims::abcipp_shim_types::shim::TxBytes;
 
     /// Convenience alias for a block space allocator at a state with protocol
     /// txs.

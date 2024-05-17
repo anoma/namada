@@ -12,5 +12,99 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+default = ["migrations"]
+mainnet = [
+  "namada/mainnet",
+]
+# for integration tests and test utilities
+testing = [
+  "namada_apps_lib/testing",
+  "namada_test_utils",
+  "clap",
+  "lazy_static",
+]
+benches = [
+  "namada_apps_lib/benches",
+  "namada_test_utils",
+  "tracing-subscriber",
+  "rand_core"
+]
+integration = ["namada_apps_lib/integration"]
+jemalloc = ["rocksdb/jemalloc"]
+migrations = [
+  "namada_migrations",
+  "namada_sdk/migrations",
+  "namada/migrations",
+  "linkme",
+]
+namada-eth-bridge = [
+  "namada/namada-eth-bridge",
+  "namada_sdk/namada-eth-bridge",
+]
 
 [dependencies]
+namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_apps_lib = {path = "../apps_lib"}
+namada_migrations = {path = "../migrations", optional = true}
+namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
+namada_test_utils = {path = "../test_utils", optional = true}
+
+arse-merkle-tree = { workspace = true, features = ["blake2b"] }
+async-trait.workspace = true
+blake2b-rs.workspace = true
+borsh.workspace = true
+borsh-ext.workspace = true
+byte-unit.workspace = true
+bytes = "1.1.0"
+clap = { workspace = true, optional = true }
+color-eyre.workspace = true
+data-encoding.workspace = true
+drain_filter_polyfill.workspace = true
+ethabi.workspace = true
+ethbridge-bridge-events.workspace = true
+ethbridge-events.workspace = true
+eyre.workspace = true
+futures.workspace = true
+itertools.workspace = true
+lazy_static = { workspace = true, optional = true }
+linkme = { workspace = true, optional = true }
+masp_primitives = { workspace = true, features = ["transparent-inputs"] }
+masp_proofs = { workspace = true, features = ["bundled-prover", "download-params"] }
+num_cpus.workspace = true
+num256.workspace = true
+num-rational.workspace = true
+num-traits.workspace = true
+once_cell.workspace = true
+prost.workspace = true
+rand_core = { workspace = true, optional = true, features = ["std"] }
+rayon.workspace = true
+regex.workspace = true
+rlimit.workspace = true
+rocksdb.workspace = true
+serde_json = {workspace = true, features = ["raw_value"]}
+sha2.workspace = true
+smooth-operator.workspace = true
+sysinfo.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio = {workspace = true, features = ["full"]}
+toml.workspace = true
+tower-abci.workspace = true
+tower.workspace = true
+tracing-subscriber = { workspace = true, optional = true, features = ["std", "json", "ansi", "tracing-log"]}
+tracing.workspace = true
+warp = "0.3.2"
+
+[dev-dependencies]
+namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
+namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
+namada_test_utils = {path = "../test_utils"}
+
+assert_matches = "1.5.0"
+clap.workspace = true
+lazy_static.workspace= true
+proptest.workspace = true
+rand = { workspace = true, features = ["std"] }
+test-log.workspace = true
+tokio-test.workspace = true

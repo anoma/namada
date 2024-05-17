@@ -26,7 +26,7 @@ use super::AllocFailure;
 /// up any remaining space with un-allocated protocol txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub struct BuildingProtocolTxBatch<Mode> {
     /// One of [`WithNormalTxs`] and [`WithoutNormalTxs`].
     _mode: Mode,
@@ -35,26 +35,26 @@ pub struct BuildingProtocolTxBatch<Mode> {
 /// Allow block proposals to include user submitted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub enum WithNormalTxs {}
 
 /// Allow block proposals to include encrypted txs.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub enum WithoutNormalTxs {}
 
 /// The leader of the current Tendermint round is building
 /// a new batch of user submitted (non-protocol) transactions.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub struct BuildingNormalTxBatch {}
 
 /// Try to allocate a new transaction on a `BlockAllocator` state.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub trait TryAlloc {
     type Resources<'tx>;
 
@@ -71,7 +71,7 @@ pub trait TryAlloc {
 /// [`NextState`].
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub trait NextStateImpl<Transition = ()> {
     /// The next state in the `BlockAllocator` state machine.
     type Next;
@@ -85,7 +85,7 @@ pub trait NextStateImpl<Transition = ()> {
 /// state with a null transition function.
 ///
 /// For more info, read the module docs of
-/// [`crate::node::ledger::shell::block_alloc::states`].
+/// [`crate::shell::block_alloc::states`].
 pub trait NextState: NextStateImpl {
     /// Transition to the next state in the `BlockAllocator` state,
     /// using a null transiiton function.

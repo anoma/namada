@@ -29,7 +29,6 @@ use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
 use crate::facade::tendermint_proto::google::protobuf;
-use crate::node::ledger;
 use crate::wasm_loader;
 
 /// Errors that represent panics in normal flow but get demoted to errors
@@ -98,7 +97,7 @@ where
                 chain_id, init.chain_id
             )));
         }
-        if ledger::migrating_state().is_some() {
+        if crate::migrating_state().is_some() {
             let rsp = response::InitChain {
                 validators: self
                     .get_abci_validator_updates(true, |pk, power| {
@@ -973,12 +972,12 @@ mod test {
     use std::str::FromStr;
 
     use namada::core::string_encoding::StringEncoded;
+    use namada_apps_lib::wallet::defaults;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;
     use crate::config::genesis::{transactions, GenesisAddress};
-    use crate::node::ledger::shell::test_utils::TestShell;
-    use crate::wallet::defaults;
+    use crate::shell::test_utils::TestShell;
 
     /// Test that the init-chain handler never commits changes directly to the
     /// DB.

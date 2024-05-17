@@ -16,10 +16,10 @@ use namada::ibc::core::host::types::identifiers::{
 use namada::ibc::primitives::ToProto;
 use namada::proof_of_stake::KeySeg;
 use namada::token::Amount;
-use namada_apps_lib::bench_utils::{
+use namada_apps_lib::wallet::defaults;
+use namada_node::bench_utils::{
     BenchShieldedCtx, ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, TX_IBC_WASM,
 };
-use namada_apps_lib::wallet::defaults;
 
 fn ibc(c: &mut Criterion) {
     let mut group = c.benchmark_group("tx_ibc");

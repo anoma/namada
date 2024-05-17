@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{Receiver, Sender};
 use warp::reply::WithStatus;
 use warp::Filter;
 
-use crate::node::ledger::ethereum_oracle as oracle;
+use crate::ethereum_oracle as oracle;
 
 /// The endpoint to which Borsh-serialized Ethereum events should be sent to,
 /// via an HTTP POST request.

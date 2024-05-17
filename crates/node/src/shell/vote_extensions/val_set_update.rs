@@ -122,12 +122,12 @@ mod test_vote_extensions {
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::tendermint::abci::types::VoteInfo;
     use namada::vote_ext::validator_set_update;
+    use namada_apps_lib::wallet;
     use namada_sdk::eth_bridge::EthBridgeQueries;
 
     use super::validate_valset_upd_vext;
-    use crate::node::ledger::shell::test_utils::{self, get_pkh_from_address};
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-    use crate::wallet;
+    use crate::shell::test_utils::{self, get_pkh_from_address};
+    use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Test if a [`validator_set_update::Vext`] that incorrectly labels what
     /// epoch it was included on in a vote extension is rejected

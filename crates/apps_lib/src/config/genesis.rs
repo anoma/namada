@@ -31,9 +31,6 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
-#[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
-use crate::config::genesis::chain::{Finalized, FinalizedEstablishedAccountTx};
-
 #[derive(
     Clone,
     Debug,
@@ -326,11 +323,14 @@ pub struct Parameters {
 /// This includes adding the Ethereum bridge parameters and
 /// adding a specified number of validators.
 #[allow(clippy::arithmetic_side_effects)]
-#[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
+#[cfg(all(
+    any(test, feature = "benches", feature = "testing"),
+    not(feature = "integration")
+))]
 pub fn make_dev_genesis(
     num_validators: u64,
     target_chain_dir: &std::path::Path,
-) -> Finalized {
+) -> crate::config::genesis::chain::Finalized {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
@@ -343,7 +343,9 @@ pub fn make_dev_genesis(
     use namada::tx::standalone_signature;
     use namada_sdk::wallet::alias::Alias;
 
-    use crate::config::genesis::chain::{finalize, DeriveEstablishedAddress};
+    use crate::config::genesis::chain::{
+        finalize, DeriveEstablishedAddress, FinalizedEstablishedAccountTx,
+    };
     use crate::wallet::defaults;
 
     let mut current_path = std::env::current_dir()

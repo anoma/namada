@@ -76,10 +76,10 @@ mod test_bp_vote_extensions {
     use namada::tendermint::abci::types::VoteInfo;
     use namada::tx::Signed;
     use namada::vote_ext::bridge_pool_roots;
+    use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
 
-    use crate::node::ledger::shell::test_utils::*;
-    use crate::node::ledger::shims::abcipp_shim_types::shim::request::FinalizeBlock;
-    use crate::wallet::defaults::{bertha_address, bertha_keypair};
+    use crate::shell::test_utils::*;
+    use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
 
     /// Make Bertha a validator.
     fn add_validator(shell: &mut TestShell) {

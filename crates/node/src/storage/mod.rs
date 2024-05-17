@@ -79,7 +79,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::node::ledger::shell::is_merklized_storage_key;
+    use crate::shell::is_merklized_storage_key;
 
     #[test]
     fn test_crud_value() {

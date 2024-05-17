@@ -76,7 +76,7 @@ pub mod mock_web3_client {
     use tokio::sync::oneshot::Sender;
 
     use super::super::super::ethereum_oracle::{Error, Oracle, RpcClient};
-    use crate::node::ledger::ethereum_oracle::SyncStatus;
+    use crate::ethereum_oracle::SyncStatus;
 
     /// Mock oracle used during unit tests.
     pub type TestOracle = Oracle<Web3Client>;
