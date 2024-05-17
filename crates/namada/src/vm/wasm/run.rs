@@ -210,9 +210,7 @@ where
         tx_wasm_cache,
     );
 
-    let initial_memory =
-        memory::prepare_tx_memory(&store).map_err(Error::MemoryError)?;
-    let imports = tx_imports(&store, initial_memory, env);
+    let imports = tx_imports(&store, env);
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &imports)
@@ -328,10 +326,8 @@ where
         &mut vp_wasm_cache,
     );
 
-    let initial_memory =
-        memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
     let yielded_value_borrow = env.ctx.yielded_value.clone();
-    let imports = vp_imports(&store, initial_memory, env);
+    let imports = vp_imports(&store, env);
 
     run_vp(
         module,
@@ -520,15 +516,12 @@ where
             gas_meter,
         )?;
 
-        let initial_memory =
-            memory::prepare_vp_memory(&store).map_err(Error::MemoryError)?;
-
         let env = VpVmEnv {
             memory: WasmMemory::default(),
             ctx,
         };
         let yielded_value_borrow = env.ctx.yielded_value.clone();
-        let imports = vp_imports(&store, initial_memory, env);
+        let imports = vp_imports(&store, env);
 
         run_vp(
             module,
