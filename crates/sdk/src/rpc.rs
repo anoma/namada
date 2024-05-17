@@ -606,7 +606,8 @@ pub struct TxResponse {
     pub gas_used: Gas,
 }
 
-/// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
+/// Determines a result of an inner tx from
+/// [`namada_tx::data::BatchedTxResult`].
 pub enum InnerTxResult<'a> {
     /// Tx is applied and accepted by all VPs
     Success(&'a BatchedTxResult),

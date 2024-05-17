@@ -249,7 +249,7 @@ pub struct TxResult<T> {
     /// Storage keys touched by the wrapper transaction
     pub wrapper_changed_keys: BTreeSet<storage::Key>,
     /// The results of the batch, indexed by the hash of the specific
-    /// [`Commitments`]
+    /// [`crate::types::TxCommitments`]
     pub batch_results: BatchResults<T>,
 }
 
