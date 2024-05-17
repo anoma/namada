@@ -4,50 +4,19 @@
 //! imports, so they can be called from inside the wasm.
 
 use namada_state::{DBIter, StorageHasher, DB};
-use wasmer::{
-    Function, HostEnvInitError, ImportObject, Instance, Store, WasmerEnv,
-};
+use wasmer::{Function, FunctionEnv, Imports, Instance, Store};
 
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
-impl<D, H, CA> WasmerEnv for TxVmEnv<WasmMemory, D, H, CA>
-where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-    CA: WasmCacheAccess + 'static,
-{
-    fn init_with_instance(
-        &mut self,
-        instance: &Instance,
-    ) -> std::result::Result<(), HostEnvInitError> {
-        self.memory.init_env_memory(&instance.exports)
-    }
-}
-
-impl<D, H, EVAL, CA> WasmerEnv for VpVmEnv<WasmMemory, D, H, EVAL, CA>
-where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
-    EVAL: VpEvaluator + 'static,
-    CA: WasmCacheAccess + 'static,
-{
-    fn init_with_instance(
-        &mut self,
-        instance: &Instance,
-    ) -> std::result::Result<(), HostEnvInitError> {
-        self.memory.init_env_memory(&instance.exports)
-    }
-}
-
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
-    wasm_store: &Store,
-    env: TxVmEnv<WasmMemory, D, H, CA>,
-) -> ImportObject
+    wasm_store: &mut Store,
+    env: &FunctionEnv<TxVmEnv<'static, WasmMemory, DB, H, CA>>,
+) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,
     H: StorageHasher + 'static,
@@ -57,34 +26,34 @@ where
         // default namespace
         "env" => {
             // Wasm middleware gas injection hook
-            "gas" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_charge_gas),
-            "namada_tx_read" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read),
-            "namada_tx_read_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_read_temp),
-            "namada_tx_result_buffer" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_result_buffer),
-            "namada_tx_has_key" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_has_key),
-            "namada_tx_write" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write),
-            "namada_tx_write_temp" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_write_temp),
-            "namada_tx_delete" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_delete),
-            "namada_tx_iter_prefix" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_iter_prefix),
-            "namada_tx_iter_next" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_iter_next),
-            "namada_tx_insert_verifier" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_insert_verifier),
-            "namada_tx_update_validity_predicate" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_validity_predicate),
-            "namada_tx_init_account" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_init_account),
-            "namada_tx_emit_event" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_emit_event),
-            "namada_tx_get_events" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_events),
-            "namada_tx_get_chain_id" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_chain_id),
-            "namada_tx_get_tx_index" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_tx_index),
-            "namada_tx_get_block_height" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_height),
-            "namada_tx_get_block_header" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_header),
-            "namada_tx_get_block_epoch" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_block_epoch),
-            "namada_tx_get_pred_epochs" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_pred_epochs),
-            "namada_tx_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_native_token),
-            "namada_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
-            "namada_tx_ibc_execute" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_ibc_execute),
-            "namada_tx_set_commitment_sentinel" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_set_commitment_sentinel),
-            "namada_tx_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_verify_tx_section_signature),
-            "namada_tx_update_masp_note_commitment_tree" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_masp_note_commitment_tree),
-            "namada_tx_yield_value" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_yield_value),
+            "gas" => Function::new_typed_with_env(wasm_store, env, host_env::tx_charge_gas),
+            "namada_tx_delete" => Function::new_typed_with_env(wasm_store, env, host_env::tx_delete),
+            "namada_tx_emit_event" => Function::new_typed_with_env(wasm_store, env, host_env::tx_emit_event),
+            "namada_tx_get_block_epoch" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_epoch),
+            "namada_tx_get_block_header" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_header),
+            "namada_tx_get_block_height" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_height),
+            "namada_tx_get_chain_id" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_chain_id),
+            "namada_tx_get_events" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_events),
+            "namada_tx_get_native_token" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_native_token),
+            "namada_tx_get_pred_epochs" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_pred_epochs),
+            "namada_tx_get_tx_index" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_tx_index),
+            "namada_tx_has_key" => Function::new_typed_with_env(wasm_store, env, host_env::tx_has_key),
+            "namada_tx_ibc_execute" => Function::new_typed_with_env(wasm_store, env, host_env::tx_ibc_execute),
+            "namada_tx_init_account" => Function::new_typed_with_env(wasm_store, env, host_env::tx_init_account),
+            "namada_tx_insert_verifier" => Function::new_typed_with_env(wasm_store, env, host_env::tx_insert_verifier),
+            "namada_tx_iter_next" => Function::new_typed_with_env(wasm_store, env, host_env::tx_iter_next),
+            "namada_tx_iter_prefix" => Function::new_typed_with_env(wasm_store, env, host_env::tx_iter_prefix),
+            "namada_tx_log_string" => Function::new_typed_with_env(wasm_store, env, host_env::tx_log_string),
+            "namada_tx_read" => Function::new_typed_with_env(wasm_store, env, host_env::tx_read),
+            "namada_tx_read_temp" => Function::new_typed_with_env(wasm_store, env, host_env::tx_read_temp),
+            "namada_tx_result_buffer" => Function::new_typed_with_env(wasm_store, env, host_env::tx_result_buffer),
+            "namada_tx_set_commitment_sentinel" => Function::new_typed_with_env(wasm_store, env, host_env::tx_set_commitment_sentinel),
+            "namada_tx_update_masp_note_commitment_tree" => Function::new_typed_with_env(wasm_store, env, host_env::tx_update_masp_note_commitment_tree),
+            "namada_tx_update_validity_predicate" => Function::new_typed_with_env(wasm_store, env, host_env::tx_update_validity_predicate),
+            "namada_tx_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, env, host_env::tx_verify_tx_section_signature),
+            "namada_tx_write" => Function::new_typed_with_env(wasm_store, env, host_env::tx_write),
+            "namada_tx_write_temp" => Function::new_typed_with_env(wasm_store, env, host_env::tx_write_temp),
+            "namada_tx_yield_value" => Function::new_typed_with_env(wasm_store, env, host_env::tx_yield_value),
         },
     }
 }

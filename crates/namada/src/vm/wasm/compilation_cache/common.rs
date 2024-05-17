@@ -1063,10 +1063,6 @@ mod test {
 
     /// Get the WASM code bytes, its hash and find the compiled module's size
     fn load_wasm(file: impl AsRef<Path>) -> WasmWithMeta {
-        // When `WeightScale` calls `loupe::size_of_val` in the cache, for some
-        // reason it returns 8 bytes more than the same call in here.
-        let _extra_bytes = 8;
-
         let file = file.as_ref();
         let code = fs::read(file).unwrap();
         let hash = hash_of_code(&code);

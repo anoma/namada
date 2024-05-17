@@ -19,14 +19,11 @@ default = ["wasm-runtime"]
 mainnet = ["namada_core/mainnet"]
 std = ["namada_sdk/std"]
 wasm-runtime = [
-  "loupe",
   "parity-wasm",
   "rayon",
   "wasm-instrument",
   "wasmer-cache",
   "wasmer-compiler-singlepass",
-  "wasmer-engine-dylib",
-  "wasmer-engine-universal",
   "wasmer-vm",
   "wasmer",
 ]
@@ -121,7 +118,6 @@ futures.workspace = true
 itertools.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
-loupe = { version = "0.1.3", optional = true }
 masp_primitives.workspace = true
 masp_proofs.workspace = true
 num256.workspace = true
@@ -154,8 +150,6 @@ wasm-instrument = { workspace = true, optional = true }
 wasmer = { workspace = true, optional = true }
 wasmer-cache = { workspace = true, optional = true }
 wasmer-compiler-singlepass = { workspace = true, optional = true }
-wasmer-engine-dylib = { workspace = true, optional = true }
-wasmer-engine-universal = { workspace = true, optional = true }
 wasmer-vm = { workspace = true, optional = true }
 #  Greater versions break in `test_tx_stack_limiter` and `test_vp_stack_limiter`
 wat = "=1.0.71"

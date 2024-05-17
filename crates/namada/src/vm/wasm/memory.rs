@@ -321,7 +321,6 @@ impl VmMemory for WasmMemory {
     }
 }
 
-#[derive(loupe::MemoryUsage)]
 /// A custom [`Tunables`] to set a WASM memory limits.
 ///
 /// Adapted from <https://github.com/wasmerio/wasmer/blob/29d7b4a5f1c401d9a1e95086ed85878c8407ec16/examples/tunables_limit_memory.rs>.
