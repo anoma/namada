@@ -10,7 +10,7 @@ consensus and enables multi-asset shielded transfers for any native
 or non-native asset. Namada features full IBC protocol support,
 a natively integrated Ethereum bridge, a modern proof-of-stake
 system with automatic reward compounding and cubic slashing, and a
-stake-weighted governance signalling mechanism. Users of shielded
+stake-weighted governance signaling mechanism. Users of shielded
 transfers are rewarded for their contributions to the privacy set in
 the form of native protocol tokens. A multi-asset shielded transfer
 wallet is provided in order to facilitate safe and private user
@@ -28,7 +28,7 @@ interaction with the protocol.
 
 ## 💾 Installing
 
-There is a single command to build and install Namada executables from source (the node, the client and the wallet). This command will also verify that a compatible version of [CometBFT](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
+There is a single command to build and install Namada executables from the source (the node, the client, and the wallet). This command will also verify that a compatible version of [CometBFT](#dependencies) is available and if not, attempt to install it. Note that currently at least 16GB RAM is needed to build from source.
 
 ```shell
 make install
@@ -69,7 +69,7 @@ To change the log level, set `NAMADA_LOG` environment variable to one of:
 * `debug`
 * `trace`
 
-The default is set to `info` for all the modules, expect for CometBFT ABCI, which has a lot of `debug` logging.
+The default is set to `info` for all the modules, except for CometBFT ABCI, which has a lot of `debug` logging.
 
 For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.
 
@@ -81,4 +81,4 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires [CometBFT v0.37.2](https://github.com/cometbft/cometbft/releases/tag/v0.37.2) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
+The ledger currently requires [CometBFT v0.37.2](https://github.com/cometbft/cometbft/releases/tag/v0.37.2) to be installed and available on the path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
