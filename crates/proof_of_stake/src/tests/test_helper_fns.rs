@@ -1,3 +1,5 @@
+#![allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::address::testing::{

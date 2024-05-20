@@ -100,7 +100,11 @@ where
             );
             return Err(VoteExtensionError::DivergesFromStorage);
         }
-        no_local_consensus_eth_addresses += 1;
+        // At most the number of consensus validator addresses - cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            no_local_consensus_eth_addresses += 1;
+        }
     }
     if no_local_consensus_eth_addresses != ext.data.voting_powers.len() {
         tracing::debug!(

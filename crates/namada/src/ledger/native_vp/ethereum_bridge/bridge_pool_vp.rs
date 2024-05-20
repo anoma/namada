@@ -133,7 +133,7 @@ where
     #[inline]
     fn check_escrowed_toks<K>(
         &self,
-        delta: EscrowDelta<K>,
+        delta: EscrowDelta<'_, K>,
     ) -> Result<bool, Error> {
         self.check_escrowed_toks_balance(delta)
             .map(|balance| balance.is_some())
@@ -144,7 +144,7 @@ where
     /// the updated escrow balance.
     fn check_escrowed_toks_balance<K>(
         &self,
-        delta: EscrowDelta<K>,
+        delta: EscrowDelta<'_, K>,
     ) -> Result<Option<AmountDelta>, Error> {
         let EscrowDelta {
             token,

@@ -27,6 +27,7 @@ pub struct EthereumProof<T> {
     pub data: T,
 }
 
+/// Ethereum bridge pool root proof.
 pub type BridgePoolRootProof = EthereumProof<(KeccakHash, Uint)>;
 
 impl<T> EthereumProof<T> {

@@ -121,7 +121,7 @@ where
                                 && epoch
                                     > Self::sub_past_epochs(params, last_update)
                             {
-                                epoch = Epoch(epoch.0 - 1);
+                                epoch = epoch.prev().expect("Cannot underflow");
                             } else {
                                 return Ok(None);
                             }
@@ -867,7 +867,10 @@ impl EpochOffset for OffsetUnbondingLen {
 pub struct OffsetPipelinePlusUnbondingLen;
 impl EpochOffset for OffsetPipelinePlusUnbondingLen {
     fn value(params: &PosParams) -> u64 {
-        params.pipeline_len + params.unbonding_len
+        params
+            .pipeline_len
+            .checked_add(params.unbonding_len)
+            .expect("Params addition must not overflow")
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -915,7 +918,10 @@ impl EpochOffset for OffsetSlashProcessingLen {
 pub struct OffsetSlashProcessingLenPlus;
 impl EpochOffset for OffsetSlashProcessingLenPlus {
     fn value(params: &PosParams) -> u64 {
-        params.slash_processing_epoch_offset() + DEFAULT_NUM_PAST_EPOCHS
+        params
+            .slash_processing_epoch_offset()
+            .checked_add(DEFAULT_NUM_PAST_EPOCHS)
+            .expect("Params addition must not overflow")
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -987,7 +993,10 @@ impl EpochOffset for OffsetMaxProposalPeriod {
 pub struct OffsetMaxProposalPeriodPlus;
 impl EpochOffset for OffsetMaxProposalPeriodPlus {
     fn value(params: &PosParams) -> u64 {
-        params.max_proposal_period + DEFAULT_NUM_PAST_EPOCHS
+        params
+            .max_proposal_period
+            .checked_add(DEFAULT_NUM_PAST_EPOCHS)
+            .expect("Params addition must not overflow")
     }
 
     fn dyn_offset() -> DynEpochOffset {
@@ -1043,7 +1052,9 @@ impl EpochOffset for OffsetMaxProposalPeriodOrSlashProcessingLenPlus {
         cmp::max(
             params.slash_processing_epoch_offset(),
             params.max_proposal_period,
-        ) + DEFAULT_NUM_PAST_EPOCHS
+        )
+        .checked_add(DEFAULT_NUM_PAST_EPOCHS)
+        .expect("Params addition must not overflow")
     }
 
     fn dyn_offset() -> DynEpochOffset {

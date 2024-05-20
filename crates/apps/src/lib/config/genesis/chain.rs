@@ -254,8 +254,14 @@ impl Finalized {
             if !is_localhost {
                 set_ip(&mut config.ledger.cometbft.rpc.laddr, "0.0.0.0");
             }
-            set_port(&mut config.ledger.cometbft.rpc.laddr, first_port + 1);
-            set_port(&mut config.ledger.cometbft.proxy_app, first_port + 2);
+            set_port(
+                &mut config.ledger.cometbft.rpc.laddr,
+                first_port.checked_add(1).expect("Port must not overflow"),
+            );
+            set_port(
+                &mut config.ledger.cometbft.proxy_app,
+                first_port.checked_add(2).expect("Port must not overflow"),
+            );
 
             // Validator node should turned off peer exchange reactor
             config.ledger.cometbft.p2p.pex = false;
@@ -318,7 +324,10 @@ impl Finalized {
                 .ok()
                 .map(Hash::sha256);
 
-        let min_duration: i64 = 60 * 60 * 24 * 365 / (epochs_per_year as i64);
+        let epy_i64 = i64::try_from(epochs_per_year)
+            .expect("`epochs_per_year` must not exceed `i64::MAX`");
+        #[allow(clippy::arithmetic_side_effects)]
+        let min_duration: i64 = 60 * 60 * 24 * 365 / epy_i64;
         let epoch_duration = EpochDuration {
             min_num_of_blocks,
             min_duration: namada::core::time::Duration::seconds(min_duration)

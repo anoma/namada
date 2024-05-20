@@ -198,7 +198,7 @@ fn write_log_read(c: &mut Criterion) {
             format!("key: {key}, bytes: {throughput_len}"),
             |b| {
                 b.iter_with_large_drop(|| {
-                    shell.state.write_log().read(&key).0.unwrap()
+                    shell.state.write_log().read(&key).unwrap().0.unwrap()
                 })
             },
         );

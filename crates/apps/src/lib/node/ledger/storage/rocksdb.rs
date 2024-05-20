@@ -71,6 +71,7 @@ use namada::storage::{
     DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
     SUBSPACE_CF,
 };
+use namada_sdk::arith::checked;
 use namada_sdk::migrations::DBUpdateVisitor;
 use rayon::prelude::*;
 use regex::Regex;
@@ -124,11 +125,11 @@ pub fn open(
     cache: Option<&rocksdb::Cache>,
 ) -> Result<RocksDB> {
     let logical_cores = num_cpus::get();
-    let compaction_threads = num_of_threads(
+    let compaction_threads = i32::try_from(num_of_threads(
         ENV_VAR_ROCKSDB_COMPACTION_THREADS,
         // If not set, default to quarter of logical CPUs count
         logical_cores / 4,
-    ) as i32;
+    ))?;
     tracing::info!(
         "Using {} compactions threads for RocksDB.",
         compaction_threads
@@ -822,7 +823,7 @@ impl DB for RocksDB {
 
     fn add_block_to_batch(
         &self,
-        state: BlockStateWrite,
+        state: BlockStateWrite<'_>,
         batch: &mut Self::WriteBatch,
         is_full_commit: bool,
     ) -> Result<()> {
@@ -842,7 +843,7 @@ impl DB for RocksDB {
             ethereum_height,
             eth_events_queue,
             commit_only_data,
-        }: BlockStateWrite = state;
+        }: BlockStateWrite<'_> = state;
 
         let state_cf = self.get_column_family(STATE_CF)?;
 
@@ -1074,7 +1075,7 @@ impl DB for RocksDB {
 
         // If the value didn't change at the given height, we try to look for it
         // at successor heights, up to the `last_height`
-        let mut raw_height = height.0 + 1;
+        let mut raw_height = checked!(height.0 + 1)?;
         loop {
             // Try to find the next diff on this key
             let (old_val_key, new_val_key) =
@@ -1100,7 +1101,7 @@ impl DB for RocksDB {
                         // Read from latest height
                         return self.read_subspace_val(key);
                     } else {
-                        raw_height += 1
+                        raw_height = checked!(raw_height + 1)?
                     }
                 }
             }
@@ -1166,7 +1167,9 @@ impl DB for RocksDB {
         let size_diff =
             match self.read_value_bytes(subspace_cf, key.to_string())? {
                 Some(old_value) => {
-                    let size_diff = value.len() as i64 - old_value.len() as i64;
+                    let len = i64::try_from(value.len())?;
+                    let old_len = i64::try_from(old_value.len())?;
+                    let size_diff = checked!(len - old_len)?;
                     // Persist the previous value
                     self.batch_write_subspace_diff(
                         batch,
@@ -1187,7 +1190,7 @@ impl DB for RocksDB {
                         Some(value),
                         persist_diffs,
                     )?;
-                    value.len() as i64
+                    i64::try_from(value.len())?
                 }
             };
 
@@ -1210,7 +1213,7 @@ impl DB for RocksDB {
         let prev_len =
             match self.read_value_bytes(subspace_cf, key.to_string())? {
                 Some(prev_value) => {
-                    let prev_len = prev_value.len() as i64;
+                    let prev_len = i64::try_from(prev_value.len())?;
                     // Persist the previous value
                     self.batch_write_subspace_diff(
                         batch,
@@ -1664,7 +1667,7 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                     let key = String::from_utf8(key.to_vec())
                         .expect("Cannot convert from bytes to key string");
                     if let Some(k) = key.strip_prefix(&self.0.stripped_prefix) {
-                        let gas = k.len() + val.len();
+                        let gas = k.len().checked_add(val.len())?;
                         return Some((k.to_owned(), val.to_vec(), gas as _));
                     } else {
                         tracing::warn!(
@@ -1708,7 +1711,7 @@ fn make_iter_read_opts(prefix: Option<String>) -> ReadOptions {
     if let Some(prefix) = prefix {
         let mut upper_prefix = prefix.into_bytes();
         if let Some(last) = upper_prefix.last_mut() {
-            *last += 1;
+            *last = last.checked_add(1).expect("cannot overflow");
             read_opts.set_iterate_upper_bound(upper_prefix);
         }
     }
@@ -1791,6 +1794,7 @@ mod imp {
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod test {
     use namada::address::EstablishedAddressGen;

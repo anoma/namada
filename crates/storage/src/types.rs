@@ -67,10 +67,12 @@ impl<I> std::fmt::Debug for PatternIterator<I> {
 /// Structure holding data that will be committed to the merkle tree
 #[derive(Debug, BorshSerialize, BorshDeserialize, Default)]
 pub struct CommitOnlyData {
+    /// Map from tx hashes to their gas cost
     pub tx_gas: BTreeMap<Hash, u64>,
 }
 
 impl CommitOnlyData {
+    /// Serialize to bytes
     pub fn serialize(&self) -> Vec<u8> {
         self.serialize_to_vec()
     }

@@ -151,10 +151,13 @@ pub fn migrating_state() -> Option<BlockHeight> {
 fn emit_warning_on_non_64bit_cpu() {
     if std::mem::size_of::<usize>() != 8 {
         tracing::warn!("");
-        tracing::warn!(
-            "Your machine has a {}-bit CPU...",
-            8 * std::mem::size_of::<usize>()
-        );
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            tracing::warn!(
+                "Your machine has a {}-bit CPU...",
+                8 * std::mem::size_of::<usize>()
+            );
+        }
         tracing::warn!("");
         tracing::warn!("A majority of nodes will run on 64-bit hardware!");
         tracing::warn!("");
@@ -416,7 +419,7 @@ async fn run_aux_setup(
         let available_memory_bytes = sys.available_memory();
         tracing::info!(
             "Available memory: {}",
-            Byte::from_bytes(available_memory_bytes as u128)
+            Byte::from_bytes(u128::from(available_memory_bytes))
                 .get_appropriate_unit(true)
         );
         available_memory_bytes
@@ -441,7 +444,7 @@ async fn run_aux_setup(
         };
     tracing::info!(
         "VP WASM compilation cache size: {}",
-        Byte::from_bytes(vp_wasm_compilation_cache as u128)
+        Byte::from_bytes(u128::from(vp_wasm_compilation_cache))
             .get_appropriate_unit(true)
     );
 
@@ -464,7 +467,7 @@ async fn run_aux_setup(
         };
     tracing::info!(
         "Tx WASM compilation cache size: {}",
-        Byte::from_bytes(tx_wasm_compilation_cache as u128)
+        Byte::from_bytes(u128::from(tx_wasm_compilation_cache))
             .get_appropriate_unit(true)
     );
 
@@ -484,7 +487,7 @@ async fn run_aux_setup(
     };
     tracing::info!(
         "RocksDB block cache size: {}",
-        Byte::from_bytes(db_block_cache_size_bytes as u128)
+        Byte::from_bytes(u128::from(db_block_cache_size_bytes))
             .get_appropriate_unit(true)
     );
 
@@ -549,8 +552,10 @@ fn start_abci_broadcaster_shell(
     };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
-    let db_cache =
-        rocksdb::Cache::new_lru_cache(db_block_cache_size_bytes as usize);
+    let db_cache = rocksdb::Cache::new_lru_cache(
+        usize::try_from(db_block_cache_size_bytes)
+            .expect("`db_block_cache_size_bytes` must not exceed `usize::MAX`"),
+    );
 
     // Construct our ABCI application.
     let tendermint_mode = config.shell.tendermint_mode.clone();

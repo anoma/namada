@@ -45,6 +45,8 @@ pub enum VerifySigError {
     InvalidWrapperSignature,
     #[error("The section signature is invalid: {0}")]
     InvalidSectionSignature(String),
+    #[error("The number of PKs overflows u8::MAX")]
+    PksOverflow,
 }
 
 #[allow(missing_docs)]
@@ -224,7 +226,9 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
     Deserialize,
 )]
 pub struct Data {
+    /// Salt with additional random data (usually a timestamp)
     pub salt: [u8; 8],
+    /// Data bytes
     pub data: Vec<u8>,
 }
 
@@ -376,6 +380,7 @@ impl Code {
     }
 }
 
+/// A memo field (bytes).
 pub type Memo = Vec<u8>;
 
 /// Indicates the list of public keys against which signatures will be verified
@@ -431,7 +436,11 @@ impl Authorization {
             // Make sure the corresponding public keys can be represented by a
             // vector instead of a map
             assert!(
-                secret_keys.keys().cloned().eq(0..(secret_keys.len() as u8)),
+                secret_keys
+                    .keys()
+                    .cloned()
+                    .eq(0..(u8::try_from(secret_keys.len())
+                        .expect("Number of SKs must not exceed `u8::MAX`"))),
                 "secret keys must be enumerated when signer address is absent"
             );
             Signer::PubKeys(secret_keys.values().map(RefTo::ref_to).collect())
@@ -458,8 +467,9 @@ impl Authorization {
         }
     }
 
-    pub fn total_signatures(&self) -> u8 {
-        self.signatures.len() as u8
+    /// Get the number of signatures if it fits in `u8`
+    pub fn total_signatures(&self) -> Option<u8> {
+        u8::try_from(self.signatures.len()).ok()
     }
 
     /// Hash this signature section
@@ -475,6 +485,7 @@ impl Authorization {
         )
     }
 
+    /// Get a hash of this section with its signer and signatures removed
     pub fn get_raw_hash(&self) -> namada_core::hash::Hash {
         Self {
             signer: Signer::PubKeys(vec![]),
@@ -512,7 +523,11 @@ impl Authorization {
                             sig,
                         )?;
                         verified_pks.insert(*idx);
-                        verifications += 1;
+                        // Cannot overflow
+                        #[allow(clippy::arithmetic_side_effects)]
+                        {
+                            verifications += 1;
+                        }
                     }
                 }
             }
@@ -526,14 +541,20 @@ impl Authorization {
                     if let Some(map_idx) =
                         public_keys_index_map.get_index_from_public_key(pk)
                     {
+                        let sig_idx = u8::try_from(idx)
+                            .map_err(|_| VerifySigError::PksOverflow)?;
                         consume_verify_sig_gas()?;
                         common::SigScheme::verify_signature(
                             pk,
                             &self.get_raw_hash(),
-                            &self.signatures[&(idx as u8)],
+                            &self.signatures[&sig_idx],
                         )?;
                         verified_pks.insert(map_idx);
-                        verifications += 1;
+                        // Cannot overflow
+                        #[allow(clippy::arithmetic_side_effects)]
+                        {
+                            verifications += 1;
+                        }
                     }
                 }
             }
@@ -576,7 +597,12 @@ impl CompressedAuthorization {
                 // The 255th section is the raw header
                 targets.push(tx.raw_header_hash());
             } else {
-                targets.push(tx.sections[idx as usize - 1].get_hash());
+                targets.push(
+                    tx.sections[(idx as usize)
+                        .checked_sub(1)
+                        .expect("cannot underflow")]
+                    .get_hash(),
+                );
             }
         }
         Authorization {
@@ -1026,7 +1052,7 @@ impl Tx {
         HEXUPPER.encode(&tx_bytes)
     }
 
-    // Deserialize from hex encoding
+    /// Deserialize from hex encoding
     pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
         if let Ok(hex) = serde_json::from_slice::<String>(data) {
             match HEXUPPER.decode(hex.as_bytes()) {
@@ -1076,7 +1102,7 @@ impl Tx {
     pub fn get_section(
         &self,
         hash: &namada_core::hash::Hash,
-    ) -> Option<Cow<Section>> {
+    ) -> Option<Cow<'_, Section>> {
         if self.header_hash() == *hash {
             return Some(Cow::Owned(Section::Header(self.header.clone())));
         } else if self.raw_header_hash() == *hash {
@@ -1228,7 +1254,10 @@ impl Tx {
                     .iter()
                     .all(|x| self.get_section(x).is_some())
                 {
-                    if signatures.total_signatures() > max_signatures {
+                    if signatures
+                        .total_signatures()
+                        .map_or(false, |len| len > max_signatures)
+                    {
                         return Err(VerifySigError::InvalidSectionSignature(
                             "too many signatures.".to_string(),
                         ));
@@ -1287,6 +1316,7 @@ impl Tx {
         .map_err(|_| VerifySigError::InvalidWrapperSignature)
     }
 
+    /// Compute signatures for the given keys
     pub fn compute_section_signature(
         &self,
         secret_keys: &[common::SecretKey],
@@ -1570,9 +1600,11 @@ impl Tx {
                 section.signatures.insert(*idx, signature.signature);
             } else if let Signer::PubKeys(pks) = &mut pk_section.signer {
                 // Add the signature under its corresponding public key
-                pk_section
-                    .signatures
-                    .insert(pks.len() as u8, signature.signature);
+                pk_section.signatures.insert(
+                    u8::try_from(pks.len())
+                        .expect("Number of PKs must not exceed u8 capacity"),
+                    signature.signature,
+                );
                 pks.push(signature.pubkey);
             }
         }

@@ -1,3 +1,5 @@
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::cmp::min;
 
 use namada_core::address::testing::arb_established_address;

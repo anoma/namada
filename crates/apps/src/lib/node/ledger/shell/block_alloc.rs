@@ -197,9 +197,15 @@ impl<State> BlockAllocator<State> {
     /// to each [`TxBin`] instance in a [`BlockAllocator`].
     #[inline]
     fn unoccupied_space_in_bytes(&self) -> u64 {
-        let total_bin_space =
-            self.protocol_txs.occupied + self.normal_txs.space.occupied;
-        self.block.allotted - total_bin_space
+        let total_bin_space = self
+            .protocol_txs
+            .occupied
+            .checked_add(self.normal_txs.space.occupied)
+            .expect("Shouldn't overflow");
+        self.block
+            .allotted
+            .checked_sub(total_bin_space)
+            .expect("Shouldn't underflow")
     }
 }
 
@@ -220,7 +226,9 @@ impl<R: Resource> TxBin<R> {
     /// Return the amount of resource left in this [`TxBin`].
     #[inline]
     pub fn resource_left(&self) -> u64 {
-        self.allotted - self.occupied
+        self.allotted
+            .checked_sub(self.occupied)
+            .expect("Shouldn't underflow")
     }
 
     /// Construct a new [`TxBin`], with a capacity of `max_capacity`.
@@ -255,7 +263,10 @@ impl<R: Resource> TxBin<R> {
                 bin_resource: bin_size,
             });
         }
-        let occupied = self.occupied + resource;
+        let occupied = self
+            .occupied
+            .checked_add(resource)
+            .expect("Shouldn't overflow");
         if occupied <= self.allotted {
             self.occupied = occupied;
             Ok(())
@@ -322,7 +333,12 @@ pub mod threshold {
 
         /// Return a [`Threshold`] over some free space.
         pub fn over(self, free_space_in_bytes: u64) -> u64 {
-            (self.0 * free_space_in_bytes).to_integer()
+            use num_traits::ops::checked::CheckedMul;
+            (self
+                .0
+                .checked_mul(&free_space_in_bytes.into())
+                .expect("Must not overflow"))
+            .to_integer()
         }
     }
 
@@ -330,6 +346,7 @@ pub mod threshold {
     pub const ONE_HALF: Threshold = Threshold::new(1, 2);
 }
 
+#[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod tests {
 

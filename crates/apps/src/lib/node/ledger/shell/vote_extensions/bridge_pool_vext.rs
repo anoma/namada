@@ -51,6 +51,7 @@ where
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_bp_vote_extensions {
     use namada::core::ethereum_events::Uint;

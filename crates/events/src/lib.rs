@@ -1,5 +1,19 @@
 //! Events emitted by the Namada ledger.
 
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
+
 pub mod extend;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
@@ -437,14 +451,15 @@ impl Event {
         self
     }
 
-    /// Compute the gas cost of emitting this event.
+    /// Compute the gas cost of emitting this event. Returns `None` on u64
+    /// overflow.
     #[inline]
-    pub fn emission_gas_cost(&self, cost_per_byte: u64) -> u64 {
-        let len = self
-            .attributes
-            .iter()
-            .fold(0, |acc, (k, v)| acc + k.len() + v.len());
-        len as u64 * cost_per_byte
+    pub fn emission_gas_cost(&self, cost_per_byte: u64) -> Option<u64> {
+        let len = self.attributes.iter().try_fold(0_usize, |acc, (k, v)| {
+            acc.checked_add(k.len())
+                .and_then(|val| val.checked_add(v.len()))
+        })?;
+        (len as u64).checked_mul(cost_per_byte)
     }
 }
 

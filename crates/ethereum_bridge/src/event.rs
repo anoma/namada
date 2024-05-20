@@ -150,6 +150,7 @@ impl EventToEmit for EthBridgeEvent {
     const DOMAIN: &'static str = "eth-bridge";
 }
 
+/// Hash of bridge pool transaction
 pub struct BridgePoolTxHash<'tx>(pub &'tx KeccakHash);
 
 impl<'tx> EventAttributeEntry<'tx> for BridgePoolTxHash<'tx> {

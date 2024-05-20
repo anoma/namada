@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
-use namada::gas::TxGasMeter;
+use namada::gas::{Gas, TxGasMeter};
 use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
@@ -264,7 +264,7 @@ fn validate_wrapper_bytes<D, H, CA>(
     block_time: Option<DateTimeUtc>,
     block_proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_state: &mut TempWlState<D, H>,
+    temp_state: &mut TempWlState<'_, D, H>,
     vp_wasm_cache: &mut VpCache<CA>,
     tx_wasm_cache: &mut TxCache<CA>,
 ) -> Result<u64, ()>
@@ -289,7 +289,8 @@ where
     tx.validate_tx().map_err(|_| ())?;
     if let TxType::Wrapper(wrapper) = tx.header().tx_type {
         // Check tx gas limit for tx size
-        let mut tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+        let gas_limit = Gas::try_from(wrapper.gas_limit).map_err(|_| ())?;
+        let mut tx_gas_meter = TxGasMeter::new(gas_limit);
         tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
         super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
@@ -323,7 +324,7 @@ fn prepare_proposal_fee_check<D, H, CA>(
     masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    shell_params: &mut ShellParams<'_, TempWlState<D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<(), Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -355,7 +356,7 @@ where
 fn compute_min_gas_price<D, H>(
     fee_token: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
-    temp_state: &TempWlState<D, H>,
+    temp_state: &TempWlState<'_, D, H>,
 ) -> Result<Amount, Error>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -405,6 +406,7 @@ where
     })
 }
 
+#[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 #[cfg(test)]
 // TODO: write tests for validator set update vote extensions in
 // prepare proposals

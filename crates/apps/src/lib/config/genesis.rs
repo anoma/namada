@@ -95,7 +95,10 @@ impl<'de> Deserialize<'de> for GenesisAddress {
         impl<'de> serde::de::Visitor<'de> for FieldVisitor {
             type Value = GenesisAddress;
 
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            fn expecting(
+                &self,
+                formatter: &mut Formatter<'_>,
+            ) -> std::fmt::Result {
                 formatter.write_str(
                     "a bech32m encoded public key or an established address",
                 )
@@ -324,6 +327,7 @@ pub struct Parameters {
 ///
 /// This includes adding the Ethereum bridge parameters and
 /// adding a specified number of validators.
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(all(any(test, feature = "benches"), not(feature = "integration")))]
 pub fn make_dev_genesis(
     num_validators: u64,

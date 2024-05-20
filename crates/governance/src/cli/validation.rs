@@ -65,7 +65,7 @@ pub enum ProposalValidation {
     #[error("invalid proposal extra data: cannot be empty.")]
     InvalidPgfFundingExtraData,
     #[error("Arithmetic {0}.")]
-    Arith(arith::Error),
+    Arith(#[from] arith::Error),
 }
 
 pub fn is_valid_author_balance(
@@ -89,7 +89,7 @@ pub fn is_valid_start_epoch(
 ) -> Result<(), ProposalValidation> {
     let start_epoch_greater_than_current = proposal_start_epoch > current_epoch;
     let start_epoch_is_multipler =
-        proposal_start_epoch.0 % proposal_epoch_multiplier == 0;
+        checked!(proposal_start_epoch.0 % proposal_epoch_multiplier)? == 0;
 
     if start_epoch_greater_than_current && start_epoch_is_multipler {
         Ok(())
@@ -110,7 +110,8 @@ pub fn is_valid_end_epoch(
     min_proposal_voting_period: u64,
     max_proposal_period: u64,
 ) -> Result<(), ProposalValidation> {
-    let voting_period = proposal_end_epoch.0 - proposal_start_epoch.0;
+    let voting_period =
+        checked!(proposal_end_epoch.0 - proposal_start_epoch.0)?;
     let end_epoch_is_multipler =
         checked!(proposal_end_epoch % proposal_epoch_multiplier)
             .map_err(ProposalValidation::Arith)?
@@ -134,7 +135,8 @@ pub fn is_valid_activation_epoch(
     proposal_end_epoch: Epoch,
     min_proposal_grace_epochs: u64,
 ) -> Result<(), ProposalValidation> {
-    let grace_period = proposal_activation_epoch.0 - proposal_end_epoch.0;
+    let grace_period =
+        checked!(proposal_activation_epoch.0 - proposal_end_epoch.0)?;
 
     if grace_period > 0 && grace_period >= min_proposal_grace_epochs {
         Ok(())
@@ -151,7 +153,8 @@ pub fn is_valid_proposal_period(
     proposal_activation_epoch: Epoch,
     max_proposal_period: u64,
 ) -> Result<(), ProposalValidation> {
-    let proposal_period = proposal_activation_epoch.0 - proposal_start_epoch.0;
+    let proposal_period =
+        checked!(proposal_activation_epoch.0 - proposal_start_epoch.0)?;
 
     if proposal_period > 0 && proposal_period <= max_proposal_period {
         Ok(())
@@ -173,8 +176,9 @@ pub fn is_valid_content(
         .values()
         .map(|value| value.len() as u64)
         .sum();
-    let proposal_content_length =
-        proposal_content_values_length + proposal_content_keys_length;
+    let proposal_content_length = checked!(
+        proposal_content_values_length + proposal_content_keys_length
+    )?;
 
     if proposal_content_length <= max_content_length {
         Ok(())

@@ -4,7 +4,7 @@ use namada_events::extend::EventAttributeEntry;
 
 use super::Gas;
 
-/// Extend an [`Event`] with gas used data.
+/// Extend an [`namada_events::Event`] with gas used data.
 pub struct GasUsed(pub Gas);
 
 impl EventAttributeEntry<'static> for GasUsed {

@@ -176,12 +176,15 @@ where
         Ok(())
     }
 
+    /// Store in memory a total gas of a transaction with the given hash.
     pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
         self.commit_only_data.tx_gas.insert(tx_hash, gas);
     }
 
     /// Get the chain ID as a raw string
     pub fn get_chain_id(&self) -> (String, u64) {
+        // Adding consts that cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
         (
             self.chain_id.to_string(),
             CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
@@ -190,6 +193,8 @@ where
 
     /// Get the block height
     pub fn get_block_height(&self) -> (BlockHeight, u64) {
+        // Adding consts that cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
         (
             self.block.height,
             BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
@@ -198,6 +203,8 @@ where
 
     /// Get the current (yet to be committed) block epoch
     pub fn get_current_epoch(&self) -> (Epoch, u64) {
+        // Adding consts that cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
         (
             self.block.epoch,
             EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
@@ -206,6 +213,8 @@ where
 
     /// Get the epoch of the last committed block
     pub fn get_last_epoch(&self) -> (Epoch, u64) {
+        // Adding consts that cannot overflow
+        #[allow(clippy::arithmetic_side_effects)]
         (
             self.last_epoch,
             EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
@@ -226,7 +235,11 @@ where
         self.next_epoch_min_start_height = initial_height
             .checked_add(min_num_of_blocks)
             .expect("Next epoch min block height shouldn't overflow");
-        self.next_epoch_min_start_time = genesis_time + min_duration;
+        // Time must not overflow
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            self.next_epoch_min_start_time = genesis_time + min_duration;
+        }
         self.block.pred_epochs = Epochs {
             first_block_heights: vec![initial_height],
         };
@@ -277,9 +290,12 @@ where
     /// Get the oldest epoch where we can read a value
     pub fn get_oldest_epoch(&self) -> Epoch {
         let oldest_height = match self.storage_read_past_height_limit {
-            Some(limit) if limit < self.get_last_block_height().0 => {
-                (self.get_last_block_height().0 - limit).into()
-            }
+            Some(limit) if limit < self.get_last_block_height().0 => (self
+                .get_last_block_height()
+                .0
+                .checked_sub(limit)
+                .expect("Cannot underflow"))
+            .into(),
             _ => BlockHeight(1),
         };
         self.block

@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};
 
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
 use namada_core::storage;
@@ -68,26 +69,32 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    /// Mutably borrow write-log
     pub fn write_log_mut(&mut self) -> &mut WriteLog {
         &mut self.0.write_log
     }
 
+    /// Mutably borrow in-memory state
     pub fn in_mem_mut(&mut self) -> &mut InMemory<H> {
         &mut self.0.in_mem
     }
 
+    /// Mutably borrow DB handle
     pub fn db_mut(&mut self) -> &mut D {
         &mut self.0.db
     }
 
+    /// Borrow state with mutable write-log.
     pub fn restrict_writes_to_write_log(&mut self) -> &mut WlState<D, H> {
         &mut self.0
     }
 
+    /// Borrow read-only write-log and state
     pub fn read_only(&self) -> &WlState<D, H> {
         &self.0
     }
 
+    /// Instantiate a full-access state. Loads the last state from a DB, if any.
     pub fn open(
         db_path: impl AsRef<std::path::Path>,
         cache: Option<&D::Cache>,
@@ -147,7 +154,7 @@ where
                 }
             }
             Some(blocks_until_switch) => {
-                *blocks_until_switch -= 1;
+                *blocks_until_switch = checked!(blocks_until_switch - 1)?;
             }
         };
         let new_epoch =
@@ -166,7 +173,11 @@ where
             self.in_mem.next_epoch_min_start_height = height
                 .checked_add(min_num_of_blocks)
                 .expect("Next epoch min block height shouldn't overflow");
-            self.in_mem.next_epoch_min_start_time = time + min_duration;
+            // Time must not overflow
+            #[allow(clippy::arithmetic_side_effects)]
+            {
+                self.in_mem.next_epoch_min_start_time = time + min_duration;
+            }
 
             self.in_mem.block.pred_epochs.new_epoch(height);
             tracing::info!("Began a new epoch {}", self.in_mem.block.epoch);
@@ -470,6 +481,7 @@ where
         }
     }
 
+    /// Commit the data from in-memory state into the block's merkle tree.
     pub fn commit_only_data(&mut self) -> Result<()> {
         let data = self.in_mem().commit_only_data.serialize();
         self.in_mem_mut()
@@ -560,27 +572,33 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    /// Borrow write-log
     pub fn write_log(&self) -> &WriteLog {
         &self.write_log
     }
 
+    /// Borrow in-memory state
     pub fn in_mem(&self) -> &InMemory<H> {
         &self.in_mem
     }
 
+    /// Mutably borrow in-memory state
     pub fn in_mem_mut(&mut self) -> &mut InMemory<H> {
         &mut self.in_mem
     }
 
+    /// Borrow DB handle
     pub fn db(&self) -> &D {
         // NOTE: `WlState` must not be allowed mutable access to DB
         &self.db
     }
 
+    /// Mutably borrow write-log
     pub fn write_log_mut(&mut self) -> &mut WriteLog {
         &mut self.write_log
     }
 
+    /// Borrow in-memory state and DB handle with a mutable temporary write-log.
     pub fn with_temp_write_log(&self) -> TempWlState<'_, D, H> {
         TempWlState {
             write_log: WriteLog::default(),
@@ -611,6 +629,7 @@ where
         self.write_log.redundant_tx_hash(hash)
     }
 
+    /// Get the height of the next block
     #[inline]
     pub fn get_current_decision_height(&self) -> BlockHeight {
         self.in_mem
@@ -660,12 +679,12 @@ where
                 self.in_mem().get_last_block_height(),
             )? {
                 Some(v) => {
-                    let gas = (key.len() + v.len()) as u64
-                        * STORAGE_ACCESS_GAS_PER_BYTE;
-                    Ok((Some(v), gas))
+                    let gas = checked!(key.len() + v.len())? as u64;
+                    Ok((Some(v), checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?))
                 }
                 None => {
-                    Ok((None, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE))
+                    let gas = key.len() as u64;
+                    Ok((None, checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?))
                 }
             }
         }
@@ -673,6 +692,7 @@ where
 
     /// Write a value to the specified subspace and returns the gas cost and the
     /// size difference
+    #[allow(clippy::arithmetic_side_effects)]
     #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_write(
         &mut self,
@@ -711,6 +731,11 @@ where
 
     /// Delete the specified subspace and returns the gas cost and the size
     /// difference
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_truncation
+    )]
     #[cfg(any(test, feature = "testing", feature = "benches"))]
     pub fn db_delete(&mut self, key: &Key) -> Result<(u64, i64)> {
         // Note that this method is the same as `StorageWrite::delete`,
@@ -741,7 +766,7 @@ where
     pub fn get_existence_proof(
         &self,
         key: &Key,
-        value: namada_merkle_tree::StorageBytes,
+        value: namada_merkle_tree::StorageBytes<'_>,
         height: BlockHeight,
     ) -> Result<ProofOps> {
         use std::array;
@@ -1009,18 +1034,22 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
 {
+    /// Borrow write-log
     pub fn write_log(&self) -> &WriteLog {
         &self.write_log
     }
 
+    /// Borrow in-memory state
     pub fn in_mem(&self) -> &InMemory<H> {
         self.in_mem
     }
 
+    /// Borrow DB handle
     pub fn db(&self) -> &D {
         self.db
     }
 
+    /// Mutably borrow write-log
     pub fn write_log_mut(&mut self) -> &mut WriteLog {
         &mut self.write_log
     }
@@ -1266,7 +1295,7 @@ where
         &self,
         key: &storage::Key,
     ) -> Result<Option<T>> {
-        let (log_val, _) = self.write_log().read_temp(key);
+        let (log_val, _) = self.write_log().read_temp(key).unwrap();
         match log_val {
             Some(value) => {
                 let value =

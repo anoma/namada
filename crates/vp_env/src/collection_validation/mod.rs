@@ -69,6 +69,7 @@ where
     })
 }
 
+/// Extensions for [`LazyCollection`]s for validation.
 pub trait LazyCollectionExt: LazyCollection {
     /// Actions on the collection determined from changed storage keys by
     /// `Self::validate`

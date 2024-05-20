@@ -1,12 +1,25 @@
 //! Gas accounting module to track the gas usage in a block for transactions and
 //! validity predicates triggered by transactions.
 
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
+
 pub mod event;
 pub mod storage;
 
 use std::fmt::Display;
 use std::num::ParseIntError;
-use std::ops::Div;
 use std::str::FromStr;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -30,8 +43,12 @@ pub enum Error {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
-#[error("Failed to parse gas: {0}")]
-pub struct GasParseError(pub ParseIntError);
+pub enum GasParseError {
+    #[error("Failed to parse gas: {0}")]
+    Parse(ParseIntError),
+    #[error("Gas overflowed")]
+    Overflow,
+}
 
 const COMPILE_GAS_PER_BYTE: u64 = 1_955;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
@@ -60,6 +77,7 @@ pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
 /// The cost of verifying a single signature of a transaction
 pub const VERIFY_TX_SIG_GAS: u64 = 594_290;
 /// The cost for requesting one more page in wasm (64KiB)
+#[allow(clippy::cast_possible_truncation)] // const in u32 range
 pub const WASM_MEMORY_PAGE_GAS: u32 =
     MEMORY_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
 /// The cost to validate an Ibc action
@@ -116,6 +134,11 @@ impl Gas {
         self.sub.checked_sub(rhs.sub).map(|sub| Self { sub })
     }
 
+    /// Checked div of `Gas`. Returns `None` if `rhs` is zero.
+    pub fn checked_div(&self, rhs: u64) -> Option<Self> {
+        self.sub.checked_div(rhs).map(|sub| Self { sub })
+    }
+
     /// Converts the sub gas units to whole ones. If the sub units are not a
     /// multiple of the `SCALE` than ceil the quotient
     fn get_whole_gas_units(&self) -> u64 {
@@ -123,23 +146,16 @@ impl Gas {
         if self.sub % SCALE == 0 {
             quotient
         } else {
-            quotient + 1
+            quotient
+                .checked_add(1)
+                .expect("Cannot overflow as the quotient is scaled down u64")
         }
     }
 
     /// Generates a `Gas` instance from a whole amount
-    pub fn from_whole_units(whole: u64) -> Self {
-        Self { sub: whole * SCALE }
-    }
-}
-
-impl Div<u64> for Gas {
-    type Output = Gas;
-
-    fn div(self, rhs: u64) -> Self::Output {
-        Self {
-            sub: self.sub / rhs,
-        }
+    pub fn from_whole_units(whole: u64) -> Option<Self> {
+        let sub = whole.checked_mul(SCALE)?;
+        Some(Self { sub })
     }
 }
 
@@ -166,8 +182,9 @@ impl FromStr for Gas {
     type Err = GasParseError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let gas: u64 = s.parse().map_err(GasParseError)?;
-        Ok(Gas::from_whole_units(gas))
+        let raw: u64 = s.parse().map_err(GasParseError::Parse)?;
+        let gas = Gas::from_whole_units(raw).ok_or(GasParseError::Overflow)?;
+        Ok(gas)
     }
 }
 
@@ -457,10 +474,14 @@ impl VpsGas {
 
     /// Get the gas consumed by the parallelized VPs
     fn get_current_gas(&self) -> Result<Gas> {
-        let parallel_gas =
-            self.rest.iter().try_fold(Gas::default(), |acc, gas| {
+        let parallel_gas = self
+            .rest
+            .iter()
+            .try_fold(Gas::default(), |acc, gas| {
                 acc.checked_add(*gas).ok_or(Error::GasOverflow)
-            })? / PARALLEL_GAS_DIVIDER;
+            })?
+            .checked_div(PARALLEL_GAS_DIVIDER)
+            .expect("Div by non-zero int cannot fail");
         self.max.checked_add(parallel_gas).ok_or(Error::GasOverflow)
     }
 }

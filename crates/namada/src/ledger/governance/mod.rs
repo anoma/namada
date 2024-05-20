@@ -5,7 +5,7 @@ pub mod utils;
 use std::collections::BTreeSet;
 
 use borsh::BorshDeserialize;
-use namada_core::arith::checked;
+use namada_core::arith::{self, checked};
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
 use namada_governance::storage::proposal::{
     AddRemove, PGFAction, ProposalType,
@@ -46,6 +46,8 @@ pub enum Error {
         "Action {0} not authorized by {1} which is not part of verifier set"
     )]
     Unauthorized(&'static str, Address),
+    #[error("Arithmetic {0}")]
+    Arith(#[from] arith::Error),
 }
 
 /// Governance VP
@@ -242,7 +244,7 @@ where
             }
         }
 
-        Ok((true, post_counter - pre_counter))
+        Ok((true, checked!(post_counter - pre_counter)?))
     }
 
     fn is_valid_vote_key(
@@ -586,11 +588,11 @@ where
                 // check that they are unique by checking that the set of add
                 // plus the set of remove plus the set of retro is equal to the
                 // total fundings
-                let are_continuous_fundings_unique =
+                let are_continuous_fundings_unique = checked!(
                     are_continuous_add_targets_unique.len()
                         + are_continuous_remove_targets_unique.len()
                         + total_retro_targets
-                        == fundings.len();
+                )? == fundings.len();
 
                 if !are_continuous_fundings_unique {
                     return Err(native_vp::Error::new_const(
@@ -730,7 +732,8 @@ where
             return Err(error);
         }
         let is_valid_max_proposal_period = start_epoch < activation_epoch
-            && activation_epoch.0 - start_epoch.0 <= max_proposal_period;
+            && checked!(activation_epoch.0 - start_epoch.0)?
+                <= max_proposal_period;
         if !is_valid_max_proposal_period {
             let error = native_vp::Error::new_alloc(format!(
                 "Expected max duration between the start and grace epoch \
@@ -808,7 +811,7 @@ where
 
         let latency: u64 =
             self.force_read(&max_latency_paramater_key, ReadType::Pre)?;
-        if start_epoch.0 - current_epoch.0 > latency {
+        if checked!(start_epoch.0 - current_epoch.0)? > latency {
             return Err(native_vp::Error::new_alloc(format!(
                 "Starting epoch {start_epoch} of the proposal with id \
                  {proposal_id} is too far in the future (more than {latency} \
@@ -1082,7 +1085,7 @@ where
         let post_counter: u64 =
             self.force_read(&counter_key, ReadType::Post)?;
 
-        let expected_counter = pre_counter + set_count;
+        let expected_counter = checked!(pre_counter + set_count)?;
         let valid_counter = expected_counter == post_counter;
 
         valid_counter.ok_or_else(|| {
@@ -1289,6 +1292,7 @@ impl KeyType {
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod test {
     use std::cell::RefCell;

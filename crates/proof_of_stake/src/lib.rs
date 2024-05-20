@@ -2,9 +2,17 @@
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
-#![warn(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    missing_docs,
+    rust_2018_idioms,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_lossless,
+    clippy::arithmetic_side_effects
+)]
 
 pub mod epoched;
 pub mod event;
@@ -1978,7 +1986,9 @@ where
     let params = read_pos_params(storage)?;
 
     // Check that the validator is jailed up to the pipeline epoch
-    for epoch in current_epoch.iter_range(params.pipeline_len + 1) {
+    for epoch in current_epoch.iter_range(
+        params.pipeline_len.checked_add(1).expect("Cannot overflow"),
+    ) {
         let state =
             validator_state_handle(validator).get(storage, epoch, &params)?;
         if let Some(state) = state {
@@ -2510,10 +2520,13 @@ where
 
             if pruned_missing_vote {
                 // Update liveness data
-                liveness_sum_missed_votes.update(
+                liveness_sum_missed_votes.try_update(
                     storage,
                     cons_validator.clone(),
-                    |missed_votes| missed_votes.unwrap() - 1,
+                    |missed_votes| {
+                        checked!(missed_votes.unwrap_or_default() - 1)
+                            .map_err(Into::into)
+                    },
                 )?;
             }
         }
@@ -2526,17 +2539,19 @@ where
                 .insert(storage, votes_height.0)?;
 
             // Update liveness data
-            liveness_sum_missed_votes.update(
+            liveness_sum_missed_votes.try_update(
                 storage,
                 cons_validator,
                 |missed_votes| {
                     match missed_votes {
-                        Some(missed_votes) => missed_votes + 1,
+                        Some(missed_votes) => {
+                            checked!(missed_votes + 1).map_err(Into::into)
+                        }
                         None => {
                             // Missing liveness data for the validator (newly
                             // added to the consensus
                             // set), initialize it
-                            1
+                            Ok(1)
                         }
                     }
                 },
@@ -2917,8 +2932,10 @@ where
         }
     }
 
-    // Safe sub cause `validator_set_update_epoch > current_epoch`
-    let start_offset = validator_set_update_epoch.0 - current_epoch.0;
+    let start_offset = validator_set_update_epoch
+        .0
+        .checked_sub(current_epoch.0)
+        .expect("Safe sub cause `validator_set_update_epoch > current_epoch`");
     // Set the validator state as `Jailed` thru the pipeline epoch
     for offset in start_offset..=params.pipeline_len {
         validator_state_handle(validator).set(

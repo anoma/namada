@@ -1,3 +1,5 @@
+//! Storage queries for ethereum bridge.
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::eth_abi::Encode;
@@ -84,7 +86,9 @@ pub enum SendValsetUpd {
 )]
 /// An enum indicating if the Ethereum bridge is enabled.
 pub enum EthBridgeStatus {
+    /// The bridge is disabled
     Disabled,
+    /// The bridge is enabled
     Enabled(EthBridgeEnabled),
 }
 
@@ -103,13 +107,12 @@ pub enum EthBridgeStatus {
 /// Enum indicating if the bridge was initialized at genesis
 /// or a later epoch.
 pub enum EthBridgeEnabled {
+    /// Bridge is enabled from genesis
     AtGenesis,
-    AtEpoch(
-        // bridge is enabled from this epoch
-        // onwards. a validator set proof must
-        // exist for this epoch.
-        Epoch,
-    ),
+    /// Bridge is enabled from this epoch
+    /// onwards. a validator set proof must
+    /// exist for this epoch.
+    AtEpoch(Epoch),
 }
 
 /// Methods used to query blockchain Ethereum bridge related state.

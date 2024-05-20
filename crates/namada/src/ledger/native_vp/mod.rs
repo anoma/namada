@@ -89,7 +89,7 @@ where
 /// Read access to the prior storage (state before tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPreStorageRead<'view, 'a: 'view, S, CA>
+pub struct CtxPreStorageRead<'view, 'a, S, CA>
 where
     S: StateRead,
     CA: WasmCacheAccess,
@@ -100,7 +100,7 @@ where
 /// Read access to the posterior storage (state after tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPostStorageRead<'view, 'a: 'view, S, CA>
+pub struct CtxPostStorageRead<'view, 'a, S, CA>
 where
     S: StateRead,
     CA: WasmCacheAccess,

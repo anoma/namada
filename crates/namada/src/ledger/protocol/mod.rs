@@ -13,7 +13,7 @@ use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
 use namada_events::EventLevel;
-use namada_gas::TxGasMeter;
+use namada_gas::{Gas, TxGasMeter};
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
@@ -183,7 +183,7 @@ pub fn dispatch_tx<'a, D, H, CA>(
     state: &'a mut WlState<D, H>,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    wrapper_args: Option<&mut WrapperArgs<'_>>,
 ) -> Result<TxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -267,7 +267,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     fee_unshield_transaction: Option<Transaction>,
     tx_bytes: &[u8],
     mut shell_params: ShellParams<'_, S, D, H, CA>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    wrapper_args: Option<&mut WrapperArgs<'_>>,
 ) -> Result<BTreeSet<Key>>
 where
     S: State<D = D, H = H> + Sync,
@@ -337,7 +337,7 @@ fn charge_fee<S, D, H, CA>(
     masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     changed_keys: &mut BTreeSet<Key>,
-    wrapper_args: Option<&mut WrapperArgs>,
+    wrapper_args: Option<&mut WrapperArgs<'_>>,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + Sync,
@@ -416,7 +416,10 @@ where
         .expect("Error reading the storage")
         .expect("Missing fee unshielding gas limit in storage")
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
-    let mut unshield_gas_meter = TxGasMeter::new(GasLimit::from(min_gas_limit));
+    let mut unshield_gas_meter = TxGasMeter::new(
+        Gas::try_from(GasLimit::from(min_gas_limit))
+            .expect("Min gas limit must not overflow"),
+    );
     unshield_gas_meter
         .copy_consumed_gas_from(&tx_gas_meter.borrow())
         .map_err(|e| Error::GasError(e.to_string()))?;

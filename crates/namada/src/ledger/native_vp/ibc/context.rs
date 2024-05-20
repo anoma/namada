@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use borsh_ext::BorshSerializeExt;
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::Epochs;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
@@ -80,25 +81,27 @@ where
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
             Some(StorageModification::Write { ref value }) => {
-                let gas = key.len() + value.len();
+                let gas = checked!(key.len() + value.len())? as u64;
                 self.ctx
                     .ctx
-                    .charge_gas(gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)?;
+                    .charge_gas(checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
                 Ok(Some(value.clone()))
             }
             Some(StorageModification::Delete) => {
-                self.ctx.ctx.charge_gas(
-                    key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-                )?;
+                let len = key.len() as u64;
+                self.ctx
+                    .ctx
+                    .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
                 Ok(None)
             }
             Some(StorageModification::InitAccount { .. }) => Err(
                 StorageError::new_const("InitAccount shouldn't be inserted"),
             ),
             None => {
-                self.ctx.ctx.charge_gas(
-                    key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
-                )?;
+                let len = key.len() as u64;
+                self.ctx
+                    .ctx
+                    .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
                 self.ctx.read_bytes(key)
             }
         }
@@ -164,19 +167,20 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<()> {
         let value = value.as_ref().to_vec();
-        let gas = key.len() + value.len();
+        let gas = checked!(key.len() + value.len())? as u64;
         self.store
             .insert(key.clone(), StorageModification::Write { value });
         self.ctx
             .ctx
-            .charge_gas(gas as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+            .charge_gas(checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?)
     }
 
     fn delete(&mut self, key: &Key) -> Result<()> {
         self.store.insert(key.clone(), StorageModification::Delete);
+        let len = key.len() as u64;
         self.ctx
             .ctx
-            .charge_gas(key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE)
+            .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)
     }
 }
 

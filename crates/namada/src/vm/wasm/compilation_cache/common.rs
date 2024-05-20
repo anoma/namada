@@ -193,7 +193,11 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         hash.to_string()
                     );
                     sleep(exponential_backoff.backoff(&iter));
-                    iter += 1;
+                    // Cannot overflow
+                    #[allow(clippy::arithmetic_side_effects)]
+                    {
+                        iter += 1;
+                    }
                     continue;
                 }
                 None => {
@@ -289,7 +293,11 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         hash.to_string()
                     );
                     sleep(exponential_backoff.backoff(&iter));
-                    iter += 1;
+                    // Cannot overflow
+                    #[allow(clippy::arithmetic_side_effects)]
+                    {
+                        iter += 1;
+                    }
                     continue;
                 }
                 None => {
@@ -625,6 +633,7 @@ pub mod testing {
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod test {
     use std::cmp::max;
