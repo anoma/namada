@@ -391,14 +391,11 @@ where
                         old_asset,
                         -i128::try_from(normed_inflation)
                             .into_storage_result()?,
-                    )
-                    .unwrap()
-                        + MaspAmount::from_pair(
-                            new_asset,
-                            i128::try_from(new_normed_inflation)
-                                .into_storage_result()?,
-                        )
-                        .unwrap())
+                    ) + MaspAmount::from_pair(
+                        new_asset,
+                        i128::try_from(new_normed_inflation)
+                            .into_storage_result()?,
+                    ))
                     .into(),
                 );
                 // Operations that happen exactly once for each token
@@ -458,15 +455,13 @@ where
                     i128::try_from(reward.1).into_storage_result()?;
                 current_convs.insert(
                     (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(old_asset, -reward_i128).unwrap()
+                    (MaspAmount::from_pair(old_asset, -reward_i128)
                         + MaspAmount::from_pair(new_asset, reward_i128)
-                            .unwrap()
                         + MaspAmount::from_pair(
                             reward_assets[digit as usize],
                             i128::try_from(real_reward)
                                 .into_storage_result()?,
-                        )
-                        .unwrap())
+                        ))
                     .into(),
                 );
                 // Operations that happen exactly once for each token

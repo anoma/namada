@@ -403,15 +403,15 @@ impl Integer for Uint {
         (*self * *other).checked_div(self.gcd(other)).unwrap()
     }
 
-    fn divides(&self, other: &Self) -> bool {
+    fn is_multiple_of(&self, other: &Self) -> bool {
         other
             .checked_rem(*self)
             .map(|rem| rem.is_zero())
             .unwrap_or_default()
     }
 
-    fn is_multiple_of(&self, other: &Self) -> bool {
-        self.divides(other)
+    fn divides(&self, other: &Self) -> bool {
+        self.is_multiple_of(other)
     }
 
     fn is_even(&self) -> bool {
