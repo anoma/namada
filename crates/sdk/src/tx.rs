@@ -147,8 +147,8 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    // Returns a `TxResult` if the transaction applied and was it accepted by
-    // all VPs. Note that this always returns false for dry-run transactions.
+    /// Returns a `TxResult` if the transaction applied and was it accepted by
+    /// all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(&self) -> Option<&TxResult> {
         match self {
             ProcessTxResponse::Applied(resp) => {
@@ -489,7 +489,7 @@ pub async fn save_initialized_accounts<N: Namada>(
         // Store newly initialized account addresses in the wallet
         for (ix, address) in initialized_accounts.iter().enumerate() {
             let encoded = address.encode();
-            let alias: Cow<str> = match &args.initialized_account_alias {
+            let alias: Cow<'_, str> = match &args.initialized_account_alias {
                 Some(initialized_account_alias) => {
                     if len == 1 {
                         // If there's only one account, use the

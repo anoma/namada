@@ -169,7 +169,9 @@ pub async fn tx_signers(
 /// The different parts of a transaction that can be signed
 #[derive(Eq, Hash, PartialEq)]
 pub enum Signable {
+    /// Fee header
     FeeHeader,
+    /// Raw header
     RawHeader,
 }
 
@@ -364,6 +366,7 @@ pub async fn aux_signing_data(
     })
 }
 
+/// Initialize validator signing data
 pub async fn init_validator_signing_data(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
@@ -672,11 +675,17 @@ fn other_err<T>(string: String) -> Result<T, Error> {
 /// Represents the transaction data that is displayed on a Ledger device
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct LedgerVector {
+    /// String blob
     pub blob: String,
+    /// Index integer
     pub index: u64,
+    /// Name
     pub name: String,
+    /// Regular output
     pub output: Vec<String>,
+    /// Expert-mode output
     pub output_expert: Vec<String>,
+    /// Is valid?
     pub valid: bool,
 }
 

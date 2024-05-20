@@ -26,7 +26,7 @@ use crate::{Ctx, Error};
 pub fn ibc_actions(
     ctx: &mut Ctx,
     verifiers: Rc<RefCell<BTreeSet<Address>>>,
-) -> IbcActions<Ctx> {
+) -> IbcActions<'_, Ctx> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
     let module = TransferModule::new(ctx.clone(), verifiers);

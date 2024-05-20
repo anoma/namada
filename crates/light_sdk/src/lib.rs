@@ -18,6 +18,17 @@
 //! Both the [`reading`] and [`writing`] modules are further divided into a
 //! blocking and asynchronous submodules.
 
+#![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
+#![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
+#![warn(
+    rust_2018_idioms,
+    clippy::dbg_macro,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
+
 pub mod reading;
 pub mod transaction;
 pub mod writing;

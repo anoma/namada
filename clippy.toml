@@ -9,3 +9,5 @@ disallowed-methods = [
   { path = "namada_core::time::DateTimeUtc::now", reason = "Do not use current date/time in code that must be deterministic" },
   { path = "wasmtimer::std::Instant", reason = "Do not use current date/time in code that must be deterministic" },
 ]
+allow-dbg-in-tests = true
+allow-print-in-tests = true
