@@ -747,7 +747,9 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         // expect an error of the throughput limit
-        Some("Transaction was rejected by VPs"),
+        Some(
+            "Transfer exceeding the per-epoch throughput limit is not allowed",
+        ),
         false,
     )?;
 
@@ -1017,10 +1019,15 @@ fn wait_for_packet_relay(
         // Check no pending packet
         if hermes
             .exp_string(
-                "\"dst\":{\"unreceived_acks\":[],\"unreceived_packets\":[]},\"\
-                 src\":{\"unreceived_acks\":[],\"unreceived_packets\":[]}",
+                "\"dst\":{\"unreceived_acks\":[],\"unreceived_packets\":[]},",
             )
             .is_ok()
+            && hermes
+                .exp_string(
+                    "\"src\":{\"unreceived_acks\":[],\"unreceived_packets\":\
+                     []}",
+                )
+                .is_ok()
         {
             return Ok(());
         }
