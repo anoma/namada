@@ -269,50 +269,52 @@ where
             )));
         }
 
-        let mut result = ChangedBalances::default();
         // Get the changed balance keys
         let counterparts_balances: Vec<_> = keys_changed
             .iter()
             .filter_map(is_any_shielded_action_balance_key)
             .collect();
 
-        for (token, counterpart) in counterparts_balances {
-            let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
-                "No denomination found in storage for the given token",
-            )?;
-            unepoched_tokens(token, denom, &mut result.tokens)?;
-            let counterpart_balance_key = counterpart.to_balance_key(token);
-            let mut pre_balance: Amount = self
-                .ctx
-                .read_pre(&counterpart_balance_key)?
-                .unwrap_or_default();
-            let mut post_balance: Amount = self
-                .ctx
-                .read_post(&counterpart_balance_key)?
-                .unwrap_or_default();
-            if let ShieldedActionOwner::Minted = counterpart {
-                // When receiving ibc transfers we mint and also shield so we
-                // have two credits/debits, we need to mock the mint balance as
-                // the opposite change
-                std::mem::swap(&mut pre_balance, &mut post_balance);
-            }
-            // Public keys must be the hash of the sources/targets
-            let address_hash = TransparentAddress(<[u8; 20]>::from(
-                ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    &counterpart.to_address_ref().serialize_to_vec(),
-                )),
-            ));
+        counterparts_balances.iter().try_fold(
+            ChangedBalances::default(),
+            |mut result, (token, counterpart)| {
+                let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
+                    "No denomination found in storage for the given token",
+                )?;
+                unepoched_tokens(token, denom, &mut result.tokens)?;
+                let counterpart_balance_key = counterpart.to_balance_key(token);
+                let mut pre_balance: Amount = self
+                    .ctx
+                    .read_pre(&counterpart_balance_key)?
+                    .unwrap_or_default();
+                let mut post_balance: Amount = self
+                    .ctx
+                    .read_post(&counterpart_balance_key)?
+                    .unwrap_or_default();
+                if let ShieldedActionOwner::Minted = counterpart {
+                    // When receiving ibc transfers we mint and also shield so
+                    // we have two credits/debits, we need
+                    // to mock the mint balance as
+                    // the opposite change
+                    std::mem::swap(&mut pre_balance, &mut post_balance);
+                }
+                // Public keys must be the hash of the sources/targets
+                let address_hash = TransparentAddress(<[u8; 20]>::from(
+                    ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                        &counterpart.to_address_ref().serialize_to_vec(),
+                    )),
+                ));
 
-            result
-                .decoder
-                .insert(address_hash, counterpart.to_address_ref().clone());
-            *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
-                ValueSum::from_pair(token.clone(), pre_balance);
-            *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
-                ValueSum::from_pair(token.clone(), post_balance);
-        }
-
-        Ok(result)
+                result
+                    .decoder
+                    .insert(address_hash, counterpart.to_address_ref().clone());
+                *result.pre.entry(address_hash).or_insert(ValueSum::zero()) +=
+                    ValueSum::from_pair((*token).clone(), pre_balance);
+                *result.post.entry(address_hash).or_insert(ValueSum::zero()) +=
+                    ValueSum::from_pair((*token).clone(), post_balance);
+                Ok(result)
+            },
+        )
     }
 }
 

@@ -252,8 +252,8 @@ where
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
-    use namada_storage::{Error, ResultExt};
     use namada_storage::conversion_state::ConversionLeaf;
+    use namada_storage::{Error, ResultExt};
     use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
