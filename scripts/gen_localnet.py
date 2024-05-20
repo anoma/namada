@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import datetime
 import sys
@@ -5,179 +7,528 @@ import os
 import subprocess
 import shutil
 import toml
+import json
+import re
 
-def system(cmd):
-    if os.system(cmd) != 0:
-        exit(1)
-
-def move_genesis_wallet(genesis_wallet_toml : str, wallet_toml : str):
-    genesis_wallet = toml.load(genesis_wallet_toml)
-    wallet = toml.load(wallet_toml)
-
-    for key in genesis_wallet.keys():
-        value_dict = genesis_wallet[key]
-        if key in wallet.keys():
-            wallet[key].update(value_dict)
-    toml.dump(wallet, open(wallet_toml, 'w'))
-
-def edit_parameters(params_toml, **kwargs):
-    # Make sure the kwargs are valid
-    params = toml.load(params_toml)
-    for k in kwargs.keys():
-        if k not in params.keys():
-            print(f"Invalid parameter {k}")
-            del kwargs[k]
-        else:
-            for key in kwargs[k].keys():
-                if key not in params[k].keys():
-                    print(f"Invalid parameter {key} for {k}")
-                    del kwargs[k][key]
-                else:
-                    params[k][key] = kwargs[k][key]
-    
-    toml.dump(params, open(params_toml, 'w'))
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from datetime import timedelta
 
 
+def main():
+    if os.name != "posix":
+        die("This script only works on UNIX-like systems")
 
-# Get the absolute path to the directory of the script
-script_dir = sys.path[0]
-# Get absolute path of parent directory
-namada_dir = script_dir[:script_dir.rfind('/')]
+    args = parse_cli_args()
 
-# Create the parser
-parser = argparse.ArgumentParser(description='Builds a localnet for testing purposes')
-
-# Add the arguments
-parser.add_argument('--base-dir', type=str, help='The path to the base directory of the chain.')
-parser.add_argument('--localnet-dir', type=str, help='The localnet directory containing the genesis templates.')
-parser.add_argument('-m', '--mode', type=str, help='The mode to run the localnet in. Can be release or debug, defaults to debug.')
-parser.add_argument('--epoch-length', type=int, help='The epoch length in seconds, defaults to parameters.toml value.')
-parser.add_argument('--max-validator-slots', type=int, help='The maximum number of validators, defaults to parameters.toml value.')
-# Change any parameters in the parameters.toml file
-parser.add_argument('--params', type=str, help='A string representation of a dictionary of parameters to update in the parameters.toml. Must be of the same format.')
+    with TemporaryDirectory() as working_directory:
+        try:
+            main_inner(args, working_directory)
+        except Exception as e:
+            error(str(e))
 
 
-# Parse the arguments
-args = parser.parse_args()
+def main_inner(args, working_directory):
+    binaries = target_binary_paths(args.mode)
 
-# Access the arguments
-if args.localnet_dir:
-    if args.localnet_dir[-1] == '/':
-        args.localnet_dir = args.localnet_dir[:-1]
-    print(os.path.basename(args.localnet_dir))
-    localnet_dir = namada_dir + '/' + os.path.basename(args.localnet_dir)
-    shutil.copytree(args.localnet_dir, localnet_dir)
+    version_string = system(binaries[NAMADA], "--version").decode().strip()
+    info(f"Using {version_string}")
 
-    if os.path.isdir(localnet_dir) and os.listdir(localnet_dir):
-        print('Using localnet directory: ' + localnet_dir)
+    chain_id, templates = init_network(
+        working_directory=working_directory,
+        binaries=binaries,
+        args=args,
+    )
+
+    command_summary = {}
+    base_dir_prefix = reset_base_dir_prefix(args)
+
+    for validator_alias, validator_addr in args.validator_aliases.items():
+        if not validator_exists(
+            templates=templates,
+            validator_alias=validator_alias,
+            validator_addr=validator_addr,
+        ):
+            die(
+                f"Could not find {validator_alias} with addr {validator_addr} in {TRANSACTIONS_TEMPLATE}"
+            )
+
+        join_network(
+            working_directory=working_directory,
+            binaries=binaries,
+            base_dir_prefix=base_dir_prefix,
+            chain_id=chain_id,
+            genesis_validator=validator_alias,
+            pre_genesis_path=args.pre_genesis_path,
+            command_summary=command_summary,
+        )
+
+    info("Run the ledger(s) using the command string(s) below")
+
+    for validator_alias, cmd_str in command_summary.items():
+        print(f"\n{Color.BOLD}{validator_alias}:{Color.END}\n{cmd_str}")
+
+
+def init_network(
+    working_directory,
+    binaries,
+    args,
+):
+    info("Creating network release archive with `init-network`")
+
+    wasm_path = get_project_root() / "wasm"
+    wasm_checksums_path = wasm_path / "checksums.json"
+
+    # Check that wasm checksums file exists
+    if not os.path.isfile(wasm_checksums_path):
+        die(f"Cannot find the wasm checksums file at {wasm_checksums_path}")
+
+    # Check that wasm directory exists and is not empty
+    if not os.path.isdir(wasm_path) or not os.listdir(wasm_path):
+        die(f"Cannot find wasm directory that is not empty at {wasm_path}")
+
+    chain_prefix = "local"
+    genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    templates = setup_templates(working_directory, args)
+
+    init_network_output = system(
+        binaries[NAMADAC],
+        "utils",
+        "init-network",
+        "--chain-prefix",
+        chain_prefix,
+        "--genesis-time",
+        genesis_time,
+        "--templates-path",
+        working_directory,
+        "--wasm-checksums-path",
+        wasm_checksums_path,
+        "--archive-dir",
+        working_directory,
+    )
+    chain_id = lookup_chain_id(init_network_output)
+
+    info(f"Initialized chain with id {chain_id}")
+
+    return chain_id, templates
+
+
+def join_network(
+    working_directory,
+    binaries,
+    base_dir_prefix,
+    chain_id,
+    genesis_validator,
+    pre_genesis_path,
+    command_summary,
+):
+    info(f"Attempting to join {chain_id} with {genesis_validator}")
+
+    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
+    genesis_validator_path = pre_genesis_path / genesis_validator
+
+    if not genesis_validator_path.is_dir() or is_empty(
+        genesis_validator_path.iterdir()
+    ):
+        die(
+            f"Cannot find pre-genesis directory that is not empty at {genesis_validator_path}"
+        )
+    if not pre_genesis_wallet_path.is_file():
+        die(f"Cannot find pre-genesis wallet at {pre_genesis_wallet_path}")
+
+    base_dir = reset_base_dir(
+        prefix=base_dir_prefix,
+        validator_alias=genesis_validator,
+        pre_genesis_wallet=pre_genesis_wallet_path,
+    )
+
+    system(
+        "env",
+        f"NAMADA_NETWORK_CONFIGS_DIR={working_directory}",
+        binaries[NAMADAC],
+        "--base-dir",
+        base_dir,
+        "utils",
+        "join-network",
+        "--allow-duplicate-ip",
+        "--chain-id",
+        chain_id,
+        "--genesis-validator",
+        genesis_validator,
+        "--pre-genesis-path",
+        genesis_validator_path,
+        "--dont-prefetch-wasm",
+    )
+
+    info(f"Validator {genesis_validator} joined {chain_id}")
+
+    command_summary[genesis_validator] = (
+        f"{binaries[NAMADA]} --base-dir='{base_dir}' ledger run"
+    )
+
+
+def log(color, descriptor, line):
+    print(f"[{color}{Color.UNDERLINE}{descriptor}{Color.END}]: {line}")
+
+
+def info(msg):
+    log(Color.GREEN, "info", msg)
+
+
+def warning(msg):
+    log(Color.YELLOW, "warning", msg)
+
+
+def error(msg):
+    log(Color.RED, "error", msg)
+
+
+def die(msg):
+    error(msg)
+    sys.exit(1)
+
+
+def system(*cmd_args):
+    return subprocess.check_output(cmd_args)
+
+
+def parse_cli_args():
+    parser = argparse.ArgumentParser(
+        description="Configure a localnet for testing purposes."
+    )
+
+    group = parser.add_argument_group(
+        title="Validator config",
+        description="Customize the validators the localnet will run with.",
+    )
+    group.add_argument(
+        "--templates",
+        type=Path,
+        help="Localnet directory containing genesis templates. Overrides the templates found in `genesis/localnet`.",
+    )
+    group.add_argument(
+        "--validator-aliases",
+        type=validator_aliases_json_object,
+        help='JSON object of validators passed to `--templates` (eg: `{"validator-0":"tnam1..."`).',
+    )
+    group.add_argument(
+        "--pre-genesis-path",
+        type=Path,
+        help="Path to pre-genesis directory. Must be present with custom `--templates`.",
+    )
+
+    group = parser.add_argument_group(
+        title="General config",
+        description="General configuration of this script.",
+    )
+    if sys.version_info.minor >= 9:
+        group.add_argument(
+            "--force",
+            action=argparse.BooleanOptionalAction,
+        )
     else:
-        print('Cannot find localnet directory that is not empty')
-        sys.exit(1)
-else:
-    localnet_dir = namada_dir + '/genesis/localnet'
+        group.add_argument(
+            "--force",
+            action="store_true",
+        )
+        parser.set_defaults(feature=True)
+    group.add_argument(
+        "--base-dir-prefix",
+        type=Path,
+        default=get_project_root() / ".namada",
+        help="Prefix path to the base directory of each validator.",
+    )
+    group.add_argument(
+        "-m",
+        "--mode",
+        type=str,
+        default="debug",
+        choices=["debug", "release"],
+        help="Mode to run the localnet in.",
+    )
 
-if args.mode:
-    mode = args.mode
-else:
-    mode = 'debug'
+    group = parser.add_argument_group(
+        title="Parameters config",
+        description="Configure chain parameters.",
+    )
+    group.add_argument(
+        "--epoch-duration",
+        type=parse_duration,
+        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+    )
+    group.add_argument(
+        "--max-validator-slots",
+        type=int,
+        help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+    )
+    group.add_argument(
+        "--edit",
+        default={},
+        type=params_json_object,
+        help='JSON object of k:v pairs to update in the templates (eg: `{"parameters.toml":{"parameters":{"epochs_per_year":5}}}`).',
+    )
 
-if mode.lower() != 'release':
-    mode = 'debug'
+    args = parser.parse_args()
+    exclusive = [args.templates, args.validator_aliases, args.pre_genesis_path]
+    exclusivity_respected = all(map(lambda x: x != None, exclusive)) or all(
+        map(lambda x: x == None, exclusive)
+    )
 
-params = {}
-if args.params:
-    params = eval(args.params)
-if args.max_validator_slots:
-    params['pos_params'] = {'max_validator_slots': args.max_validator_slots}
-if args.epoch_length:
-    epochs_per_year = round(365 * 24 * 60 * 60 / args.epoch_length)
-    params['parameters'] = {'epochs_per_year': epochs_per_year }
-if len(params.keys())>0:
-    edit_parameters(localnet_dir + '/parameters.toml', **params)
-        
-namada_bin_dir = namada_dir + '/target/' + mode + '/'
+    if not exclusivity_respected:
+        die(
+            "Validator aliases, genesis templates and a pre-genesis dir must be present simultaneously, consult `--help`"
+        )
 
-# Check that namada_bin_dir exists and is not empty
-if not os.path.isdir(namada_bin_dir) or not os.listdir(namada_bin_dir):
-    print('Cannot find namada binary directory that is not empty')
-    sys.exit(1)
+    args.templates = args.templates or get_project_root() / "genesis" / "localnet"
+    args.validator_aliases = args.validator_aliases or {
+        "validator-0": "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
+    }
+    args.pre_genesis_path = (
+        args.pre_genesis_path
+        or get_project_root() / "genesis" / "localnet" / "src" / "pre-genesis"
+    )
 
-namada_bin = namada_bin_dir + 'namada'
-namadac_bin = namada_bin_dir + 'namadac'
-namadan_bin = namada_bin_dir + 'namadan'
-namadaw_bin = namada_bin_dir + 'namadaw'
+    if not os.path.isdir(args.templates):
+        die(f"Path to templates {args.templates} is not a directory")
+    if not os.path.isdir(args.pre_genesis_path):
+        die(f"Path to pre-genesis {args.pre_genesis_path} is not a directory")
 
-bins = [namada_bin, namadac_bin, namadan_bin, namadaw_bin]
-# Check that each binary exists and is executable
-for bin in bins:
-    if not os.path.isfile(bin) or not os.access(bin, os.X_OK):
-        print(f"Cannot find the {bin.split('/')[-1]} binary or it is not executable")
-        sys.exit(1)
+    return args
 
 
+def validator_aliases_json_object(s):
+    aliases = json.loads(s)
 
-print(f"Using {bins[0].split('/')[-1]} version: {os.popen(bin + ' --version').read()}")
+    if type(aliases) != dict:
+        die("Only JSON objects allowed for validator")
 
-# Run namadac utils init_network with the correct arguments
-print('Running namadac utils init_network')
-CHAIN_PREFIX='local'
-GENESIS_TIME = datetime.datetime.now(datetime.timezone.utc).isoformat()
-TEMPLATES_PATH=localnet_dir
-WASM_CHECKSUMS_PATH=namada_dir + '/wasm/checksums.json'
-WASM_PATH=namada_dir + '/wasm/'
-BASE_DIR = args.base_dir
+    for k, v in aliases.items():
+        valid_type = type(k) == str and type(v) == str and v.startswith("tnam1")
+        if not valid_type:
+            die("Must map from validator alias to their validator address")
 
-if not BASE_DIR:
-    BASE_DIR = subprocess.check_output([namadac_bin, "utils", "default-base-dir"]).decode().strip()
+    return aliases
 
-# Delete the base dir
-if os.path.isdir(BASE_DIR):
-    shutil.rmtree(BASE_DIR)
-os.mkdir(BASE_DIR)
 
-# Check that wasm checksums file exists
-if not os.path.isfile(WASM_CHECKSUMS_PATH):
-    print(f"Cannot find the wasm checksums file at {WASM_CHECKSUMS_PATH}")
-    sys.exit(1)
+def params_json_object(s):
+    params = json.loads(s)
 
-# Check that wasm directory exists and is not empty
-if not os.path.isdir(WASM_PATH) or not os.listdir(WASM_PATH):
-    print(f"Cannot find wasm directory that is not empty at {WASM_PATH}")
-    sys.exit(1)
+    if type(params) != dict:
+        die("Only JSON objects allowed for param updates")
 
-system(f"{namadac_bin} --base-dir='{BASE_DIR}' utils init-network --chain-prefix {CHAIN_PREFIX} --genesis-time {GENESIS_TIME} --templates-path {TEMPLATES_PATH} --wasm-checksums-path {WASM_CHECKSUMS_PATH}")
+    return params
 
-base_dir_files = os.listdir(BASE_DIR)
-CHAIN_ID=""
-for file in base_dir_files:
-    if file.startswith(CHAIN_PREFIX):
-        CHAIN_ID = file
-        break
 
-# create a new directory within the base_dir 
-temp_dir = BASE_DIR + '/tmp/'
-os.mkdir(temp_dir)
-shutil.move(BASE_DIR + '/' + CHAIN_ID, BASE_DIR + '/tmp/' + CHAIN_ID)
-shutil.move(namada_dir + '/' + CHAIN_ID + '.tar.gz', temp_dir + CHAIN_ID + '.tar.gz')
+def to_edit_from_args(args):
+    if args.max_validator_slots:
+        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
+        params.setdefault("pos_params", {})[
+            "max_validator_slots"
+        ] = args.max_validator_slots
+    if args.epoch_duration:
+        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
+        params.setdefault("parameters", {})["epochs_per_year"] = int(
+            round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds())
+        )
+    return args.edit
 
-GENESIS_VALIDATOR='validator-0'
-PRE_GENESIS_PATH=localnet_dir + '/src/pre-genesis/' + GENESIS_VALIDATOR
-if not os.path.isdir(PRE_GENESIS_PATH) or not os.listdir(PRE_GENESIS_PATH):
-    print(f"Cannot find pre-genesis directory that is not empty at {PRE_GENESIS_PATH}")
-    sys.exit(1)
 
-system(f"NAMADA_NETWORK_CONFIGS_DIR='{temp_dir}' {namadac_bin} --base-dir='{BASE_DIR}' utils join-network --chain-id {CHAIN_ID} --genesis-validator {GENESIS_VALIDATOR} --pre-genesis-path {PRE_GENESIS_PATH} --dont-prefetch-wasm")
+def edit_templates(templates, to_edit):
+    def invalid_dict(tab):
+        return type(tab) != dict or len(tab) == 0
 
-shutil.rmtree(BASE_DIR + '/' + CHAIN_ID + '/wasm/')
-shutil.move(temp_dir + CHAIN_ID + '/wasm/', BASE_DIR + '/' + CHAIN_ID + '/wasm/')
+    def edit(so_far, table, entries):
+        if invalid_dict(table) or invalid_dict(entries):
+            return
 
-# Move the genesis wallet to the base dir
-genesis_wallet_toml = localnet_dir + '/src/pre-genesis' + '/wallet.toml'
-wallet = BASE_DIR + '/' + CHAIN_ID + '/wallet.toml'
-move_genesis_wallet(genesis_wallet_toml, wallet)
-# Delete the temp dir
-shutil.rmtree(temp_dir)
+        so_far_str = None
 
-print("Run the ledger using the following command:")
-print(f"{namada_bin} --base-dir='{BASE_DIR}' --chain-id '{CHAIN_ID}' ledger run")
+        for key, value in entries.items():
+            if key not in table:
+                if not so_far_str:
+                    so_far_str = "/".join(so_far)
+                warning(f"Skipping invalid parameters entry {so_far_str}/{key}")
+                continue
 
+            if type(value) == dict:
+                so_far.append(key)
+                edit(so_far, table[key], value)
+                return
+
+            table[key] = value
+
+    edit([], templates, to_edit)
+
+
+def write_templates(working_directory, templates):
+    template_path = lambda name: Path(working_directory) / name
+    for name, template in templates.items():
+        with open(template_path(name), "w") as output_file:
+            toml.dump(template, output_file)
+
+
+def setup_templates(working_directory, args):
+    to_edit = to_edit_from_args(args)
+    info(f"Updating templates with provided args: {to_edit}")
+    templates = load_base_templates(args.templates)
+    edit_templates(templates, to_edit)
+    write_templates(working_directory, templates)
+    info("Templates have been updated")
+    return templates
+
+
+def get_project_root():
+    # ../namada/scripts/<this>.py => ../../
+    #      ^
+    return Path(sys.argv[0]).absolute().parent.parent
+
+
+def genesis_template_members():
+    return [
+        BALANCES_TEMPLATE,
+        PARAMETERS_TEMPLATE,
+        TOKENS_TEMPLATE,
+        TRANSACTIONS_TEMPLATE,
+        VALIDITY_PREDICATES_TEMPLATE,
+    ]
+
+
+def load_base_templates(base_templates):
+    return {
+        template_name: toml.load(base_templates / template_name)
+        for template_name in ALL_GENESIS_TEMPLATES
+    }
+
+
+def target_binary_paths(mode):
+    bins = {}
+
+    for bin_name in ALL_NAMADA_BINS:
+        full_bin_path = get_project_root() / "target" / mode / bin_name
+
+        if not os.path.isfile(full_bin_path) or not os.access(full_bin_path, os.X_OK):
+            die(f"Cannot find {bin_name} binary or it is not executable")
+
+        bins[bin_name] = full_bin_path
+
+    return bins
+
+
+def lookup_chain_id(init_network_output):
+    needle = b"Derived chain ID: "
+    start = init_network_output.find(needle)
+    if start == -1:
+        die("Could not find chain id in `init-network` output")
+    init_network_output = init_network_output[start + len(needle) :]
+    end = init_network_output.find(b"\n")
+    if end == -1:
+        die("Could not find chain id in `init-network` output")
+    return init_network_output[:end].decode()
+
+
+def is_empty(g):
+    try:
+        next(g)
+        return False
+    except StopIteration:
+        return True
+
+
+def reset_base_dir_prefix(args):
+    prefix = args.base_dir_prefix
+    if os.path.isdir(prefix):
+        if not args.force:
+            die(
+                f"Base directory prefix {prefix} already exists. Try running this script with `--force`."
+            )
+        shutil.rmtree(prefix)
+    os.mkdir(prefix)
+    return prefix
+
+
+def reset_base_dir(prefix, validator_alias, pre_genesis_wallet):
+    base_dir = prefix / validator_alias
+    pre_genesis_dir = base_dir / "pre-genesis"
+    os.mkdir(base_dir)
+    os.mkdir(pre_genesis_dir)
+    shutil.copy(pre_genesis_wallet, pre_genesis_dir)
+    return base_dir
+
+
+def validator_exists(templates, validator_alias, validator_addr):
+    transactions = templates[TRANSACTIONS_TEMPLATE]
+    validators = transactions["validator_account"]
+
+    for val in validators:
+        if val["address"] == validator_addr:
+            info(f"Validator {validator_alias} will listen at {val['net_address']}")
+            return True
+
+    return False
+
+
+# https://stackoverflow.com/questions/5522031/convert-timedelta-to-total-seconds
+def parse_duration(time_str):
+    parts = PARSE_TIME_REGEX.match(time_str)
+    if not parts:
+        die(f"Invalid duration {time_str}")
+    parts = parts.groupdict()
+    time_params = {}
+    for name, param in parts.items():
+        if param:
+            time_params[name] = int(param)
+    dur = timedelta(**time_params)
+    if dur.total_seconds() == 0:
+        die(
+            f"Duration {time_str} was parsed as zero, try using `hr`, `m` or `s` unit suffixes"
+        )
+    return dur
+
+
+# https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
+class Color:
+    PURPLE = "\033[95m"
+    CYAN = "\033[96m"
+    DARKCYAN = "\033[36m"
+    BLUE = "\033[94m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
+
+
+BALANCES_TEMPLATE = "balances.toml"
+PARAMETERS_TEMPLATE = "parameters.toml"
+TOKENS_TEMPLATE = "tokens.toml"
+TRANSACTIONS_TEMPLATE = "transactions.toml"
+VALIDITY_PREDICATES_TEMPLATE = "validity-predicates.toml"
+
+ALL_GENESIS_TEMPLATES = [
+    BALANCES_TEMPLATE,
+    PARAMETERS_TEMPLATE,
+    TOKENS_TEMPLATE,
+    TRANSACTIONS_TEMPLATE,
+    VALIDITY_PREDICATES_TEMPLATE,
+]
+
+NAMADA = "namada"
+NAMADAC = "namadac"
+NAMADAN = "namadan"
+NAMADAW = "namadaw"
+
+ALL_NAMADA_BINS = [
+    NAMADA,
+    NAMADAC,
+    NAMADAN,
+    NAMADAW,
+]
+
+PARSE_TIME_REGEX = re.compile(
+    r"((?P<hours>\d+?)hr)?((?P<minutes>\d+?)m)?((?P<seconds>\d+?)s)?"
+)
+
+if __name__ == "__main__":
+    main()

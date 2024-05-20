@@ -499,6 +499,7 @@ pub fn network(
             [
                 "utils",
                 "join-network",
+                "--add-persistent-peers",
                 "--chain-id",
                 net.chain_id.as_str(),
                 "--genesis-validator",
@@ -531,6 +532,7 @@ pub fn network(
             [
                 "utils",
                 "join-network",
+                "--add-persistent-peers",
                 "--chain-id",
                 net.chain_id.as_str(),
                 "--dont-prefetch-wasm",

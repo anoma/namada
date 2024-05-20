@@ -1,3 +1,4 @@
+use std::fs;
 use std::mem::ManuallyDrop;
 use std::path::Path;
 use std::str::FromStr;
@@ -91,19 +92,30 @@ pub fn initialize_genesis(
         base_dir: test_dir.path().to_path_buf(),
         wasm_dir: Some(test_dir.path().join(chain_id.as_str()).join("wasm")),
     };
-    // setup genesis file
-    namada_apps::client::utils::init_network(
-        global_args.clone(),
-        args::InitNetwork {
+
+    // Create genesis chain release archive
+    let release_archive_path =
+        namada_apps::client::utils::init_network(args::InitNetwork {
             templates_path: genesis_path,
             wasm_checksums_path,
             chain_id_prefix,
             consensus_timeout_commit: Timeout::from_str("30s").unwrap(),
-            dont_archive: true,
             archive_dir: None,
             genesis_time,
-        },
-    );
+        });
+
+    // Decode and unpack the release archive
+    let mut archive = {
+        let decoder = flate2::read::GzDecoder::new(
+            fs::File::open(&release_archive_path).unwrap(),
+        );
+        tar::Archive::new(decoder)
+    };
+    archive.unpack(&global_args.base_dir).unwrap();
+    _ = archive;
+
+    // Remove release archive
+    fs::remove_file(release_archive_path).unwrap();
 
     let eth_bridge_params = genesis.get_eth_bridge_params();
     let auto_drive_services = {
