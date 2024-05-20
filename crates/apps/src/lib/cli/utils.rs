@@ -154,6 +154,13 @@ pub const fn arg_multi<T, K>(name: &'static str) -> ArgMulti<T, K> {
     }
 }
 
+#[macro_export]
+macro_rules! wrap {
+    ($text:literal) => {
+        textwrap_macros::fill!($text, 80)
+    };
+}
+
 impl<T> Arg<T> {
     pub const fn opt(self) -> ArgOpt<T> {
         ArgOpt {
