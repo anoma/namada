@@ -150,23 +150,26 @@ where
 
         // Execute wrapper and protocol transactions
         let successful_wrappers = self.retrieve_and_execute_transactions(
-            &req.txs,
-            &mut response,
-            &mut changed_keys,
-            &mut stats,
-            height,
             &native_block_proposer_address,
+            ExecutionArgs {
+                processed_txs: &req.txs,
+                response: &mut response,
+                changed_keys: &mut changed_keys,
+                stats: &mut stats,
+                height,
+            },
         );
 
         // Execute inner transactions
         self.execute_tx_batches(
             successful_wrappers,
-            //FIXME: same args as the previous function, use a struct
-            &req.txs,
-            &mut response,
-            &mut changed_keys,
-            &mut stats,
-            height,
+            ExecutionArgs {
+                processed_txs: &req.txs,
+                response: &mut response,
+                changed_keys: &mut changed_keys,
+                stats: &mut stats,
+                height,
+            },
         );
 
         stats.set_tx_cache_size(
@@ -579,13 +582,14 @@ where
     // Get the transactions from the consensus engine, preprocess and execute them. Return the cache of successful wrapper transactions later used when executing the inner txs.
     fn retrieve_and_execute_transactions(
         &mut self,
-        processed_txs: &[shim::request::ProcessedTx],
-        response: &mut shim::response::FinalizeBlock,
-        //FIXME: review how we pass these, custom struct?
-        changed_keys: &mut BTreeSet<Key>,
-        stats: &mut InternalStats,
-        height: BlockHeight,
         native_block_proposer_address: &Address,
+        ExecutionArgs {
+            processed_txs,
+            response,
+            changed_keys,
+            stats,
+            height,
+        }: ExecutionArgs,
         //FIXME: maybe better to cache the transactions themselves to avoid another deserialization
     ) -> Vec<WrapperCache> {
         let mut successful_wrappers = vec![];
@@ -783,14 +787,14 @@ where
     // Execute the transaction batches for successful wrapper transactions
     fn execute_tx_batches(
         &mut self,
-        //FIXME: iter trait?
         successful_wrappers: Vec<WrapperCache>,
-        processed_txs: &[shim::request::ProcessedTx],
-        response: &mut shim::response::FinalizeBlock,
-        //FIXME: review how we pass these, custom struct?
-        changed_keys: &mut BTreeSet<Key>,
-        stats: &mut InternalStats,
-        height: BlockHeight,
+        ExecutionArgs {
+            processed_txs,
+            response,
+            changed_keys,
+            stats,
+            height,
+        }: ExecutionArgs,
     ) {
         for WrapperCache {
             tx_index,
@@ -863,6 +867,14 @@ where
             );
         }
     }
+}
+
+struct ExecutionArgs<'finalize> {
+    processed_txs: &'finalize [shim::request::ProcessedTx],
+    response: &'finalize mut shim::response::FinalizeBlock,
+    changed_keys: &'finalize mut BTreeSet<Key>,
+    stats: &'finalize mut InternalStats,
+    height: BlockHeight,
 }
 
 // Caches the execution of a wrapper transaction to be used when later executing the inner batch
