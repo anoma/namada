@@ -490,7 +490,7 @@ dependencies = [
  "bitflags 2.5.0",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "proc-macro2",
@@ -8248,8 +8248,9 @@ dependencies = [
 
 [[package]]
 name = "tower-abci"
-version = "0.12.0"
-source = "git+https://github.com/penumbra-zone/tower-abci.git?rev=4b7306578b93a4def9d76abae8e2a46c8ee6952f#4b7306578b93a4def9d76abae8e2a46c8ee6952f"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87b4818eb762092f14476ee0a32ce462c893b26366406bb73234eb13b84d7921"
 dependencies = [
  "bytes",
  "futures",
