@@ -182,14 +182,18 @@ where
         .conversion_state
         .assets
         .iter()
-        .map(
-            |(&asset_type, ((ref addr, denom, digit), epoch, ref conv, _))| {
+        .map(|(&asset_type, asset)| {
+            (
+                asset_type,
                 (
-                    asset_type,
-                    (addr.clone(), *denom, *digit, *epoch, conv.clone().into()),
-                )
-            },
-        )
+                    asset.token.clone(),
+                    asset.denom,
+                    asset.digit_pos,
+                    asset.epoch,
+                    asset.conversion.clone().into(),
+                ),
+            )
+        })
         .collect())
 }
 
@@ -203,18 +207,22 @@ where
     H: 'static + StorageHasher + Sync,
 {
     // Conversion values are constructed on request
-    if let Some(((addr, denom, digit), epoch, conv, pos)) =
+    if let Some(asset) =
         ctx.state.in_mem().conversion_state.assets.get(&asset_type)
     {
         Ok(Some((
-            addr.clone(),
-            *denom,
-            *digit,
-            *epoch,
+            asset.token.clone(),
+            asset.denom,
+            asset.digit_pos,
+            asset.epoch,
             Into::<masp_primitives::transaction::components::I128Sum>::into(
-                conv.clone(),
+                asset.conversion.clone(),
             ),
-            ctx.state.in_mem().conversion_state.tree.path(*pos),
+            ctx.state
+                .in_mem()
+                .conversion_state
+                .tree
+                .path(asset.leaf_pos),
         )))
     } else {
         Ok(None)

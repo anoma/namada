@@ -364,13 +364,13 @@ fn validate_transparent_input<A: Authorization>(
         // must never be allowed to backdate transparent inputs to a
         // transaction for they would then be able to claim rewards while
         // locking their assets for negligible time periods.
-        Some(((address, _asset_denom, digit), asset_epoch, _, _))
-            if *asset_epoch == epoch =>
-        {
-            let amount =
-                token::Amount::from_masp_denominated(vin.value, *digit);
+        Some(asset) if asset.epoch == epoch => {
+            let amount = token::Amount::from_masp_denominated(
+                vin.value,
+                asset.digit_pos,
+            );
             *bal_ref = bal_ref
-                .checked_sub(&ValueSum::from_pair(address.clone(), amount))
+                .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
                         "Overflow in bundle balance",
@@ -443,13 +443,13 @@ fn validate_transparent_output(
         .or_insert(ValueSum::zero());
 
     match conversion_state.assets.get(&out.asset_type) {
-        Some(((address, _asset_denom, digit), asset_epoch, _, _))
-            if *asset_epoch <= epoch =>
-        {
-            let amount =
-                token::Amount::from_masp_denominated(out.value, *digit);
+        Some(asset) if asset.epoch <= epoch => {
+            let amount = token::Amount::from_masp_denominated(
+                out.value,
+                asset.digit_pos,
+            );
             *bal_ref = bal_ref
-                .checked_sub(&ValueSum::from_pair(address.clone(), amount))
+                .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
                         "Overflow in bundle balance",
@@ -558,14 +558,12 @@ fn verify_sapling_balancing_value(
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
         match conversion_state.assets.get(asset_type) {
-            Some(((address, _, digit), asset_epoch, _, _))
-                if *asset_epoch <= target_epoch =>
-            {
+            Some(asset) if asset.epoch <= target_epoch => {
                 acc = apply_balance_component(
                     &acc,
                     *val,
-                    *digit,
-                    address.clone(),
+                    asset.digit_pos,
+                    asset.token.clone(),
                 )?;
             }
             None if tokens.contains_key(asset_type) => {
