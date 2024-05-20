@@ -15,7 +15,7 @@ use crate::vm::{host_env, WasmCacheAccess};
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
     wasm_store: &mut Store,
-    env: &FunctionEnv<TxVmEnv<'static, WasmMemory, DB, H, CA>>,
+    env: &FunctionEnv<TxVmEnv<WasmMemory, D, H, CA>>,
 ) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,

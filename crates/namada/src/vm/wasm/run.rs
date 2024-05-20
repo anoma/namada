@@ -16,7 +16,9 @@ use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
-use wasmer::{BaseTunables, Module, Store};
+use wasmer::{
+    BaseTunables, Engine, Features, Module, NativeEngineExt, Store, Target,
+};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
@@ -355,7 +357,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn run_vp(
     module: wasmer::Module,
-    vp_imports: wasmer::ImportObject,
+    vp_imports: wasmer::Imports,
     vp_code_hash: &Hash,
     input_data: &BatchedTxRef<'_>,
     address: &Address,
@@ -551,10 +553,16 @@ where
 pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
     // Use Singlepass compiler with the default settings
     let compiler = wasmer_compiler_singlepass::Singlepass::default();
-    wasmer::Store::new_with_tunables(
-        &wasmer_engine_universal::Universal::new(compiler).engine(),
-        limit,
-    )
+    let mut engine = Engine::new(
+        Box::new(compiler),
+        // NB: The default target corresponds to the host's triplet
+        Target::default(),
+        // NB: WASM has already been validated, so we can use
+        // the default features here
+        Features::default(),
+    );
+    engine.set_tunables(limit);
+    wasmer::Store::new(engine)
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code

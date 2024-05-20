@@ -340,6 +340,7 @@ pub fn vp_limit() -> Limit<BaseTunables> {
     let limit = Pages(VP_MEMORY_MAX_PAGES);
     Limit { limit, base }
 }
+
 /// A [`Limit`] with memory limit setup for transaction WASM execution.
 pub fn tx_limit() -> Limit<BaseTunables> {
     let base = BaseTunables::for_target(&Target::default());
@@ -411,7 +412,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         &self,
         ty: &MemoryType,
         style: &MemoryStyle,
-    ) -> std::result::Result<Arc<dyn vm::Memory>, MemoryError> {
+    ) -> std::result::Result<vm::VMMemory, MemoryError> {
         let adjusted = self.adjust_memory(ty);
         self.validate_memory(&adjusted)?;
         self.base.create_host_memory(&adjusted, style)
@@ -426,7 +427,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         ty: &MemoryType,
         style: &MemoryStyle,
         vm_definition_location: NonNull<VMMemoryDefinition>,
-    ) -> std::result::Result<Arc<dyn vm::Memory>, MemoryError> {
+    ) -> std::result::Result<vm::VMMemory, MemoryError> {
         let adjusted = self.adjust_memory(ty);
         self.validate_memory(&adjusted)?;
         self.base
@@ -441,7 +442,7 @@ impl<T: Tunables> Tunables for Limit<T> {
         &self,
         ty: &TableType,
         style: &TableStyle,
-    ) -> std::result::Result<Arc<dyn vm::Table>, String> {
+    ) -> std::result::Result<vm::VMTable, String> {
         self.base.create_host_table(ty, style)
     }
 
@@ -454,14 +455,17 @@ impl<T: Tunables> Tunables for Limit<T> {
         ty: &TableType,
         style: &TableStyle,
         vm_definition_location: NonNull<VMTableDefinition>,
-    ) -> std::result::Result<Arc<dyn vm::Table>, String> {
+    ) -> std::result::Result<vm::VMTable, String> {
         self.base.create_vm_table(ty, style, vm_definition_location)
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use wasmer::{wat2wasm, Cranelift, Instance, Module, Store};
+    use wasmer::{
+        wat2wasm, Cranelift, Engine, Features, Instance, Module,
+        NativeEngineExt, Store, Target,
+    };
 
     use super::*;
 
@@ -478,14 +482,19 @@ pub mod tests {
 
         // Any compiler and any engine do the job here
         let compiler = Cranelift::default();
-        let engine = wasmer_engine_universal::Universal::new(compiler).engine();
+        let mut engine = Engine::new(
+            Box::new(compiler),
+            Target::default(),
+            Features::default(),
+        );
 
         let base = BaseTunables::for_target(&Target::default());
         let limit = Pages(24);
         let tunables = Limit { limit, base };
+        engine.set_tunables(tunables);
 
         // Create a store, that holds the engine and our custom tunables
-        let store = Store::new_with_tunables(&engine, tunables);
+        let store = Store::new(engine);
 
         println!("Compiling module...");
         let module = Module::new(&store, wasm_bytes).unwrap();
