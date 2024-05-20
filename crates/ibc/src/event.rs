@@ -233,7 +233,16 @@ impl TryFrom<RawIbcEvent> for IbcEvent {
         let attributes: HashMap<_, _> = abci_event
             .attributes
             .iter()
-            .map(|tag| (tag.key.to_string(), tag.value.to_string()))
+            .map(|tag| {
+                (
+                    tag.key_str()
+                        .expect("Attribute key is malformed UFT-8")
+                        .to_string(),
+                    tag.value_str()
+                        .expect("Attribute value is malformed UTF-8")
+                        .to_string(),
+                )
+            })
             .collect();
         Ok(Self {
             event_type,
