@@ -202,7 +202,7 @@ where
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
-    let env = TxVmEnv::new(
+    let mut env = TxVmEnv::new(
         WasmMemory::default(),
         write_log,
         in_mem,
@@ -226,17 +226,28 @@ where
     let instance = wasmer::Instance::new(&module, &imports)
         .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
-    // We need to write the inputs in the memory exported from the wasm
-    // module
-    let memory = instance
+    // Fetch guest's main memory
+    let guest_memory = instance
         .exports
         .get_memory("memory")
         .map_err(Error::MissingModuleMemory)?;
+
+    // Write the inputs in the memory exported from the wasm
+    // module
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, &batched_tx)
+    } = memory::write_tx_inputs(guest_memory, &batched_tx)
         .map_err(Error::MemoryError)?;
+
+    // Share guest memory with the host
+    //
+    // SAFETY: We do not access `env.memory` after `instance`
+    // is dropped.
+    unsafe {
+        env.memory.init_from_guest(guest_memory);
+    }
+
     // Get the module's entrypoint to be called
     let apply_tx = instance
         .exports
@@ -258,13 +269,12 @@ where
         }
     })?;
 
+    // NB: early drop this data to avoid memory errors
+    _ = (instance, imports, env);
+
     if ok == 1 {
         Ok(verifiers)
     } else {
-        // NB: drop imports so we can safely access the
-        // `&mut` ptrs we shared with the guest
-        _ = (instance, imports);
-
         let err = yielded_value.take().map_or_else(
             || Ok("Execution ended abruptly with an unknown error".to_owned()),
             |borsh_encoded_err| {
@@ -340,6 +350,8 @@ where
     );
 
     let yielded_value_borrow = env.ctx.yielded_value;
+
+    // TODO: init host memory with guest's memory in env
     let imports = vp_imports(&store, env);
 
     run_vp(
@@ -376,12 +388,14 @@ fn run_vp(
     let instance = wasmer::Instance::new(&module, &vp_imports)
         .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
-    // We need to write the inputs in the memory exported from the wasm
-    // module
-    let memory = instance
+    // Fetch guest's main memory
+    let guest_memory = instance
         .exports
         .get_memory("memory")
         .map_err(Error::MissingModuleMemory)?;
+
+    // Write the inputs in the memory exported from the wasm
+    // module
     let memory::VpCallInput {
         addr_ptr,
         addr_len,
@@ -391,7 +405,8 @@ fn run_vp(
         keys_changed_len,
         verifiers_ptr,
         verifiers_len,
-    } = memory::write_vp_inputs(memory, input).map_err(Error::MemoryError)?;
+    } = memory::write_vp_inputs(guest_memory, input)
+        .map_err(Error::MemoryError)?;
 
     // Get the module's entrypoint to be called
     let validate_tx = instance
@@ -440,13 +455,12 @@ fn run_vp(
         "wasm vp"
     );
 
+    // NB: early drop this data to avoid memory errors
+    _ = (instance, vp_imports);
+
     if is_valid == 1 {
         Ok(())
     } else {
-        // NB: drop imports so we can safely access the
-        // `&mut` ptrs we shared with the guest
-        _ = (instance, vp_imports);
-
         unsafe { yielded_value.get_mut() }.take().map_or_else(
             || Err(Error::VpError(VpError::Unspecified)),
             |borsh_encoded_err| {

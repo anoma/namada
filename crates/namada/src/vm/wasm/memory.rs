@@ -11,8 +11,8 @@ use namada_sdk::arith::{self, checked};
 use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::{
-    vm, BaseTunables, HostEnvInitError, LazyInit, Memory, MemoryError,
-    MemoryType, Pages, TableType, Target, Tunables, WASM_PAGE_SIZE,
+    vm, BaseTunables, Memory, MemoryError, MemoryType, Pages, TableType,
+    Target, Tunables, WASM_PAGE_SIZE,
 };
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
@@ -253,29 +253,31 @@ fn write_memory_bytes(
 /// The wasm memory
 #[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
-    pub(crate) inner: LazyInit<wasmer::Memory>,
+    pub(crate) inner: Option<NonNull<wasmer::Memory>>,
 }
 
 impl WasmMemory {
-    /// Initialize the memory from the given exports, used to implement
-    /// [`wasmer::WasmerEnv`].
-    pub fn init_env_memory(
-        &mut self,
-        exports: &wasmer::Exports,
-    ) -> std::result::Result<(), HostEnvInitError> {
-        // "`TxEnv` holds a reference to the Wasm `Memory`, which itself
-        // internally holds a reference to the instance which owns that
-        // memory. However the instance itself also holds a reference to
-        // the `TxEnv` when it is instantiated, thus creating a circular
-        // reference.
-        // You can work around this by using `get_with_generics_weak` which
-        // creates a weak reference to the `Instance` internally."
-        // <https://github.com/wasmerio/wasmer/issues/2780#issuecomment-1054452629>
-        let memory = exports.get_with_generics_weak("memory")?;
-        if !self.inner.initialize(memory) {
+    /// Initialize the host memory with a pointer to the guest's memory.
+    ///
+    /// ## Safety
+    ///
+    /// The inner [`Memory`] lives in a [`wasmer::Store`], which is owned
+    /// by a [`wasmer::Instance`]. The instance must outlive the access to
+    /// the memory object, to avoid use-after-free errors.
+    ///
+    /// Additionally, the guest memory cannot be accessed concurrently.
+    pub unsafe fn init_from_guest(&mut self, guest_memory: &Memory) {
+        if self.inner.is_some() {
             tracing::error!("wasm memory is already initialized");
+            return;
         }
-        Ok(())
+        self.inner =
+            Some(NonNull::new_unchecked(guest_memory as *const _ as *mut _));
+    }
+
+    /// Get a reference to the inner [`Memory`].
+    unsafe fn get_ref(&self) -> Option<&Memory> {
+        self.inner.as_ref().map(|mem| mem.as_ref())
     }
 }
 
@@ -285,7 +287,8 @@ impl VmMemory for WasmMemory {
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
-        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        let memory = unsafe { self.inner.get_ref() }
+            .ok_or(Error::UninitializedMemory)?;
         let bytes = read_memory_bytes(memory, offset, len)?;
         let len = bytes.len() as u64;
         let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
@@ -299,7 +302,8 @@ impl VmMemory for WasmMemory {
         // allocated
         let len = bytes.as_ref().len() as u64;
         let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-        let memory = self.inner.get_ref().ok_or(Error::UninitializedMemory)?;
+        let memory = unsafe { self.inner.get_ref() }
+            .ok_or(Error::UninitializedMemory)?;
         write_memory_bytes(memory, offset, bytes)?;
         Ok(gas)
     }
