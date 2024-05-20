@@ -413,6 +413,7 @@ where
         &mut shell.vp_wasm_cache,
         &mut shell.tx_wasm_cache,
         None,
+        None,
     );
     shell
         .state

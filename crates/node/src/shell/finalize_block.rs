@@ -142,10 +142,16 @@ where
                      proposer from tendermint raw hash",
                 )
         };
+        //FIXME: need uni test on fee pyament when inner txs touch balance of fee payer (also run this test on the old version with the bug to check that the bug was indeed there)
 
         // Tracks the accepted transactions
         self.state.in_mem_mut().block.results = BlockResults::default();
         let mut changed_keys = BTreeSet::new();
+        //FIXME: maybe better to cache the transactions themselves to avoid another deserialization
+        let mut successful_wrappers = vec![];
+
+        //FIXME: move this to a separate function? Maybe yes
+        // Execute wrapper and protocol transactions
         for (tx_index, processed_tx) in req.txs.iter().enumerate() {
             let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
                 tx
@@ -303,21 +309,13 @@ where
                     }
                 },
             };
-            let replay_protection_hashes =
-                if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
-                    Some(ReplayProtectionHashes {
-                        raw_header_hash: tx.raw_header_hash(),
-                        header_hash: tx.header_hash(),
-                    })
-                } else {
-                    None
-                };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let mut tx_event = new_tx_event(&tx, height.0);
+            let tx_event = new_tx_event(&tx, height.0);
             let is_atomic_batch = tx.header.atomic;
             let commitments_len = tx.commitments().len() as u64;
             let tx_hash = tx.header_hash();
 
+            //FIXME: this thing is the same for raw txs, merge them? Maybe not
             let dispatch_result = protocol::dispatch_tx(
                 tx,
                 processed_tx.tx.as_ref(),
@@ -327,11 +325,88 @@ where
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
                 block_proposer,
+                None,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // save the gas cost
+            self.update_tx_gas(tx_hash, consumed_gas.into());
+
+            //FIXME: this is becoming very cluttered because it needs to handle wrappers, inners and protocols, should split in different functions?
+            if let Some(wrapper_cache) = self.evaluate_tx_result(
+                &mut response,
+                dispatch_result,
+                TxData {
+                    is_atomic_batch,
+                    tx_header: &tx_header,
+                    commitments_len,
+                    tx_index,
+                    replay_protection_hashes: None,
+                    tx_gas_meter,
+                    height,
+                },
+                TxLogs {
+                    tx_event,
+                    stats: &mut stats,
+                    changed_keys: &mut changed_keys,
+                },
+            ) {
+                successful_wrappers.push(wrapper_cache);
+            }
+        }
+
+        // Execute inner transactions
+        //FIXME: export this to another function
+        for WrapperCache {
+            tx_index,
+            gas_meter: tx_gas_meter,
+            event: tx_event,
+            tx_result: wrapper_tx_result,
+        } in successful_wrappers
+        {
+            //FIXME: should also enqueue the tx directly to avoid deserializing again? POssibly yes
+            //FIXME: manage unwrap
+            let processed_tx = req.txs.get(tx_index).unwrap();
+            let mut tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref())
+            {
+                tx
+            } else {
+                tracing::error!(
+                    "FinalizeBlock received a tx that could not be \
+                     deserialized to a Tx type. This is likely a protocol \
+                     transaction."
+                );
+                continue;
+            };
+
+            let tx_header = tx.header();
+            let tx_hash = tx.header_hash();
+            let is_atomic_batch = tx.header.atomic;
+            let commitments_len = tx.commitments().len() as u64;
+            let replay_protection_hashes = Some(ReplayProtectionHashes {
+                raw_header_hash: tx.raw_header_hash(),
+                header_hash: tx.header_hash(),
+            });
+
+            // change tx type to raw for execution
+            tx.update_header(TxType::Raw);
+            let tx_gas_meter = RefCell::new(tx_gas_meter);
+            let dispatch_result = protocol::dispatch_tx(
+                tx,
+                processed_tx.tx.as_ref(),
+                TxIndex::must_from_usize(tx_index),
+                &tx_gas_meter,
+                &mut self.state,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+                None,
+                Some(wrapper_tx_result),
+            );
+            let tx_gas_meter = tx_gas_meter.into_inner();
+            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
+
+            // update the gas cost of the corresponding wrapper
             self.update_tx_gas(tx_hash, consumed_gas.into());
 
             self.evaluate_tx_result(
@@ -343,16 +418,15 @@ where
                     commitments_len,
                     tx_index,
                     replay_protection_hashes,
-                    consumed_gas,
+                    tx_gas_meter,
                     height,
                 },
                 TxLogs {
-                    tx_event: &mut tx_event,
+                    tx_event,
                     stats: &mut stats,
                     changed_keys: &mut changed_keys,
                 },
             );
-            response.events.emit(tx_event);
         }
 
         stats.set_tx_cache_size(
@@ -524,8 +598,8 @@ where
         }
     }
 
-    // Evaluate the result of a batch. Commit or drop the storage changes,
-    // update stats and event, manage replay protection.
+    // Evaluate the result of a transaction. Commit or drop the storage changes,
+    // update stats and event, manage replay protection. For successful wrapper transactions return the relevant data and delay the evaluation after the batch execution
     fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
@@ -535,14 +609,27 @@ where
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
-    ) {
+    ) -> Option<WrapperCache> {
         match dispatch_result {
-            Ok(tx_result) => self.handle_inner_tx_results(
-                response,
-                tx_result,
-                tx_data,
-                &mut tx_logs,
-            ),
+            Ok(tx_result) => match tx_data.tx_header.tx_type {
+                //FIXME: manage unwrap
+                TxType::Wrapper(_) =>
+                // Return withouth emitting the event
+                {
+                    return Some(WrapperCache {
+                        tx_index: tx_data.tx_index,
+                        gas_meter: tx_data.tx_gas_meter,
+                        event: tx_logs.tx_event,
+                        tx_result,
+                    })
+                }
+                _ => self.handle_inner_tx_results(
+                    response,
+                    tx_result,
+                    tx_data,
+                    &mut tx_logs,
+                ),
+            },
             Err(DispatchError {
                 error: protocol::Error::WrapperRunnerError(msg),
                 tx_result: _,
@@ -557,7 +644,7 @@ where
                 );
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.consumed_gas))
+                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
                 // Make sure to clean the write logs for the next transaction
@@ -582,7 +669,7 @@ where
 
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.consumed_gas))
+                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::WasmRuntimeError));
 
@@ -595,6 +682,9 @@ where
                 );
             }
         }
+
+        response.events.emit(tx_logs.tx_event);
+        None
     }
 
     // Evaluate the results of all the transactions of the batch. Commit or drop
@@ -747,18 +837,28 @@ where
     }
 }
 
+// Caches the execution of a wrapper transaction to be used when later executing the inner batch
+struct WrapperCache {
+    tx_index: usize,
+    gas_meter: TxGasMeter,
+    event: Event,
+    tx_result: namada::tx::data::TxResult<protocol::Error>,
+}
+
 struct TxData<'tx> {
     is_atomic_batch: bool,
+    // FIXME: need the actual tx but it's hard becasue that is passed to dispatch_tx so I'd need to clone it
+    //FIXME: actually I need the tx only for wrappers, for everything else I only need the header
     tx_header: &'tx namada::tx::Header,
     commitments_len: u64,
     tx_index: usize,
     replay_protection_hashes: Option<ReplayProtectionHashes>,
-    consumed_gas: Gas,
+    tx_gas_meter: TxGasMeter,
     height: BlockHeight,
 }
 
 struct TxLogs<'finalize> {
-    tx_event: &'finalize mut Event,
+    tx_event: Event,
     stats: &'finalize mut InternalStats,
     changed_keys: &'finalize mut BTreeSet<Key>,
 }
@@ -2798,25 +2898,21 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(
-            shell
-                .shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-        );
+        assert!(shell
+            .shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_tx.raw_header_hash()));
         // Check that the hash is not present in the merkle tree
         shell.state.commit_block().unwrap();
-        assert!(
-            !shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&wrapper_hash_key)
-                .unwrap()
-        );
+        assert!(!shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&wrapper_hash_key)
+            .unwrap());
 
         // test that a commitment to replay protection gets added.
         let reprot_key = replay_protection::commitment_key();
@@ -2863,26 +2959,22 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
         // Check that the hashes are present in the merkle tree
         shell.state.commit_block().unwrap();
-        assert!(
-            shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&convert_key)
-                .unwrap()
-        );
-        assert!(
-            shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&commitment_key)
-                .unwrap()
-        );
+        assert!(shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&convert_key)
+            .unwrap());
+        assert!(shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&commitment_key)
+            .unwrap());
     }
 
     /// Test that a tx that has already been applied in the same block
@@ -2960,34 +3052,26 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-            );
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.header_hash())
-            );
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash()));
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.header_hash()));
         }
         // Commit to check the hashes from storage
         shell.commit();
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap()
-            );
-            assert!(
-                !shell
-                    .state
-                    .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap()
-            );
+            assert!(shell
+                .state
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+                .unwrap());
+            assert!(!shell
+                .state
+                .has_replay_protection_entry(&wrapper.header_hash())
+                .unwrap());
         }
     }
 
@@ -3270,29 +3354,23 @@ mod test_finalize_block {
             &unsigned_wrapper,
             &wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell.state.write_log().has_replay_protection_entry(
-                    &valid_wrapper.raw_header_hash()
-                )
-            );
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-            );
-        }
-        assert!(
-            shell.state.write_log().has_replay_protection_entry(
-                &failing_wrapper.raw_header_hash()
-            )
-        );
-        assert!(
-            !shell
+            assert!(!shell
                 .state
                 .write_log()
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-        );
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash()));
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.header_hash()));
+        }
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash()));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.header_hash()));
 
         // Commit to check the hashes from storage
         shell.commit();
@@ -3301,33 +3379,23 @@ mod test_finalize_block {
             unsigned_wrapper,
             wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell
-                    .state
-                    .has_replay_protection_entry(
-                        &valid_wrapper.raw_header_hash()
-                    )
-                    .unwrap()
-            );
-            assert!(
-                shell
-                    .state
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap()
-            );
+            assert!(!shell
+                .state
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash())
+                .unwrap());
+            assert!(shell
+                .state
+                .has_replay_protection_entry(&valid_wrapper.header_hash())
+                .unwrap());
         }
-        assert!(
-            shell
-                .state
-                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .unwrap()
-        );
-        assert!(
-            !shell
-                .state
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap()
-        );
+        assert!(shell
+            .state
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
+            .unwrap());
+        assert!(!shell
+            .state
+            .has_replay_protection_entry(&failing_wrapper.header_hash())
+            .unwrap());
     }
 
     #[test]
@@ -3387,18 +3455,14 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
 
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_hash)
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.raw_header_hash())
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_hash));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper.raw_header_hash()));
     }
 
     // Test that the fees are paid even if the inner transaction fails and its
@@ -3796,11 +3860,9 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(
-            enqueued_slashes_handle()
-                .at(&Epoch::default())
-                .is_empty(&shell.state)?
-        );
+        assert!(enqueued_slashes_handle()
+            .at(&Epoch::default())
+            .is_empty(&shell.state)?);
         assert_eq!(
             get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
@@ -3819,21 +3881,17 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(
-                enqueued_slashes_handle()
-                    .at(&epoch)
-                    .is_empty(&shell.state)?
-            );
+            assert!(enqueued_slashes_handle()
+                .at(&epoch)
+                .is_empty(&shell.state)?);
             assert_eq!(
                 get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(
-            !enqueued_slashes_handle()
-                .at(&processing_epoch)
-                .is_empty(&shell.state)?
-        );
+        assert!(!enqueued_slashes_handle()
+            .at(&processing_epoch)
+            .is_empty(&shell.state)?);
 
         // Advance to the processing epoch
         loop {
@@ -3856,11 +3914,9 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(
-                    enqueued_slashes_handle()
-                        .at(&shell.state.in_mem().block.epoch)
-                        .is_empty(&shell.state)?
-                );
+                assert!(enqueued_slashes_handle()
+                    .at(&shell.state.in_mem().block.epoch)
+                    .is_empty(&shell.state)?);
                 let stake1 = read_validator_stake(
                     &shell.state,
                     &params,
@@ -4344,13 +4400,11 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         tracing::debug!("Advancing to epoch 7");
 
@@ -4415,22 +4469,18 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(
-            namada_proof_of_stake::is_validator_frozen(
-                &shell.state,
-                &val1.address,
-                current_epoch,
-                &params
-            )
-            .unwrap()
-        );
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::is_validator_frozen(
+            &shell.state,
+            &val1.address,
+            current_epoch,
+            &params
+        )
+        .unwrap());
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(
@@ -5308,11 +5358,9 @@ mod test_finalize_block {
             shell.vp_wasm_cache.clone(),
         );
         let parameters = ParametersVp { ctx };
-        assert!(
-            parameters
-                .validate_tx(&batched_tx, &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(parameters
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .is_ok());
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
@@ -5385,13 +5433,11 @@ mod test_finalize_block {
         let inner_results = inner_tx_result.batch_results.0;
 
         for cmt in batch.commitments() {
-            assert!(
-                inner_results
-                    .get(&cmt.get_hash())
-                    .unwrap()
-                    .clone()
-                    .is_ok_and(|res| res.is_accepted())
-            );
+            assert!(inner_results
+                .get(&cmt.get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted()));
         }
 
         // Check storage modifications
@@ -5429,24 +5475,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications are missing
         for key in ["random_key_1", "random_key_2", "random_key_3"] {
@@ -5477,27 +5517,21 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[2].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
+        assert!(inner_results
+            .get(&batch.commitments()[2].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
 
         // Check storage modifications
         assert_eq!(
@@ -5508,12 +5542,10 @@ mod test_finalize_block {
                 .unwrap(),
             STORAGE_VALUE
         );
-        assert!(
-            !shell
-                .state
-                .has_key(&"random_key_2".parse().unwrap())
-                .unwrap()
-        );
+        assert!(!shell
+            .state
+            .has_key(&"random_key_2".parse().unwrap())
+            .unwrap());
         assert_eq!(
             shell
                 .state
@@ -5545,24 +5577,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications are missing
         for key in ["random_key_1", "random_key_2", "random_key_3"] {
@@ -5592,24 +5618,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications
         assert_eq!(
