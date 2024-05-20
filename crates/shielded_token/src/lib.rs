@@ -27,7 +27,7 @@ use std::str::FromStr;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::dec::Dec;
 pub use namada_storage::conversion_state::{
-    ConversionState, WithConversionState,
+    ConversionLeaf, ConversionState, WithConversionState,
 };
 use serde::{Deserialize, Serialize};
 pub use storage::*;

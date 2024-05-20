@@ -110,7 +110,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "derivative",
- "num-traits",
+ "num-traits 0.2.17",
  "zeroize",
 ]
 
@@ -126,7 +126,7 @@ dependencies = [
  "ark-std",
  "derivative",
  "num-bigint",
- "num-traits",
+ "num-traits 0.2.17",
  "paste",
  "rustc_version 0.3.3",
  "zeroize",
@@ -149,7 +149,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db2fd794a08ccb318058009eefdf15bcaaaaf6f8161eb3345f907222bac38b20"
 dependencies = [
  "num-bigint",
- "num-traits",
+ "num-traits 0.2.17",
  "quote",
  "syn 1.0.109",
 ]
@@ -170,7 +170,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1df2c09229cbc5a028b1d70e00fdb2acee28b1055dfb5ca73eea49c5a25c4e7c"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.17",
  "rand 0.8.5",
 ]
 
@@ -762,7 +762,7 @@ dependencies = [
  "android-tzdata",
  "iana-time-zone",
  "js-sys",
- "num-traits",
+ "num-traits 0.2.17",
  "wasm-bindgen",
  "windows-targets 0.48.5",
 ]
@@ -1974,7 +1974,7 @@ dependencies = [
  "libm",
  "num-bigint",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -3017,7 +3017,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "951641f13f873bff03d4bf19ae8bec531935ac0ac2cc775f84d7edfdcfed3f17"
 dependencies = [
  "integer-sqrt",
- "num-traits",
+ "num-traits 0.2.17",
  "uint",
 ]
 
@@ -3150,7 +3150,7 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -3384,7 +3384,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=b5e87a01c5928ce341f2d2a63a6fa6c4033be395#b5e87a01c5928ce341f2d2a63a6fa6c4033be395"
+source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
 dependencies = [
  "borsh 1.4.0",
  "chacha20",
@@ -3397,7 +3397,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=b5e87a01c5928ce341f2d2a63a6fa6c4033be395#b5e87a01c5928ce341f2d2a63a6fa6c4033be395"
+source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
 dependencies = [
  "aes",
  "bip0039",
@@ -3417,7 +3417,7 @@ dependencies = [
  "masp_note_encryption",
  "memuse",
  "nonempty",
- "num-traits",
+ "num-traits 0.2.19",
  "proptest",
  "rand 0.8.5",
  "rand_core 0.6.4",
@@ -3429,7 +3429,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=b5e87a01c5928ce341f2d2a63a6fa6c4033be395#b5e87a01c5928ce341f2d2a63a6fa6c4033be395"
+source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3606,7 +3606,7 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
- "num-traits",
+ "num-traits 0.2.17",
  "num256",
  "orion",
  "owo-colors",
@@ -3631,6 +3631,7 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
+ "uint",
  "wasm-instrument",
  "wasmer",
  "wasmer-cache",
@@ -3692,7 +3693,7 @@ dependencies = [
  "namada_migrations",
  "num-integer",
  "num-rational",
- "num-traits",
+ "num-traits 0.2.17",
  "num256",
  "num_enum",
  "primitive-types",
@@ -3892,7 +3893,7 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
- "num-traits",
+ "num-traits 0.2.17",
  "once_cell",
  "proptest",
  "serde",
@@ -3948,7 +3949,7 @@ dependencies = [
  "namada_token",
  "namada_tx",
  "namada_vote_ext",
- "num-traits",
+ "num-traits 0.2.17",
  "num256",
  "orion",
  "owo-colors",
@@ -4069,7 +4070,7 @@ dependencies = [
  "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
- "num-traits",
+ "num-traits 0.2.17",
  "prost",
  "regex",
  "serde",
@@ -4121,7 +4122,7 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "num-derive 0.3.3",
- "num-traits",
+ "num-traits 0.2.17",
  "proptest",
  "prost",
  "prost-types",
@@ -4240,7 +4241,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-rational",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4251,7 +4252,7 @@ checksum = "608e7659b5c3d7cba262d894801b9ec9d00de989e8a82bd4bef91d08da45cdc0"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4260,7 +4261,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ba157ca0885411de85d6ca030ba7e2a83a28636056c7c699b07c8b6f7383214"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4292,7 +4293,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4303,7 +4304,7 @@ checksum = "7d03e6c028c5dc5cac6e2dec0efda81fc887605bb3d884578bb6d6bf7514e252"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4315,7 +4316,7 @@ dependencies = [
  "autocfg",
  "num-bigint",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -4329,6 +4330,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-traits"
+version = "0.2.19"
+source = "git+https://github.com/heliaxdev/num-traits?rev=3f3657caa34b8e116fdf3f8a3519c4ac29f012fe#3f3657caa34b8e116fdf3f8a3519c4ac29f012fe"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "num256"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4337,7 +4346,7 @@ dependencies = [
  "lazy_static",
  "num",
  "num-derive 0.3.3",
- "num-traits",
+ "num-traits 0.2.17",
  "serde",
  "serde_derive",
 ]
@@ -4823,7 +4832,7 @@ dependencies = [
  "bit-vec",
  "bitflags 2.5.0",
  "lazy_static",
- "num-traits",
+ "num-traits 0.2.17",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_xorshift",
@@ -5297,7 +5306,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1790d1c4c0ca81211399e0e0af16333276f375209e71a37b67698a373db5b47a"
 dependencies = [
  "arrayvec",
- "num-traits",
+ "num-traits 0.2.17",
 ]
 
 [[package]]
@@ -5741,7 +5750,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
 dependencies = [
  "num-bigint",
- "num-traits",
+ "num-traits 0.2.17",
  "thiserror",
  "time",
 ]
@@ -6027,7 +6036,7 @@ dependencies = [
  "ed25519",
  "flex-error",
  "futures",
- "num-traits",
+ "num-traits 0.2.17",
  "once_cell",
  "prost",
  "prost-types",
@@ -6056,7 +6065,7 @@ dependencies = [
  "flex-error",
  "futures",
  "k256",
- "num-traits",
+ "num-traits 0.2.17",
  "once_cell",
  "prost",
  "prost-types",
@@ -6110,7 +6119,7 @@ dependencies = [
  "bytes",
  "flex-error",
  "num-derive 0.4.2",
- "num-traits",
+ "num-traits 0.2.17",
  "prost",
  "prost-types",
  "serde",

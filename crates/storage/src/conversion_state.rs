@@ -14,6 +14,23 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 
+/// A representation of a leaf in the conversion tree
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
+pub struct ConversionLeaf {
+    /// The token associated with this asset type
+    pub token: Address,
+    /// The denomination associated with the above toke
+    pub denom: Denomination,
+    /// The digit position covered by this asset type
+    pub digit_pos: MaspDigitPos,
+    /// The epoch of the asset type
+    pub epoch: Epoch,
+    /// The actual conversion and generator
+    pub conversion: AllowedConversion,
+    /// The position of this leaf in the conversion tree
+    pub leaf_pos: usize,
+}
+
 /// A representation of the conversion state
 #[derive(
     Debug, Default, BorshSerialize, BorshDeserialize, BorshDeserializer,
@@ -24,16 +41,7 @@ pub struct ConversionState {
     /// The tree currently containing all the conversions
     pub tree: FrozenCommitmentTree<sapling::Node>,
     /// Map assets to their latest conversion and position in Merkle tree
-    #[allow(clippy::type_complexity)]
-    pub assets: BTreeMap<
-        AssetType,
-        (
-            (Address, Denomination, MaspDigitPos),
-            Epoch,
-            AllowedConversion,
-            usize,
-        ),
-    >,
+    pub assets: BTreeMap<AssetType, ConversionLeaf>,
 }
 
 /// Able to borrow mutable conversion state.

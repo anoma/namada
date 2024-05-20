@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::address::Address;
-use crate::arith::{self, checked, CheckedAdd};
+use crate::arith::{self, checked, CheckedAdd, CheckedSub};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::hash::Hash;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
@@ -336,8 +336,38 @@ impl Amount {
 }
 
 impl CheckedAdd for Amount {
-    fn checked_add(&self, rhs: Self) -> Option<Self> {
-        self.checked_add(rhs)
+    type Output = Amount;
+
+    fn checked_add(self, rhs: Self) -> Option<Self::Output> {
+        Amount::checked_add(&self, rhs)
+    }
+}
+
+impl CheckedAdd for &Amount {
+    type Output = Amount;
+
+    fn checked_add(self, rhs: Self) -> Option<Self::Output> {
+        self.checked_add(*rhs)
+    }
+}
+
+impl CheckedSub for Amount {
+    type Output = Amount;
+
+    fn checked_sub(self, amount: Self) -> Option<Self::Output> {
+        self.raw
+            .checked_sub(amount.raw)
+            .map(|result| Self { raw: result })
+    }
+}
+
+impl CheckedSub for &Amount {
+    type Output = Amount;
+
+    fn checked_sub(self, amount: Self) -> Option<Self::Output> {
+        self.raw
+            .checked_sub(amount.raw)
+            .map(|result| Amount { raw: result })
     }
 }
 

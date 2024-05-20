@@ -8,15 +8,12 @@ use namada_parameters::storage;
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::masp_primitives::asset_type::AssetType;
-use namada_sdk::masp_primitives::convert::AllowedConversion;
 use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
-use namada_sdk::proof_of_stake::Epoch;
 use namada_sdk::storage::{DbColFam, Key};
-use namada_sdk::token::{Denomination, MaspDigitPos};
 use namada_shielded_token::storage_key::masp_token_map_key;
-use namada_shielded_token::ConversionState;
+use namada_shielded_token::{ConversionLeaf, ConversionState};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
 
@@ -33,15 +30,7 @@ pub struct NewConversionState {
     pub tree: FrozenCommitmentTree<sapling::Node>,
     /// Map assets to their latest conversion and position in Merkle tree
     #[allow(clippy::type_complexity)]
-    pub assets: BTreeMap<
-        AssetType,
-        (
-            (Address, Denomination, MaspDigitPos),
-            Epoch,
-            AllowedConversion,
-            usize,
-        ),
-    >,
+    pub assets: BTreeMap<AssetType, ConversionLeaf>,
 }
 
 impl From<ConversionState> for NewConversionState {

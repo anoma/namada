@@ -1,3 +1,4 @@
+#![allow(clippy::assign_op_pattern)]
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 
