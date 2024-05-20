@@ -40,7 +40,7 @@ use crate::queries::{
     TransferToEthereumStatus, RPC,
 };
 use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
-use crate::signing::{aux_signing_data, validate_fee_and_gen_unshield};
+use crate::signing::{aux_signing_data, validate_transparent_fee};
 use crate::tx::prepare_tx;
 use crate::{
     args, display, display_line, edisplay_line, MaybeSync, Namada,
@@ -87,12 +87,9 @@ pub async fn build_bridge_pool_tx(
             Some(sender_),
         ),
     )?;
-    let (fee_amount, _, unshield) = validate_fee_and_gen_unshield(
-        context,
-        &tx_args,
-        &signing_data.fee_payer,
-    )
-    .await?;
+    let (fee_amount, _) =
+        validate_transparent_fee(context, &tx_args, &signing_data.fee_payer)
+            .await?;
 
     let chain_id = tx_args
         .chain_id
@@ -112,7 +109,6 @@ pub async fn build_bridge_pool_tx(
     prepare_tx(
         &tx_args,
         &mut tx,
-        unshield,
         fee_amount,
         signing_data.fee_payer.clone(),
     )

@@ -498,22 +498,6 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     }
 }
 
-// TODO: remove when fee unshielding is gone
-/// Extend an [`Event`] with `is_wrapper_valid_masp_tx` data, indicating that
-/// the wrapper tx is a valid masp txs.
-pub struct MaspTxWrapper;
-
-impl EventAttributeEntry<'static> for MaspTxWrapper {
-    type Value = String;
-    type ValueOwned = Self::Value;
-
-    const KEY: &'static str = "is_wrapper_valid_masp_tx";
-
-    fn into_value(self) -> Self::Value {
-        String::new()
-    }
-}
-
 /// A displyable collection of hashes.
 #[derive(Serialize, Deserialize)]
 pub struct DisplayableHashVec(Vec<Hash>);

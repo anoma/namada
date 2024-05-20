@@ -22,7 +22,7 @@ impl Transfer {
         target: Address,
         token: Address,
         amount: DenominatedAmount,
-        // FIXME: handle masp here
+        // TODO(namada#2596): handle masp here
         shielded: Option<Hash>,
         args: GlobalArgs,
     ) -> Self {

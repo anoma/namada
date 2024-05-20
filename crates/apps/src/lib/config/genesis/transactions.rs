@@ -85,7 +85,6 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         fee_amount: None,
         wrapper_fee_payer: None,
         fee_token: genesis_fee_token_address(),
-        fee_unshield: None,
         gas_limit: 0.into(),
         expiration: Default::default(),
         disposable_signing_key: false,
@@ -131,7 +130,6 @@ fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
         },
         fee_payer,
         0.into(),
-        None,
     );
     tx
 }

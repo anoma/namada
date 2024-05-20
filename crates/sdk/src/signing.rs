@@ -10,7 +10,6 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
-use masp_primitives::transaction::Transaction;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
@@ -35,10 +34,8 @@ use namada_tx::{MaspBuilder, Section, Tx};
 use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use tokio::sync::RwLock;
 
-use super::masp::{ShieldedContext, ShieldedTransfer};
 use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
@@ -418,16 +415,11 @@ pub struct TxSourcePostBalance {
     pub token: Address,
 }
 
-/// Validate the fee of the transaction and generate the fee unshielding
-/// transaction if needed
-pub async fn validate_fee_and_gen_unshield<N: Namada>(
+/// Validate the fee amount and token
+pub async fn validate_fee<N: Namada>(
     context: &N,
     args: &args::Tx<SdkTypes>,
-    fee_payer: &common::PublicKey,
-) -> Result<(DenominatedAmount, TxSourcePostBalance, Option<Transaction>), Error>
-{
-    let fee_payer_address = Address::from(fee_payer);
-    // Validate fee amount and token
+) -> Result<DenominatedAmount, Error> {
     let gas_cost_key = parameter_storage::get_gas_cost_key();
     let minimum_fee = match rpc::query_storage_value::<
         _,
@@ -456,6 +448,7 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
     let validated_minimum_fee = context
         .denominate_amount(&args.fee_token, minimum_fee)
         .await;
+
     let fee_amount = match args.fee_amount {
         Some(amount) => {
             let validated_fee_amount =
@@ -482,6 +475,19 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
         None => validated_minimum_fee,
     };
 
+    Ok(fee_amount)
+}
+
+/// Validate the fee of the transaction in case of a transparent fee payer,
+/// computing the updated post balance
+pub async fn validate_transparent_fee<N: Namada>(
+    context: &N,
+    args: &args::Tx<SdkTypes>,
+    fee_payer: &common::PublicKey,
+) -> Result<(DenominatedAmount, TxSourcePostBalance), Error> {
+    let fee_amount = validate_fee(context, args).await?;
+    let fee_payer_address = Address::from(fee_payer);
+
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
     let balance = rpc::query_storage_value::<_, token::Amount>(
         context.client(),
@@ -497,141 +503,31 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
         token: args.fee_token.clone(),
     };
 
-    let unshield = match total_fee.checked_sub(balance) {
+    match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => {
-            if let Some(spending_key) = args.fee_unshield.clone() {
-                // Unshield funds for fee payment
-                let target = namada_core::masp::TransferTarget::Address(
-                    fee_payer_address.clone(),
-                );
-                let fee_amount = DenominatedAmount::new(
-                    // NOTE: must unshield the total fee amount, not the
-                    // diff, because the ledger evaluates the transaction in
-                    // reverse (wrapper first, inner second) and cannot know
-                    // ahead of time if the inner will modify the balance of
-                    // the gas payer
-                    total_fee,
-                    0.into(),
-                );
+            let token_addr = args.fee_token.clone();
+            if !args.force {
+                let fee_amount =
+                    context.format_amount(&token_addr, total_fee).await;
 
-                match ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-                        context,
-                        &spending_key,
-                        &target,
-                        &args.fee_token,
-                        fee_amount,
-               !(args.dry_run || args.dry_run_wrapper)
-                    )
-                    .await
-                {
-                    Ok(Some(ShieldedTransfer {
-                        builder: _,
-                        masp_tx: transaction,
-                        metadata: _data,
-                        epoch: _unshielding_epoch,
-                    })) => {
-                        let spends = transaction
-                            .sapling_bundle()
-                            .unwrap()
-                            .shielded_spends
-                            .len();
-                        let converts = transaction
-                            .sapling_bundle()
-                            .unwrap()
-                            .shielded_converts
-                            .len();
-                        let outs = transaction
-                            .sapling_bundle()
-                            .unwrap()
-                            .shielded_outputs
-                            .len();
-
-                        let descriptions = spends + converts + outs;
-
-                        let descriptions_limit_key=  parameter_storage::get_fee_unshielding_descriptions_limit_key();
-                        let descriptions_limit =
-                            rpc::query_storage_value::<_, u64>(
-                                context.client(),
-                                &descriptions_limit_key,
-                            )
-                            .await
-                            .unwrap();
-
-                        if u64::try_from(descriptions).unwrap()
-                            > descriptions_limit
-                            && !args.force
-                        {
-                            return Err(Error::from(
-                                TxSubmitError::FeeUnshieldingError(format!(
-                                    "Descriptions exceed the limit: found \
-                                     {descriptions}, limit \
-                                     {descriptions_limit}"
-                                )),
-                            ));
-                        }
-
-                                                Some(transaction)
-                    }
-                    Ok(None) => {
-                        if !args.force {
-                            return Err(Error::from(
-                                TxSubmitError::FeeUnshieldingError(
-                                    "Missing unshielding transaction"
-                                        .to_string(),
-                                ),
-                            ));
-                        }
-
-            updated_balance.post_balance = Amount::zero();
-                        None
-                    }
-                    Err(e) => {
-                        if !args.force {
-                            return Err(Error::from(
-                                TxSubmitError::FeeUnshieldingError(e.to_string()),
-                            ));
-                        }
-            updated_balance.post_balance = Amount::zero();
-                        None
-                    }
-                }
-            } else {
-                let token_addr = args.fee_token.clone();
-                if !args.force {
-                    let fee_amount =
-                        context.format_amount(&token_addr, total_fee).await;
-
-                    let balance =
-                        context.format_amount(&token_addr, balance).await;
-                    return Err(Error::from(
-                        TxSubmitError::BalanceTooLowForFees(
-                            fee_payer_address,
-                            token_addr,
-                            fee_amount,
-                            balance,
-                        ),
-                    ));
-                }
-
-                updated_balance.post_balance = Amount::zero();
-                None
+                let balance = context.format_amount(&token_addr, balance).await;
+                return Err(Error::from(TxSubmitError::BalanceTooLowForFees(
+                    fee_payer_address,
+                    token_addr,
+                    fee_amount,
+                    balance,
+                )));
             }
+
+            updated_balance.post_balance = Amount::zero();
         }
         _ => {
-            if args.fee_unshield.is_some() {
-                return Err(Error::Other(
-                    "Enough transparent balance to pay fees: please remove \
-                     the --gas-spending-key or select a different --gas-payer"
-                        .to_string(),
-                ));
-            }
             updated_balance.post_balance =
                 checked!(updated_balance.post_balance - total_fee)?;
-            None
         }
     };
 
-    Ok((fee_amount, updated_balance, unshield))
+    Ok((fee_amount, updated_balance))
 }
 
 /// Create a wrapper tx from a normal tx. Get the hash of the
@@ -641,18 +537,9 @@ pub async fn validate_fee_and_gen_unshield<N: Namada>(
 pub async fn wrap_tx(
     tx: &mut Tx,
     args: &args::Tx<SdkTypes>,
-    unshield: Option<Transaction>,
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
 ) -> Result<(), Error> {
-    let unshield_section_hash = unshield.map(|masp_tx| {
-        let section = Section::MaspTx(masp_tx);
-        let mut hasher = sha2::Sha256::new();
-        section.hash(&mut hasher);
-        tx.add_section(section);
-        namada_core::hash::Hash(hasher.finalize().into())
-    });
-
     tx.add_wrapper(
         Fee {
             amount_per_gas_unit: fee_amount,
@@ -661,7 +548,6 @@ pub async fn wrap_tx(
         fee_payer,
         // TODO: partially validate the gas limit in client
         args.gas_limit,
-        unshield_section_hash,
     );
 
     Ok(())

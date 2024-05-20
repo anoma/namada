@@ -470,7 +470,6 @@ where
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
                     tx.header_hash(),
-                    get_fee_unshielding_transaction(&tx, &wrapper),
                     block_proposer,
                     &mut ShellParams::new(
                         &RefCell::new(tx_gas_meter),
@@ -516,10 +515,10 @@ where
     }
 }
 
+// TODO(namada#2597): check masp fee payment if required
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
-    masp_transaction: Option<Transaction>,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
@@ -538,12 +537,7 @@ where
         wrapper.fee.token
     ))))?;
 
-    wrapper_fee_check(
-        wrapper,
-        masp_transaction,
-        minimum_gas_price,
-        shell_params,
-    )?;
+    fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
     protocol::transfer_fee(
         shell_params.state,
@@ -875,7 +869,6 @@ mod test_process_proposal {
                 },
                 public_key,
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -926,7 +919,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -999,7 +991,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1066,7 +1057,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1161,7 +1151,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
@@ -1230,7 +1219,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1283,7 +1271,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1343,7 +1330,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1362,7 +1348,6 @@ mod test_process_proposal {
             },
             keypair_2.ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         ))));
         new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
@@ -1397,7 +1382,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         wrapper.header.chain_id = wrong_chain_id.clone();
@@ -1458,7 +1442,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.header.expiration = Some(DateTimeUtc::default());
@@ -1503,7 +1486,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 (block_gas_limit + 1).into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1544,7 +1526,6 @@ mod test_process_proposal {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1591,7 +1572,6 @@ mod test_process_proposal {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -1633,7 +1613,6 @@ mod test_process_proposal {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
@@ -1677,7 +1656,6 @@ mod test_process_proposal {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 150_000.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
@@ -1721,7 +1699,6 @@ mod test_process_proposal {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
@@ -1776,7 +1753,6 @@ mod test_process_proposal {
                     },
                     keypair.ref_to(),
                     GAS_LIMIT_MULTIPLIER.into(),
-                    None,
                 ))));
             wrapper.header.chain_id = shell.chain_id.clone();
             wrapper

@@ -31,7 +31,6 @@ use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::chain::ChainId;
 use namada::core::ethereum_events::EthereumEvent;
@@ -47,7 +46,7 @@ use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::{get_fee_unshielding_transaction, ShellParams};
+use namada::ledger::protocol::ShellParams;
 use namada::ledger::{parameters, protocol};
 use namada::parameters::validate_tx_bytes;
 use namada::proof_of_stake::storage::read_pos_params;
@@ -58,7 +57,7 @@ use namada::state::{
 };
 use namada::token;
 pub use namada::tx::data::ResultCode;
-use namada::tx::data::{TxType, WrapperTx, WrapperTxErr};
+use namada::tx::data::{TxType, WrapperTx};
 use namada::tx::{Section, Tx};
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
@@ -1116,10 +1115,10 @@ where
                     return response;
                 }
 
-                // Validate wrapper fees
+                // TODO(namada#2597): validate masp fee payment if normal fee
+                // payment fails Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
                     &wrapper,
-                    get_fee_unshielding_transaction(&tx, &wrapper),
                     &mut ShellParams::new(
                         &RefCell::new(gas_meter),
                         &mut self.state.with_temp_write_log(),
@@ -1269,7 +1268,6 @@ where
 // Perform the fee check in mempool
 fn mempool_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
-    masp_transaction: Option<Transaction>,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
@@ -1287,20 +1285,13 @@ where
         wrapper.fee.token
     ))))?;
 
-    wrapper_fee_check(
-        wrapper,
-        masp_transaction,
-        minimum_gas_price,
-        shell_params,
-    )?;
+    fee_data_check(wrapper, minimum_gas_price, shell_params)?;
     protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
 }
 
-/// Check the validity of the fee payment, including the minimum amounts
-/// required and the optional unshield
-pub fn wrapper_fee_check<D, H, CA>(
+/// Check the validity of the fee data
+pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
-    masp_transaction: Option<Transaction>,
     minimum_gas_price: token::Amount,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
@@ -1332,114 +1323,6 @@ where
                 wrapper.fee.amount_per_gas_unit, wrapper.fee.token, err,
             ))));
         }
-    }
-
-    if let Some(transaction) = masp_transaction {
-        fee_unshielding_validation(wrapper, transaction, shell_params)?;
-    }
-
-    Ok(())
-}
-
-// Verifies the correctness of the masp transaction for fee payment
-fn fee_unshielding_validation<D, H, CA>(
-    wrapper: &WrapperTx,
-    masp_transaction: Transaction,
-    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
-) -> Result<()>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-    CA: 'static + WasmCacheAccess + Sync,
-{
-    // Validation of the commitment to this section is done when
-    // checking the aggregated signature of the wrapper, no need for
-    // further validation
-
-    // Validate data and generate unshielding tx
-    check_fee_unshielding(shell_params.state, &masp_transaction)?;
-
-    if namada::ledger::protocol::run_fee_unshielding(
-        wrapper,
-        shell_params,
-        masp_transaction,
-    )
-    .map_err(|e| {
-        Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(format!(
-                "Fee unshielding went out of gas: {}",
-                e
-            )),
-        ))
-    })? {
-        Ok(())
-    } else {
-        Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(
-                "Error while applying fee unshielding wasm transaction"
-                    .to_string(),
-            ),
-        )))
-    }
-}
-
-// Performs validation on the optional fee unshielding data carried by
-// the wrapper.
-fn check_fee_unshielding<D, H>(
-    temp_state: &TempWlState<'_, D, H>,
-    unshield: &Transaction,
-) -> Result<()>
-where
-    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
-    H: StorageHasher + Sync + 'static,
-{
-    // Check that the number of descriptions is within a certain limit
-    // to avoid a possible DoS vector
-    let sapling_bundle = unshield.sapling_bundle().ok_or(Error::TxApply(
-        protocol::Error::FeeUnshieldingError(WrapperTxErr::InvalidUnshield(
-            "Missing required sapling bundle".to_string(),
-        )),
-    ))?;
-    let spends = sapling_bundle.shielded_spends.len();
-    let converts = sapling_bundle.shielded_converts.len();
-    let outs = sapling_bundle.shielded_outputs.len();
-
-    let descriptions = spends
-        .checked_add(converts)
-        .ok_or_else(|| {
-            Error::TxApply(protocol::Error::FeeUnshieldingError(
-                WrapperTxErr::InvalidUnshield(
-                    "Descriptions overflow".to_string(),
-                ),
-            ))
-        })?
-        .checked_add(outs)
-        .ok_or_else(|| {
-            Error::TxApply(protocol::Error::FeeUnshieldingError(
-                WrapperTxErr::InvalidUnshield(
-                    "Descriptions overflow".to_string(),
-                ),
-            ))
-        })?;
-
-    let descriptions_limit = temp_state
-        .read(
-            &parameters::storage::get_fee_unshielding_descriptions_limit_key(),
-        )
-        .expect("Error reading the storage")
-        .expect("Missing fee unshielding descriptions limit param in storage");
-
-    if u64::try_from(descriptions).map_err(|e| {
-        Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(e.to_string()),
-        ))
-    })? > descriptions_limit
-    {
-        return Err(Error::TxApply(protocol::Error::FeeUnshieldingError(
-            WrapperTxErr::InvalidUnshield(
-                "Descriptions exceed the maximum amount allowed".to_string(),
-            ),
-        )));
     }
 
     Ok(())
@@ -2333,7 +2216,6 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
         unsigned_wrapper
@@ -2371,7 +2253,6 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         invalid_wrapper.header.chain_id = shell.chain_id.clone();
         invalid_wrapper
@@ -2442,7 +2323,6 @@ mod shell_tests {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2503,7 +2383,6 @@ mod shell_tests {
             },
             crate::wallet::defaults::bertha_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         ))));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
@@ -2615,7 +2494,6 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 (block_gas_limit + 1).into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2647,7 +2525,6 @@ mod shell_tests {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2685,7 +2562,6 @@ mod shell_tests {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2719,7 +2595,6 @@ mod shell_tests {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2754,7 +2629,6 @@ mod shell_tests {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 150_000.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2789,7 +2663,6 @@ mod shell_tests {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -2835,7 +2708,6 @@ mod shell_tests {
                     },
                     keypair.ref_to(),
                     GAS_LIMIT_MULTIPLIER.into(),
-                    None,
                 ))));
             wrapper.header.chain_id = shell.chain_id.clone();
             wrapper
