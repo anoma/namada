@@ -223,6 +223,7 @@ impl<'a> EventAttributeEntry<'a> for EventOrigin<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Event, EventLevel, EventTypeBuilder};
 
     const fn dummy_trace() -> EventTrace<'static> {
         EventTrace {
@@ -232,6 +233,30 @@ mod tests {
             line: 1,
             column: 2,
         }
+    }
+
+    #[test]
+    fn test_event_trace_emit_event() {
+        let (event, start_line, end_line) = {
+            let ev = Event::new(
+                EventTypeBuilder::new_with_type("test").build(),
+                EventLevel::Tx,
+            );
+            let mut events = Vec::with_capacity(1);
+
+            const START_LINE: u32 = line!();
+            emit_event(ev, &mut events);
+            const END_LINE: u32 = line!();
+
+            (events.pop().unwrap(), START_LINE, END_LINE)
+        };
+
+        let trace = event.read_attribute::<EventOrigin<'_>>().unwrap();
+
+        assert!(trace.line > start_line && trace.line < end_line);
+        assert_eq!(trace.file, file!());
+        assert_eq!(trace.pkg_name, env!("CARGO_PKG_NAME"));
+        assert_eq!(trace.pkg_version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
@@ -267,5 +292,11 @@ mod tests {
                     .to_owned()
             )
         );
+    }
+
+    #[track_caller]
+    fn emit_event(event: Event, events: &mut impl EmitEvents) {
+        let mut tracer = EventTracer::trace(events);
+        tracer.emit(event);
     }
 }
