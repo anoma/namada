@@ -147,287 +147,27 @@ where
         // Tracks the accepted transactions
         self.state.in_mem_mut().block.results = BlockResults::default();
         let mut changed_keys = BTreeSet::new();
-        //FIXME: maybe better to cache the transactions themselves to avoid another deserialization
-        let mut successful_wrappers = vec![];
 
-        //FIXME: move this to a separate function? Maybe yes
         // Execute wrapper and protocol transactions
-        for (tx_index, processed_tx) in req.txs.iter().enumerate() {
-            let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
-                tx
-            } else {
-                tracing::error!(
-                    "FinalizeBlock received a tx that could not be \
-                     deserialized to a Tx type. This is likely a protocol \
-                     transaction."
-                );
-                continue;
-            };
-
-            let result_code = ResultCode::from_u32(processed_tx.result.code)
-                .expect("Result code conversion should not fail");
-
-            // If [`process_proposal`] rejected a Tx due to invalid signature,
-            // emit an event here and move on to next tx.
-            if result_code == ResultCode::InvalidSig {
-                let base_event = match tx.header().tx_type {
-                    TxType::Wrapper(_) | TxType::Protocol(_) => {
-                        new_tx_event(&tx, height.0)
-                    }
-                    _ => {
-                        tracing::error!(
-                            "Internal logic error: FinalizeBlock received a \
-                             tx with an invalid signature error code that \
-                             could not be deserialized to a WrapperTx / \
-                             ProtocolTx type"
-                        );
-                        continue;
-                    }
-                };
-                response.events.emit(
-                    base_event
-                        .with(Code(result_code))
-                        .with(Info(format!(
-                            "Tx rejected: {}",
-                            &processed_tx.result.info
-                        )))
-                        .with(GasUsed(0.into())),
-                );
-                continue;
-            }
-
-            if tx.validate_tx().is_err() {
-                tracing::error!(
-                    "Internal logic error: FinalizeBlock received tx that \
-                     could not be deserialized to a valid TxType"
-                );
-                continue;
-            };
-            let tx_header = tx.header();
-            // If [`process_proposal`] rejected a Tx, emit an event here and
-            // move on to next tx
-            if result_code != ResultCode::Ok {
-                response.events.emit(
-                    new_tx_event(&tx, height.0)
-                        .with(Code(result_code))
-                        .with(Info(format!(
-                            "Tx rejected: {}",
-                            &processed_tx.result.info
-                        )))
-                        .with(GasUsed(0.into())),
-                );
-                continue;
-            }
-
-            let (tx_gas_meter, block_proposer) = match &tx_header.tx_type {
-                TxType::Wrapper(wrapper) => {
-                    stats.increment_wrapper_txs();
-                    let gas_limit = match Gas::try_from(wrapper.gas_limit) {
-                        Ok(value) => value,
-                        Err(_) => {
-                            response.events.emit(
-                                new_tx_event(&tx, height.0)
-                                    .with(Code(ResultCode::InvalidTx))
-                                    .with(Info(
-                                        "The wrapper gas limit overflowed gas \
-                                         representation"
-                                            .to_owned(),
-                                    ))
-                                    .with(GasUsed(0.into())),
-                            );
-                            continue;
-                        }
-                    };
-                    let gas_meter = TxGasMeter::new(gas_limit);
-                    for cmt in tx.commitments() {
-                        if let Some(code_sec) = tx
-                            .get_section(cmt.code_sechash())
-                            .and_then(|x| Section::code_sec(x.as_ref()))
-                        {
-                            stats.increment_tx_type(
-                                code_sec.code.hash().to_string(),
-                            );
-                        }
-                    }
-                    (gas_meter, Some(&native_block_proposer_address))
-                }
-                TxType::Raw => {
-                    tracing::error!(
-                        "Internal logic error: FinalizeBlock received a \
-                         TxType::Raw transaction"
-                    );
-                    continue;
-                }
-                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                    ProtocolTxType::BridgePoolVext
-                    | ProtocolTxType::BridgePool
-                    | ProtocolTxType::ValSetUpdateVext
-                    | ProtocolTxType::ValidatorSetUpdate => {
-                        (TxGasMeter::new_from_sub_limit(0.into()), None)
-                    }
-                    ProtocolTxType::EthEventsVext => {
-                        let ext =
-                            ethereum_tx_data_variants::EthEventsVext::try_from(
-                                &tx,
-                            )
-                            .unwrap();
-                        if self
-                            .mode
-                            .get_validator_address()
-                            .map(|validator| {
-                                validator == &ext.data.validator_addr
-                            })
-                            .unwrap_or(false)
-                        {
-                            for event in ext.data.ethereum_events.iter() {
-                                self.mode.dequeue_eth_event(event);
-                            }
-                        }
-                        (TxGasMeter::new_from_sub_limit(0.into()), None)
-                    }
-                    ProtocolTxType::EthereumEvents => {
-                        let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx
-                            ).unwrap();
-                        if let Some(address) =
-                            self.mode.get_validator_address().cloned()
-                        {
-                            let this_signer = &(
-                                address,
-                                self.state.in_mem().get_last_block_height(),
-                            );
-                            for MultiSignedEthEvent { event, signers } in
-                                &digest.events
-                            {
-                                if signers.contains(this_signer) {
-                                    self.mode.dequeue_eth_event(event);
-                                }
-                            }
-                        }
-                        (TxGasMeter::new_from_sub_limit(0.into()), None)
-                    }
-                },
-            };
-            let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let tx_event = new_tx_event(&tx, height.0);
-            let is_atomic_batch = tx.header.atomic;
-            let commitments_len = tx.commitments().len() as u64;
-            let tx_hash = tx.header_hash();
-
-            //FIXME: this thing is the same for raw txs, merge them? Maybe not
-            let dispatch_result = protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
-                TxIndex::must_from_usize(tx_index),
-                &tx_gas_meter,
-                &mut self.state,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                block_proposer,
-                None,
-            );
-            let tx_gas_meter = tx_gas_meter.into_inner();
-            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
-
-            // save the gas cost
-            self.update_tx_gas(tx_hash, consumed_gas.into());
-
-            //FIXME: this is becoming very cluttered because it needs to handle wrappers, inners and protocols, should split in different functions?
-            if let Some(wrapper_cache) = self.evaluate_tx_result(
-                &mut response,
-                dispatch_result,
-                TxData {
-                    is_atomic_batch,
-                    tx_header: &tx_header,
-                    commitments_len,
-                    tx_index,
-                    replay_protection_hashes: None,
-                    tx_gas_meter,
-                    height,
-                },
-                TxLogs {
-                    tx_event,
-                    stats: &mut stats,
-                    changed_keys: &mut changed_keys,
-                },
-            ) {
-                successful_wrappers.push(wrapper_cache);
-            }
-        }
+        let successful_wrappers = self.retrieve_and_execute_transactions(
+            &req.txs,
+            &mut response,
+            &mut changed_keys,
+            &mut stats,
+            height,
+            &native_block_proposer_address,
+        );
 
         // Execute inner transactions
-        //FIXME: export this to another function
-        for WrapperCache {
-            tx_index,
-            gas_meter: tx_gas_meter,
-            event: tx_event,
-            tx_result: wrapper_tx_result,
-        } in successful_wrappers
-        {
-            //FIXME: should also enqueue the tx directly to avoid deserializing again? POssibly yes
-            //FIXME: manage unwrap
-            let processed_tx = req.txs.get(tx_index).unwrap();
-            let mut tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref())
-            {
-                tx
-            } else {
-                tracing::error!(
-                    "FinalizeBlock received a tx that could not be \
-                     deserialized to a Tx type. This is likely a protocol \
-                     transaction."
-                );
-                continue;
-            };
-
-            let tx_header = tx.header();
-            let tx_hash = tx.header_hash();
-            let is_atomic_batch = tx.header.atomic;
-            let commitments_len = tx.commitments().len() as u64;
-            let replay_protection_hashes = Some(ReplayProtectionHashes {
-                raw_header_hash: tx.raw_header_hash(),
-                header_hash: tx.header_hash(),
-            });
-
-            // change tx type to raw for execution
-            tx.update_header(TxType::Raw);
-            let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let dispatch_result = protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
-                TxIndex::must_from_usize(tx_index),
-                &tx_gas_meter,
-                &mut self.state,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                None,
-                Some(wrapper_tx_result),
-            );
-            let tx_gas_meter = tx_gas_meter.into_inner();
-            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
-
-            // update the gas cost of the corresponding wrapper
-            self.update_tx_gas(tx_hash, consumed_gas.into());
-
-            self.evaluate_tx_result(
-                &mut response,
-                dispatch_result,
-                TxData {
-                    is_atomic_batch,
-                    tx_header: &tx_header,
-                    commitments_len,
-                    tx_index,
-                    replay_protection_hashes,
-                    tx_gas_meter,
-                    height,
-                },
-                TxLogs {
-                    tx_event,
-                    stats: &mut stats,
-                    changed_keys: &mut changed_keys,
-                },
-            );
-        }
+        self.execute_tx_batches(
+            successful_wrappers,
+            //FIXME: same args as the previous function, use a struct
+            &req.txs,
+            &mut response,
+            &mut changed_keys,
+            &mut stats,
+            height,
+        );
 
         stats.set_tx_cache_size(
             self.tx_wasm_cache.get_size(),
@@ -833,6 +573,294 @@ where
                     .redundant_tx_hash(&header_hash)
                     .expect("Error while marking tx hash as redundant");
             }
+        }
+    }
+
+    // Get the transactions from the consensus engine, preprocess and execute them. Return the cache of successful wrapper transactions later used when executing the inner txs.
+    fn retrieve_and_execute_transactions(
+        &mut self,
+        processed_txs: &[shim::request::ProcessedTx],
+        response: &mut shim::response::FinalizeBlock,
+        //FIXME: review how we pass these, custom struct?
+        changed_keys: &mut BTreeSet<Key>,
+        stats: &mut InternalStats,
+        height: BlockHeight,
+        native_block_proposer_address: &Address,
+        //FIXME: maybe better to cache the transactions themselves to avoid another deserialization
+    ) -> Vec<WrapperCache> {
+        let mut successful_wrappers = vec![];
+
+        for (tx_index, processed_tx) in processed_txs.iter().enumerate() {
+            let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
+                tx
+            } else {
+                tracing::error!(
+                    "FinalizeBlock received a tx that could not be \
+                     deserialized to a Tx type. This is likely a protocol \
+                     transaction."
+                );
+                continue;
+            };
+
+            let result_code = ResultCode::from_u32(processed_tx.result.code)
+                .expect("Result code conversion should not fail");
+
+            // If [`process_proposal`] rejected a Tx due to invalid signature,
+            // emit an event here and move on to next tx.
+            if result_code == ResultCode::InvalidSig {
+                let base_event = match tx.header().tx_type {
+                    TxType::Wrapper(_) | TxType::Protocol(_) => {
+                        new_tx_event(&tx, height.0)
+                    }
+                    _ => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                             tx with an invalid signature error code that \
+                             could not be deserialized to a WrapperTx / \
+                             ProtocolTx type"
+                        );
+                        continue;
+                    }
+                };
+                response.events.emit(
+                    base_event
+                        .with(Code(result_code))
+                        .with(Info(format!(
+                            "Tx rejected: {}",
+                            &processed_tx.result.info
+                        )))
+                        .with(GasUsed(0.into())),
+                );
+                continue;
+            }
+
+            if tx.validate_tx().is_err() {
+                tracing::error!(
+                    "Internal logic error: FinalizeBlock received tx that \
+                     could not be deserialized to a valid TxType"
+                );
+                continue;
+            };
+            let tx_header = tx.header();
+            // If [`process_proposal`] rejected a Tx, emit an event here and
+            // move on to next tx
+            if result_code != ResultCode::Ok {
+                response.events.emit(
+                    new_tx_event(&tx, height.0)
+                        .with(Code(result_code))
+                        .with(Info(format!(
+                            "Tx rejected: {}",
+                            &processed_tx.result.info
+                        )))
+                        .with(GasUsed(0.into())),
+                );
+                continue;
+            }
+
+            let (tx_gas_meter, block_proposer) =
+                match &tx_header.tx_type {
+                    TxType::Wrapper(wrapper) => {
+                        stats.increment_wrapper_txs();
+                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                        for cmt in tx.commitments() {
+                            if let Some(code_sec) = tx
+                                .get_section(cmt.code_sechash())
+                                .and_then(|x| Section::code_sec(x.as_ref()))
+                            {
+                                stats.increment_tx_type(
+                                    code_sec.code.hash().to_string(),
+                                );
+                            }
+                        }
+                        (gas_meter, Some(native_block_proposer_address))
+                    }
+                    TxType::Raw => {
+                        tracing::error!(
+                            "Internal logic error: FinalizeBlock received a \
+                         TxType::Raw transaction"
+                        );
+                        continue;
+                    }
+                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                        ProtocolTxType::BridgePoolVext
+                        | ProtocolTxType::BridgePool
+                        | ProtocolTxType::ValSetUpdateVext
+                        | ProtocolTxType::ValidatorSetUpdate => {
+                            (TxGasMeter::new_from_sub_limit(0.into()), None)
+                        }
+                        ProtocolTxType::EthEventsVext => {
+                            let ext =
+                        ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
+                            .unwrap();
+                            if self
+                                .mode
+                                .get_validator_address()
+                                .map(|validator| {
+                                    validator == &ext.data.validator_addr
+                                })
+                                .unwrap_or(false)
+                            {
+                                for event in ext.data.ethereum_events.iter() {
+                                    self.mode.dequeue_eth_event(event);
+                                }
+                            }
+                            (TxGasMeter::new_from_sub_limit(0.into()), None)
+                        }
+                        ProtocolTxType::EthereumEvents => {
+                            let digest =
+                        ethereum_tx_data_variants::EthereumEvents::try_from(
+                            &tx,
+                        )
+                        .unwrap();
+                            if let Some(address) =
+                                self.mode.get_validator_address().cloned()
+                            {
+                                let this_signer = &(
+                                    address,
+                                    self.state.in_mem().get_last_block_height(),
+                                );
+                                for MultiSignedEthEvent { event, signers } in
+                                    &digest.events
+                                {
+                                    if signers.contains(this_signer) {
+                                        self.mode.dequeue_eth_event(event);
+                                    }
+                                }
+                            }
+                            (TxGasMeter::new_from_sub_limit(0.into()), None)
+                        }
+                    },
+                };
+            let tx_gas_meter = RefCell::new(tx_gas_meter);
+            let tx_event = new_tx_event(&tx, height.0);
+            let is_atomic_batch = tx.header.atomic;
+            let commitments_len = tx.commitments().len() as u64;
+            let tx_hash = tx.header_hash();
+
+            let dispatch_result = protocol::dispatch_tx(
+                tx,
+                processed_tx.tx.as_ref(),
+                TxIndex::must_from_usize(tx_index),
+                &tx_gas_meter,
+                &mut self.state,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+                block_proposer,
+                None,
+            );
+            let tx_gas_meter = tx_gas_meter.into_inner();
+            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
+
+            // save the gas cost
+            self.update_tx_gas(tx_hash, consumed_gas.into());
+
+            //FIXME: this is becoming very cluttered because it needs to handle wrappers, inners and protocols, should split in different functions?
+            if let Some(wrapper_cache) = self.evaluate_tx_result(
+                response,
+                dispatch_result,
+                TxData {
+                    is_atomic_batch,
+                    tx_header: &tx_header,
+                    commitments_len,
+                    tx_index,
+                    replay_protection_hashes: None,
+                    tx_gas_meter,
+                    height,
+                },
+                TxLogs {
+                    tx_event,
+                    stats,
+                    changed_keys,
+                },
+            ) {
+                successful_wrappers.push(wrapper_cache);
+            }
+        }
+
+        successful_wrappers
+    }
+
+    // Execute the transaction batches for successful wrapper transactions
+    fn execute_tx_batches(
+        &mut self,
+        //FIXME: iter trait?
+        successful_wrappers: Vec<WrapperCache>,
+        processed_txs: &[shim::request::ProcessedTx],
+        response: &mut shim::response::FinalizeBlock,
+        //FIXME: review how we pass these, custom struct?
+        changed_keys: &mut BTreeSet<Key>,
+        stats: &mut InternalStats,
+        height: BlockHeight,
+    ) {
+        for WrapperCache {
+            tx_index,
+            gas_meter: tx_gas_meter,
+            event: tx_event,
+            tx_result: wrapper_tx_result,
+        } in successful_wrappers
+        {
+            //FIXME: should also enqueue the tx directly to avoid deserializing again? POssibly yes
+            //FIXME: manage unwrap
+            let processed_tx = processed_txs.get(tx_index).unwrap();
+            let mut tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref())
+            {
+                tx
+            } else {
+                tracing::error!(
+                    "FinalizeBlock received a tx that could not be \
+                     deserialized to a Tx type. This is likely a protocol \
+                     transaction."
+                );
+                continue;
+            };
+
+            let tx_header = tx.header();
+            let tx_hash = tx.header_hash();
+            let is_atomic_batch = tx.header.atomic;
+            let commitments_len = tx.commitments().len() as u64;
+            let replay_protection_hashes = Some(ReplayProtectionHashes {
+                raw_header_hash: tx.raw_header_hash(),
+                header_hash: tx.header_hash(),
+            });
+
+            // change tx type to raw for execution
+            tx.update_header(TxType::Raw);
+            let tx_gas_meter = RefCell::new(tx_gas_meter);
+            let dispatch_result = protocol::dispatch_tx(
+                tx,
+                processed_tx.tx.as_ref(),
+                TxIndex::must_from_usize(tx_index),
+                &tx_gas_meter,
+                &mut self.state,
+                &mut self.vp_wasm_cache,
+                &mut self.tx_wasm_cache,
+                None,
+                Some(wrapper_tx_result),
+            );
+            let tx_gas_meter = tx_gas_meter.into_inner();
+            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
+
+            // update the gas cost of the corresponding wrapper
+            self.update_tx_gas(tx_hash, consumed_gas.into());
+
+            self.evaluate_tx_result(
+                response,
+                dispatch_result,
+                TxData {
+                    is_atomic_batch,
+                    tx_header: &tx_header,
+                    commitments_len,
+                    tx_index,
+                    replay_protection_hashes,
+                    tx_gas_meter,
+                    height,
+                },
+                TxLogs {
+                    tx_event,
+                    stats,
+                    changed_keys,
+                },
+            );
         }
     }
 }
