@@ -403,7 +403,7 @@ where
     let cmt = tx.first_commitments().unwrap().to_owned();
 
     let dispatch_result = protocol::dispatch_tx(
-        tx,
+        &tx,
         &[], /*  this is used to compute the fee
               * based on the code size. We dont
               * need it here. */

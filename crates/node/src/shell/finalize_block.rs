@@ -151,8 +151,8 @@ where
         // Execute wrapper and protocol transactions
         let successful_wrappers = self.retrieve_and_execute_transactions(
             &native_block_proposer_address,
+            &req.txs,
             ExecutionArgs {
-                processed_txs: &req.txs,
                 response: &mut response,
                 changed_keys: &mut changed_keys,
                 stats: &mut stats,
@@ -164,7 +164,6 @@ where
         self.execute_tx_batches(
             successful_wrappers,
             ExecutionArgs {
-                processed_txs: &req.txs,
                 response: &mut response,
                 changed_keys: &mut changed_keys,
                 stats: &mut stats,
@@ -354,17 +353,17 @@ where
         mut tx_logs: TxLogs<'_>,
     ) -> Option<WrapperCache> {
         match dispatch_result {
-            Ok(tx_result) => match tx_data.tx_header.tx_type {
-                //FIXME: manage unwrap
+            Ok(tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) =>
-                // Return withouth emitting the event
+                // Return withouth emitting any events
                 {
                     return Some(WrapperCache {
+                        tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
                         tx_result,
-                    })
+                    });
                 }
                 _ => self.handle_inner_tx_results(
                     response,
@@ -446,7 +445,7 @@ where
             is_any_tx_invalid,
         } = temp_log.check_inner_results(
             &tx_result,
-            tx_data.tx_header,
+            &tx_data.tx.header,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -507,7 +506,7 @@ where
             is_any_tx_invalid: _,
         } = temp_log.check_inner_results(
             &tx_result,
-            tx_data.tx_header,
+            &tx_data.tx.header,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -554,7 +553,7 @@ where
         // If user transaction didn't fail because of out of gas nor
         // invalid section commitment, commit its hash to prevent
         // replays
-        if matches!(tx_data.tx_header.tx_type, TxType::Wrapper(_)) {
+        if matches!(tx_data.tx.header.tx_type, TxType::Wrapper(_)) {
             if !matches!(
                 err,
                 Error::TxApply(protocol::Error::GasError(_))
@@ -583,14 +582,13 @@ where
     fn retrieve_and_execute_transactions(
         &mut self,
         native_block_proposer_address: &Address,
+        processed_txs: &[shim::request::ProcessedTx],
         ExecutionArgs {
-            processed_txs,
             response,
             changed_keys,
             stats,
             height,
         }: ExecutionArgs,
-        //FIXME: maybe better to cache the transactions themselves to avoid another deserialization
     ) -> Vec<WrapperCache> {
         let mut successful_wrappers = vec![];
 
@@ -742,7 +740,7 @@ where
             let tx_hash = tx.header_hash();
 
             let dispatch_result = protocol::dispatch_tx(
-                tx,
+                &tx,
                 processed_tx.tx.as_ref(),
                 TxIndex::must_from_usize(tx_index),
                 &tx_gas_meter,
@@ -758,13 +756,12 @@ where
             // save the gas cost
             self.update_tx_gas(tx_hash, consumed_gas.into());
 
-            //FIXME: this is becoming very cluttered because it needs to handle wrappers, inners and protocols, should split in different functions?
             if let Some(wrapper_cache) = self.evaluate_tx_result(
                 response,
                 dispatch_result,
                 TxData {
                     is_atomic_batch,
-                    tx_header: &tx_header,
+                    tx: &tx,
                     commitments_len,
                     tx_index,
                     replay_protection_hashes: None,
@@ -789,7 +786,6 @@ where
         &mut self,
         successful_wrappers: Vec<WrapperCache>,
         ExecutionArgs {
-            processed_txs,
             response,
             changed_keys,
             stats,
@@ -797,28 +793,13 @@ where
         }: ExecutionArgs,
     ) {
         for WrapperCache {
+            mut tx,
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
             tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
-            //FIXME: should also enqueue the tx directly to avoid deserializing again? POssibly yes
-            //FIXME: manage unwrap
-            let processed_tx = processed_txs.get(tx_index).unwrap();
-            let mut tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref())
-            {
-                tx
-            } else {
-                tracing::error!(
-                    "FinalizeBlock received a tx that could not be \
-                     deserialized to a Tx type. This is likely a protocol \
-                     transaction."
-                );
-                continue;
-            };
-
-            let tx_header = tx.header();
             let tx_hash = tx.header_hash();
             let is_atomic_batch = tx.header.atomic;
             let commitments_len = tx.commitments().len() as u64;
@@ -831,8 +812,9 @@ where
             tx.update_header(TxType::Raw);
             let tx_gas_meter = RefCell::new(tx_gas_meter);
             let dispatch_result = protocol::dispatch_tx(
-                tx,
-                processed_tx.tx.as_ref(),
+                &tx,
+                // not needed here for gas computation
+                &[],
                 TxIndex::must_from_usize(tx_index),
                 &tx_gas_meter,
                 &mut self.state,
@@ -852,7 +834,7 @@ where
                 dispatch_result,
                 TxData {
                     is_atomic_batch,
-                    tx_header: &tx_header,
+                    tx: &tx,
                     commitments_len,
                     tx_index,
                     replay_protection_hashes,
@@ -870,7 +852,6 @@ where
 }
 
 struct ExecutionArgs<'finalize> {
-    processed_txs: &'finalize [shim::request::ProcessedTx],
     response: &'finalize mut shim::response::FinalizeBlock,
     changed_keys: &'finalize mut BTreeSet<Key>,
     stats: &'finalize mut InternalStats,
@@ -879,6 +860,7 @@ struct ExecutionArgs<'finalize> {
 
 // Caches the execution of a wrapper transaction to be used when later executing the inner batch
 struct WrapperCache {
+    tx: Tx,
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
@@ -887,9 +869,7 @@ struct WrapperCache {
 
 struct TxData<'tx> {
     is_atomic_batch: bool,
-    // FIXME: need the actual tx but it's hard becasue that is passed to dispatch_tx so I'd need to clone it
-    //FIXME: actually I need the tx only for wrappers, for everything else I only need the header
-    tx_header: &'tx namada::tx::Header,
+    tx: &'tx Tx,
     commitments_len: u64,
     tx_index: usize,
     replay_protection_hashes: Option<ReplayProtectionHashes>,

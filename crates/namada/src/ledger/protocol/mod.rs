@@ -183,7 +183,7 @@ impl From<Error> for DispatchError {
 /// environment, in which case validity predicates will be bypassed.
 #[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
-    tx: Tx,
+    tx: &Tx,
     //FIXME: some params are only needed for some tx types, should also pass the txtype with the associated data here? Maybe yes
     tx_bytes: &'a [u8],
     tx_index: TxIndex,
@@ -311,7 +311,7 @@ where
             })
         }
         TxType::Wrapper(ref wrapper) => {
-            let mut tx_result = apply_wrapper_tx(
+            let tx_result = apply_wrapper_tx(
                 tx.clone(),
                 wrapper,
                 tx_bytes,
