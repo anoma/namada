@@ -12,6 +12,7 @@ use crate::transaction;
 const TX_BRIDGE_POOL_WASM: &str = "tx_bridge_pool.wasm";
 
 /// A transfer over the Ethereum bridge
+#[derive(Debug, Clone)]
 pub struct BridgeTransfer(Tx);
 
 impl BridgeTransfer {

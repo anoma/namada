@@ -14,6 +14,7 @@ const TX_INIT_PROPOSAL_WASM: &str = "tx_init_proposal.wasm";
 const TX_VOTE_PROPOSAL: &str = "tx_vote_proposal.wasm";
 
 /// Transaction to initialize a governance proposal
+#[derive(Debug, Clone)]
 pub struct InitProposal(Tx);
 
 impl InitProposal {
