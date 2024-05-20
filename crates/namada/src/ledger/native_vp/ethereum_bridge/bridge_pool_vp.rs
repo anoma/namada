@@ -17,7 +17,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::arith::{checked, CheckedAdd};
+use namada_core::arith::{checked, CheckedAdd, CheckedNeg, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::eth_bridge_pool::erc20_token_address;
 use namada_core::hints;
@@ -34,12 +34,11 @@ use namada_tx::Tx;
 use crate::address::{Address, InternalAddress};
 use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
 use crate::ethereum_events::EthAddress;
-use crate::ledger::native_vp::{
-    self, Ctx, NativeVp, SignedAmount, StorageReader,
-};
+use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::storage::Key;
 use crate::token::storage_key::balance_key;
 use crate::token::Amount;
+use crate::uint::I320;
 use crate::vm::WasmCacheAccess;
 
 #[derive(thiserror::Error, Debug)]
@@ -53,14 +52,14 @@ struct AmountDelta {
     /// The base [`Amount`], before applying the delta.
     base: Amount,
     /// The delta to be applied to the base amount.
-    delta: SignedAmount,
+    delta: I320,
 }
 
 impl AmountDelta {
     /// Resolve the updated amount by applying the delta value.
     #[inline]
-    fn resolve(self) -> Result<SignedAmount, Error> {
-        checked!(self.delta + SignedAmount::from(self.base))
+    fn resolve(self) -> Result<I320, Error> {
+        checked!(self.delta + I320::from(self.base))
             .map_err(|e| Error(e.into()))
     }
 }
@@ -108,7 +107,12 @@ where
         };
         Ok(Some(AmountDelta {
             base: before,
-            delta: SignedAmount::from(after) - SignedAmount::from(before),
+            delta: checked!(I320::from(after) - I320::from(before)).map_err(
+                |error| {
+                    tracing::warn!(?error, %account_key, "reading pre value");
+                    Error(error.into())
+                },
+            )?,
         }))
     }
 
@@ -146,10 +150,11 @@ where
             (
                 Some(AmountDelta { delta: debit, .. }),
                 Some(escrow_balance @ AmountDelta { delta: credit, .. }),
-            ) if !debit.is_positive() && !credit.is_negative() => Ok((debit
-                == -SignedAmount::from(expected_debit)
-                && credit == SignedAmount::from(expected_credit))
-            .then_some(escrow_balance)),
+            ) if !debit.is_positive() && !credit.is_negative() => {
+                Ok((Some(debit) == I320::from(expected_debit).checked_neg()
+                    && credit == I320::from(expected_credit))
+                .then_some(escrow_balance))
+            }
             // user did not debit from their account
             (Some(AmountDelta { delta, .. }), _) if !delta.is_negative() => {
                 tracing::debug!(
@@ -277,7 +282,7 @@ where
                 .map_err(Error)?
                 .unwrap_or_default()
         };
-        if escrowed_balance > SignedAmount::from(wnam_cap) {
+        if escrowed_balance > I320::from(wnam_cap) {
             tracing::debug!(
                 ?transfer,
                 escrowed_nam = %escrowed_balance.to_string_native(),
@@ -795,35 +800,35 @@ mod test_bridge_pool_vp {
         update_balances(
             write_log,
             Balance::new(TransferToEthereumKind::Erc20, bertha_address()),
-            SignedAmount::from(BERTHA_WEALTH),
-            SignedAmount::from(BERTHA_TOKENS),
+            I320::from(BERTHA_WEALTH),
+            I320::from(BERTHA_TOKENS),
         );
         update_balances(
             write_log,
             Balance::new(TransferToEthereumKind::Nut, daewon_address()),
-            SignedAmount::from(DAEWONS_GAS),
-            SignedAmount::from(DAES_NUTS),
+            I320::from(DAEWONS_GAS),
+            I320::from(DAES_NUTS),
         );
         // set up the initial balances of the bridge pool
         update_balances(
             write_log,
             Balance::new(TransferToEthereumKind::Erc20, BRIDGE_POOL_ADDRESS),
-            SignedAmount::from(ESCROWED_AMOUNT),
-            SignedAmount::from(ESCROWED_TOKENS),
+            I320::from(ESCROWED_AMOUNT),
+            I320::from(ESCROWED_TOKENS),
         );
         update_balances(
             write_log,
             Balance::new(TransferToEthereumKind::Nut, BRIDGE_POOL_ADDRESS),
-            SignedAmount::from(ESCROWED_AMOUNT),
-            SignedAmount::from(ESCROWED_NUTS),
+            I320::from(ESCROWED_AMOUNT),
+            I320::from(ESCROWED_NUTS),
         );
         // set up the initial balances of the ethereum bridge account
         update_balances(
             write_log,
             Balance::new(TransferToEthereumKind::Erc20, BRIDGE_ADDRESS),
-            SignedAmount::from(ESCROWED_AMOUNT),
+            I320::from(ESCROWED_AMOUNT),
             // we only care about escrowing NAM
-            SignedAmount::from(0),
+            I320::from(0),
         );
         write_log.commit_tx();
     }
@@ -833,8 +838,8 @@ mod test_bridge_pool_vp {
     fn update_balances(
         write_log: &mut WriteLog,
         balance: Balance,
-        gas_delta: SignedAmount,
-        token_delta: SignedAmount,
+        gas_delta: I320,
+        token_delta: I320,
     ) -> BTreeSet<Key> {
         // wnam is drawn from the same account
         if balance.asset == wnam()
@@ -843,9 +848,7 @@ mod test_bridge_pool_vp {
             // update the balance of nam
             let original_balance = std::cmp::max(balance.token, balance.gas);
             let updated_balance: Amount =
-                (SignedAmount::from(original_balance)
-                    + gas_delta
-                    + token_delta)
+                (I320::from(original_balance) + gas_delta + token_delta)
                     .try_into()
                     .unwrap();
 
@@ -882,13 +885,11 @@ mod test_bridge_pool_vp {
             let account_key = balance_key(&nam(), &balance.owner);
 
             // update the balance of nam
-            let new_gas_balance: Amount = (SignedAmount::from(balance.gas)
-                + gas_delta)
-                .try_into()
-                .unwrap();
+            let new_gas_balance: Amount =
+                (I320::from(balance.gas) + gas_delta).try_into().unwrap();
 
             // update the balance of tokens
-            let new_token_balance: Amount = (SignedAmount::from(balance.token)
+            let new_token_balance: Amount = (I320::from(balance.token)
                 + token_delta)
                 .try_into()
                 .unwrap();
@@ -957,10 +958,10 @@ mod test_bridge_pool_vp {
     /// Helper function that tests various ways gas can be escrowed,
     /// either correctly or incorrectly, is handled appropriately
     fn assert_bridge_pool<F>(
-        payer_gas_delta: SignedAmount,
-        gas_escrow_delta: SignedAmount,
-        payer_delta: SignedAmount,
-        escrow_delta: SignedAmount,
+        payer_gas_delta: I320,
+        gas_escrow_delta: I320,
+        payer_delta: I320,
+        escrow_delta: I320,
         insert_transfer: F,
         expect: Expect,
     ) where
@@ -1047,10 +1048,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_happy_flow() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1068,10 +1069,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_incorrect_gas_withdrawn() {
         assert_bridge_pool(
-            -SignedAmount::from(10),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(10),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1089,10 +1090,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_payer_balance_must_decrease() {
         assert_bridge_pool(
-            SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1110,10 +1111,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_incorrect_gas_deposited() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(10),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(10),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1132,10 +1133,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_incorrect_token_deltas() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(10),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(10),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1153,10 +1154,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_incorrect_tokens_escrowed() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(10),
-            SignedAmount::from(10),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(10),
+            I320::from(10),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1174,10 +1175,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_escrowed_gas_must_increase() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            -I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1195,10 +1196,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_escrowed_tokens_must_increase() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            SignedAmount::from(TOKENS),
-            -SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            I320::from(TOKENS),
+            -I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1216,10 +1217,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_not_adding_transfer_rejected() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, _| BTreeSet::from([get_pending_key(transfer)]),
             Expect::Rejected,
         );
@@ -1230,10 +1231,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_add_wrong_transfer() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 let t = PendingTransfer {
                     transfer: TransferToEthereum {
@@ -1262,10 +1263,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_add_wrong_key() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 let t = PendingTransfer {
                     transfer: TransferToEthereum {
@@ -1294,10 +1295,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_signed_merkle_root_changes_rejected() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 log.write(
                     &get_pending_key(transfer),
@@ -1343,8 +1344,8 @@ mod test_bridge_pool_vp {
                 gas: BERTHA_WEALTH.into(),
                 token: BERTHA_TOKENS.into(),
             },
-            -SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            -I320::from(TOKENS),
         );
         keys_changed.append(&mut new_keys_changed);
 
@@ -1358,8 +1359,8 @@ mod test_bridge_pool_vp {
                 gas: ESCROWED_AMOUNT.into(),
                 token: ESCROWED_TOKENS.into(),
             },
-            SignedAmount::from(GAS_FEE),
-            SignedAmount::from(TOKENS),
+            I320::from(GAS_FEE),
+            I320::from(TOKENS),
         );
         keys_changed.append(&mut new_keys_changed);
         let verifiers = BTreeSet::default();
@@ -1722,8 +1723,8 @@ mod test_bridge_pool_vp {
                 gas: DAEWONS_GAS.into(),
                 token: DAES_NUTS.into(),
             },
-            -SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            -I320::from(TOKENS),
         );
         keys_changed.append(&mut new_keys_changed);
 
@@ -1737,8 +1738,8 @@ mod test_bridge_pool_vp {
                 gas: ESCROWED_AMOUNT.into(),
                 token: ESCROWED_NUTS.into(),
             },
-            SignedAmount::from(GAS_FEE),
-            SignedAmount::from(TOKENS),
+            I320::from(GAS_FEE),
+            I320::from(TOKENS),
         );
         keys_changed.append(&mut new_keys_changed);
 
@@ -1785,10 +1786,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_bridge_pool_vp_rejects_wnam_nut() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 transfer.transfer.kind = TransferToEthereumKind::Nut;
                 transfer.transfer.asset = wnam();
@@ -1807,10 +1808,10 @@ mod test_bridge_pool_vp {
     #[test]
     fn test_bridge_pool_vp_accepts_wnam_erc20() {
         assert_bridge_pool(
-            -SignedAmount::from(GAS_FEE),
-            SignedAmount::from(GAS_FEE),
-            -SignedAmount::from(TOKENS),
-            SignedAmount::from(TOKENS),
+            -I320::from(GAS_FEE),
+            I320::from(GAS_FEE),
+            -I320::from(TOKENS),
+            I320::from(TOKENS),
             |transfer, log| {
                 transfer.transfer.kind = TransferToEthereumKind::Erc20;
                 transfer.transfer.asset = wnam();

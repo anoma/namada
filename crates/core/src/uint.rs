@@ -6,6 +6,7 @@
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::ops::Not;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -17,7 +18,10 @@ use num_integer::Integer;
 use uint::construct_uint;
 
 use super::dec::{Dec, POS_DECIMAL_PRECISION};
-use crate::arith::{self, checked, CheckedAdd};
+use crate::arith::{
+    self, checked, CheckedAdd, CheckedNeg, CheckedSub, OverflowingAdd,
+    OverflowingSub,
+};
 use crate::token;
 use crate::token::{AmountParseError, MaspDigitPos};
 
@@ -877,6 +881,237 @@ impl TryFrom<I256> for i128 {
         } else {
             Ok(raw)
         }
+    }
+}
+
+construct_uint! {
+    #[derive(
+        BorshSerialize,
+        BorshDeserialize,
+        BorshSchema,
+    )]
+
+    struct SignedAmountInt(5);
+}
+
+/// A positive or negative amount
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Default,
+)]
+pub struct I320(SignedAmountInt);
+
+impl<T> OverflowingAdd<T> for I320
+where
+    T: Into<I320>,
+{
+    type Output = Self;
+
+    fn overflowing_add(self, other: T) -> (Self, bool) {
+        let (res, overflow) = self.0.overflowing_add(other.into().0);
+        (Self(res), overflow)
+    }
+}
+
+impl<'a, T> OverflowingAdd<T> for &'a I320
+where
+    T: Into<I320>,
+{
+    type Output = I320;
+
+    fn overflowing_add(self, other: T) -> (I320, bool) {
+        let (res, overflow) = self.0.overflowing_add(other.into().0);
+        (I320(res), overflow)
+    }
+}
+
+impl<T> OverflowingSub<T> for I320
+where
+    T: Into<I320>,
+{
+    type Output = Self;
+
+    fn overflowing_sub(self, other: T) -> (Self, bool) {
+        let (res, overflow) = self.0.overflowing_sub(other.into().0);
+        (I320(res), overflow)
+    }
+}
+
+impl<'a, T> OverflowingSub<T> for &'a I320
+where
+    T: Into<I320>,
+{
+    type Output = I320;
+
+    fn overflowing_sub(self, other: T) -> (I320, bool) {
+        let (res, overflow) = self.0.overflowing_sub(other.into().0);
+        (I320(res), overflow)
+    }
+}
+
+impl From<Uint> for I320 {
+    fn from(lo: Uint) -> Self {
+        let mut arr = [0u64; Self::N_WORDS];
+        arr[..4].copy_from_slice(&lo.0);
+        Self(SignedAmountInt(arr))
+    }
+}
+
+impl From<token::Amount> for I320 {
+    fn from(lo: token::Amount) -> Self {
+        let mut arr = [0u64; Self::N_WORDS];
+        arr[..4].copy_from_slice(&lo.raw_amount().0);
+        Self(SignedAmountInt(arr))
+    }
+}
+
+impl TryInto<token::Amount> for I320 {
+    type Error = std::io::Error;
+
+    fn try_into(self) -> Result<token::Amount, Self::Error> {
+        if self.0.0[Self::N_WORDS - 1] == 0 {
+            Ok(token::Amount::from_uint(
+                Uint([self.0.0[0], self.0.0[1], self.0.0[2], self.0.0[3]]),
+                0,
+            )
+            .unwrap())
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Integer overflow when casting to Amount",
+            ))
+        }
+    }
+}
+
+impl I320 {
+    const N_WORDS: usize = 5;
+
+    /// Gives the one value of an SignedAmount
+    pub fn one() -> Self {
+        Self(SignedAmountInt::one())
+    }
+
+    /// Check if the amount is negative (less than zero)
+    pub fn is_negative(&self) -> bool {
+        self.0.bit(Self::N_WORDS * SignedAmountInt::WORD_BITS - 1)
+    }
+
+    /// Check if the amount is positive (greater than zero)
+    pub fn is_positive(&self) -> bool {
+        !self.is_negative() && !self.0.is_zero()
+    }
+
+    /// Get the absolute value
+    fn abs(&self) -> Self {
+        if self.is_negative() {
+            self.overflowing_neg()
+        } else {
+            *self
+        }
+    }
+
+    /// Get the absolute value
+    pub fn checked_abs(&self) -> Option<Self> {
+        if self.is_negative() {
+            self.checked_neg()
+        } else {
+            Some(*self)
+        }
+    }
+
+    /// Compute the negation of a number.
+    pub fn overflowing_neg(self) -> Self {
+        (!self).overflowing_add(Self::one()).0
+    }
+
+    /// Get a string representation of `self` as a
+    /// native token amount.
+    pub fn to_string_native(self) -> String {
+        let mut res = self.abs().0.to_string();
+        if self.is_negative() {
+            res.insert(0, '-');
+        }
+        res
+    }
+
+    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// amount.
+    pub fn from_masp_denominated(
+        val: i128,
+        denom: MaspDigitPos,
+    ) -> Result<Self, <i64 as TryFrom<u64>>::Error> {
+        let abs = val.unsigned_abs();
+        #[allow(clippy::cast_possible_truncation)]
+        let lo = abs as u64;
+        let hi = (abs >> 64) as u64;
+        let lo_pos = denom as usize;
+        #[allow(clippy::arithmetic_side_effects)]
+        let hi_pos = lo_pos + 1;
+        let mut raw = [0u64; Self::N_WORDS];
+        raw[lo_pos] = lo;
+        raw[hi_pos] = hi;
+        i64::try_from(raw[Self::N_WORDS - 1]).map(|_| {
+            let res = Self(SignedAmountInt(raw));
+            if val.is_negative() {
+                res.checked_neg().unwrap()
+            } else {
+                res
+            }
+        })
+    }
+}
+
+impl Not for I320 {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        Self(!self.0)
+    }
+}
+
+impl CheckedNeg for I320 {
+    type Output = I320;
+
+    fn checked_neg(self) -> Option<Self::Output> {
+        let neg = self.overflowing_neg();
+        (neg != self).then_some(neg)
+    }
+}
+
+impl CheckedAdd for I320 {
+    type Output = I320;
+
+    fn checked_add(self, rhs: Self) -> Option<Self::Output> {
+        let res = self.overflowing_add(rhs).0;
+        ((self.is_negative() != rhs.is_negative())
+            || (self.is_negative() == res.is_negative()))
+        .then_some(res)
+    }
+}
+
+impl CheckedSub for I320 {
+    type Output = I320;
+
+    fn checked_sub(self, rhs: Self) -> Option<Self::Output> {
+        let res = self.overflowing_add(rhs.overflowing_neg()).0;
+        ((self.is_negative() == rhs.is_negative())
+            || (res.is_negative() == self.is_negative()))
+        .then_some(res)
+    }
+}
+
+impl PartialOrd for I320 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        #[allow(clippy::arithmetic_side_effects)]
+        (!self.is_negative(), self.0 << 1)
+            .partial_cmp(&(!other.is_negative(), other.0 << 1))
     }
 }
 

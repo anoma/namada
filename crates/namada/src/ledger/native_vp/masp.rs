@@ -38,9 +38,10 @@ use token::storage_key::{
 use token::Amount;
 
 use crate::ledger::native_vp;
-use crate::ledger::native_vp::{Ctx, NativeVp, SignedAmount};
+use crate::ledger::native_vp::{Ctx, NativeVp};
 use crate::token;
 use crate::token::MaspDigitPos;
+use crate::uint::I320;
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -524,14 +525,14 @@ fn validate_transparent_bundle(
 
 // Apply the given Sapling value balance component to the accumulator
 fn apply_balance_component(
-    acc: &ValueSum<Address, SignedAmount>,
+    acc: &ValueSum<Address, I320>,
     val: i128,
     digit: MaspDigitPos,
     address: Address,
-) -> Result<ValueSum<Address, SignedAmount>> {
+) -> Result<ValueSum<Address, I320>> {
     // Put val into the correct digit position
-    let decoded_change = SignedAmount::from_masp_denominated(val, digit)
-        .map_err(|_| {
+    let decoded_change =
+        I320::from_masp_denominated(val, digit).map_err(|_| {
             Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Overflow in MASP value balance",
             ))
@@ -556,7 +557,7 @@ fn verify_sapling_balancing_value(
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {
-    let mut acc = ValueSum::<Address, SignedAmount>::from_sum(post.clone());
+    let mut acc = ValueSum::<Address, I320>::from_sum(post.clone());
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
         match conversion_state.assets.get(asset_type) {
