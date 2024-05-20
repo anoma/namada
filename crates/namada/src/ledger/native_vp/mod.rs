@@ -16,7 +16,7 @@ use namada_core::storage;
 use namada_core::storage::Epochs;
 use namada_events::{Event, EventType};
 use namada_gas::GasMetering;
-use namada_tx::Tx;
+use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
 
@@ -43,7 +43,7 @@ pub trait NativeVp {
     /// Run the validity predicate
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> std::result::Result<(), Self::Error>;
@@ -68,8 +68,10 @@ where
     pub gas_meter: &'a RefCell<VpGasMeter>,
     /// Read-only state access.
     pub state: &'a S,
-    /// The transaction code is used for signature verification
+    /// The transaction
     pub tx: &'a Tx,
+    /// The commitments in the transaction
+    pub cmt: &'a TxCommitments,
     /// The transaction index is used to obtain the shielded transaction's
     /// parent
     pub tx_index: &'a TxIndex,
@@ -119,6 +121,7 @@ where
         address: &'a Address,
         state: &'a S,
         tx: &'a Tx,
+        cmt: &'a TxCommitments,
         tx_index: &'a TxIndex,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
@@ -132,6 +135,7 @@ where
             iterators: RefCell::new(PrefixIterators::default()),
             gas_meter,
             tx,
+            cmt,
             tx_index,
             keys_changed,
             verifiers,
@@ -409,7 +413,7 @@ where
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<(), state::StorageError> {
         #[cfg(feature = "wasm-runtime")]
         {
@@ -437,6 +441,7 @@ where
                 self.state.db(),
                 self.gas_meter,
                 self.tx,
+                self.cmt,
                 self.tx_index,
                 &mut iterators,
                 self.verifiers,
@@ -474,8 +479,11 @@ where
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
-        vp_host_fns::get_tx_code_hash(self.gas_meter, self.tx)
-            .into_storage_result()
+        vp_host_fns::get_tx_code_hash(
+            self.gas_meter,
+            &self.tx.batch_ref_tx(self.cmt),
+        )
+        .into_storage_result()
     }
 
     fn read_pre<T: borsh::BorshDeserialize>(

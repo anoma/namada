@@ -8,7 +8,7 @@ use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_ethereum_bridge::storage;
 use namada_ethereum_bridge::storage::escrow_key;
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 
 use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
 use crate::state::StateRead;
@@ -93,7 +93,7 @@ where
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
         &self,
-        _: &Tx,
+        _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<(), Self::Error> {
@@ -179,6 +179,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
+    use namada_tx::{Tx, TxCommitments};
     use rand::Rng;
 
     use super::*;
@@ -248,6 +249,7 @@ mod tests {
     /// Setup a ctx for running native vps
     fn setup_ctx<'a>(
         tx: &'a Tx,
+        cmt: &'a TxCommitments,
         state: &'a TestState,
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
@@ -257,6 +259,7 @@ mod tests {
             &crate::ethereum_bridge::ADDRESS,
             state,
             tx,
+            cmt,
             &TxIndex(0),
             gas_meter,
             keys_changed,
@@ -385,15 +388,24 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_ref_first_tx();
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                batched_tx.tx,
+                batched_tx.cmt,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
     }
 
@@ -430,15 +442,24 @@ mod tests {
         let verifiers = BTreeSet::from([BRIDGE_POOL_ADDRESS]);
 
         // set up the VP
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_ref_first_tx();
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                batched_tx.tx,
+                batched_tx.cmt,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -478,15 +499,24 @@ mod tests {
         let verifiers = BTreeSet::from([]);
 
         // set up the VP
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
+        let batched_tx = tx.batch_ref_first_tx();
         let vp = EthBridge {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            ctx: setup_ctx(
+                batched_tx.tx,
+                batched_tx.cmt,
+                &state,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+            ),
         };
 
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 }

@@ -1,7 +1,7 @@
 use namada_tx_prelude::{hash::Hash, storage::Key, *};
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, _tx_data: Tx) -> TxResult {
+fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {
     // governance
     let target_key = gov_storage::keys::get_min_proposal_grace_epochs_key();
     ctx.write(&target_key, 9_u64)?;

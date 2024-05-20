@@ -8,11 +8,8 @@ use namada_tx_prelude::parameters::native_erc20_key;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, signed: Tx) -> TxResult {
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let transfer = PendingTransfer::try_from_slice(&data[..])
         .map_err(|e| Error::wrap("Error deserializing PendingTransfer", e))?;
     debug_log!("Received transfer to add to Bridge pool");

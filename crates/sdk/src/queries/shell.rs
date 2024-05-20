@@ -80,7 +80,7 @@ router! {SHELL,
         -> Vec<u8> = (with_options storage_value),
 
     // Dry run a transaction
-    ( "dry_run_tx" ) -> TxResult = (with_options dry_run_tx),
+    ( "dry_run_tx" ) -> TxResult<String> = (with_options dry_run_tx),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )

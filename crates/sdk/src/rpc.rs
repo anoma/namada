@@ -40,8 +40,8 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
-use namada_tx::data::{ResultCode, TxResult};
-use namada_tx::event::{Code as CodeAttr, InnerTx as InnerTxAttr};
+use namada_tx::data::{BatchedTxResult, ResultCode, TxResult};
+use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
 
 use crate::args::InputAmount;
@@ -523,7 +523,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_tx::data::TxResult, Error> {
+) -> Result<namada_tx::data::TxResult<String>, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()
@@ -531,21 +531,40 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = if result.is_accepted() {
-        format!(
-            "Transaction was successfully applied. Used {} gas.",
-            result.gas_used
-        )
-    } else {
-        format!(
-            "Transaction was rejected by VPs: {}\nErrors: {}\nChanged keys: {}",
-            serde_json::to_string_pretty(&result.vps_result.rejected_vps)
-                .unwrap(),
-            serde_json::to_string_pretty(&result.vps_result.errors).unwrap(),
-            serde_json::to_string_pretty(&result.changed_keys).unwrap(),
-        )
-    };
-    display_line!(context.io(), "Dry-run result: {result_str}");
+    let result_str = format!("Transaction consumed {} gas", result.gas_used);
+    let mut cmt_result_str = String::new();
+    for (cmt_hash, cmt_result) in &result.batch_results.0 {
+        match cmt_result {
+            Ok(result) => {
+                if result.is_accepted() {
+                    cmt_result_str.push_str(&format!(
+                        "Inner transaction {cmt_hash} was successfully applied",
+                    ));
+                } else {
+                    cmt_result_str.push_str(&format!(
+                        "Inner transaction {} was rejected by VPs: \
+                         {}\nErrors: {}\nChanged keys: {}",
+                        cmt_hash,
+                        serde_json::to_string_pretty(
+                            &result.vps_result.rejected_vps
+                        )
+                        .unwrap(),
+                        serde_json::to_string_pretty(&result.vps_result.errors)
+                            .unwrap(),
+                        serde_json::to_string_pretty(&result.changed_keys)
+                            .unwrap(),
+                    ))
+                }
+            }
+            Err(msg) => cmt_result_str.push_str(&format!(
+                "Inner transaction {cmt_hash} failed with error: {msg}"
+            )),
+        }
+    }
+    display_line!(
+        context.io(),
+        "Dry-run result: {result_str}. {cmt_result_str}"
+    );
     Ok(result)
 }
 
@@ -571,28 +590,29 @@ pub enum TxBroadcastData {
 /// A parsed event from tendermint relating to a transaction
 #[derive(Debug, Serialize)]
 pub struct TxResponse {
-    /// Result of inner tx (wasm), if any
-    pub inner_tx: Option<TxResult>,
+    /// Result of the tx batch (wasm), if any
+    pub batch: Option<TxResult<String>>,
     /// Response additional information
     pub info: String,
     /// Response log
     pub log: String,
     /// Block height
     pub height: BlockHeight,
-    /// Transaction height
+    /// Transaction hash
     pub hash: Hash,
     /// Response code
     pub code: ResultCode,
-    /// Gas used. If there's an `inner_tx`, its gas is equal to this value.
+    /// Gas used.
     pub gas_used: Gas,
 }
 
-/// Determines a result of an inner tx from [`TxResponse::inner_tx_result`].
+/// Determines a result of an inner tx from
+/// [`namada_tx::data::BatchedTxResult`].
 pub enum InnerTxResult<'a> {
     /// Tx is applied and accepted by all VPs
-    Success(&'a TxResult),
+    Success(&'a BatchedTxResult),
     /// Some VPs rejected the tx
-    VpsRejected(&'a TxResult),
+    VpsRejected(&'a BatchedTxResult),
     /// Transaction failed in some other way
     OtherFailure,
 }
@@ -601,7 +621,7 @@ impl TryFrom<Event> for TxResponse {
     type Error = String;
 
     fn try_from(event: Event) -> Result<Self, Self::Error> {
-        let inner_tx = event.read_attribute::<InnerTxAttr<'_>>().ok();
+        let batch = event.read_attribute::<BatchAttr<'_>>().ok();
         let hash = event
             .read_attribute::<extend::TxHash>()
             .map_err(|err| err.to_string())?;
@@ -622,7 +642,7 @@ impl TryFrom<Event> for TxResponse {
             .map_err(|err| err.to_string())?;
 
         Ok(TxResponse {
-            inner_tx,
+            batch,
             info,
             hash,
             log,
@@ -641,17 +661,27 @@ impl TxResponse {
         })
     }
 
-    /// Check the result of the inner tx. This should not be used with wrapper
+    /// Check the result of the batch. This should not be used with wrapper
     /// txs.
-    pub fn inner_tx_result(&self) -> InnerTxResult<'_> {
-        if let Some(tx) = self.inner_tx.as_ref() {
-            if tx.is_accepted() {
-                InnerTxResult::Success(tx)
-            } else {
-                InnerTxResult::VpsRejected(tx)
+    pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
+        if let Some(tx) = self.batch.as_ref() {
+            let mut result = HashMap::default();
+            for (cmt_hash, cmt_result) in &tx.batch_results.0 {
+                let value = match cmt_result {
+                    Ok(res) => {
+                        if res.is_accepted() {
+                            InnerTxResult::Success(res)
+                        } else {
+                            InnerTxResult::VpsRejected(res)
+                        }
+                    }
+                    Err(_) => InnerTxResult::OtherFailure,
+                };
+                result.insert(cmt_hash.to_owned(), value);
             }
+            result
         } else {
-            InnerTxResult::OtherFailure
+            HashMap::default()
         }
     }
 }

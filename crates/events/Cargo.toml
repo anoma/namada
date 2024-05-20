@@ -28,5 +28,6 @@ namada_migrations = {path = "../migrations", optional = true}
 borsh.workspace = true
 linkme = {workspace = true, optional = true}
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

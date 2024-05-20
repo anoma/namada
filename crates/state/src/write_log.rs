@@ -64,6 +64,54 @@ pub enum StorageModification {
     },
 }
 
+/// The write log for a transaction. This allows managing the result of a single
+/// inner transaction inside a batch
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TxWriteLog {
+    // The generator of established addresses
+    address_gen: Option<EstablishedAddressGen>,
+    // The storage modifications for the current transaction
+    write_log: HashMap<storage::Key, StorageModification>,
+    // Temporary key-values for the current transaction that are dropped after
+    // tx and its verifying VPs execution is done
+    tx_temp_log: HashMap<storage::Key, Vec<u8>>,
+    // A precommit bucket for the `tx_write_log`. This is useful for
+    // validation when a clean `tx_write_log` is needed without committing any
+    // modification already in there. These modifications can be temporarily
+    // stored here and then discarded or committed to the `block_write_log`,
+    // together with the content of `tx_write_log`. No direct key
+    // write/update/delete should ever happen on this field, this log should
+    // only be populated through a dump of the `tx_write_log` and should be
+    // cleaned either when committing or dumping the `tx_write_log`
+    precommit_write_log: HashMap<storage::Key, StorageModification>,
+    /// The events emitted by the current transaction
+    events: WriteLogEvents,
+}
+
+impl Default for TxWriteLog {
+    fn default() -> Self {
+        Self {
+            address_gen: None,
+            write_log: HashMap::with_capacity(100),
+            tx_temp_log: HashMap::with_capacity(1),
+            precommit_write_log: HashMap::with_capacity(100),
+            events: WriteLogEvents {
+                tree: StringPatriciaMap::new(),
+            },
+        }
+    }
+}
+
+/// The write log for an already evaluated transaction of a batch. This allows
+/// managing the result of a single inner transaction inside a batch
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BatchedTxWriteLog {
+    // The generator of established addresses
+    address_gen: Option<EstablishedAddressGen>,
+    // The storage modifications for the transaction
+    write_log: HashMap<storage::Key, StorageModification>,
+}
+
 /// Log of events in the write log.
 #[derive(Debug, Clone)]
 pub(crate) struct WriteLogEvents {
@@ -92,29 +140,19 @@ impl std::cmp::Eq for WriteLogEvents {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WriteLog {
     /// The generator of established addresses
-    pub(crate) address_gen: Option<EstablishedAddressGen>,
+    pub(crate) block_address_gen: Option<EstablishedAddressGen>,
     /// All the storage modification accepted by validity predicates are stored
     /// in block write-log, before being committed to the storage
     pub(crate) block_write_log: HashMap<storage::Key, StorageModification>,
-    /// The storage modifications for the current transaction
-    pub(crate) tx_write_log: HashMap<storage::Key, StorageModification>,
-    /// Temporary key-values for the current transaction that are dropped after
-    /// tx and its verifying VPs execution is done
-    pub(crate) tx_temp_log: HashMap<storage::Key, Vec<u8>>,
-    /// A precommit bucket for the `tx_write_log`. This is useful for
-    /// validation when a clean `tx_write_log` is needed without committing any
-    /// modification already in there. These modifications can be temporarily
-    /// stored here and then discarded or committed to the `block_write_log`,
-    /// together with th content of `tx_write_log`. No direct key
-    /// write/update/delete should ever happen on this field, this log should
-    /// only be populated through a dump of the `tx_write_log` and should be
-    /// cleaned either when committing or dumping the `tx_write_log`
-    pub(crate) tx_precommit_write_log:
-        HashMap<storage::Key, StorageModification>,
-    /// The events emitted by the current transaction
-    pub(crate) events: WriteLogEvents,
-    /// Storage modifications for the replay protection storage, always
-    /// committed regardless of the result of the transaction
+    /// The write log of the transactions of the current batch
+    /// INVARIANT: this has to be sorted by the insertion
+    /// order to correctly read values
+    pub(crate) batch_write_log: Vec<BatchedTxWriteLog>,
+    // The write log of the current active transaction
+    pub(crate) tx_write_log: TxWriteLog,
+    /// Storage modifications for the replay protection storage, cannot be
+    /// managed in the normal write log because we need to commit them
+    /// sometimes even on batch failure
     pub(crate) replay_protection: HashSet<Hash>,
 }
 
@@ -137,14 +175,10 @@ impl Iterator for PrefixIter {
 impl Default for WriteLog {
     fn default() -> Self {
         Self {
-            address_gen: None,
+            block_address_gen: None,
             block_write_log: HashMap::with_capacity(100_000),
-            tx_write_log: HashMap::with_capacity(100),
-            tx_temp_log: HashMap::with_capacity(1),
-            tx_precommit_write_log: HashMap::with_capacity(100),
-            events: WriteLogEvents {
-                tree: StringPatriciaMap::new(),
-            },
+            batch_write_log: Vec::with_capacity(5),
+            tx_write_log: Default::default(),
             replay_protection: HashSet::with_capacity(1_000),
         }
     }
@@ -161,10 +195,19 @@ impl WriteLog {
         // try to read from tx write log first
         match self
             .tx_write_log
+            .write_log
             .get(key)
             .or_else(|| {
                 // If not found, then try to read from tx precommit write log
-                self.tx_precommit_write_log.get(key)
+                self.tx_write_log.precommit_write_log.get(key)
+            })
+            .or_else(|| {
+                // If not found, then try to read from batch write log,
+                // following the insertion order
+                self.batch_write_log
+                    .iter()
+                    .rev()
+                    .find_map(|log| log.write_log.get(key))
             })
             .or_else(|| {
                 // if not found, then try to read from block write log
@@ -197,8 +240,14 @@ impl WriteLog {
         key: &storage::Key,
     ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
     {
-        match self.block_write_log.get(key) {
-            Some(v) => {
+        for bucket in self
+            .batch_write_log
+            .iter()
+            .rev()
+            .map(|batch_log| &batch_log.write_log)
+            .chain([&self.block_write_log])
+        {
+            if let Some(v) = bucket.get(key) {
                 let gas = match v {
                     StorageModification::Write { ref value } => {
                         checked!(key.len() + value.len())?
@@ -208,13 +257,14 @@ impl WriteLog {
                         checked!(key.len() + vp_code_hash.len())?
                     }
                 } as u64;
-                Ok((Some(v), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
-            }
-            None => {
-                let gas = key.len() as u64;
-                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+                return Ok((
+                    Some(v),
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?,
+                ));
             }
         }
+        let gas = key.len() as u64;
+        Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
     }
 
     /// Read a temp value at the given key and return the value and the gas
@@ -225,7 +275,7 @@ impl WriteLog {
         key: &storage::Key,
     ) -> Result<(Option<&Vec<u8>>, u64)> {
         // try to read from tx write log first
-        match self.tx_temp_log.get(key) {
+        match self.tx_write_log.tx_temp_log.get(key) {
             Some(value) => {
                 let gas = checked!(key.len() + value.len())? as u64;
 
@@ -249,15 +299,16 @@ impl WriteLog {
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
         let len = value.len();
-        if self.tx_temp_log.contains_key(key) {
+        if self.tx_write_log.tx_temp_log.contains_key(key) {
             return Err(Error::UpdateTemporaryValue);
         }
         let len_signed =
             i64::try_from(len).map_err(|_| Error::ValueLenOverflow)?;
         let size_diff = match self
             .tx_write_log
+            .write_log
             .get(key)
-            .or_else(|| self.tx_precommit_write_log.get(key))
+            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
@@ -281,6 +332,7 @@ impl WriteLog {
         };
 
         self.tx_write_log
+            .write_log
             .insert(key.clone(), StorageModification::Write { value });
 
         let gas = checked!(key.len() + len)? as u64;
@@ -297,7 +349,7 @@ impl WriteLog {
         key: &storage::Key,
         value: Vec<u8>,
     ) -> Result<()> {
-        if self.tx_temp_log.contains_key(key) {
+        if self.tx_write_log.tx_temp_log.contains_key(key) {
             return Err(Error::UpdateTemporaryValue);
         }
         if let Some(prev) = self
@@ -329,8 +381,9 @@ impl WriteLog {
     ) -> Result<(u64, i64)> {
         if let Some(prev) = self
             .tx_write_log
+            .write_log
             .get(key)
-            .or_else(|| self.tx_precommit_write_log.get(key))
+            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
         {
             match prev {
                 StorageModification::Write { .. } => {
@@ -349,7 +402,7 @@ impl WriteLog {
         let len = value.len();
         let len_signed =
             i64::try_from(len).map_err(|_| Error::ValueLenOverflow)?;
-        let size_diff = match self.tx_temp_log.get(key) {
+        let size_diff = match self.tx_write_log.tx_temp_log.get(key) {
             Some(prev) => {
                 let prev_len = i64::try_from(prev.len())
                     .map_err(|_| Error::ValueLenOverflow)?;
@@ -360,7 +413,7 @@ impl WriteLog {
             None => len_signed,
         };
 
-        self.tx_temp_log.insert(key.clone(), value);
+        self.tx_write_log.tx_temp_log.insert(key.clone(), value);
 
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
@@ -378,8 +431,9 @@ impl WriteLog {
         }
         let size_diff = match self
             .tx_write_log
+            .write_log
             .get(key)
-            .or_else(|| self.tx_precommit_write_log.get(key))
+            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
         {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len(),
@@ -394,6 +448,7 @@ impl WriteLog {
         };
 
         self.tx_write_log
+            .write_log
             .insert(key.clone(), StorageModification::Delete);
         let gas = checked!(key.len() + size_diff)? as u64;
         let size_diff = i64::try_from(size_diff)
@@ -435,6 +490,7 @@ impl WriteLog {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
         let address_gen = self
+            .tx_write_log
             .address_gen
             .get_or_insert_with(|| storage_address_gen.clone());
         let addr = address_gen.generate_address(entropy_source);
@@ -446,6 +502,7 @@ impl WriteLog {
             .checked_mul(STORAGE_WRITE_GAS_PER_BYTE)
             .expect("Canno overflow");
         self.tx_write_log
+            .write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
         (addr, gas)
     }
@@ -457,10 +514,18 @@ impl WriteLog {
         let gas_cost = event.emission_gas_cost(MEMORY_ACCESS_GAS_PER_BYTE);
         if gas_cost.as_ref().is_some() {
             let event_type = event.kind().to_string();
-            if !self.events.tree.contains_key(&event_type) {
-                self.events.tree.insert(&event_type, HashSet::new());
+            if !self.tx_write_log.events.tree.contains_key(&event_type) {
+                self.tx_write_log
+                    .events
+                    .tree
+                    .insert(&event_type, HashSet::new());
             }
-            self.events.tree.get_mut(&event_type).unwrap().insert(event);
+            self.tx_write_log
+                .events
+                .tree
+                .get_mut(&event_type)
+                .unwrap()
+                .insert(event);
         }
         gas_cost
     }
@@ -471,6 +536,7 @@ impl WriteLog {
     /// not included in the result of this function.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log
+            .write_log
             .iter()
             .map(|(key, _modification)| key.clone())
             .collect()
@@ -480,9 +546,10 @@ impl WriteLog {
     /// current transaction and precommit. The account keys point to the
     /// validity predicates of the newly created accounts.
     pub fn get_keys_with_precommit(&self) -> BTreeSet<storage::Key> {
-        self.tx_precommit_write_log
+        self.tx_write_log
+            .precommit_write_log
             .keys()
-            .chain(self.tx_write_log.keys())
+            .chain(self.tx_write_log.write_log.keys())
             .cloned()
             .collect()
     }
@@ -496,19 +563,24 @@ impl WriteLog {
         &self,
     ) -> (BTreeSet<&storage::Key>, HashSet<&Address>) {
         use itertools::Either;
-        self.tx_write_log.iter().partition_map(|(key, value)| {
-            match (key.is_validity_predicate(), value) {
-                (Some(address), StorageModification::InitAccount { .. }) => {
-                    Either::Right(address)
+        self.tx_write_log
+            .write_log
+            .iter()
+            .partition_map(|(key, value)| {
+                match (key.is_validity_predicate(), value) {
+                    (
+                        Some(address),
+                        StorageModification::InitAccount { .. },
+                    ) => Either::Right(address),
+                    _ => Either::Left(key),
                 }
-                _ => Either::Left(key),
-            }
-        })
+            })
     }
 
     /// Get the addresses of accounts initialized in the current transaction.
     pub fn get_initialized_accounts(&self) -> Vec<Address> {
         self.tx_write_log
+            .write_log
             .iter()
             .filter_map(|(key, value)| {
                 match (key.is_validity_predicate(), value) {
@@ -524,7 +596,7 @@ impl WriteLog {
 
     /// Take the events of the current transaction
     pub fn take_events(&mut self) -> BTreeSet<Event> {
-        std::mem::take(&mut self.events.tree)
+        std::mem::take(&mut self.tx_write_log.events.tree)
             .into_iter()
             .flat_map(|(_, event_set)| event_set)
             .collect()
@@ -537,7 +609,8 @@ impl WriteLog {
         &'this self,
         event_type: &'ty EventType,
     ) -> impl Iterator<Item = &'this Event> + 'this {
-        self.events
+        self.tx_write_log
+            .events
             .tree
             .iter_prefix(event_type)
             .flat_map(|(_, event_set)| event_set)
@@ -549,7 +622,8 @@ impl WriteLog {
     pub fn get_events_of<E: EventToEmit>(
         &self,
     ) -> impl Iterator<Item = &Event> {
-        self.events
+        self.tx_write_log
+            .events
             .tree
             .iter_prefix(E::DOMAIN)
             .flat_map(|(_, event_set)| event_set)
@@ -558,54 +632,75 @@ impl WriteLog {
     /// Get all events emitted by the current transaction.
     #[inline]
     pub fn get_events(&self) -> impl Iterator<Item = &Event> {
-        self.events.tree.values().flatten()
+        self.tx_write_log.events.tree.values().flatten()
     }
 
     /// Add the entire content of the tx write log to the precommit one. The tx
     /// log gets reset in the process.
     pub fn precommit_tx(&mut self) {
         let tx_log = std::mem::replace(
-            &mut self.tx_write_log,
+            &mut self.tx_write_log.write_log,
             HashMap::with_capacity(100),
         );
 
-        self.tx_precommit_write_log.extend(tx_log)
+        self.tx_write_log.precommit_write_log.extend(tx_log)
     }
 
     /// Commit the current transaction's write log and precommit log to the
-    /// block when it's accepted by all the triggered validity predicates.
-    /// Starts a new transaction write log a clears the temp write log.
-    pub fn commit_tx(&mut self) {
+    /// batch when it's accepted by all the triggered validity predicates.
+    /// Starts a new transaction write log.
+    pub fn commit_tx_to_batch(&mut self) {
         // First precommit everything
         self.precommit_tx();
 
-        // Then commit to block
-        let tx_precommit_write_log = std::mem::replace(
-            &mut self.tx_precommit_write_log,
-            HashMap::with_capacity(100),
-        );
+        // Then commit to batch
+        let tx_write_log = std::mem::take(&mut self.tx_write_log);
+        let batched_log = BatchedTxWriteLog {
+            address_gen: tx_write_log.address_gen,
+            write_log: tx_write_log.precommit_write_log,
+        };
 
-        self.block_write_log.extend(tx_precommit_write_log);
-        self.tx_temp_log.clear();
-        self.events.tree.clear();
+        self.batch_write_log.push(batched_log);
     }
 
     /// Drop the current transaction's write log and IBC events and precommit
     /// when it's declined by any of the triggered validity predicates.
     /// Starts a new transaction write log a clears the temp write log.
     pub fn drop_tx(&mut self) {
-        self.tx_precommit_write_log.clear();
-        self.tx_write_log.clear();
-        self.tx_temp_log.clear();
-        self.events.tree.clear();
+        self.tx_write_log = Default::default();
     }
 
-    /// Drop the current transaction's write log but keep the precommit one.
-    /// This is useful only when a part of a transaction failed but it can still
-    /// be valid and we want to keep the changes applied before the failed
-    /// section.
+    /// Drop the current transaction's write log and temporary log but keep the
+    /// precommit one. This is useful only when a part of a transaction
+    /// failed but it can still be valid and we want to keep the changes
+    /// applied before the failed section.
     pub fn drop_tx_keep_precommit(&mut self) {
-        self.tx_write_log.clear();
+        self.tx_write_log.write_log.clear();
+        self.tx_write_log.tx_temp_log.clear();
+    }
+
+    /// Commit the entire batch to the block log.
+    pub fn commit_batch(&mut self) {
+        for log in std::mem::take(&mut self.batch_write_log) {
+            self.block_write_log.extend(log.write_log);
+            self.block_address_gen = log.address_gen;
+        }
+    }
+
+    /// Drop the entire batch log.
+    pub fn drop_batch(&mut self) {
+        self.batch_write_log = Default::default();
+    }
+
+    /// Commit the tx write log to the block write log.
+    pub fn commit_tx(&mut self) {
+        // First precommit everything
+        self.precommit_tx();
+
+        // Then commit to block
+        let tx_write_log = std::mem::take(&mut self.tx_write_log);
+        self.block_write_log
+            .extend(tx_write_log.precommit_write_log);
     }
 
     /// Get the verifiers set whose validity predicates should validate the
@@ -646,7 +741,12 @@ impl WriteLog {
     pub fn iter_prefix_pre(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        for (key, modification) in &self.block_write_log {
+        for (key, modification) in self.block_write_log.iter().chain(
+            self.batch_write_log
+                .iter()
+                .rev()
+                .flat_map(|batch_log| batch_log.write_log.iter()),
+        ) {
             if key.split_prefix(prefix).is_some() {
                 matches.insert(key.to_string(), modification.clone());
             }
@@ -661,15 +761,20 @@ impl WriteLog {
     pub fn iter_prefix_post(&self, prefix: &storage::Key) -> PrefixIter {
         let mut matches = BTreeMap::new();
 
-        for bucket in [
-            &self.block_write_log,
-            &self.tx_precommit_write_log,
-            &self.tx_write_log,
-        ] {
-            for (key, modification) in bucket {
-                if key.split_prefix(prefix).is_some() {
-                    matches.insert(key.to_string(), modification.clone());
-                }
+        for (key, modification) in self.block_write_log.iter().chain(
+            self.batch_write_log
+                .iter()
+                .rev()
+                .flat_map(|batch_log| batch_log.write_log.iter())
+                .chain(
+                    self.tx_write_log
+                        .precommit_write_log
+                        .iter()
+                        .chain(self.tx_write_log.write_log.iter()),
+                ),
+        ) {
+            if key.split_prefix(prefix).is_some() {
+                matches.insert(key.to_string(), modification.clone());
             }
         }
 
@@ -1113,9 +1218,9 @@ mod tests {
         ///    included in the changed keys set.
         #[test]
         fn verifiers_changed_key_tx_all_key(
-            (verifiers_from_tx, tx_write_log) in arb_verifiers_changed_key_tx_all_key(),
+            (verifiers_from_tx, write_log) in arb_verifiers_changed_key_tx_all_key(),
         ) {
-            let write_log = WriteLog { tx_write_log, ..WriteLog::default() };
+            let write_log = WriteLog { tx_write_log: super::TxWriteLog { write_log, ..Default::default()} , ..WriteLog::default() };
 
             let (verifiers, changed_keys) = write_log.verifiers_and_changed_keys(&verifiers_from_tx);
 

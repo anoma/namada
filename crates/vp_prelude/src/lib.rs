@@ -43,11 +43,12 @@ pub use namada_storage::{
     iter_prefix, iter_prefix_bytes, Error as StorageError, OptionExt,
     ResultExt, StorageRead,
 };
-pub use namada_tx::{Section, Tx};
+pub use namada_tx::{BatchedTx, Section, Tx};
 use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use namada_vp_env::{collection_validation, VpEnv};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
+use tx::BatchedTxRef;
 pub use {
     namada_account as account, namada_parameters as parameters,
     namada_proof_of_stake as proof_of_stake, namada_token as token,
@@ -366,7 +367,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn eval(
         &self,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> Result<(), StorageError> {
         let input_data_bytes = input_data.serialize_to_vec();
 

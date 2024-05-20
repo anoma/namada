@@ -7,7 +7,7 @@ use namada_governance::pgf::storage::keys as pgf_storage;
 use namada_governance::{is_proposal_accepted, pgf};
 use namada_state::StateRead;
 use namada_tx::action::{Action, PgfAction, Read};
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};
@@ -52,7 +52,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -182,7 +182,7 @@ where
                 ))
                 .into()),
                 KeyType::PgfInflationRate | KeyType::StewardInflationRate => {
-                    self.is_valid_parameter_change(tx_data)
+                    self.is_valid_parameter_change(batched_tx)
                 }
                 KeyType::UnknownPgf => Err(native_vp::Error::new_alloc(
                     format!("Unknown PGF state update on key: {key}"),
@@ -200,8 +200,11 @@ where
     CA: 'static + WasmCacheAccess,
 {
     /// Validate a governance parameter
-    pub fn is_valid_parameter_change(&self, tx: &Tx) -> Result<()> {
-        tx.data().map_or_else(
+    pub fn is_valid_parameter_change(
+        &self,
+        batched_tx: &BatchedTxRef<'_>,
+    ) -> Result<()> {
+        batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
                     "PGF parameter changes require tx data to be present",

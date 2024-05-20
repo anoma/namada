@@ -237,7 +237,7 @@ where
         }
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
-        if let Some(address_gen) = self.0.write_log.address_gen.take() {
+        if let Some(address_gen) = self.0.write_log.block_address_gen.take() {
             self.0.in_mem.address_gen = address_gen
         }
         Ok(())
@@ -607,8 +607,7 @@ where
         }
     }
 
-    /// Commit the current transaction's write log to the block when it's
-    /// accepted by all the triggered validity predicates. Starts a new
+    /// Commit the current transaction's write log to the block. Starts a new
     /// transaction write log.
     pub fn commit_tx(&mut self) {
         self.write_log.commit_tx()

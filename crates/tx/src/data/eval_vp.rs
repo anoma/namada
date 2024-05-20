@@ -7,7 +7,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
-use crate::Tx;
+use crate::BatchedTx;
 
 /// A validity predicate with an input that is intended to be invoked via `eval`
 /// host function.
@@ -24,5 +24,5 @@ pub struct EvalVp {
     /// The VP code hash to `eval`
     pub vp_code_hash: Hash,
     /// The input for the `eval`ed VP
-    pub input: Tx,
+    pub input: BatchedTx,
 }

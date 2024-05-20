@@ -464,6 +464,11 @@ impl Event {
         })?;
         (len as u64).checked_mul(cost_per_byte)
     }
+
+    /// Joins the attribute sets of two [`Event`]
+    pub fn merge(&mut self, other: Self) {
+        self.attributes.extend(other.attributes)
+    }
 }
 
 impl From<Event> for namada_core::tendermint_proto::v0_37::abci::Event {

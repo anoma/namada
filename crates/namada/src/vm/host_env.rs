@@ -26,7 +26,7 @@ use namada_state::{
 };
 use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::data::TxSentinel;
-use namada_tx::Tx;
+use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -128,8 +128,10 @@ where
     pub gas_meter: HostRef<'a, &'a RefCell<TxGasMeter>>,
     /// Transaction sentinel. In  `RefCell` to charge gas in read-only fns.
     pub sentinel: HostRef<'a, &'a RefCell<TxSentinel>>,
-    /// The transaction code is used for signature verification
+    /// The transaction
     pub tx: HostRef<'a, &'a Tx>,
+    /// The commitments inside the transaction
+    pub cmt: HostRef<'a, &'a TxCommitments>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -175,6 +177,7 @@ where
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -189,6 +192,7 @@ where
         let gas_meter = unsafe { HostRef::new(gas_meter) };
         let sentinel = unsafe { HostRef::new(sentinel) };
         let tx = unsafe { HostRef::new(tx) };
+        let cmt = unsafe { HostRef::new(cmt) };
         let tx_index = unsafe { HostRef::new(tx_index) };
         let verifiers = unsafe { MutHostRef::new(verifiers) };
         let result_buffer = unsafe { MutHostRef::new(result_buffer) };
@@ -205,6 +209,7 @@ where
             gas_meter,
             sentinel,
             tx,
+            cmt,
             tx_index,
             verifiers,
             result_buffer,
@@ -288,6 +293,7 @@ where
             gas_meter: self.gas_meter.clone(),
             sentinel: self.sentinel.clone(),
             tx: self.tx.clone(),
+            cmt: self.cmt.clone(),
             tx_index: self.tx_index.clone(),
             verifiers: self.verifiers.clone(),
             result_buffer: self.result_buffer.clone(),
@@ -337,8 +343,10 @@ where
     pub iterators: MutHostRef<'a, &'a PrefixIterators<'a, D>>,
     /// VP gas meter. In  `RefCell` to charge gas in read-only fns.
     pub gas_meter: HostRef<'a, &'a RefCell<VpGasMeter>>,
-    /// The transaction code is used for signature verification
+    /// The transaction
     pub tx: HostRef<'a, &'a Tx>,
+    /// The commitments inside the transaction
+    pub cmt: HostRef<'a, &'a TxCommitments>,
     /// The transaction index is used to identify a shielded transaction's
     /// parent
     pub tx_index: HostRef<'a, &'a TxIndex>,
@@ -381,7 +389,7 @@ pub trait VpEvaluator {
         &self,
         ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
         vp_code_hash: Hash,
-        input_data: Tx,
+        input_data: BatchedTxRef<'_>,
     ) -> HostEnvResult;
 }
 
@@ -409,6 +417,7 @@ where
         db: &D,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
@@ -425,6 +434,7 @@ where
             db,
             gas_meter,
             tx,
+            cmt,
             tx_index,
             iterators,
             verifiers,
@@ -483,6 +493,7 @@ where
         db: &D,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         iterators: &mut PrefixIterators<'a, D>,
         verifiers: &BTreeSet<Address>,
@@ -497,6 +508,7 @@ where
         let db = unsafe { HostRef::new(db) };
         let in_mem = unsafe { HostRef::new(in_mem) };
         let tx = unsafe { HostRef::new(tx) };
+        let cmt = unsafe { HostRef::new(cmt) };
         let tx_index = unsafe { HostRef::new(tx_index) };
         let iterators = unsafe { MutHostRef::new(iterators) };
         let gas_meter = unsafe { HostRef::new(gas_meter) };
@@ -515,6 +527,7 @@ where
             iterators,
             gas_meter,
             tx,
+            cmt,
             tx_index,
             eval_runner,
             result_buffer,
@@ -565,6 +578,7 @@ where
             iterators: self.iterators.clone(),
             gas_meter: self.gas_meter.clone(),
             tx: self.tx.clone(),
+            cmt: self.cmt.clone(),
             tx_index: self.tx_index.clone(),
             eval_runner: self.eval_runner.clone(),
             result_buffer: self.result_buffer.clone(),
@@ -1853,7 +1867,9 @@ where
 {
     let gas_meter = env.ctx.gas_meter();
     let tx = unsafe { env.ctx.tx.get() };
-    let hash = vp_host_fns::get_tx_code_hash(gas_meter, tx)?;
+    let cmt = unsafe { env.ctx.cmt.get() };
+    let batched_tx = tx.batch_ref_tx(cmt);
+    let hash = vp_host_fns::get_tx_code_hash(gas_meter, &batched_tx)?;
     let mut result_bytes = vec![];
     if let Some(hash) = hash {
         result_bytes.push(1);
@@ -2066,7 +2082,8 @@ where
     tx_charge_gas::<MEM, D, H, CA>(env, IBC_TX_GAS)?;
 
     let tx = unsafe { env.ctx.tx.get() };
-    let tx_data = tx.data().ok_or_else(|| {
+    let cmt = unsafe { env.ctx.cmt.get() };
+    let tx_data = tx.data(cmt).ok_or_else(|| {
         let sentinel = unsafe { env.ctx.sentinel.get() };
         sentinel.borrow_mut().set_invalid_commitment();
         TxRuntimeError::MissingTxData
@@ -2345,7 +2362,7 @@ where
             .read_bytes(input_data_ptr, input_data_len.try_into()?)
             .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
         vp_host_fns::add_gas(gas_meter, gas)?;
-        let tx: Tx = BorshDeserialize::try_from_slice(&input_data)
+        let tx: BatchedTx = BorshDeserialize::try_from_slice(&input_data)
             .map_err(vp_host_fns::RuntimeError::EncodingError)?;
         tx
     };
@@ -2357,7 +2374,13 @@ where
             format!("Not a valid hash: {:?}", e),
         ))
     })?);
-    Ok(eval_runner.eval(env.ctx.clone(), vp_code_hash, tx).to_i64())
+    let batch_ref = BatchedTxRef {
+        tx: &tx.tx,
+        cmt: &tx.cmt,
+    };
+    Ok(eval_runner
+        .eval(env.ctx.clone(), vp_code_hash, batch_ref)
+        .to_i64())
 }
 
 /// Get the native token's address
@@ -2445,6 +2468,7 @@ pub mod testing {
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
@@ -2471,6 +2495,7 @@ pub mod testing {
             gas_meter,
             sentinel,
             tx,
+            cmt,
             tx_index,
             verifiers,
             result_buffer,
@@ -2491,6 +2516,7 @@ pub mod testing {
         gas_meter: &RefCell<TxGasMeter>,
         sentinel: &RefCell<TxSentinel>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
@@ -2523,6 +2549,7 @@ pub mod testing {
             gas_meter,
             sentinel,
             tx,
+            cmt,
             tx_index,
             verifiers,
             result_buffer,
@@ -2542,6 +2569,7 @@ pub mod testing {
         iterators: &mut PrefixIterators<'static, <S as StateRead>::D>,
         gas_meter: &RefCell<VpGasMeter>,
         tx: &Tx,
+        cmt: &TxCommitments,
         tx_index: &TxIndex,
         verifiers: &BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
@@ -2570,6 +2598,7 @@ pub mod testing {
             state.db(),
             gas_meter,
             tx,
+            cmt,
             tx_index,
             iterators,
             verifiers,

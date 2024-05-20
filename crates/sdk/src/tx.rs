@@ -60,7 +60,7 @@ use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
-use namada_tx::data::{pos, ResultCode, TxResult};
+use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
@@ -143,18 +143,21 @@ pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
-    DryRun(TxResult),
+    DryRun(TxResult<String>),
 }
 
 impl ProcessTxResponse {
     /// Returns a `TxResult` if the transaction applied and was it accepted by
     /// all VPs. Note that this always returns false for dry-run transactions.
-    pub fn is_applied_and_valid(&self) -> Option<&TxResult> {
+    pub fn is_applied_and_valid(
+        &self,
+        cmt: &TxCommitments,
+    ) -> Option<&BatchedTxResult> {
         match self {
             ProcessTxResponse::Applied(resp) => {
                 if resp.code == ResultCode::Ok {
-                    if let InnerTxResult::Success(result) =
-                        resp.inner_tx_result()
+                    if let Some(InnerTxResult::Success(result)) =
+                        resp.batch_result().get(&cmt.get_hash())
                     {
                         return Some(result);
                     }
@@ -231,6 +234,7 @@ pub async fn process_tx(
     } else {
         // We use this to determine when the wrapper tx makes it on-chain
         let tx_hash = tx.header_hash().to_string();
+        let cmts = tx.commitments().clone();
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
         let to_broadcast = TxBroadcastData::Live { tx, tx_hash };
@@ -244,15 +248,17 @@ pub async fn process_tx(
         } else {
             match submit_tx(context, to_broadcast).await {
                 Ok(resp) => {
-                    if let InnerTxResult::Success(result) =
-                        resp.inner_tx_result()
-                    {
-                        save_initialized_accounts(
-                            context,
-                            args,
-                            result.initialized_accounts.clone(),
-                        )
-                        .await;
+                    for cmt in cmts {
+                        if let Some(InnerTxResult::Success(result)) =
+                            resp.batch_result().get(&cmt.get_hash())
+                        {
+                            save_initialized_accounts(
+                                context,
+                                args,
+                                result.initialized_accounts.clone(),
+                            )
+                            .await;
+                        }
                     }
                     Ok(ProcessTxResponse::Applied(resp))
                 }
@@ -393,75 +399,50 @@ pub async fn submit_tx(
     let tx_query = rpc::TxEventQuery::Applied(tx_hash.as_str());
     let event = rpc::query_tx_status(context, tx_query, deadline).await?;
     let response = TxResponse::from_event(event);
-    display_inner_resp(context, &response);
+    display_batch_resp(context, &response);
     Ok(response)
 }
 
-/// Display a result of a wrapper tx.
-/// Returns true if the wrapper tx was successful.
-pub fn display_wrapper_resp_and_get_result(
-    context: &impl Namada,
-    resp: &TxResponse,
-) -> bool {
-    let result = if resp.code != ResultCode::Ok {
-        display_line!(
-            context.io(),
-            "Wrapper transaction failed with error code {}. Used {} gas.",
-            resp.code,
-            resp.gas_used,
-        );
-        false
-    } else {
-        display_line!(
-            context.io(),
-            "Wrapper transaction accepted at height {}. Used {} gas.",
-            resp.height,
-            resp.gas_used,
-        );
-        true
-    };
-
-    tracing::debug!(
-        "Full wrapper result: {}",
-        serde_json::to_string_pretty(resp).unwrap()
-    );
-    result
-}
-
-/// Display a result of an inner tx.
-pub fn display_inner_resp(context: &impl Namada, resp: &TxResponse) {
-    match resp.inner_tx_result() {
-        InnerTxResult::Success(inner) => {
-            display_line!(
-                context.io(),
-                "Transaction was successfully applied at height {}. Used {} \
-                 gas.",
-                resp.height,
-                inner.gas_used,
-            );
-        }
-        InnerTxResult::VpsRejected(inner) => {
-            let changed_keys: Vec<_> = inner
-                .changed_keys
-                .iter()
-                .map(storage::Key::to_string)
-                .collect();
-            edisplay_line!(
-                context.io(),
-                "Transaction was rejected by VPs: {}\nErrors: {}\nChanged \
-                 keys: {}",
-                serde_json::to_string_pretty(&inner.vps_result.rejected_vps)
+/// Display a result of a tx batch.
+pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
+    for (cmt_hash, result) in resp.batch_result() {
+        match result {
+            InnerTxResult::Success(_) => {
+                display_line!(
+                    context.io(),
+                    "Transaction {} was successfully applied at height {}.",
+                    cmt_hash,
+                    resp.height,
+                );
+            }
+            InnerTxResult::VpsRejected(inner) => {
+                let changed_keys: Vec<_> = inner
+                    .changed_keys
+                    .iter()
+                    .map(storage::Key::to_string)
+                    .collect();
+                edisplay_line!(
+                    context.io(),
+                    "Transaction {} was rejected by VPs: {}\nErrors: \
+                     {}\nChanged keys: {}",
+                    cmt_hash,
+                    serde_json::to_string_pretty(
+                        &inner.vps_result.rejected_vps
+                    )
                     .unwrap(),
-                serde_json::to_string_pretty(&inner.vps_result.errors).unwrap(),
-                serde_json::to_string_pretty(&changed_keys).unwrap(),
-            );
-        }
-        InnerTxResult::OtherFailure => {
-            edisplay_line!(
-                context.io(),
-                "Transaction failed.\nDetails: {}",
-                serde_json::to_string_pretty(&resp).unwrap()
-            );
+                    serde_json::to_string_pretty(&inner.vps_result.errors)
+                        .unwrap(),
+                    serde_json::to_string_pretty(&changed_keys).unwrap(),
+                );
+            }
+            InnerTxResult::OtherFailure => {
+                edisplay_line!(
+                    context.io(),
+                    "Transaction {} failed.\nDetails: {}",
+                    cmt_hash,
+                    serde_json::to_string_pretty(&resp).unwrap()
+                );
+            }
         }
     }
 
@@ -2884,6 +2865,44 @@ async fn used_asset_types<P, K, N>(
         }
     }
     Ok(asset_types)
+}
+
+/// Constructs the batched tx from the provided list. Returns also the data for
+/// signing
+pub fn build_batch(
+    mut txs: Vec<(Tx, SigningTxData)>,
+) -> Result<(Tx, Vec<SigningTxData>)> {
+    if txs.is_empty() {
+        return Err(Error::Other(
+            "No transactions provided for the batch".to_string(),
+        ));
+    }
+    let (mut batched_tx, sig_data) = txs.remove(0);
+    let mut signing_data = vec![sig_data];
+
+    for (tx, sig_data) in txs {
+        if tx.commitments().len() != 1 {
+            return Err(Error::Other(format!(
+                "Inner tx did not contain exactly one transaction, \
+                 transaction length: {}",
+                tx.commitments().len()
+            )));
+        }
+
+        let cmt = tx.first_commitments().unwrap().to_owned();
+        if !batched_tx.add_inner_tx(tx, cmt.clone()) {
+            return Err(Error::Other(format!(
+                "The transaction batch already contains inner tx: {}",
+                cmt.get_hash()
+            )));
+        }
+        // Avoid redundant signing data
+        if !signing_data.iter().any(|sig| sig == &sig_data) {
+            signing_data.push(sig_data);
+        }
+    }
+
+    Ok((batched_tx, signing_data))
 }
 
 /// Submit an ordinary transfer

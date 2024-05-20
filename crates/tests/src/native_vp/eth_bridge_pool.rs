@@ -24,6 +24,7 @@ mod test_bridge_pool_vp {
         UpgradeableContract,
     };
     use namada_sdk::tx::TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM;
+    use namada_tx_prelude::BatchedTx;
 
     use crate::native_vp::TestNativeVpEnv;
     use crate::tx::{tx_host_env, TestTxEnv};
@@ -63,9 +64,9 @@ mod test_bridge_pool_vp {
     }
 
     /// Create necessary accounts and balances for the test.
-    fn setup_env(tx: Tx) -> TestTxEnv {
+    fn setup_env(batched_tx: BatchedTx) -> TestTxEnv {
         let mut env = TestTxEnv {
-            tx,
+            batched_tx,
             ..Default::default()
         };
         let config = EthereumBridgeParams {
@@ -108,7 +109,7 @@ mod test_bridge_pool_vp {
         env
     }
 
-    fn run_vp(tx: Tx) -> bool {
+    fn run_vp(tx: BatchedTx) -> bool {
         let env = setup_env(tx);
         tx_host_env::set(env);
         let mut tx_env = tx_host_env::take();
@@ -122,7 +123,7 @@ mod test_bridge_pool_vp {
             .is_ok()
     }
 
-    fn validate_tx(tx: Tx) {
+    fn validate_tx(tx: BatchedTx) {
         #[cfg(feature = "namada-eth-bridge")]
         {
             assert!(run_vp(tx));
@@ -135,11 +136,14 @@ mod test_bridge_pool_vp {
         }
     }
 
-    fn invalidate_tx(tx: Tx) {
+    fn invalidate_tx(tx: BatchedTx) {
         assert!(!run_vp(tx));
     }
 
-    fn create_tx(transfer: PendingTransfer, keypair: &common::SecretKey) -> Tx {
+    fn create_tx(
+        transfer: PendingTransfer,
+        keypair: &common::SecretKey,
+    ) -> BatchedTx {
         let data = transfer.serialize_to_vec();
         let wasm_code =
             wasm_loader::read_wasm_or_exit(wasm_dir(), ADD_TRANSFER_WASM);
@@ -148,7 +152,7 @@ mod test_bridge_pool_vp {
         tx.add_code(wasm_code, None)
             .add_serialized_data(data)
             .sign_wrapper(keypair.clone());
-        tx
+        tx.batch_first_tx()
     }
 
     #[test]

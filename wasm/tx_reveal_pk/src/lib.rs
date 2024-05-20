@@ -7,12 +7,8 @@ use namada_tx_prelude::key::common;
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let pk = common::PublicKey::try_from_slice(&data[..])
         .wrap_err("Failed to decode public key to reveal from the tx data")?;
     debug_log!("tx_reveal_pk called with pk: {pk}");

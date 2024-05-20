@@ -16,7 +16,7 @@ use namada_governance::ProposalVote;
 use namada_proof_of_stake::is_validator;
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -69,7 +69,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -86,7 +86,7 @@ where
         // Is VP triggered by a governance proposal?
         let is_governance_proposal = is_proposal_accepted(
             &self.ctx.pre(),
-            tx_data.data().unwrap_or_default().as_ref(),
+            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )
         .unwrap_or_default();
 
@@ -1119,8 +1119,12 @@ where
     }
 
     /// Validate a governance parameter
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
-        tx.data().map_or_else(
+    pub fn is_valid_parameter(
+        &self,
+        batched_tx: &BatchedTxRef<'_>,
+    ) -> Result<()> {
+        let BatchedTxRef { tx, cmt } = batched_tx;
+        tx.data(cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
                     "Governance parameter changes require tx data to be \
@@ -1384,11 +1388,13 @@ mod test {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
+        let batched_tx = tx.batch_ref_first_tx();
 
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1399,7 +1405,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1637,10 +1643,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1651,7 +1659,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -1731,10 +1739,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1743,7 +1753,8 @@ mod test {
         );
 
         let governance_vp = GovernanceVp { ctx };
-        let result = governance_vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let result =
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         // this should fail
         assert_matches!(&result, Err(_));
 
@@ -1827,10 +1838,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1839,7 +1852,8 @@ mod test {
         );
 
         let governance_vp = GovernanceVp { ctx };
-        let result = governance_vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let result =
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert_matches!(&result, Ok(_));
 
         if result.is_err() {
@@ -1922,10 +1936,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1936,7 +1952,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -1998,10 +2014,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2012,7 +2030,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2074,10 +2092,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2088,7 +2108,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2168,10 +2188,12 @@ mod test {
             true,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2182,7 +2204,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2262,10 +2284,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2276,7 +2300,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2338,10 +2362,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2352,7 +2378,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -2387,10 +2413,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2401,7 +2429,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -2463,10 +2491,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2477,7 +2507,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -2512,10 +2542,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2526,7 +2558,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2588,10 +2620,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2602,7 +2636,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -2637,10 +2671,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2651,7 +2687,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2713,10 +2749,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2727,7 +2765,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -2779,10 +2817,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2793,7 +2833,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -2855,10 +2895,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2869,7 +2911,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -2921,10 +2963,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2935,7 +2979,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }
@@ -2997,10 +3041,12 @@ mod test {
             false,
         );
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3011,7 +3057,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
 
@@ -3063,10 +3109,12 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3077,7 +3125,7 @@ mod test {
         let governance_vp = GovernanceVp { ctx };
 
         assert_matches!(
-            governance_vp.validate_tx(&tx, &keys_changed, &verifiers),
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Err(_)
         );
     }

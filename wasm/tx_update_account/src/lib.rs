@@ -5,12 +5,8 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
-    let signed = tx;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, batched_tx: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&batched_tx)?;
     let tx_data = account::UpdateAccount::try_from_slice(&data[..])
         .wrap_err("Failed to decode UpdateAccount tx data")?;
 
@@ -21,7 +17,8 @@ fn apply_tx(ctx: &mut Ctx, tx: Tx) -> TxResult {
     ctx.insert_verifier(owner)?;
 
     if let Some(hash) = tx_data.vp_code_hash {
-        let vp_code_sec = signed
+        let vp_code_sec = batched_tx
+            .tx
             .get_section(&hash)
             .ok_or_err_msg("VP code section not found")
             .map_err(|err| {

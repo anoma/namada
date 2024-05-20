@@ -78,14 +78,14 @@ impl EventAttributeEntry<'static> for Code {
     }
 }
 
-/// Extend an [`Event`] with inner tx data.
-pub struct InnerTx<'result>(pub &'result TxResult);
+/// Extend an [`Event`] with batch data.
+pub struct Batch<'result>(pub &'result TxResult<String>);
 
-impl<'result> EventAttributeEntry<'result> for InnerTx<'result> {
-    type Value = &'result TxResult;
-    type ValueOwned = TxResult;
+impl<'result> EventAttributeEntry<'result> for Batch<'result> {
+    type Value = &'result TxResult<String>;
+    type ValueOwned = TxResult<String>;
 
-    const KEY: &'static str = "inner_tx";
+    const KEY: &'static str = "batch";
 
     fn into_value(self) -> Self::Value {
         self.0
