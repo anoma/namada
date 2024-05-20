@@ -520,6 +520,30 @@ fn validate_transparent_bundle(
     Ok(())
 }
 
+// Apply the given Sapling value balance component to the accumulator
+fn apply_balance_component(
+    acc: &ValueSum<Address, SignedAmount>,
+    val: i128,
+    digit: MaspDigitPos,
+    address: Address,
+) -> Result<ValueSum<Address, SignedAmount>> {
+    // Put val into the correct digit position
+    let decoded_change = SignedAmount::from_masp_denominated(val, digit)
+        .map_err(|_| {
+            Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Overflow in MASP value balance",
+            ))
+        })?;
+    // Tag the numerical change with the token type
+    let decoded_change = ValueSum::from_pair(address, decoded_change);
+    // Apply the change to the accumulator
+    acc.checked_add(&decoded_change).ok_or_else(|| {
+        Error::NativeVpError(native_vp::Error::SimpleMessage(
+            "Overflow in MASP value balance",
+        ))
+    })
+}
+
 // Verify that the pre balance + the Sapling value balance = the post balance
 // using the decodings in tokens and conversion_state for assistance.
 fn verify_sapling_balancing_value(
@@ -530,46 +554,24 @@ fn verify_sapling_balancing_value(
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {
-    let mut acc = ValueSum::<Address, SignedAmount>::from_sum(pre.clone());
+    let mut acc = ValueSum::<Address, SignedAmount>::from_sum(post.clone());
     for (asset_type, val) in sapling_value_balance.components() {
         // Only assets with at most the target timestamp count
         match conversion_state.assets.get(asset_type) {
             Some(((address, _, digit), asset_epoch, _, _))
                 if *asset_epoch <= target_epoch =>
             {
-                let decoded_change = SignedAmount::from_masp_denominated(
-                    *val, *digit,
-                )
-                .map_err(|_| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in MASP value balance",
-                    ))
-                })?;
-                let decoded_change =
-                    ValueSum::from_pair(address.clone(), decoded_change);
-                acc = acc.checked_sub(&decoded_change).ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in MASP value balance",
-                    ))
-                })?;
+                acc = apply_balance_component(
+                    &acc,
+                    *val,
+                    *digit,
+                    address.clone(),
+                )?;
             }
             None if tokens.contains_key(asset_type) => {
                 let (token, _denom, digit) = &tokens[asset_type];
-                let decoded_change = SignedAmount::from_masp_denominated(
-                    *val, *digit,
-                )
-                .map_err(|_| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in MASP value balance",
-                    ))
-                })?;
-                let decoded_change =
-                    ValueSum::from_pair(token.clone(), decoded_change);
-                acc = acc.checked_sub(&decoded_change).ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in MASP value balance",
-                    ))
-                })?;
+                acc =
+                    apply_balance_component(&acc, *val, *digit, token.clone())?;
             }
             _ => {
                 let error =
@@ -581,7 +583,7 @@ fn verify_sapling_balancing_value(
             }
         }
     }
-    if acc == ValueSum::from_sum(post.clone()) {
+    if acc == ValueSum::from_sum(pre.clone()) {
         Ok(())
     } else {
         let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
