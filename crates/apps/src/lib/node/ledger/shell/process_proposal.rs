@@ -302,6 +302,7 @@ where
                         };
                     }
                 }
+
                 match protocol_tx.tx {
                     ProtocolTxType::EthEventsVext => {
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
@@ -404,6 +405,7 @@ where
                 }
             }
             TxType::Wrapper(wrapper) => {
+                // Validate wrapper first
                 // Account for the tx's resources
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
@@ -427,17 +429,6 @@ where
                         code: ResultCode::TxGasLimit.into(),
                         info: "Wrapper transactions exceeds its gas limit"
                             .to_string(),
-                    };
-                }
-
-                // Tx allowlist
-                if let Err(err) = check_tx_allowed(&tx, &self.state) {
-                    return TxResult {
-                        code: ResultCode::TxNotAllowlisted.into(),
-                        info: format!(
-                            "Tx code didn't pass the allowlist check: {}",
-                            err
-                        ),
                     };
                 }
 
@@ -476,7 +467,7 @@ where
                 }
 
                 // Check that the fee payer has sufficient balance.
-                match process_proposal_fee_check(
+                if let Err(e) = process_proposal_fee_check(
                     &wrapper,
                     tx.header_hash(),
                     get_fee_unshielding_transaction(&tx, &wrapper),
@@ -488,15 +479,30 @@ where
                         tx_wasm_cache,
                     ),
                 ) {
-                    Ok(()) => TxResult {
-                        code: ResultCode::Ok.into(),
-                        info: "Process proposal accepted this transaction"
-                            .into(),
-                    },
-                    Err(e) => TxResult {
+                    return TxResult {
                         code: ResultCode::FeeError.into(),
                         info: e.to_string(),
-                    },
+                    };
+                }
+
+                for cmt in tx.commitments() {
+                    // Tx allowlist
+                    if let Err(err) =
+                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
+                    {
+                        return TxResult {
+                            code: ResultCode::TxNotAllowlisted.into(),
+                            info: format!(
+                                "Tx code didn't pass the allowlist check: {}",
+                                err
+                            ),
+                        };
+                    }
+                }
+
+                TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "Process proposal accepted this transaction".into(),
                 }
             }
         }
@@ -1311,7 +1317,7 @@ mod test_process_proposal {
                 assert_eq!(
                     response[0].result.info,
                     format!(
-                        "Transaction replay attempt: Inner transaction hash \
+                        "Transaction replay attempt: Batch transaction hash \
                          {} already in storage",
                         wrapper.raw_header_hash()
                     )

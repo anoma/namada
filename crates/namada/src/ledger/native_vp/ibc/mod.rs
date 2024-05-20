@@ -21,7 +21,7 @@ use namada_ibc::{
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_state::write_log::StorageModification;
 use namada_state::StateRead;
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -79,12 +79,12 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<()> {
-        let signed = tx_data;
-        let tx_data = signed.data().ok_or(Error::NoTxData)?;
+        let tx_data =
+            batched_tx.tx.data(batched_tx.cmt).ok_or(Error::NoTxData)?;
 
         // Pseudo execution and compare them
         self.validate_state(&tx_data, keys_changed)?;
@@ -411,7 +411,7 @@ mod tests {
     use namada_state::StorageRead;
     use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
-    use namada_tx::{Authorization, Code, Data, Section};
+    use namada_tx::{Authorization, Code, Data, Section, Tx};
     use prost::Message;
     use sha2::Digest;
 
@@ -936,10 +936,12 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -950,7 +952,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1010,10 +1012,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1023,8 +1027,9 @@ mod tests {
 
         let ibc = Ibc { ctx };
         // this should fail because no state is stored
-        let result =
-            ibc.validate_tx(&tx, &keys_changed, &verifiers).unwrap_err();
+        let result = ibc
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .unwrap_err();
         assert_matches!(result, Error::StateChange(_));
     }
 
@@ -1132,10 +1137,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1144,7 +1151,10 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -1236,10 +1246,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1249,7 +1261,7 @@ mod tests {
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
         assert!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers)
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers)
                 .is_ok()
         );
     }
@@ -1328,10 +1340,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1340,8 +1354,9 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should fail because no event
-        let result =
-            ibc.validate_tx(&tx, &keys_changed, &verifiers).unwrap_err();
+        let result = ibc
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .unwrap_err();
         assert_matches!(result, Error::IbcEvent(_));
     }
 
@@ -1445,10 +1460,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1457,7 +1474,10 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         // this should return true because state has been stored
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -1550,10 +1570,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1562,7 +1584,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1643,10 +1665,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1655,7 +1679,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1764,10 +1788,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1776,7 +1802,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1884,10 +1910,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -1896,7 +1924,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -1989,10 +2017,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = outer_tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &outer_tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2001,7 +2031,7 @@ mod tests {
         );
         let ibc = Ibc { ctx };
         assert_matches!(
-            ibc.validate_tx(&outer_tx, &keys_changed, &verifiers),
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
         );
     }
@@ -2089,10 +2119,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2100,7 +2132,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     // skip test_close_init_channel() and test_close_confirm_channel() since it
@@ -2245,10 +2280,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2256,7 +2293,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -2451,10 +2491,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2462,7 +2504,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -2601,10 +2646,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2612,7 +2659,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -2758,10 +2808,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2769,7 +2821,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -2916,10 +2971,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -2927,7 +2984,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -3089,10 +3149,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3100,7 +3162,10 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -3318,10 +3383,12 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -3329,6 +3396,9 @@ mod tests {
             vp_wasm_cache,
         );
         let ibc = Ibc { ctx };
-        assert_matches!(ibc.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 }

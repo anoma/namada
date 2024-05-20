@@ -8,7 +8,7 @@ use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
 
@@ -51,7 +51,7 @@ where
 
     fn validate_tx(
         &self,
-        tx_data: &Tx,
+        tx_data: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -280,8 +280,8 @@ where
     }
 
     /// Return if the parameter change was done via a governance proposal
-    pub fn is_valid_parameter(&self, tx: &Tx) -> Result<()> {
-        tx.data().map_or_else(
+    pub fn is_valid_parameter(&self, batched_tx: &BatchedTxRef) -> Result<()> {
+        batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
                 Err(native_vp::Error::new_const(
                     "Token parameter changes require tx data to be present",
@@ -314,7 +314,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_tx::data::TxType;
-    use namada_tx::{Authorization, Code, Data, Section};
+    use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
 
     use super::*;
     use crate::core::address::testing::{
@@ -335,7 +335,7 @@ mod tests {
         state
     }
 
-    fn dummy_tx(state: &TestState) -> Tx {
+    fn dummy_tx(state: &TestState) -> BatchedTx {
         let tx_code = vec![];
         let tx_data = vec![];
         let mut tx = Tx::from_type(TxType::Raw);
@@ -347,7 +347,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        tx
+        tx.batch_first_tx()
     }
 
     fn transfer(
@@ -390,7 +390,7 @@ mod tests {
         let keys_changed = transfer(&mut state, &src, &dest);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -401,6 +401,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -409,7 +410,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -428,7 +432,7 @@ mod tests {
             .expect("write failed");
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -438,6 +442,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -446,7 +451,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -484,7 +492,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -498,6 +506,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -506,7 +515,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -542,7 +554,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -554,6 +566,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -562,7 +575,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -593,7 +609,7 @@ mod tests {
         // no minter is set
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -603,6 +619,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -611,7 +628,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -649,7 +669,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -661,6 +681,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -669,7 +690,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -687,7 +711,7 @@ mod tests {
         keys_changed.insert(minter_key);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -699,6 +723,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -707,7 +732,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -728,7 +756,7 @@ mod tests {
         keys_changed.insert(key);
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -738,6 +766,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -746,7 +775,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp.validate_tx(&tx, &keys_changed, &verifiers).is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -761,7 +793,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -772,6 +804,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -780,7 +813,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
+        assert_matches!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            Err(_)
+        );
     }
 
     #[test]
@@ -795,7 +831,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -806,6 +842,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -814,7 +851,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Ok(_));
+        assert_matches!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            Ok(_)
+        );
     }
 
     #[test]
@@ -829,7 +869,7 @@ mod tests {
         state.write(&key, false).unwrap();
 
         let tx_index = TxIndex::default();
-        let tx = dummy_tx(&state);
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
@@ -840,6 +880,7 @@ mod tests {
             &ADDRESS,
             &state,
             &tx,
+            &cmt,
             &tx_index,
             &gas_meter,
             &keys_changed,
@@ -848,6 +889,9 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert_matches!(vp.validate_tx(&tx, &keys_changed, &verifiers), Err(_));
+        assert_matches!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            Err(_)
+        );
     }
 }

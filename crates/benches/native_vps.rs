@@ -55,7 +55,7 @@ use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
-use namada::tx::{Code, Section, Tx};
+use namada::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -199,7 +199,7 @@ fn governance(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        let verifiers_from_tx = shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
         let (verifiers, keys_changed) = shell
             .state
@@ -213,7 +213,8 @@ fn governance(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Governance),
                 &shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -227,7 +228,7 @@ fn governance(c: &mut Criterion) {
                 assert!(
                     governance
                         .validate_tx(
-                            &signed_tx,
+                            &signed_tx.to_ref(),
                             governance.ctx.keys_changed,
                             governance.ctx.verifiers,
                         )
@@ -313,7 +314,7 @@ fn governance(c: &mut Criterion) {
 //      group.finish();
 //  }
 
-fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
+fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
     match bench_name {
         "open_connection" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
@@ -391,8 +392,8 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, Tx) {
                 TransferSource::Address(defaults::albert_address()),
                 TransferTarget::PaymentAddress(albert_payment_addr),
             );
-            shielded_ctx.shell.execute_tx(&shield_tx);
-            shielded_ctx.shell.commit_masp_tx(shield_tx);
+            shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
+            shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
             shielded_ctx.shell.commit_block();
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
@@ -419,7 +420,8 @@ fn ibc(c: &mut Criterion) {
         // Initialize the state according to the target tx
         let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
+        let verifiers_from_tx =
+            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
         let (verifiers, keys_changed) = shielded_ctx
             .shell
             .state
@@ -433,7 +435,8 @@ fn ibc(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
                 &shielded_ctx.shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -446,7 +449,7 @@ fn ibc(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     ibc.validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         ibc.ctx.keys_changed,
                         ibc.ctx.verifiers,
                     )
@@ -485,7 +488,7 @@ fn vp_multitoken(c: &mut Criterion) {
         .zip(["foreign_key_write", "transfer"])
     {
         let mut shell = BenchShell::default();
-        let verifiers_from_tx = shell.execute_tx(signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
         let (verifiers, keys_changed) = shell
             .state
             .write_log()
@@ -498,7 +501,8 @@ fn vp_multitoken(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Multitoken),
                 &shell.state,
-                signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -512,7 +516,7 @@ fn vp_multitoken(c: &mut Criterion) {
                 assert!(
                     multitoken
                         .validate_tx(
-                            signed_tx,
+                            &signed_tx.to_ref(),
                             multitoken.ctx.keys_changed,
                             multitoken.ctx.verifiers,
                         )
@@ -527,7 +531,7 @@ fn vp_multitoken(c: &mut Criterion) {
 // from tx and the tx.
 fn setup_storage_for_masp_verification(
     bench_name: &str,
-) -> (BenchShieldedCtx, BTreeSet<Address>, Tx) {
+) -> (BenchShieldedCtx, BTreeSet<Address>, BatchedTx) {
     let amount = Amount::native_whole(500);
     let mut shielded_ctx = BenchShieldedCtx::default();
 
@@ -554,8 +558,8 @@ fn setup_storage_for_masp_verification(
         TransferTarget::PaymentAddress(albert_payment_addr),
     );
 
-    shielded_ctx.shell.execute_tx(&shield_tx);
-    shielded_ctx.shell.commit_masp_tx(shield_tx);
+    shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
+    shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
 
     // Update the anchor in storage
     let tree_key = namada::token::storage_key::masp_commitment_tree_key();
@@ -585,7 +589,7 @@ fn setup_storage_for_masp_verification(
         ),
         _ => panic!("Unexpected bench test"),
     };
-    let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
 
     (shielded_ctx, verifiers_from_tx, signed_tx)
 }
@@ -610,7 +614,8 @@ fn masp(c: &mut Criterion) {
                 ctx: Ctx::new(
                     &Address::Internal(InternalAddress::Masp),
                     &shielded_ctx.shell.state,
-                    &signed_tx,
+                    &signed_tx.tx,
+                    &signed_tx.cmt,
                     &TxIndex(0),
                     &gas_meter,
                     &keys_changed,
@@ -622,7 +627,7 @@ fn masp(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     masp.validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         masp.ctx.keys_changed,
                         masp.ctx.verifiers,
                     )
@@ -645,6 +650,7 @@ fn masp_check_spend(c: &mut Criterion) {
                     setup_storage_for_masp_verification("shielded");
 
                 let transaction = signed_tx
+                    .tx
                     .sections
                     .into_iter()
                     .filter_map(|section| match section {
@@ -693,6 +699,7 @@ fn masp_check_convert(c: &mut Criterion) {
                     setup_storage_for_masp_verification("shielded");
 
                 let transaction = signed_tx
+                    .tx
                     .sections
                     .into_iter()
                     .filter_map(|section| match section {
@@ -732,6 +739,7 @@ fn masp_check_output(c: &mut Criterion) {
                     setup_storage_for_masp_verification("shielded");
 
                 let transaction = signed_tx
+                    .tx
                     .sections
                     .into_iter()
                     .filter_map(|section| match section {
@@ -772,6 +780,7 @@ fn masp_final_check(c: &mut Criterion) {
         setup_storage_for_masp_verification("shielded");
 
     let transaction = signed_tx
+        .tx
         .sections
         .into_iter()
         .filter_map(|section| match section {
@@ -866,7 +875,7 @@ fn pgf(c: &mut Criterion) {
         };
 
         // Run the tx to validate
-        let verifiers_from_tx = shell.execute_tx(&signed_tx);
+        let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
         let (verifiers, keys_changed) = shell
             .state
@@ -880,7 +889,8 @@ fn pgf(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Pgf),
                 &shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -893,7 +903,7 @@ fn pgf(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     pgf.validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         pgf.ctx.keys_changed,
                         pgf.ctx.verifiers,
                     )
@@ -940,7 +950,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    let verifiers_from_tx = shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
     let (verifiers, keys_changed) = shell
         .state
@@ -956,7 +966,8 @@ fn eth_bridge_nut(c: &mut Criterion) {
         ctx: Ctx::new(
             &vp_address,
             &shell.state,
-            &signed_tx,
+            &signed_tx.tx,
+            &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -969,7 +980,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
         b.iter(|| {
             assert!(
                 nut.validate_tx(
-                    &signed_tx,
+                    &signed_tx.to_ref(),
                     nut.ctx.keys_changed,
                     nut.ctx.verifiers,
                 )
@@ -1013,7 +1024,7 @@ fn eth_bridge(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    let verifiers_from_tx = shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
     let (verifiers, keys_changed) = shell
         .state
@@ -1028,7 +1039,8 @@ fn eth_bridge(c: &mut Criterion) {
         ctx: Ctx::new(
             &vp_address,
             &shell.state,
-            &signed_tx,
+            &signed_tx.tx,
+            &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -1042,7 +1054,7 @@ fn eth_bridge(c: &mut Criterion) {
             assert!(
                 eth_bridge
                     .validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         eth_bridge.ctx.keys_changed,
                         eth_bridge.ctx.verifiers,
                     )
@@ -1111,7 +1123,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
     };
 
     // Run the tx to validate
-    let verifiers_from_tx = shell.execute_tx(&signed_tx);
+    let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
     let (verifiers, keys_changed) = shell
         .state
@@ -1126,7 +1138,8 @@ fn eth_bridge_pool(c: &mut Criterion) {
         ctx: Ctx::new(
             &vp_address,
             &shell.state,
-            &signed_tx,
+            &signed_tx.tx,
+            &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -1140,7 +1153,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
             assert!(
                 bridge_pool
                     .validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         bridge_pool.ctx.keys_changed,
                         bridge_pool.ctx.verifiers,
                     )
@@ -1160,7 +1173,7 @@ fn parameters(c: &mut Criterion) {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                let verifiers_from_tx = shell.execute_tx(&tx);
+                let verifiers_from_tx = shell.execute_tx(&tx.to_ref());
                 (verifiers_from_tx, tx)
             }
             "parameter_change" => {
@@ -1176,7 +1189,9 @@ fn parameters(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                (verifiers_from_tx, tx)
+                let cmt = tx.first_commitments().unwrap().clone();
+                let batched_tx = tx.batch_tx(cmt);
+                (verifiers_from_tx, batched_tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -1194,7 +1209,8 @@ fn parameters(c: &mut Criterion) {
             ctx: Ctx::new(
                 &vp_address,
                 &shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -1208,7 +1224,7 @@ fn parameters(c: &mut Criterion) {
                 assert!(
                     parameters
                         .validate_tx(
-                            &signed_tx,
+                            &signed_tx.to_ref(),
                             parameters.ctx.keys_changed,
                             parameters.ctx.verifiers,
                         )
@@ -1231,7 +1247,7 @@ fn pos(c: &mut Criterion) {
             "foreign_key_write" => {
                 let tx = generate_foreign_key_tx(&defaults::albert_keypair());
                 // Run the tx to validate
-                let verifiers_from_tx = shell.execute_tx(&tx);
+                let verifiers_from_tx = shell.execute_tx(&tx.to_ref());
                 (verifiers_from_tx, tx)
             }
             "parameter_change" => {
@@ -1247,7 +1263,9 @@ fn pos(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                (verifiers_from_tx, tx)
+                let cmt = tx.first_commitments().unwrap().clone();
+                let batched_tx = tx.batch_tx(cmt);
+                (verifiers_from_tx, batched_tx)
             }
             _ => panic!("Unexpected bench test"),
         };
@@ -1265,7 +1283,8 @@ fn pos(c: &mut Criterion) {
             ctx: Ctx::new(
                 &vp_address,
                 &shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -1278,7 +1297,7 @@ fn pos(c: &mut Criterion) {
             b.iter(|| {
                 assert!(
                     pos.validate_tx(
-                        &signed_tx,
+                        &signed_tx.to_ref(),
                         pos.ctx.keys_changed,
                         pos.ctx.verifiers,
                     )
@@ -1302,8 +1321,9 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
     ] {
         let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
-        let tx_data = signed_tx.data().unwrap();
+        let verifiers_from_tx =
+            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+        let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
         let (verifiers, keys_changed) = shielded_ctx
             .shell
             .state
@@ -1317,7 +1337,8 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
                 &shielded_ctx.shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
@@ -1358,8 +1379,9 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
     ] {
         let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
-        let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx);
-        let tx_data = signed_tx.data().unwrap();
+        let verifiers_from_tx =
+            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+        let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
         let (verifiers, keys_changed) = shielded_ctx
             .shell
             .state
@@ -1373,7 +1395,8 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             ctx: Ctx::new(
                 &Address::Internal(InternalAddress::Ibc),
                 &shielded_ctx.shell.state,
-                &signed_tx,
+                &signed_tx.tx,
+                &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,

@@ -20,6 +20,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::AssetData;
 use namada_core::sign::SignatureIndex;
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -232,6 +233,12 @@ pub struct Data {
     pub data: Vec<u8>,
 }
 
+impl PartialEq for Data {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
 impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
@@ -273,6 +280,12 @@ pub enum Commitment {
     Hash(namada_core::hash::Hash),
     /// Result of applying identity function to bytes
     Id(Vec<u8>),
+}
+
+impl PartialEq for Commitment {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash() == other.hash()
+    }
 }
 
 impl Commitment {
@@ -337,6 +350,12 @@ pub struct Code {
     pub tag: Option<String>,
 }
 
+impl PartialEq for Code {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
+}
+
 impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
@@ -393,6 +412,7 @@ pub type Memo = Vec<u8>;
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum Signer {
     /// The address of a multisignature account
@@ -411,6 +431,7 @@ pub enum Signer {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Authorization {
     /// The hash of the section being signed
@@ -613,31 +634,6 @@ impl CompressedAuthorization {
     }
 }
 
-/// Represents a section obtained by encrypting another section
-#[derive(
-    Clone,
-    Debug,
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-)]
-pub struct Ciphertext {
-    /// Ciphertext representation when ferveo not available
-    pub opaque: Vec<u8>,
-}
-
-impl Ciphertext {
-    /// Get the hash of this ciphertext section. This operation is done in such
-    /// a way it matches the hash of the type pun
-    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
-        hasher.update(self.serialize_to_vec());
-        hasher
-    }
-}
-
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TransactionSerde(Vec<u8>);
 
@@ -741,6 +737,12 @@ pub struct MaspBuilder {
     pub builder: Builder<(), ExtendedFullViewingKey, ()>,
 }
 
+impl PartialEq for MaspBuilder {
+    fn eq(&self, other: &Self) -> bool {
+        self.target == other.target
+    }
+}
+
 impl MaspBuilder {
     /// Get the hash of this ciphertext section. This operation is done in such
     /// a way it matches the hash of the type pun
@@ -761,6 +763,7 @@ impl MaspBuilder {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub enum Section {
     /// Transaction data that needs to be sent to hardware wallets
@@ -771,8 +774,6 @@ pub enum Section {
     Code(Code),
     /// A transaction header/protocol signature
     Authorization(Authorization),
-    /// Ciphertext obtained by encrypting arbitrary transaction sections
-    Ciphertext(Ciphertext),
     /// Embedded MASP transaction section
     #[serde(
         serialize_with = "borsh_serde::<TransactionSerde, _>",
@@ -799,7 +800,6 @@ impl Section {
             Self::ExtraData(extra) => extra.hash(hasher),
             Self::Code(code) => code.hash(hasher),
             Self::Authorization(signature) => signature.hash(hasher),
-            Self::Ciphertext(ct) => ct.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
                 hasher.update(tx.txid().as_ref());
@@ -870,15 +870,6 @@ impl Section {
         }
     }
 
-    /// Extract the ciphertext from this section if possible
-    pub fn ciphertext(&self) -> Option<Ciphertext> {
-        if let Self::Ciphertext(data) = self {
-            Some(data.clone())
-        } else {
-            None
-        }
-    }
-
     /// Extract the MASP transaction from this section if possible
     pub fn masp_tx(&self) -> Option<Transaction> {
         if let Self::MaspTx(data) = self {
@@ -898,6 +889,65 @@ impl Section {
     }
 }
 
+/// An inner transaction of the batch, represented by its commitments to the
+/// [`Code`], [`Data`] and [`Memo`] sections
+#[derive(
+    Clone,
+    Debug,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct TxCommitments {
+    /// The SHA-256 hash of the transaction's code section
+    pub code_hash: namada_core::hash::Hash,
+    /// The SHA-256 hash of the transaction's data section
+    pub data_hash: namada_core::hash::Hash,
+    /// The SHA-256 hash of the transaction's memo section
+    ///
+    /// In case a memo is not present in the transaction, a
+    /// byte array filled with zeroes is present instead
+    pub memo_hash: namada_core::hash::Hash,
+}
+
+impl TxCommitments {
+    /// Get the hash of this transaction's code
+    pub fn code_sechash(&self) -> &namada_core::hash::Hash {
+        &self.code_hash
+    }
+
+    /// Get the transaction data hash
+    pub fn data_sechash(&self) -> &namada_core::hash::Hash {
+        &self.data_hash
+    }
+
+    /// Get the hash of this transaction's memo
+    pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
+        &self.memo_hash
+    }
+
+    pub fn hash<'a>(&self, hasher: &'a mut Sha256) -> &'a mut Sha256 {
+        hasher.update(self.serialize_to_vec());
+        hasher
+    }
+
+    /// Get the hash of this Commitments
+    pub fn get_hash(&self) -> namada_core::hash::Hash {
+        namada_core::hash::Hash(
+            self.hash(&mut Sha256::new()).finalize_reset().into(),
+        )
+    }
+}
+
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
 #[derive(
@@ -909,6 +959,7 @@ impl Section {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Header {
     /// The chain which this transaction is being submitted to
@@ -917,15 +968,10 @@ pub struct Header {
     pub expiration: Option<DateTimeUtc>,
     /// A transaction timestamp
     pub timestamp: DateTimeUtc,
-    /// The SHA-256 hash of the transaction's code section
-    pub code_hash: namada_core::hash::Hash,
-    /// The SHA-256 hash of the transaction's data section
-    pub data_hash: namada_core::hash::Hash,
-    /// The SHA-256 hash of the transaction's memo section
-    ///
-    /// In case a memo is not present in the transaction, a
-    /// byte array filled with zeroes is present instead
-    pub memo_hash: namada_core::hash::Hash,
+    /// The commitments to the transaction's sections
+    pub batch: HashSet<TxCommitments>,
+    /// Whether the inner txs should be executed atomically
+    pub atomic: bool,
     /// The type of this transaction
     pub tx_type: TxType,
 }
@@ -939,9 +985,8 @@ impl Header {
             expiration: None,
             #[allow(clippy::disallowed_methods)]
             timestamp: DateTimeUtc::now(),
-            code_hash: namada_core::hash::Hash::default(),
-            data_hash: namada_core::hash::Hash::default(),
-            memo_hash: namada_core::hash::Hash::default(),
+            batch: Default::default(),
+            atomic: Default::default(),
         }
     }
 
@@ -1065,6 +1110,27 @@ impl Tx {
         }
     }
 
+    /// Add new default commitments to the transaction. Returns false if the
+    /// commitment is already contained in the set
+    #[cfg(any(test, feature = "testing"))]
+    pub fn push_default_inner_tx(&mut self) -> bool {
+        self.header.batch.insert(TxCommitments::default())
+    }
+
+    /// Add a new inner tx to the transaction. Returns `false` if the
+    /// commitments already existed in the collection. This function expects a
+    /// transaction carrying a single inner tx as input
+    pub fn add_inner_tx(&mut self, other: Tx, cmt: TxCommitments) -> bool {
+        if !self.header.batch.insert(cmt) {
+            return false;
+        }
+
+        // TODO: avoid duplicated sections to reduce the size of the message
+        self.sections.extend(other.sections);
+
+        true
+    }
+
     /// Get the transaction header
     pub fn header(&self) -> Header {
         self.header.clone()
@@ -1118,26 +1184,30 @@ impl Tx {
         None
     }
 
-    /// Set the transaction memo hash stored in the header
+    /// Set the last transaction memo hash stored in the header
     pub fn set_memo_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.memo_hash = hash;
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.memo_hash = hash;
+                last
+            }
+            None => TxCommitments {
+                memo_hash: hash,
+                ..Default::default()
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
-    /// Get the hash of this transaction's memo from the heeader
-    pub fn memo_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.memo_hash
-    }
-
-    /// Get the memo designated by the memo hash in the header
-    pub fn memo(&self) -> Option<Vec<u8>> {
-        if self.memo_sechash() == &namada_core::hash::Hash::default() {
+    /// Get the memo designated by the memo hash in the header for the specified
+    /// commitment
+    pub fn memo(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+        if cmt.memo_hash == namada_core::hash::Hash::default() {
             return None;
         }
-        match self
-            .get_section(self.memo_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
+
+        match self.get_section(&cmt.memo_hash).as_ref().map(Cow::as_ref) {
             Some(Section::ExtraData(section)) => section.code.id(),
             _ => None,
         }
@@ -1149,23 +1219,26 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the hash of this transaction's code from the heeader
-    pub fn code_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.code_hash
-    }
-
-    /// Set the transaction code hash stored in the header
+    /// Set the last transaction code hash stored in the header
     pub fn set_code_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.code_hash = hash
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.code_hash = hash;
+                last
+            }
+            None => TxCommitments {
+                code_hash: hash,
+                ..Default::default()
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
-    /// Get the code designated by the transaction code hash in the header
-    pub fn code(&self) -> Option<Vec<u8>> {
-        match self
-            .get_section(self.code_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
+    /// Get the code designated by the transaction code hash in the header for
+    /// the specified commitment
+    pub fn code(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+        match self.get_section(&cmt.code_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
         }
@@ -1179,14 +1252,20 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the transaction data hash stored in the header
-    pub fn data_sechash(&self) -> &namada_core::hash::Hash {
-        &self.header.data_hash
-    }
-
-    /// Set the transaction data hash stored in the header
+    /// Set the last transaction data hash stored in the header
     pub fn set_data_sechash(&mut self, hash: namada_core::hash::Hash) {
-        self.header.data_hash = hash
+        let item = match self.header.batch.pop() {
+            Some(mut last) => {
+                last.data_hash = hash;
+                last
+            }
+            None => TxCommitments {
+                data_hash: hash,
+                ..Default::default()
+            },
+        };
+
+        self.header.batch.insert(item);
     }
 
     /// Add the given code to the transaction and set the hash in the header
@@ -1197,13 +1276,10 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the data designated by the transaction data hash in the header
-    pub fn data(&self) -> Option<Vec<u8>> {
-        match self
-            .get_section(self.data_sechash())
-            .as_ref()
-            .map(Cow::as_ref)
-        {
+    /// Get the data designated by the transaction data hash in the header at
+    /// the specified commitment
+    pub fn data(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+        match self.get_section(&cmt.data_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -1555,7 +1631,7 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
-        // The inner tx signer signs the Decrypted version of the Header
+        // The inner tx signer signs the Raw version of the Header
         let hashes = vec![self.raw_header_hash()];
         self.protocol_filter();
 
@@ -1613,6 +1689,121 @@ impl Tx {
             self.add_section(Section::Authorization(section));
         }
         self
+    }
+
+    pub fn commitments(&self) -> &HashSet<TxCommitments> {
+        &self.header.batch
+    }
+
+    pub fn first_commitments(&self) -> Option<&TxCommitments> {
+        self.header.batch.first()
+    }
+
+    pub fn batch_tx(self, cmt: TxCommitments) -> BatchedTx {
+        BatchedTx { tx: self, cmt }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_ref_first_tx(&self) -> BatchedTxRef {
+        BatchedTxRef {
+            tx: self,
+            cmt: self.first_commitments().unwrap(),
+        }
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn batch_first_tx(self) -> BatchedTx {
+        let cmt = self.first_commitments().unwrap().to_owned();
+        BatchedTx { tx: self, cmt }
+    }
+}
+
+impl<'tx> Tx {
+    pub fn batch_ref_tx(
+        &'tx self,
+        cmt: &'tx TxCommitments,
+    ) -> BatchedTxRef<'tx> {
+        BatchedTxRef { tx: self, cmt }
+    }
+}
+
+/// The type of an indexed transaction, wrapper or inner. If the latter, then
+/// also carries the specific commitment in the bundle
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub enum IndexedTxType {
+    Wrapper,
+    Inner(TxCommitments),
+}
+
+/// Represents the pointers of an indexed tx, which are the block height, the
+/// index inside that block and the commitment inside the tx bundle (if inner
+/// tx)
+#[derive(
+    Debug,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct IndexedTx {
+    /// The block height of the indexed tx
+    pub height: BlockHeight,
+    /// The index in the block of the tx
+    pub index: TxIndex,
+    /// This indicates if the tx is the wrapper or the inner
+    pub tx_type: IndexedTxType,
+}
+
+impl Default for IndexedTx {
+    fn default() -> Self {
+        Self {
+            height: BlockHeight::first(),
+            index: TxIndex(0),
+            tx_type: IndexedTxType::Wrapper,
+        }
+    }
+}
+
+/// A reference to a transaction with the commitment to a specific inner
+/// transaction of the batch
+#[derive(Debug, BorshSerialize)]
+pub struct BatchedTxRef<'tx> {
+    pub tx: &'tx Tx,
+    pub cmt: &'tx TxCommitments,
+}
+
+/// A transaction with the commitment to a specific inner transaction of the
+/// batch
+#[derive(
+    Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize,
+)]
+pub struct BatchedTx {
+    pub tx: Tx,
+    pub cmt: TxCommitments,
+}
+
+impl BatchedTx {
+    pub fn to_ref(&self) -> BatchedTxRef {
+        BatchedTxRef {
+            tx: &self.tx,
+            cmt: &self.cmt,
+        }
     }
 }
 

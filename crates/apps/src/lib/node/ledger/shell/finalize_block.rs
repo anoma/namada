@@ -4,27 +4,29 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada::core::storage::{BlockResults, Epoch, Header};
+use namada::events::Event;
 use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
 use namada::ledger::events::extend::{
-    ComposeEvent, Height, Info, TxHash, ValidMaspTx,
+    ComposeEvent, Height, Info, MaspTxBatchRefs, MaspTxBlockIndex,
+    MaspTxWrapper, TxHash,
 };
+use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::WrapperArgs;
+use namada::ledger::protocol::{DispatchError, WrapperArgs};
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
-use namada::sdk::events::EmitEvents;
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
 use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
-use namada::tx::event::{Code, InnerTx};
+use namada::tx::event::{Batch, Code};
 use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
@@ -234,91 +236,83 @@ where
                             }
                         };
                         let gas_meter = TxGasMeter::new(gas_limit);
+                        for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
-                            .get_section(tx.code_sechash())
+                            .get_section(cmt.code_sechash())
                             .and_then(|x| Section::code_sec(x.as_ref()))
                         {
                             stats.increment_tx_type(
                                 code_sec.code.hash().to_string(),
                             );
                         }
-                        (
-                            tx_event,
-                            gas_meter,
-                            Some(WrapperArgs {
-                                block_proposer: &native_block_proposer_address,
-                                is_committed_fee_unshield: false,
-                            }),
-                        )
+                        }
                     }
-                    TxType::Raw => {
-                        tracing::error!(
-                            "Internal logic error: FinalizeBlock received a \
-                             TxType::Raw transaction"
-                        );
-                        continue;
+                    (
+                        gas_meter,
+                        Some(WrapperArgs {
+                            block_proposer: &native_block_proposer_address,
+                            is_committed_fee_unshield: false,
+                        }),
+                    )
+                }
+                TxType::Raw => {
+                    tracing::error!(
+                        "Internal logic error: FinalizeBlock received a \
+                         TxType::Raw transaction"
+                    );
+                    continue;
+                }
+                TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    ProtocolTxType::BridgePoolVext
+                    | ProtocolTxType::BridgePool
+                    | ProtocolTxType::ValSetUpdateVext
+                    | ProtocolTxType::ValidatorSetUpdate => {
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
                     }
-                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
-                        ProtocolTxType::BridgePoolVext
-                        | ProtocolTxType::BridgePool
-                        | ProtocolTxType::ValSetUpdateVext
-                        | ProtocolTxType::ValidatorSetUpdate => (
-                            new_tx_event(&tx, height.0),
-                            TxGasMeter::new_from_sub_limit(0.into()),
-                            None,
-                        ),
-                        ProtocolTxType::EthEventsVext => {
-                            let ext =
+                    ProtocolTxType::EthEventsVext => {
+                        let ext =
                             ethereum_tx_data_variants::EthEventsVext::try_from(
                                 &tx,
                             )
                             .unwrap();
-                            if self
-                                .mode
-                                .get_validator_address()
-                                .map(|validator| {
-                                    validator == &ext.data.validator_addr
-                                })
-                                .unwrap_or(false)
+                        if self
+                            .mode
+                            .get_validator_address()
+                            .map(|validator| {
+                                validator == &ext.data.validator_addr
+                            })
+                            .unwrap_or(false)
+                        {
+                            for event in ext.data.ethereum_events.iter() {
+                                self.mode.dequeue_eth_event(event);
+                            }
+                        }
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
+                    }
+                    ProtocolTxType::EthereumEvents => {
+                        let digest =
+                            ethereum_tx_data_variants::EthereumEvents::try_from(
+                                &tx
+                            ).unwrap();
+                        if let Some(address) =
+                            self.mode.get_validator_address().cloned()
+                        {
+                            let this_signer = &(
+                                address,
+                                self.state.in_mem().get_last_block_height(),
+                            );
+                            for MultiSignedEthEvent { event, signers } in
+                                &digest.events
                             {
-                                for event in ext.data.ethereum_events.iter() {
+                                if signers.contains(this_signer) {
                                     self.mode.dequeue_eth_event(event);
                                 }
                             }
-                            (
-                                new_tx_event(&tx, height.0),
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
                         }
-                        ProtocolTxType::EthereumEvents => {
-                            let digest =
-                            ethereum_tx_data_variants::EthereumEvents::try_from(
-                                &tx,
-                            ).unwrap();
-                            if let Some(address) =
-                                self.mode.get_validator_address().cloned()
-                            {
-                                let this_signer = &(
-                                    address,
-                                    self.state.in_mem().get_last_block_height(),
-                                );
-                                for MultiSignedEthEvent { event, signers } in
-                                    &digest.events
-                                {
-                                    if signers.contains(this_signer) {
-                                        self.mode.dequeue_eth_event(event);
-                                    }
-                                }
-                            }
-                            (
-                                new_tx_event(&tx, height.0),
-                                TxGasMeter::new_from_sub_limit(0.into()),
-                                None,
-                            )
-                        }
-                    },
-                };
+                        (TxGasMeter::new_from_sub_limit(0.into()), None)
+                    }
+                },
+            };
             let replay_protection_hashes =
                 if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
                     Some(ReplayProtectionHashes {
@@ -329,8 +323,13 @@ where
                     None
                 };
             let tx_gas_meter = RefCell::new(tx_gas_meter);
-            let tx_result = protocol::dispatch_tx(
-                tx.clone(),
+            let mut tx_event = new_tx_event(&tx, height.0);
+            let is_atomic_batch = tx.header.atomic;
+            let commitments_len = tx.commitments().len() as u64;
+            let tx_hash = tx.header_hash();
+
+            let dispatch_result = protocol::dispatch_tx(
+                tx,
                 processed_tx.tx.as_ref(),
                 TxIndex::must_from_usize(tx_index),
                 &tx_gas_meter,
@@ -338,181 +337,32 @@ where
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
                 wrapper_args.as_mut(),
-            )
-            .map_err(Error::TxApply);
+            );
             let tx_gas_meter = tx_gas_meter.into_inner();
+            let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // save the gas cost
-            let tx_hash = tx.header_hash();
-            self.update_tx_gas(
-                tx_hash,
-                tx_gas_meter.get_tx_consumed_gas().into(),
+            self.update_tx_gas(tx_hash, consumed_gas.into());
+
+            self.evaluate_tx_result(
+                &mut response,
+                dispatch_result,
+                TxData {
+                    is_atomic_batch,
+                    tx_header: &tx_header,
+                    commitments_len,
+                    tx_index,
+                    replay_protection_hashes,
+                    consumed_gas,
+                    height,
+                    wrapper_args,
+                },
+                TxLogs {
+                    tx_event: &mut tx_event,
+                    stats: &mut stats,
+                    changed_keys: &mut changed_keys,
+                },
             );
-
-            match tx_result {
-                Ok(result) => {
-                    if result.is_accepted() {
-                        if wrapper_args
-                            .map(|args| args.is_committed_fee_unshield)
-                            .unwrap_or_default()
-                            || is_masp_tx(&result.changed_keys)
-                        {
-                            tx_event.extend(ValidMaspTx(
-                                TxIndex::must_from_usize(tx_index),
-                            ));
-                        }
-                        tracing::trace!(
-                            "all VPs accepted transaction {} storage \
-                             modification {:#?}",
-                            tx_event
-                                .raw_read_attribute::<TxHash>()
-                                .unwrap_or("<unknown>"),
-                            result
-                        );
-
-                        changed_keys
-                            .extend(result.changed_keys.iter().cloned());
-                        changed_keys.extend(
-                            result.wrapper_changed_keys.iter().cloned(),
-                        );
-                        stats.increment_successful_txs();
-                        self.commit_inner_tx_hash(replay_protection_hashes);
-
-                        self.state.commit_tx();
-                        if !tx_event.has_attribute::<Code>() {
-                            tx_event.extend(Code(ResultCode::Ok));
-                            self.state
-                                .in_mem_mut()
-                                .block
-                                .results
-                                .accept(tx_index);
-                        }
-                        // events from other sources
-                        response.events.emit_many(
-                            result.events.iter().map(|event| {
-                                event.clone().with(Height(height))
-                            }),
-                        );
-                    } else {
-                        // this branch can only be reached by inner txs
-                        tracing::trace!(
-                            "some VPs rejected transaction {} storage \
-                             modification {:#?}",
-                            tx_event
-                                .raw_read_attribute::<TxHash>()
-                                .unwrap_or("<unknown>"),
-                            result.vps_result.rejected_vps
-                        );
-                        // The fee unshield operation could still have been
-                        // committed
-                        if wrapper_args
-                            .map(|args| args.is_committed_fee_unshield)
-                            .unwrap_or_default()
-                        {
-                            tx_event.extend(ValidMaspTx(
-                                TxIndex::must_from_usize(tx_index),
-                            ));
-                        }
-
-                        // If an inner tx failed for any reason but invalid
-                        // signature, commit its hash to storage, otherwise
-                        // allow for a replay
-                        if !result
-                            .vps_result
-                            .status_flags
-                            .contains(VpStatusFlags::INVALID_SIGNATURE)
-                        {
-                            self.commit_inner_tx_hash(replay_protection_hashes);
-                        }
-
-                        stats.increment_rejected_txs();
-                        self.state.drop_tx();
-                        tx_event.extend(Code(ResultCode::InvalidTx));
-                    }
-                    tx_event
-                        .extend(GasUsed(result.gas_used))
-                        .extend(Info("Check inner_tx for result.".to_string()))
-                        .extend(InnerTx(&result));
-                }
-                Err(Error::TxApply(protocol::Error::WrapperRunnerError(
-                    msg,
-                ))) => {
-                    tracing::info!(
-                        "Wrapper transaction {} failed with: {}",
-                        tx_event
-                            .raw_read_attribute::<TxHash>()
-                            .unwrap_or("<unknown>"),
-                        msg,
-                    );
-                    tx_event
-                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
-                        .extend(Info(msg.to_string()))
-                        .extend(Code(ResultCode::InvalidTx));
-                }
-                Err(msg) => {
-                    tracing::info!(
-                        "Transaction {} failed with: {}",
-                        tx_event
-                            .raw_read_attribute::<TxHash>()
-                            .unwrap_or("<unknown>"),
-                        msg
-                    );
-
-                    // If user transaction didn't fail
-                    // because of out of gas nor invalid
-                    // section commitment, commit its hash to prevent replays
-                    if matches!(tx_header.tx_type, TxType::Wrapper(_)) {
-                        if !matches!(
-                            msg,
-                            Error::TxApply(protocol::Error::GasError(_))
-                                | Error::TxApply(
-                                    protocol::Error::MissingSection(_)
-                                )
-                                | Error::TxApply(
-                                    protocol::Error::ReplayAttempt(_)
-                                )
-                        ) {
-                            self.commit_inner_tx_hash(replay_protection_hashes);
-                        } else if let Error::TxApply(
-                            protocol::Error::ReplayAttempt(_),
-                        ) = msg
-                        {
-                            // Mark the wrapper hash as redundant but keep the
-                            // inner tx
-                            // hash. A replay of the wrapper is impossible since
-                            // the inner tx hash is committed to storage and
-                            // we validate the wrapper against that hash too
-                            let header_hash = replay_protection_hashes
-                                .expect("This cannot fail")
-                                .header_hash;
-                            self.state.redundant_tx_hash(&header_hash).expect(
-                                "Error while marking tx hash as redundant",
-                            );
-                        }
-                    }
-
-                    stats.increment_errored_txs();
-                    self.state.drop_tx();
-
-                    tx_event
-                        .extend(GasUsed(tx_gas_meter.get_tx_consumed_gas()))
-                        .extend(Info(msg.to_string()));
-
-                    // If wrapper, invalid tx error code
-                    tx_event.extend(Code(ResultCode::InvalidTx));
-                    // The fee unshield operation could still have been
-                    // committed
-                    if wrapper_args
-                        .map(|args| args.is_committed_fee_unshield)
-                        .unwrap_or_default()
-                    {
-                        tx_event.extend(ValidMaspTx(TxIndex::must_from_usize(
-                            tx_index,
-                        )));
-                    }
-                    tx_event.extend(Code(ResultCode::WasmRuntimeError));
-                }
-            }
             response.events.emit(tx_event);
         }
 
@@ -665,11 +515,11 @@ where
         Ok(())
     }
 
-    // Write the inner tx hash to storage and mark the corresponding wrapper
-    // hash as redundant (we check the inner tx hash too when validating
+    // Write the batch hash to storage and mark the corresponding wrapper
+    // hash as redundant (we check the batch hash too when validating
     // the wrapper). Requires the wrapper transaction as argument to recover
     // both the hashes.
-    fn commit_inner_tx_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
+    fn commit_batch_hash(&mut self, hashes: Option<ReplayProtectionHashes>) {
         if let Some(ReplayProtectionHashes {
             raw_header_hash,
             header_hash,
@@ -683,6 +533,393 @@ where
                 .redundant_tx_hash(&header_hash)
                 .expect("Error while marking tx hash as redundant");
         }
+    }
+
+    // Evaluate the result of a batch. Commit or drop the storage changes,
+    // update stats and event, manage replay protection.
+    fn evaluate_tx_result(
+        &mut self,
+        response: &mut shim::response::FinalizeBlock,
+        dispatch_result: std::result::Result<
+            namada::tx::data::TxResult<protocol::Error>,
+            DispatchError,
+        >,
+        tx_data: TxData,
+        mut tx_logs: TxLogs,
+    ) {
+        // Check the commitment of the fee unshielding regardless of the
+        // result, it could be committed even in case of errors
+        if tx_data
+            .wrapper_args
+            .as_ref()
+            .map(|args| args.is_committed_fee_unshield)
+            .unwrap_or_default()
+        {
+            tx_logs.tx_event.extend(MaspTxBlockIndex(
+                TxIndex::must_from_usize(tx_data.tx_index),
+            ));
+            tx_logs.tx_event.extend(MaspTxWrapper);
+        }
+
+        match dispatch_result {
+            Ok(tx_result) => self.handle_inner_tx_results(
+                response,
+                tx_result,
+                tx_data,
+                &mut tx_logs,
+            ),
+            Err(DispatchError {
+                error: protocol::Error::WrapperRunnerError(msg),
+                tx_result: _,
+            }) => {
+                tracing::info!(
+                    "Wrapper transaction {} failed with: {}",
+                    tx_logs
+                        .tx_event
+                        .raw_read_attribute::<TxHash>()
+                        .unwrap_or("<unknown>"),
+                    msg,
+                );
+                tx_logs
+                    .tx_event
+                    .extend(GasUsed(tx_data.consumed_gas))
+                    .extend(Info(msg.to_string()))
+                    .extend(Code(ResultCode::InvalidTx));
+                // Make sure to clean the write logs for the next transaction
+                self.state.write_log_mut().drop_tx();
+            }
+            Err(dispatch_error) => {
+                // This branch represents an error that affects the entire
+                // batch
+                let (msg, tx_result) = (
+                    Error::TxApply(dispatch_error.error),
+                    // The tx result should always be present at this point
+                    dispatch_error.tx_result.unwrap_or_default(),
+                );
+                tracing::info!(
+                    "Transaction {} failed with: {}",
+                    tx_logs
+                        .tx_event
+                        .raw_read_attribute::<TxHash>()
+                        .unwrap_or("<unknown>"),
+                    msg
+                );
+
+                tx_logs
+                    .tx_event
+                    .extend(GasUsed(tx_data.consumed_gas))
+                    .extend(Info(msg.to_string()))
+                    .extend(Code(ResultCode::WasmRuntimeError));
+
+                self.handle_batch_error(
+                    response,
+                    &msg,
+                    tx_result,
+                    tx_data,
+                    &mut tx_logs,
+                );
+            }
+        }
+    }
+
+    // Evaluate the results of all the transactions of the batch. Commit or drop
+    // the storage changes, update stats and event, manage replay protection.
+    fn handle_inner_tx_results(
+        &mut self,
+        response: &mut shim::response::FinalizeBlock,
+        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        tx_data: TxData,
+        tx_logs: &mut TxLogs,
+    ) {
+        let mut temp_log = TempTxLogs::new_from_tx_logs(tx_logs);
+
+        let ValidityFlags {
+            commit_batch_hash,
+            is_any_tx_invalid,
+        } = temp_log.check_inner_results(
+            &tx_result,
+            tx_data.tx_header,
+            tx_data.tx_index,
+            tx_data.height,
+        );
+
+        if tx_data.is_atomic_batch && is_any_tx_invalid {
+            // Atomic batches need custom handling when even a single tx fails,
+            // since we need to drop everything
+            let unrun_txs = tx_data.commitments_len
+                - tx_result.batch_results.0.len() as u64;
+            temp_log.stats.set_failing_atomic_batch(unrun_txs);
+            temp_log.commit_stats_only(tx_logs);
+            self.state.write_log_mut().drop_batch();
+            tx_logs.tx_event.extend(Code(ResultCode::WasmRuntimeError));
+        } else {
+            self.state.write_log_mut().commit_batch();
+            self.state
+                .in_mem_mut()
+                .block
+                .results
+                .accept(tx_data.tx_index);
+            temp_log.commit(tx_logs, response);
+
+            // Atomic successful batches or non-atomic batches (even if the
+            // inner txs failed) are marked as Ok
+            tx_logs.tx_event.extend(Code(ResultCode::Ok));
+        }
+
+        if commit_batch_hash {
+            // If at least one of the inner txs of the batch requires its hash
+            // to be committed than commit the hash of the entire batch
+            self.commit_batch_hash(tx_data.replay_protection_hashes);
+        }
+
+        tx_logs
+            .changed_keys
+            .extend(tx_result.wrapper_changed_keys.iter().cloned());
+        tx_logs
+            .tx_event
+            .extend(GasUsed(tx_result.gas_used))
+            .extend(Info("Check batch for result.".to_string()))
+            .extend(Batch(&tx_result.to_result_string()));
+    }
+
+    fn handle_batch_error(
+        &mut self,
+        response: &mut shim::response::FinalizeBlock,
+        msg: &Error,
+        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        tx_data: TxData,
+        tx_logs: &mut TxLogs,
+    ) {
+        let mut temp_log = TempTxLogs::new_from_tx_logs(tx_logs);
+
+        let ValidityFlags {
+            commit_batch_hash,
+            is_any_tx_invalid: _,
+        } = temp_log.check_inner_results(
+            &tx_result,
+            tx_data.tx_header,
+            tx_data.tx_index,
+            tx_data.height,
+        );
+
+        let unrun_txs =
+            tx_data.commitments_len - tx_result.batch_results.0.len() as u64;
+
+        if tx_data.is_atomic_batch {
+            tx_logs.stats.set_failing_atomic_batch(unrun_txs);
+            temp_log.commit_stats_only(tx_logs);
+            self.state.write_log_mut().drop_batch();
+        } else {
+            temp_log.stats.set_failing_batch(unrun_txs);
+            self.state
+                .in_mem_mut()
+                .block
+                .results
+                .accept(tx_data.tx_index);
+            temp_log.commit(tx_logs, response);
+            // Commit the successful inner transactions before the error
+            self.state.write_log_mut().commit_batch();
+        }
+
+        if commit_batch_hash {
+            // If at least one of the inner txs of the batch requires its hash
+            // to be committed than commit the hash of the entire batch
+            // regardless of the specific error
+            self.commit_batch_hash(tx_data.replay_protection_hashes);
+        } else {
+            self.handle_batch_error_reprot(msg, tx_data);
+        }
+
+        tx_logs
+            .tx_event
+            .extend(Batch(&tx_result.to_result_string()));
+    }
+
+    fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData) {
+        // If user transaction didn't fail because of out of gas nor
+        // invalid section commitment, commit its hash to prevent
+        // replays
+        if matches!(tx_data.tx_header.tx_type, TxType::Wrapper(_)) {
+            if !matches!(
+                err,
+                Error::TxApply(protocol::Error::GasError(_))
+                    | Error::TxApply(protocol::Error::ReplayAttempt(_))
+            ) {
+                self.commit_batch_hash(tx_data.replay_protection_hashes);
+            } else if let Error::TxApply(protocol::Error::ReplayAttempt(_)) =
+                err
+            {
+                // Remove the wrapper hash but keep the inner tx
+                // hash. A replay of the wrapper is impossible since
+                // the inner tx hash is committed to storage and
+                // we validate the wrapper against that hash too
+                let header_hash = tx_data
+                    .replay_protection_hashes
+                    .expect("This cannot fail")
+                    .header_hash;
+                self.state
+                    .redundant_tx_hash(&header_hash)
+                    .expect("Error while marking tx hash as redundant");
+            }
+        }
+    }
+}
+
+struct TxData<'tx> {
+    is_atomic_batch: bool,
+    tx_header: &'tx namada::tx::Header,
+    commitments_len: u64,
+    tx_index: usize,
+    replay_protection_hashes: Option<ReplayProtectionHashes>,
+    consumed_gas: Gas,
+    height: BlockHeight,
+    wrapper_args: Option<WrapperArgs<'tx>>,
+}
+
+struct TxLogs<'finalize> {
+    tx_event: &'finalize mut Event,
+    stats: &'finalize mut InternalStats,
+    changed_keys: &'finalize mut BTreeSet<Key>,
+}
+
+#[derive(Default)]
+struct ValidityFlags {
+    // Track the need to commit the batch hash for replay protection. Hash
+    // must be written if at least one of the txs in the batch requires so
+    commit_batch_hash: bool,
+    // Track if any of the inner txs failed or was rejected
+    is_any_tx_invalid: bool,
+}
+
+// Temporary support type to update the tx logs. If the tx is confirmed this
+// gets merged to the non-temporary type
+struct TempTxLogs {
+    tx_event: Event,
+    stats: InternalStats,
+    changed_keys: BTreeSet<Key>,
+    response_events: Vec<Event>,
+}
+
+impl TempTxLogs {
+    fn new_from_tx_logs(tx_logs: &TxLogs) -> Self {
+        Self {
+            tx_event: Event::new(
+                tx_logs.tx_event.kind().to_owned(),
+                tx_logs.tx_event.level().to_owned(),
+            ),
+            stats: Default::default(),
+            changed_keys: Default::default(),
+            response_events: Default::default(),
+        }
+    }
+}
+
+impl<'finalize> TempTxLogs {
+    // Consumes the temporary logs and merges them to confirmed ones. Pushes ibc
+    // and eth events to the finalize block response
+    fn commit(
+        self,
+        logs: &mut TxLogs<'finalize>,
+        response: &mut shim::response::FinalizeBlock,
+    ) {
+        logs.tx_event.merge(self.tx_event);
+        logs.stats.merge(self.stats);
+        logs.changed_keys.extend(self.changed_keys);
+        response.events.extend(self.response_events);
+    }
+
+    // Consumes the temporary logs and merges the statistics to confirmed ones.
+    // This is useful for failing atomic batches
+    fn commit_stats_only(self, logs: &mut TxLogs<'finalize>) {
+        logs.stats.merge(self.stats);
+    }
+
+    fn check_inner_results(
+        &mut self,
+        tx_result: &namada::tx::data::TxResult<protocol::Error>,
+        tx_header: &namada::tx::Header,
+        tx_index: usize,
+        height: BlockHeight,
+    ) -> ValidityFlags {
+        let mut flags = ValidityFlags::default();
+        let mut masp_cmts = vec![];
+
+        for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
+            match batched_result {
+                Ok(result) => {
+                    if result.is_accepted() {
+                        if is_masp_tx(&result.changed_keys) {
+                            masp_cmts.push(*cmt_hash);
+                        }
+                        tracing::trace!(
+                            "all VPs accepted inner tx {} storage \
+                             modification {:#?}",
+                            cmt_hash,
+                            result
+                        );
+
+                        self.changed_keys
+                            .extend(result.changed_keys.iter().cloned());
+                        self.stats.increment_successful_txs();
+                        flags.commit_batch_hash = true;
+
+                        // events from other sources
+                        self.response_events.emit_many(
+                            result.events.iter().map(|event| {
+                                event.clone().with(Height(height))
+                            }),
+                        );
+                    } else {
+                        // VPs rejected, this branch can only be reached by
+                        // inner txs
+                        tracing::trace!(
+                            "some VPs rejected inner tx {} storage \
+                             modification {:#?}",
+                            cmt_hash,
+                            result.vps_result.rejected_vps
+                        );
+
+                        // If an inner tx failed for any reason but invalid
+                        // signature, commit its hash to storage, otherwise
+                        // allow for a replay
+                        if !result
+                            .vps_result
+                            .status_flags
+                            .contains(VpStatusFlags::INVALID_SIGNATURE)
+                        {
+                            flags.commit_batch_hash = true;
+                        }
+
+                        self.stats.increment_rejected_txs();
+                        flags.is_any_tx_invalid = true;
+                    }
+                }
+                Err(e) => {
+                    // this branch can only be reached by inner txs
+                    tracing::trace!("Inner tx {} failed: {}", cmt_hash, e);
+                    // If inner transaction didn't fail because of invalid
+                    // section commitment, commit its hash to prevent replays
+                    if matches!(tx_header.tx_type, TxType::Wrapper(_))
+                        && !matches!(e, protocol::Error::MissingSection(_))
+                    {
+                        flags.commit_batch_hash = true;
+                    }
+
+                    self.stats.increment_errored_txs();
+                    flags.is_any_tx_invalid = true;
+                }
+            }
+        }
+
+        // If at least one of the inner transactions is a valid masp tx, update
+        // the events
+        if !masp_cmts.is_empty() {
+            self.tx_event
+                .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
+            self.tx_event.extend(MaspTxBatchRefs(masp_cmts.into()));
+        }
+
+        flags
     }
 }
 
@@ -828,7 +1065,8 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 20_000;
+    const WRAPPER_GAS_LIMIT: u64 = 10_000;
+    const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
     /// added to `FinalizeBlock` request.
@@ -860,6 +1098,90 @@ mod test_finalize_block {
         let tx = wrapper_tx.to_bytes();
         (
             wrapper_tx,
+            ProcessedTx {
+                tx: tx.into(),
+                result: TxResult {
+                    code: ResultCode::Ok.into(),
+                    info: "".into(),
+                },
+            },
+        )
+    }
+
+    // Make a transaction batch with three transactions. Optionally make the
+    // batch atomic, request the failure or out of gas of the second transaction
+    fn mk_tx_batch(
+        shell: &TestShell,
+        sk: &common::SecretKey,
+        set_atomic: bool,
+        should_fail: bool,
+        should_run_out_of_gas: bool,
+    ) -> (Tx, ProcessedTx) {
+        let mut batch =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    token: shell.state.in_mem().native_token.clone(),
+                },
+                sk.ref_to(),
+                WRAPPER_GAS_LIMIT.into(),
+                None,
+            ))));
+        batch.header.chain_id = shell.chain_id.clone();
+        batch.header.atomic = set_atomic;
+
+        // append first inner tx to batch
+        let data = TxWriteData {
+            key: "random_key_1".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(
+            TestWasms::TxWriteStorageKey.read_bytes(),
+            None,
+        ));
+
+        // append second inner tx to batch
+        batch.push_default_inner_tx();
+        let tx_code = if should_fail {
+            TestWasms::TxFail.read_bytes()
+        } else if should_run_out_of_gas {
+            TestWasms::TxInfiniteHostGas.read_bytes()
+        } else {
+            TestWasms::TxWriteStorageKey.read_bytes()
+        };
+        let data = TxWriteData {
+            key: "random_key_2".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(tx_code, None));
+
+        // append last inner tx to batch
+        batch.push_default_inner_tx();
+        let data = TxWriteData {
+            key: "random_key_3".parse().unwrap(),
+            value: STORAGE_VALUE.serialize_to_vec(),
+        };
+        batch.set_data(Data::new(data.serialize_to_vec()));
+        batch.set_code(Code::new(
+            TestWasms::TxWriteStorageKey.read_bytes(),
+            None,
+        ));
+
+        batch.add_section(Section::Authorization(Authorization::new(
+            vec![batch.raw_header_hash()],
+            [(0, sk.clone())].into_iter().collect(),
+            None,
+        )));
+        batch.add_section(Section::Authorization(Authorization::new(
+            batch.sechashes(),
+            [(0, sk.clone())].into_iter().collect(),
+            None,
+        )));
+        let tx = batch.to_bytes();
+        (
+            batch,
             ProcessedTx {
                 tx: tx.into(),
                 result: TxResult {
@@ -2772,7 +3094,14 @@ mod test_finalize_block {
 
         assert_eq!(*event[0].kind(), APPLIED_TX);
         let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
-        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let first_tx_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&wrapper.first_commitments().unwrap().get_hash())
+            .unwrap();
+        assert!(first_tx_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(*event[1].kind(), APPLIED_TX);
         let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::Ok);
@@ -2916,13 +3245,39 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::InvalidTx);
         assert_eq!(*event[1].kind(), APPLIED_TX);
         let code = event[1].read_attribute::<CodeAttr>().expect("Test failed");
-        assert_eq!(code, ResultCode::InvalidTx);
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[1].read_attribute::<Batch>().unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&unsigned_wrapper.first_commitments().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(*event[2].kind(), APPLIED_TX);
         let code = event[2].read_attribute::<CodeAttr>().expect("Test failed");
-        assert_eq!(code, ResultCode::WasmRuntimeError);
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[2].read_attribute::<Batch>().unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(
+                &wrong_commitment_wrapper
+                    .first_commitments()
+                    .unwrap()
+                    .get_hash(),
+            )
+            .unwrap();
+        assert!(inner_result.is_err());
         assert_eq!(*event[3].kind(), APPLIED_TX);
         let code = event[3].read_attribute::<CodeAttr>().expect("Test failed");
-        assert_eq!(code, ResultCode::WasmRuntimeError);
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[3].read_attribute::<Batch>().unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&failing_wrapper.first_commitments().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.is_err());
 
         for valid_wrapper in [
             &out_of_gas_wrapper,
@@ -3079,7 +3434,8 @@ mod test_finalize_block {
                 None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        // Set no code to let the inner tx fail
+        wrapper.set_code(Code::new(TestWasms::TxFail.read_bytes(), None));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair.clone())].into_iter().collect(),
@@ -3119,7 +3475,14 @@ mod test_finalize_block {
         // Check balance of fee payer
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
-        assert_eq!(code, ResultCode::WasmRuntimeError);
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event.read_attribute::<Batch>().unwrap();
+        let inner_result = inner_tx_result
+            .batch_results
+            .0
+            .get(&wrapper.first_commitments().unwrap().get_hash())
+            .unwrap();
+        assert!(inner_result.is_err());
 
         let new_signer_balance = namada::token::read_balance(
             &shell.state,
@@ -3134,8 +3497,7 @@ mod test_finalize_block {
     }
 
     // Test that if the fee payer doesn't have enough funds for fee payment the
-    // ledger drains their balance. Note that because of the checks in process
-    // proposal this scenario should never happen
+    // ledger drains their balance
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
@@ -3162,7 +3524,7 @@ mod test_finalize_block {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(200.into()),
                     token: native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -4951,10 +5313,12 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
+        let batched_tx = tx.batch_ref_first_tx();
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),
-            &tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
@@ -4964,7 +5328,7 @@ mod test_finalize_block {
         let parameters = ParametersVp { ctx };
         assert!(
             parameters
-                .validate_tx(&tx, &keys_changed, &verifiers)
+                .validate_tx(&batched_tx, &keys_changed, &verifiers)
                 .is_ok()
         );
 
@@ -5015,5 +5379,273 @@ mod test_finalize_block {
         let Command::UpdateConfig(cmd) =
             control_receiver.recv().await.expect("Test failed");
         assert_eq!(u64::from(cmd.min_confirmations), 42);
+    }
+
+    // Test a successful tx batch containing three valid transactions
+    #[test]
+    fn test_successful_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, false, false);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].read_attribute::<CodeAttr>().unwrap();
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        for cmt in batch.commitments() {
+            assert!(
+                inner_results
+                    .get(&cmt.get_hash())
+                    .unwrap()
+                    .clone()
+                    .is_ok_and(|res| res.is_accepted())
+            );
+        }
+
+        // Check storage modifications
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert_eq!(
+                shell
+                    .state
+                    .read::<String>(&key.parse().unwrap())
+                    .unwrap()
+                    .unwrap(),
+                STORAGE_VALUE
+            );
+        }
+    }
+
+    // Test a failing atomic batch with two successful txs and a failing one.
+    // Verify that also the changes applied by the valid txs are dropped and
+    // that the last transaction is never executed (batch short-circuit)
+    #[test]
+    fn test_failing_atomic_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, true, false);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].read_attribute::<CodeAttr>().unwrap();
+        assert_eq!(code, ResultCode::WasmRuntimeError);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        // Assert that the last tx didn't run
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .is_none()
+        );
+
+        // Check storage modifications are missing
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
+    }
+
+    // Test a failing non-atomic batch with two successful txs and a failing
+    // one. Verify that only the changes applied by the valid txs are
+    // committed
+    #[test]
+    fn test_failing_non_atomic_batch() {
+        let (mut shell, _broadcaster, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, true, false);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].read_attribute::<CodeAttr>().unwrap();
+        assert_eq!(code, ResultCode::Ok);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+
+        // Check storage modifications
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"random_key_1".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+        assert!(
+            !shell
+                .state
+                .has_key(&"random_key_2".parse().unwrap())
+                .unwrap()
+        );
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"random_key_3".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+    }
+
+    // Test a gas error on the second tx of an atomic batch with three
+    // successful txs. Verify that no changes are committed
+    #[test]
+    fn test_gas_error_atomic_batch() {
+        let (mut shell, _, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) = mk_tx_batch(&shell, &sk, true, false, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].read_attribute::<CodeAttr>().unwrap();
+        assert_eq!(code, ResultCode::WasmRuntimeError);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        // Assert that the last tx didn't run
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .is_none()
+        );
+
+        // Check storage modifications are missing
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
+    }
+
+    // Test a gas error on the second tx of a non-atomic batch with three
+    // successful txs. Verify that changes from the first tx are committed
+    #[test]
+    fn test_gas_error_non_atomic_batch() {
+        let (mut shell, _, _, _) = setup();
+        let sk = crate::wallet::defaults::bertha_keypair();
+
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &sk, false, false, true);
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        let code = event[0].read_attribute::<CodeAttr>().unwrap();
+        assert_eq!(code, ResultCode::WasmRuntimeError);
+        let inner_tx_result = event[0].read_attribute::<Batch>().unwrap();
+        let inner_results = inner_tx_result.batch_results.0;
+
+        assert!(
+            inner_results
+                .get(&batch.commitments()[0].get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted())
+        );
+        assert!(
+            inner_results
+                .get(&batch.commitments()[1].get_hash())
+                .unwrap()
+                .clone()
+                .is_err()
+        );
+        // Assert that the last tx didn't run
+        assert!(
+            inner_results
+                .get(&batch.commitments()[2].get_hash())
+                .is_none()
+        );
+
+        // Check storage modifications
+        assert_eq!(
+            shell
+                .state
+                .read::<String>(&"random_key_1".parse().unwrap())
+                .unwrap()
+                .unwrap(),
+            STORAGE_VALUE
+        );
+        for key in ["random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
     }
 }

@@ -4,12 +4,8 @@ use namada_tx_prelude::action::{Action, PgfAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let steward_address = Address::try_from_slice(&data[..]).wrap_err(
         "Failed to decode the address of the PGF steward to remove",
     )?;

@@ -848,6 +848,7 @@ pub mod testing {
     };
     use crate::tx::{
         Authorization, Code, Commitment, Header, MaspBuilder, Section,
+        TxCommitments,
     };
 
     #[derive(Debug, Clone)]
@@ -1007,15 +1008,20 @@ pub mod testing {
             code_hash in arb_hash(),
             data_hash in arb_hash(),
             memo_hash in arb_hash(),
+            atomic in proptest::bool::ANY,
             tx_type in arb_tx_type(),
         ) -> Header {
             Header {
                 chain_id,
                 expiration,
                 timestamp,
-                data_hash,
-                code_hash,
-                memo_hash,
+                //TODO: arbitrary number of commitments
+                batch: [TxCommitments{
+                    data_hash,
+                    code_hash,
+                    memo_hash,
+                }].into(),
+                atomic,
                 tx_type,
             }
         }

@@ -6,9 +6,8 @@ use namada_tx_prelude::*;
 
 // TODO: need to benchmark gas!!!
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data")?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let MetaDataChange {
         validator,
         email,

@@ -1541,32 +1541,6 @@ impl<E> GetEventNonce for InnerEthEventsQueue<E> {
     }
 }
 
-/// Represents the pointers of an indexed tx, which are the block height and the
-/// index inside that block
-#[derive(
-    Default,
-    Debug,
-    Copy,
-    Clone,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-)]
-pub struct IndexedTx {
-    /// The block height of the indexed tx
-    pub height: BlockHeight,
-    /// The index in the block of the tx
-    pub index: TxIndex,
-    /// A transcation can have up to two shielded transfers.
-    /// This indicates if the wrapper contained a shielded transfer.
-    pub is_wrapper: bool,
-}
-
 #[cfg(test)]
 /// Tests and strategies for storage
 pub mod tests {

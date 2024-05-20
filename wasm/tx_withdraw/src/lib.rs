@@ -4,12 +4,8 @@
 use namada_tx_prelude::*;
 
 #[transaction]
-fn apply_tx(ctx: &mut Ctx, tx_data: Tx) -> TxResult {
-    let signed = tx_data;
-    let data = signed.data().ok_or_err_msg("Missing data").map_err(|err| {
-        ctx.set_commitment_sentinel();
-        err
-    })?;
+fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
+    let data = ctx.get_tx_data(&tx_data)?;
     let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("Failed to decode Withdraw tx data")?;
 
@@ -209,7 +205,7 @@ mod tests {
 
         assert_eq!(unbond_pre, Some(unbonded_amount));
 
-        apply_tx(ctx(), signed_tx)?;
+        apply_tx(ctx(), signed_tx.batch_first_tx())?;
 
         // Read the data after the tx is executed
         let unbond_post =

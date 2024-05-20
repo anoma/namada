@@ -46,7 +46,7 @@ pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
     StorageRead, StorageWrite,
 };
-pub use namada_tx::{action, data as transaction, Section, Tx};
+pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
@@ -117,6 +117,19 @@ impl Ctx {
         unsafe {
             namada_tx_yield_value(value.as_ptr() as _, value.len() as _);
         }
+    }
+
+    /// Get the transaction data for the specified inner tx
+    pub fn get_tx_data(
+        &mut self,
+        batched_tx: &BatchedTx,
+    ) -> EnvResult<Vec<u8>> {
+        let BatchedTx { tx, ref cmt } = batched_tx;
+
+        tx.data(cmt).ok_or_err_msg("Missing data").map_err(|err| {
+            self.set_commitment_sentinel();
+            err
+        })
     }
 }
 

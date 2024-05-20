@@ -14,7 +14,7 @@ use namada_state::StateRead;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
 };
-use namada_tx::Tx;
+use namada_tx::BatchedTxRef;
 use thiserror::Error;
 
 use crate::address::Address;
@@ -55,15 +55,16 @@ where
 
     fn validate_tx(
         &self,
-        tx: &Tx,
+        batched_tx: &BatchedTxRef,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         tracing::debug!("\nValidating PoS Tx\n");
 
         // Check if this is a governance proposal first
-        if tx
-            .data()
+        if batched_tx
+            .tx
+            .data(batched_tx.cmt)
             .map(|tx_data| {
                 namada_governance::is_proposal_accepted(
                     &self.ctx.pre(),

@@ -79,7 +79,7 @@ use namada::proof_of_stake::OwnedPosParams;
 use namada::state::testing::TestState;
 use namada::tendermint::time::Time as TmTime;
 use namada::token::{self, Amount, DenominatedAmount};
-use namada::tx::Tx;
+use namada::tx::BatchedTxRef;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
 use namada_sdk::state::StateRead;
@@ -99,10 +99,10 @@ pub struct TestIbcVp<'a> {
 impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
-        tx_data: &Tx,
+        batched_tx: &BatchedTxRef,
     ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
         self.ibc.validate_tx(
-            tx_data,
+            batched_tx,
             self.ibc.ctx.keys_changed,
             self.ibc.ctx.verifiers,
         )
@@ -116,10 +116,10 @@ pub struct TestMultitokenVp<'a> {
 impl<'a> TestMultitokenVp<'a> {
     pub fn validate(
         &self,
-        tx: &Tx,
+        batched_tx: &BatchedTxRef,
     ) -> std::result::Result<(), MultitokenVpError> {
         self.multitoken_vp.validate_tx(
-            tx,
+            batched_tx,
             self.multitoken_vp.ctx.keys_changed,
             self.multitoken_vp.ctx.verifiers,
         )
@@ -129,7 +129,7 @@ impl<'a> TestMultitokenVp<'a> {
 /// Validate an IBC transaction with IBC VP.
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    tx: &'a Tx,
+    batched_tx: &'a BatchedTxRef,
 ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
     let (verifiers, keys_changed) = tx_env
         .state
@@ -151,7 +151,8 @@ pub fn validate_ibc_vp_from_tx<'a>(
     let ctx = Ctx::new(
         &ADDRESS,
         &tx_env.state,
-        tx,
+        batched_tx.tx,
+        batched_tx.cmt,
         &TxIndex(0),
         &gas_meter,
         &keys_changed,
@@ -160,13 +161,13 @@ pub fn validate_ibc_vp_from_tx<'a>(
     );
     let ibc = Ibc { ctx };
 
-    TestIbcVp { ibc }.validate(tx)
+    TestIbcVp { ibc }.validate(batched_tx)
 }
 
 /// Validate the native token VP for the given address
 pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
-    tx: &'a Tx,
+    batched_tx: &'a BatchedTxRef,
     target: &Key,
 ) -> std::result::Result<(), MultitokenVpError> {
     let (verifiers, keys_changed) = tx_env
@@ -189,7 +190,8 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     let ctx = Ctx::new(
         &ADDRESS,
         &tx_env.state,
-        tx,
+        batched_tx.tx,
+        batched_tx.cmt,
         &TxIndex(0),
         &gas_meter,
         &keys_changed,
@@ -198,7 +200,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     );
     let multitoken_vp = MultitokenVp { ctx };
 
-    TestMultitokenVp { multitoken_vp }.validate(tx)
+    TestMultitokenVp { multitoken_vp }.validate(batched_tx)
 }
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].

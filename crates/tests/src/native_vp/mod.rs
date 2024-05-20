@@ -52,7 +52,8 @@ impl TestNativeVpEnv {
         let ctx = Ctx::new(
             &self.address,
             &self.tx_env.state,
-            &self.tx_env.tx,
+            &self.tx_env.batched_tx.tx,
+            &self.tx_env.batched_tx.cmt,
             &self.tx_env.tx_index,
             gas_meter,
             &self.keys_changed,
@@ -62,7 +63,7 @@ impl TestNativeVpEnv {
         let native_vp = init_native_vp(ctx);
 
         native_vp.validate_tx(
-            &self.tx_env.tx,
+            &self.tx_env.batched_tx.to_ref(),
             &self.keys_changed,
             &self.verifiers,
         )

@@ -20,7 +20,7 @@ use syn::{parse_macro_input, ItemEnum, ItemFn, ItemStruct, LitByte};
 /// ```compiler_fail
 /// fn apply_tx(
 ///     ctx: &mut Ctx,
-///     tx_data: Vec<u8>
+///     tx_data: BatchedTx,
 /// ) -> TxResult
 /// ```
 #[proc_macro_attribute]
@@ -43,7 +43,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
                     tx_data_len as _,
                 )
             };
-            let tx_data = Tx::try_from_slice(slice).unwrap();
+            let tx_data = BatchedTx::try_from_slice(slice).unwrap();
 
             // The context on WASM side is only provided by the VM once its
             // being executed (in here it's implicit). But because we want to
@@ -74,7 +74,7 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```compiler_fail
 /// fn validate_tx(
 ///     ctx: &Ctx,
-///     tx_data: Vec<u8>,
+///     tx_data: BatchedTx,
 ///     addr: Address,
 ///     keys_changed: BTreeSet<storage::Key>,
 ///     verifiers: BTreeSet<Address>
@@ -118,7 +118,7 @@ pub fn validity_predicate(
                     tx_data_len as _,
                 )
             };
-            let tx_data = Tx::try_from_slice(slice).unwrap();
+            let tx_data = BatchedTx::try_from_slice(slice).unwrap();
 
             let slice = unsafe {
                 core::slice::from_raw_parts(

@@ -43,7 +43,7 @@ pub fn broadcast_tx(tendermint_addr: &str, tx: Tx) -> Result<Response, Error> {
         // acceptance/application results later
         {
             println!("Wrapper transaction hash: {:?}", wrapper_tx_hash);
-            println!("Inner transaction hash: {:?}", decrypted_tx_hash);
+            println!("Batch transaction hash: {:?}", decrypted_tx_hash);
         }
         Ok(response)
     } else {

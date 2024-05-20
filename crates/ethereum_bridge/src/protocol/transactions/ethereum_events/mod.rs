@@ -17,7 +17,7 @@ use namada_core::token::Amount;
 use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::tx_queue::ExpiredTx;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
-use namada_tx::data::TxResult;
+use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
 
 use super::ChangedKeys;
@@ -84,14 +84,14 @@ where
 pub fn apply_derived_tx<D, H>(
     state: &mut WlState<D, H>,
     events: Vec<MultiSignedEthEvent>,
-) -> Result<TxResult>
+) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let mut changed_keys = timeout_events(state)?;
     if events.is_empty() {
-        return Ok(TxResult {
+        return Ok(BatchedTxResult {
             changed_keys,
             ..Default::default()
         });
@@ -119,7 +119,7 @@ where
         apply_updates(state, updates, voting_powers)?;
     changed_keys.append(&mut apply_updates_keys);
 
-    Ok(TxResult {
+    Ok(BatchedTxResult {
         changed_keys,
         events: eth_bridge_events
             .into_iter()
@@ -505,11 +505,6 @@ mod tests {
             Err(err) => panic!("unexpected error: {:#?}", err),
         };
 
-        assert_eq!(
-            tx_result.gas_used,
-            0.into(),
-            "No gas should be used for a derived transaction"
-        );
         let eth_msg_keys = vote_tallies::Keys::from(&event);
         let dai_token = wrapped_erc20s::token(&DAI_ERC20_ETH_ADDRESS);
         assert_eq!(
@@ -801,7 +796,7 @@ mod tests {
     fn check_event_keys<T, F>(
         keys: &Keys<T>,
         state: &TestState,
-        result: Result<TxResult>,
+        result: Result<BatchedTxResult>,
         mut assert: F,
     ) where
         F: FnMut(KeyKind, Option<Vec<u8>>),
