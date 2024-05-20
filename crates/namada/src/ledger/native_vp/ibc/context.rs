@@ -227,14 +227,6 @@ where
         transfer(self, token, src, dest, amount)
     }
 
-    fn handle_masp_tx(
-        &mut self,
-        shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<()> {
-        crate::token::utils::handle_masp_tx(self, shielded)?;
-        crate::token::utils::update_note_commitment_tree(self, shielded)
-    }
-
     fn mint_token(
         &mut self,
         target: &Address,
@@ -257,6 +249,10 @@ where
         amount: Amount,
     ) -> Result<()> {
         burn_tokens(self, token, target, amount)
+    }
+
+    fn insert_verifier(&mut self, _verifier: &Address) -> Result<()> {
+        Ok(())
     }
 
     fn log_string(&self, message: String) {
@@ -397,13 +393,6 @@ where
         unimplemented!("Validation doesn't transfer")
     }
 
-    fn handle_masp_tx(
-        &mut self,
-        _shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<()> {
-        unimplemented!("Validation doesn't handle a masp tx")
-    }
-
     fn mint_token(
         &mut self,
         _target: &Address,
@@ -420,6 +409,10 @@ where
         _amount: Amount,
     ) -> Result<()> {
         unimplemented!("Validation doesn't burn")
+    }
+
+    fn insert_verifier(&mut self, _verifier: &Address) -> Result<()> {
+        Ok(())
     }
 
     /// Logging

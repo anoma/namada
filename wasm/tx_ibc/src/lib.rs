@@ -7,13 +7,9 @@ use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    // let data = ctx.get_tx_data(&tx_data)?;
-
-    // let transfer =
-    // ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
-
-    // Temp. workaround for <https://github.com/anoma/namada/issues/1831>
-    let transfer = tx_ibc_execute()?;
+    let data = ctx.get_tx_data(&tx_data)?;
+    let transfer =
+        ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
     if let Some(transfer) = transfer {
         let shielded = transfer

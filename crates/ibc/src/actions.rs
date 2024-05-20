@@ -17,9 +17,8 @@ use namada_events::{EmitEvents, EventTypeBuilder};
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
-    DBIter, Epochs, OptionExt, ResultExt, State, StateRead, StorageError,
-    StorageHasher, StorageRead, StorageResult, StorageWrite, TxHostEnvState,
-    WlState, DB,
+    DBIter, Epochs, ResultExt, State, StorageError, StorageHasher, StorageRead,
+    StorageResult, StorageWrite, WlState, DB,
 };
 use namada_token as token;
 use token::DenominatedAmount;
@@ -115,83 +114,6 @@ where
     }
 }
 
-impl<D, H> IbcStorageContext for TxHostEnvState<'_, D, H>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
-        let gas = self
-            .write_log_mut()
-            .emit_event(event)
-            .ok_or_err_msg("Gas overflow")?;
-        self.charge_gas(gas).into_storage_result()?;
-        Ok(())
-    }
-
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, StorageError> {
-        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
-            .with_segment(event_type)
-            .build();
-
-        Ok(self
-            .write_log()
-            .lookup_events_with_prefix(&event_type)
-            .filter_map(|event| IbcEvent::try_from(event).ok())
-            .collect())
-    }
-
-    fn transfer_token(
-        &mut self,
-        src: &Address,
-        dest: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<(), StorageError> {
-        token::transfer(self, token, src, dest, amount)
-    }
-
-    fn handle_masp_tx(
-        &mut self,
-        shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<(), StorageError> {
-        namada_token::utils::handle_masp_tx(self, shielded)?;
-        namada_token::utils::update_note_commitment_tree(self, shielded)
-    }
-
-    fn mint_token(
-        &mut self,
-        target: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<(), StorageError> {
-        ibc_storage::mint_tokens(self, target, token, amount)
-    }
-
-    fn burn_token(
-        &mut self,
-        target: &Address,
-        token: &Address,
-        amount: Amount,
-    ) -> Result<(), StorageError> {
-        ibc_storage::burn_tokens(self, target, token, amount)
-    }
-
-    fn log_string(&self, message: String) {
-        tracing::trace!(message);
-    }
-}
-
-impl<D, H> IbcCommonContext for TxHostEnvState<'_, D, H>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-}
-
 impl<S> IbcStorageContext for IbcProtocolContext<'_, S>
 where
     S: State + EmitEvents,
@@ -230,14 +152,6 @@ where
         token::transfer(self.state, token, src, dest, amount)
     }
 
-    /// Handle masp tx
-    fn handle_masp_tx(
-        &mut self,
-        _shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<(), StorageError> {
-        unimplemented!("No MASP transfer in an IBC protocol transaction")
-    }
-
     /// Mint token
     fn mint_token(
         &mut self,
@@ -256,6 +170,13 @@ where
         amount: Amount,
     ) -> Result<(), StorageError> {
         ibc_storage::burn_tokens(self.state, target, token, amount)
+    }
+
+    fn insert_verifier(
+        &mut self,
+        _verifier: &Address,
+    ) -> Result<(), StorageError> {
+        Ok(())
     }
 
     fn log_string(&self, message: String) {

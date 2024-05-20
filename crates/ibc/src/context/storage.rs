@@ -27,12 +27,6 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
         amount: Amount,
     ) -> Result<(), Error>;
 
-    /// Handle masp tx
-    fn handle_masp_tx(
-        &mut self,
-        shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<(), Error>;
-
     /// Mint token
     fn mint_token(
         &mut self,
@@ -48,6 +42,9 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error>;
+
+    /// Insert the verifier
+    fn insert_verifier(&mut self, verifier: &Address) -> Result<(), Error>;
 
     /// Logging
     fn log_string(&self, message: String);

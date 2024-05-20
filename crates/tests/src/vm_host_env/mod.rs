@@ -18,10 +18,8 @@ pub mod vp;
 #[cfg(test)]
 mod tests {
 
-    use std::cell::RefCell;
     use std::collections::BTreeSet;
     use std::panic;
-    use std::rc::Rc;
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
@@ -703,8 +701,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
 
         // create a client with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("creating a client failed");
 
@@ -735,8 +732,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // update the client with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("updating a client failed");
 
@@ -777,8 +773,7 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a connection with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("creating a connection failed");
 
@@ -809,8 +804,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("opening the connection failed");
 
@@ -852,8 +846,7 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // open try a connection with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("creating a connection failed");
 
@@ -884,8 +877,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the mssage
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("opening the connection failed");
 
@@ -929,8 +921,7 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("creating a channel failed");
 
@@ -961,8 +952,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("opening the channel failed");
 
@@ -1006,8 +996,7 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // try open a channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("creating a channel failed");
 
@@ -1039,8 +1028,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open a channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("opening the channel failed");
 
@@ -1087,8 +1075,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // close the channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers);
+        let mut actions = tx_host_env::ibc::ibc_actions(tx::ctx());
         // the dummy module closes the channel
         let dummy_module = DummyTransferModule {};
         actions.add_transfer_module(dummy_module);
@@ -1146,8 +1133,7 @@ mod tests {
             .sign_wrapper(keypair);
 
         // close the channel with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("closing the channel failed");
 
@@ -1194,8 +1180,7 @@ mod tests {
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1243,8 +1228,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // ack the packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("ack failed");
 
@@ -1329,8 +1313,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // send the token and a packet with the data
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1412,8 +1395,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("receiving the token failed");
 
@@ -1504,8 +1486,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // Receive the packet, but no token is received
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("receiving the token failed");
 
@@ -1598,8 +1579,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("receiving a token failed");
 
@@ -1701,8 +1681,7 @@ mod tests {
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("receiving a token failed");
 
@@ -1764,8 +1743,7 @@ mod tests {
         ibc::set_timeout_timestamp(&mut msg.message);
         let tx_data = msg.serialize_to_vec();
         // send a packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1797,8 +1775,7 @@ mod tests {
             .sign_wrapper(keypair);
 
         // timeout the packet
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("timeout failed");
 
@@ -1850,8 +1827,7 @@ mod tests {
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         let tx_data = msg.serialize_to_vec();
         // send a packet with the message
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("sending a token failed");
 
@@ -1883,8 +1859,7 @@ mod tests {
             .sign_wrapper(keypair);
 
         // timeout the packet
-        let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-        tx_host_env::ibc::ibc_actions(tx::ctx(), verifiers)
+        tx_host_env::ibc::ibc_actions(tx::ctx())
             .execute(&tx_data)
             .expect("timeout on close failed");
 

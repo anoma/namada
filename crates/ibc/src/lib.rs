@@ -97,8 +97,8 @@ pub enum Error {
     Trace(String),
     #[error("Invalid chain ID: {0}")]
     ChainId(IdentifierError),
-    #[error("Handling MASP transaction error: {0}")]
-    MaspTx(String),
+    #[error("Verifier insertion error: {0}")]
+    Verifier(namada_storage::Error),
 }
 
 /// IBC actions to handle IBC operations
@@ -150,6 +150,7 @@ where
                     self.ctx.inner.clone(),
                     self.verifiers.clone(),
                 );
+                self.insert_verifiers()?;
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
@@ -366,6 +367,7 @@ where
                     self.ctx.inner.clone(),
                     verifiers.clone(),
                 );
+                self.insert_verifiers()?;
                 send_transfer_validate(
                     &self.ctx,
                     &token_transfer_ctx,
@@ -406,6 +408,14 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))
             }
         }
+    }
+
+    fn insert_verifiers(&self) -> Result<(), Error> {
+        let mut ctx = self.ctx.inner.borrow_mut();
+        for verifier in self.verifiers.borrow().iter() {
+            ctx.insert_verifier(verifier).map_err(Error::Verifier)?;
+        }
+        Ok(())
     }
 }
 
