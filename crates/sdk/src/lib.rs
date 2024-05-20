@@ -803,7 +803,7 @@ pub mod testing {
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
         MetaDataChange, Redelegation, Unbond, Withdraw,
     };
-    use namada_tx::data::{DecryptedTx, Fee, TxType, WrapperTx};
+    use namada_tx::data::{Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use prost::Message;
@@ -963,16 +963,6 @@ pub mod testing {
                 gas_limit,
                 unshield_section_hash,
             }
-        }
-    }
-
-    prop_compose! {
-        // Generate an arbitrary decrypted transaction
-        pub fn arb_decrypted_tx()(decrypted_tx in prop_oneof![
-            Just(DecryptedTx::Decrypted),
-            Just(DecryptedTx::Undecryptable),
-        ]) -> DecryptedTx {
-            decrypted_tx
         }
     }
 
