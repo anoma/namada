@@ -33,7 +33,6 @@ namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
 namada_replay_protection = { path = "../replay_protection" }
 namada_storage = { path = "../storage" }
-namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx" }
 
 arse-merkle-tree.workspace = true
