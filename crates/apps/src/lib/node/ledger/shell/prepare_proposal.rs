@@ -10,6 +10,7 @@ use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
+use namada::token::{Amount, DenominatedAmount};
 use namada::tx::data::{TxType, WrapperTx};
 use namada::tx::Tx;
 use namada::vm::wasm::{TxCache, VpCache};
@@ -329,30 +330,11 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price = {
-        // A local config of the validator overrides the consensus param
-        // when creating a block
-        match proposer_local_config {
-            Some(config) => config
-                .accepted_gas_tokens
-                .get(&wrapper.fee.token)
-                .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-                    "The provided {} token is not accepted by the block \
-                     proposer for fee payment",
-                    wrapper.fee.token
-                ))))?
-                .to_owned(),
-            None => namada::ledger::parameters::read_gas_cost(
-                shell_params.state,
-                &wrapper.fee.token,
-            )
-            .expect("Must be able to read gas cost parameter")
-            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-                "The provided {} token is not allowed for fee payment",
-                wrapper.fee.token
-            ))))?,
-        }
-    };
+    let minimum_gas_price = compute_min_gas_price(
+        &wrapper.fee.token,
+        proposer_local_config,
+        shell_params.state,
+    )?;
 
     super::wrapper_fee_check(
         wrapper,
@@ -368,6 +350,59 @@ where
         wrapper_tx_hash,
     )
     .map_err(Error::TxApply)
+}
+
+fn compute_min_gas_price<D, H>(
+    fee_token: &Address,
+    proposer_local_config: Option<&ValidatorLocalConfig>,
+    temp_state: &TempWlState<D, H>,
+) -> Result<Amount, Error>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
+    H: StorageHasher + Sync + 'static,
+{
+    let consensus_min_gas_price =
+        namada::ledger::parameters::read_gas_cost(temp_state, fee_token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or_else(|| {
+                Error::TxApply(protocol::Error::FeeError(format!(
+                    "The provided {fee_token} token is not allowed for fee \
+                     payment",
+                )))
+            })?;
+
+    let Some(config) = proposer_local_config else {
+        return Ok(consensus_min_gas_price);
+    };
+
+    let validator_min_gas_price = config
+        .accepted_gas_tokens
+        .get(fee_token)
+        .ok_or_else(|| {
+            Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {fee_token} token is not accepted by the block \
+                 proposer for fee payment",
+            )))
+        })?
+        .to_owned();
+
+    // The validator's local config overrides the consensus param
+    // when creating a block, as long as its min gas price for
+    // `token` is not lower than the consensus value
+    Ok(if validator_min_gas_price < consensus_min_gas_price {
+        tracing::warn!(
+            fee_token = %fee_token,
+            validator_min_gas_price = %DenominatedAmount::from(validator_min_gas_price),
+            consensus_min_gas_price = %DenominatedAmount::from(consensus_min_gas_price),
+            "The gas price for the given token set by the block proposer \
+             is lower than the value agreed upon by consensus. \
+             Falling back to consensus value."
+        );
+
+        consensus_min_gas_price
+    } else {
+        validator_min_gas_price
+    })
 }
 
 #[cfg(test)]
@@ -388,7 +423,7 @@ mod test_prepare_proposal {
     use namada::proof_of_stake::types::WeightedValidator;
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::token::{read_denom, Amount, DenominatedAmount};
+    use namada::token::read_denom;
     use namada::tx::data::Fee;
     use namada::tx::{Authorization, Code, Data, Section, Signed};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
@@ -1394,5 +1429,44 @@ mod test_prepare_proposal {
             let found_event = ext.0.data.ethereum_events.remove(1);
             assert_eq!(found_event, event2);
         }
+    }
+
+    /// Test that if a validator's local config minimum
+    /// gas price is lower than the consensus value, the
+    /// validator defaults to the latter.
+    #[test]
+    fn test_default_validator_min_gas_price() {
+        let (shell, _recv, _, _) = test_utils::setup();
+        let temp_state = shell.state.with_temp_write_log();
+
+        let validator_min_gas_price = Amount::zero();
+        let consensus_min_gas_price =
+            namada::ledger::parameters::read_gas_cost(
+                &temp_state,
+                &shell.state.in_mem().native_token,
+            )
+            .expect("Must be able to read gas cost parameter")
+            .expect("NAM should be an allowed gas token");
+
+        assert!(validator_min_gas_price < consensus_min_gas_price);
+
+        let config = ValidatorLocalConfig {
+            accepted_gas_tokens: {
+                let mut m = namada::core::collections::HashMap::new();
+                m.insert(
+                    shell.state.in_mem().native_token.clone(),
+                    validator_min_gas_price,
+                );
+                m
+            },
+        };
+        let computed_min_gas_price = compute_min_gas_price(
+            &shell.state.in_mem().native_token,
+            Some(&config),
+            &temp_state,
+        )
+        .unwrap();
+
+        assert_eq!(computed_min_gas_price, consensus_min_gas_price);
     }
 }
