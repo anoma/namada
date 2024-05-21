@@ -44,7 +44,7 @@ name = "namadar"
 path = "src/bin/namada-relayer/main.rs"
 
 [features]
-default = ["namada/mainnet", "migrations"]
+default = ["migrations"]
 mainnet = ["namada_apps_lib/mainnet"]
 jemalloc = ["namada_node/jemalloc"]
 migrations = ["namada/migrations", "namada_apps_lib/migrations"]
