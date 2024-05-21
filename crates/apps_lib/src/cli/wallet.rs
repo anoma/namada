@@ -28,7 +28,7 @@ use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
 use crate::client::utils::PRE_GENESIS_DIR;
-use crate::node::ledger::tendermint_node::validator_key_to_json;
+use crate::tendermint_node::validator_key_to_json;
 use crate::wallet::{
     self, read_and_confirm_encryption_password, CliWalletUtils,
 };

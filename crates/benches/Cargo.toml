@@ -48,7 +48,8 @@ namada-eth-bridge = [
 # NOTE: this crate MUST NOT import any dependency with testing features to prevent benchmarking non-production code
 [dev-dependencies]
 namada = { path = "../namada", features = ["rand", "benches"] }
-namada_apps_lib = { path = "../apps_lib", features = ["benches"] }
+namada_apps_lib = { path = "../apps_lib" }
+namada_node = { path = "../node", features = ["benches"] }
 masp_primitives.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true

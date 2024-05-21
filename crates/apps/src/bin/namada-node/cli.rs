@@ -2,9 +2,10 @@
 
 use eyre::{Context, Result};
 use namada::core::time::{DateTimeUtc, Utc};
+use namada_apps_lib::cli::cmds::TestGenesis;
 use namada_apps_lib::cli::{self, cmds};
 use namada_apps_lib::config::{Action, ActionAtHeight, ValidatorLocalConfig};
-use namada_apps_lib::node::ledger;
+use namada_node as node;
 #[cfg(not(feature = "migrations"))]
 use namada_sdk::display_line;
 
@@ -16,7 +17,7 @@ pub fn main() -> Result<()> {
                 let chain_ctx = ctx.take_chain_or_exit();
                 let wasm_dir = chain_ctx.wasm_dir();
                 sleep_until(args.start_time);
-                ledger::run(chain_ctx.config.ledger, wasm_dir);
+                node::run(chain_ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
                 let mut chain_ctx = ctx.take_chain_or_exit();
@@ -24,20 +25,20 @@ pub fn main() -> Result<()> {
                 sleep_until(args.time);
                 chain_ctx.config.ledger.shell.action_at_height =
                     Some(args.action_at_height);
-                ledger::run(chain_ctx.config.ledger, wasm_dir);
+                node::run(chain_ctx.config.ledger, wasm_dir);
             }
             cmds::Ledger::Reset(_) => {
                 let chain_ctx = ctx.take_chain_or_exit();
-                ledger::reset(chain_ctx.config.ledger)
+                node::reset(chain_ctx.config.ledger)
                     .wrap_err("Failed to reset Namada node")?;
             }
             cmds::Ledger::DumpDb(cmds::LedgerDumpDb(args)) => {
                 let chain_ctx = ctx.take_chain_or_exit();
-                ledger::dump_db(chain_ctx.config.ledger, args);
+                node::dump_db(chain_ctx.config.ledger, args);
             }
             cmds::Ledger::RollBack(_) => {
                 let chain_ctx = ctx.take_chain_or_exit();
-                ledger::rollback(chain_ctx.config.ledger)
+                node::rollback(chain_ctx.config.ledger)
                     .wrap_err("Failed to rollback the Namada node")?;
             }
             cmds::Ledger::UpdateDB(cmds::LedgerUpdateDB(args)) => {
@@ -50,7 +51,7 @@ pub fn main() -> Result<()> {
                 }
                 let mut chain_ctx = ctx.take_chain_or_exit();
                 #[cfg(feature = "migrations")]
-                ledger::update_db_keys(
+                node::update_db_keys(
                     chain_ctx.config.ledger.clone(),
                     args.updates,
                     args.dry_run,
@@ -68,7 +69,7 @@ pub fn main() -> Result<()> {
                     );
                     // don't stop on panics
                     let handle = std::thread::spawn(|| {
-                        ledger::run(chain_ctx.config.ledger, wasm_dir)
+                        node::run(chain_ctx.config.ledger, wasm_dir)
                     });
                     _ = handle.join();
                     std::env::remove_var("NAMADA_INITIAL_HEIGHT");
@@ -84,7 +85,7 @@ pub fn main() -> Result<()> {
                 }
                 let chain_ctx = ctx.take_chain_or_exit();
                 #[cfg(feature = "migrations")]
-                ledger::query_db(
+                node::query_db(
                     chain_ctx.config.ledger,
                     &args.key,
                     &args.hash,
@@ -127,6 +128,11 @@ pub fn main() -> Result<()> {
                     ))
                     .join("validator_local_config.toml");
                 std::fs::write(config_path, updated_config).unwrap();
+            }
+        },
+        cmds::NamadaNode::Utils(sub) => match sub {
+            cmds::NodeUtils::TestGenesis(TestGenesis(args)) => {
+                node::utils::test_genesis(args)
             }
         },
     }

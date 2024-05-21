@@ -123,17 +123,21 @@ pub mod cmds {
     pub enum NamadaNode {
         Ledger(Ledger),
         Config(Config),
+        Utils(NodeUtils),
     }
 
     impl Cmd for NamadaNode {
         fn add_sub(app: App) -> App {
-            app.subcommand(Ledger::def()).subcommand(Config::def())
+            app.subcommand(Ledger::def())
+                .subcommand(Config::def())
+                .subcommand(NodeUtils::def())
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let config = SubCmd::parse(matches).map(Self::Config);
-            ledger.or(config)
+            let utils = SubCmd::parse(matches).map(Self::Utils);
+            ledger.or(config).or(utils)
         }
     }
     impl SubCmd for NamadaNode {
@@ -206,7 +210,7 @@ pub mod cmds {
         /// don't exist.
         WithContext(NamadaClientWithContext),
         /// Utils don't have [`super::Context`], only the global arguments.
-        WithoutContext(Utils),
+        WithoutContext(ClientUtils),
     }
 
     impl Cmd for NamadaClient {
@@ -270,7 +274,7 @@ pub mod cmds {
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
                 // Utils
-                .subcommand(Utils::def().display_order(7))
+                .subcommand(ClientUtils::def().display_order(7))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -2174,7 +2178,30 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub enum Utils {
+    pub enum NodeUtils {
+        TestGenesis(TestGenesis),
+    }
+
+    impl SubCmd for NodeUtils {
+        const CMD: &'static str = "utils";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).and_then(|matches| {
+                SubCmd::parse(matches).map(Self::TestGenesis)
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Utilities."))
+                .subcommand(TestGenesis::def())
+                .subcommand_required(true)
+                .arg_required_else_help(true)
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub enum ClientUtils {
         JoinNetwork(JoinNetwork),
         ValidateWasm(ValidateWasm),
         InitNetwork(InitNetwork),
@@ -2186,12 +2213,11 @@ pub mod cmds {
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
-        TestGenesis(TestGenesis),
         SignGenesisTxs(SignGenesisTxs),
         ParseMigrationJson(MigrationJson),
     }
 
-    impl SubCmd for Utils {
+    impl SubCmd for ClientUtils {
         const CMD: &'static str = "utils";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -2219,8 +2245,6 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ValidateGenesisTemplates);
                 let genesis_tx =
                     SubCmd::parse(matches).map(Self::SignGenesisTxs);
-                let test_genesis =
-                    SubCmd::parse(matches).map(Self::TestGenesis);
                 let parse_migrations_json =
                     SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 join_network
@@ -2234,7 +2258,6 @@ pub mod cmds {
                     .or(default_base_dir)
                     .or(epoch_sleep)
                     .or(validate_genesis_templates)
-                    .or(test_genesis)
                     .or(genesis_tx)
                     .or(parse_migrations_json)
             })
@@ -2254,7 +2277,6 @@ pub mod cmds {
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
-                .subcommand(TestGenesis::def())
                 .subcommand(SignGenesisTxs::def())
                 .subcommand(MigrationJson::def())
                 .subcommand_required(true)
@@ -7701,7 +7723,7 @@ pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
 
 #[allow(clippy::large_enum_variant)]
 pub enum NamadaClient {
-    WithoutContext(cmds::Utils, args::Global),
+    WithoutContext(cmds::ClientUtils, args::Global),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 

@@ -724,34 +724,34 @@ impl CliApi {
             }
             cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
                 // Utils cmds
-                Utils::JoinNetwork(JoinNetwork(args)) => {
+                ClientUtils::JoinNetwork(JoinNetwork(args)) => {
                     utils::join_network(global_args, args).await
                 }
-                Utils::ValidateWasm(ValidateWasm(args)) => {
+                ClientUtils::ValidateWasm(ValidateWasm(args)) => {
                     utils::validate_wasm(args)
                 }
-                Utils::InitNetwork(InitNetwork(args)) => {
+                ClientUtils::InitNetwork(InitNetwork(args)) => {
                     utils::init_network(args);
                 }
-                Utils::GenesisBond(GenesisBond(args)) => {
+                ClientUtils::GenesisBond(GenesisBond(args)) => {
                     utils::genesis_bond(args)
                 }
-                Utils::DeriveGenesisAddresses(DeriveGenesisAddresses(args)) => {
-                    utils::derive_genesis_addresses(global_args, args)
-                }
-                Utils::InitGenesisEstablishedAccount(
+                ClientUtils::DeriveGenesisAddresses(
+                    DeriveGenesisAddresses(args),
+                ) => utils::derive_genesis_addresses(global_args, args),
+                ClientUtils::InitGenesisEstablishedAccount(
                     InitGenesisEstablishedAccount(args),
                 ) => utils::init_genesis_established_account(global_args, args),
-                Utils::InitGenesisValidator(InitGenesisValidator(args)) => {
-                    utils::init_genesis_validator(global_args, args)
-                }
-                Utils::PkToTmAddress(PkToTmAddress(args)) => {
+                ClientUtils::InitGenesisValidator(InitGenesisValidator(
+                    args,
+                )) => utils::init_genesis_validator(global_args, args),
+                ClientUtils::PkToTmAddress(PkToTmAddress(args)) => {
                     utils::pk_to_tm_address(global_args, args)
                 }
-                Utils::DefaultBaseDir(DefaultBaseDir(args)) => {
+                ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
                     utils::default_base_dir(global_args, args)
                 }
-                Utils::EpochSleep(EpochSleep(args)) => {
+                ClientUtils::EpochSleep(EpochSleep(args)) => {
                     let mut ctx = cli::Context::new::<IO>(global_args)
                         .expect("expected to construct a context");
                     let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -762,16 +762,13 @@ impl CliApi {
                     let namada = ctx.to_sdk(client, io);
                     rpc::epoch_sleep(&namada, args).await;
                 }
-                Utils::ValidateGenesisTemplates(ValidateGenesisTemplates(
-                    args,
-                )) => utils::validate_genesis_templates(global_args, args),
-                Utils::TestGenesis(TestGenesis(args)) => {
-                    utils::test_genesis(args)
-                }
-                Utils::SignGenesisTxs(SignGenesisTxs(args)) => {
+                ClientUtils::ValidateGenesisTemplates(
+                    ValidateGenesisTemplates(args),
+                ) => utils::validate_genesis_templates(global_args, args),
+                ClientUtils::SignGenesisTxs(SignGenesisTxs(args)) => {
                     utils::sign_genesis_tx(global_args, args).await
                 }
-                Utils::ParseMigrationJson(MigrationJson(args)) => {
+                ClientUtils::ParseMigrationJson(MigrationJson(args)) => {
                     #[cfg(feature = "migrations")]
                     {
                         let mut update_json = String::new();

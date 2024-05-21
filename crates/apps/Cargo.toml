@@ -46,13 +46,14 @@ path = "src/bin/namada-relayer/main.rs"
 [features]
 default = ["namada/mainnet", "migrations"]
 mainnet = ["namada_apps_lib/mainnet"]
-jemalloc = ["namada_apps_lib/jemalloc"]
+jemalloc = ["namada_node/jemalloc"]
 migrations = ["namada/migrations", "namada_apps_lib/migrations"]
 namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
 [dependencies]
 namada = {path = "../namada"}
 namada_apps_lib = {path = "../apps_lib"}
+namada_node = {path = "../node"}
 
 color-eyre.workspace = true
 eyre.workspace = true
