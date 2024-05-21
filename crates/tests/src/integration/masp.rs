@@ -6,14 +6,12 @@ use color_eyre::owo_colors::OwoColorize;
 use namada::state::{StorageRead, StorageWrite};
 use namada::token::storage_key::masp_token_map_key;
 use namada::token::{self, DenominatedAmount};
-use namada_apps_lib::node::ledger::shell::testing::client::run;
-use namada_apps_lib::node::ledger::shell::testing::node::NodeResults;
-use namada_apps_lib::node::ledger::shell::testing::utils::{
-    Bin, CapturedOutput,
-};
 use namada_apps_lib::wallet::defaults::christel_keypair;
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
+use namada_node::shell::testing::client::run;
+use namada_node::shell::testing::node::NodeResults;
+use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::masp::fs::FsShieldedUtils;
 use test_log::test;
 

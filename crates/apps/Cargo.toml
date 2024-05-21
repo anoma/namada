@@ -46,13 +46,14 @@ path = "src/bin/namada-relayer/main.rs"
 [features]
 default = ["namada/mainnet", "migrations"]
 mainnet = ["namada_apps_lib/mainnet"]
-jemalloc = ["namada_apps_lib/jemalloc"]
+jemalloc = ["namada_node/jemalloc"]
 migrations = ["namada/migrations", "namada_apps_lib/migrations"]
 namada-eth-bridge = ["namada_apps_lib/namada-eth-bridge"]
 
 [dependencies]
 namada = {path = "../namada"}
 namada_apps_lib = {path = "../apps_lib"}
+namada_node = {path = "../node"}
 
 color-eyre.workspace = true
 eyre.workspace = true
@@ -71,7 +72,7 @@ winapi.workspace = true
 namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 
-assert_matches = "1.5.0"
+assert_matches.workspace = true
 bit-set.workspace = true
 proptest.workspace = true
 test-log.workspace = true

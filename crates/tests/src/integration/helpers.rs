@@ -2,12 +2,10 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use eyre::eyre;
-use namada_apps_lib::node::ledger::shell::testing::client::run;
-use namada_apps_lib::node::ledger::shell::testing::node::MockNode;
-use namada_apps_lib::node::ledger::shell::testing::utils::{
-    Bin, CapturedOutput,
-};
 use namada_core::address::Address;
+use namada_node::shell::testing::client::run;
+use namada_node::shell::testing::node::MockNode;
+use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 
 /// Query the wallet to get an address from a given alias.
 pub fn find_address(

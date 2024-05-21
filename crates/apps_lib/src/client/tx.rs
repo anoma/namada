@@ -28,7 +28,7 @@ use crate::client::tx::signing::{default_sign, SigningTxData};
 use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
-use crate::node::ledger::tendermint_node;
+use crate::tendermint_node;
 use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional

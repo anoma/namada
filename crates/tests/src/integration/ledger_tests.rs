@@ -7,14 +7,12 @@ use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada::core::collections::HashMap;
 use namada::token;
-use namada_apps_lib::node::ledger::shell::testing::client::run;
-use namada_apps_lib::node::ledger::shell::testing::utils::{
-    Bin, CapturedOutput,
-};
 use namada_apps_lib::wallet::defaults;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_node::shell::testing::client::run;
+use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;

@@ -2,7 +2,6 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
@@ -24,7 +23,6 @@ use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
 
 use crate::cli::args;
-use crate::cli::args::TestGenesis;
 use crate::cli::context::wasm_dir_from_env_or;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
@@ -33,9 +31,8 @@ use crate::config::genesis::transactions::{
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
-use crate::node::ledger::tendermint_node;
 use crate::wallet::{pre_genesis, CliWalletUtils};
-use crate::wasm_loader;
+use crate::{tendermint_node, wasm_loader};
 
 pub const NET_ACCOUNTS_DIR: &str = "setup";
 pub const NET_OTHER_ACCOUNTS_DIR: &str = "other";
@@ -437,29 +434,6 @@ pub fn init_network(
     );
 
     release_file
-}
-
-pub fn test_genesis(args: TestGenesis) {
-    use crate::facade::tendermint::Timeout;
-
-    let templates = genesis::templates::load_and_validate(&args.path).unwrap();
-    let genesis = genesis::chain::finalize(
-        templates,
-        FromStr::from_str("namada-dryrun").unwrap(),
-        Default::default(),
-        Timeout::from_str("30s").unwrap(),
-    );
-    let chain_id = &genesis.metadata.chain_id;
-    let test_dir = tempfile::tempdir().unwrap();
-    let config = crate::config::Config::load(test_dir.path(), chain_id, None);
-    genesis
-        .write_toml_files(&test_dir.path().join(chain_id.to_string()))
-        .unwrap();
-    crate::node::ledger::test_genesis_files(
-        config.ledger,
-        genesis,
-        args.wasm_dir,
-    );
 }
 
 pub fn pk_to_tm_address(
