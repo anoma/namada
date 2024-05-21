@@ -359,16 +359,6 @@ where
         match dispatch_result {
             Ok(tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
-                    // FIXME: review this, really need to do all this stuff?
-                    // Wait if the inenr transaction is empty (no cmts?)
-                    self.state.write_log_mut().commit_tx();
-                    self.state
-                        .in_mem_mut()
-                        .block
-                        .results
-                        .accept(tx_data.tx_index);
-                    tx_logs.tx_event.extend(Code(ResultCode::Ok));
-
                     // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
@@ -458,7 +448,6 @@ where
             is_any_tx_invalid,
         } = temp_log.check_inner_results(
             &tx_result,
-            &tx_data.tx.header,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -519,7 +508,6 @@ where
             is_any_tx_invalid: _,
         } = temp_log.check_inner_results(
             &tx_result,
-            &tx_data.tx.header,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -956,7 +944,6 @@ impl<'finalize> TempTxLogs {
     fn check_inner_results(
         &mut self,
         tx_result: &namada::tx::data::TxResult<protocol::Error>,
-        tx_header: &namada::tx::Header,
         tx_index: usize,
         height: BlockHeight,
     ) -> ValidityFlags {
