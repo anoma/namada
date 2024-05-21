@@ -563,34 +563,27 @@ where
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
-        // If user transaction didn't fail because of out of gas nor
-        // replay attempt, commit its hash to prevent
-        // replays
-        // FIXME: really need the match on the tx type? Wrapper cannot get here
-        // anyway and I don't know if this is a problem with protocol
-        // transactions
-        if matches!(tx_data.tx.header.tx_type, TxType::Raw) {
-            if !matches!(
-                err,
-                Error::TxApply(protocol::Error::GasError(_))
-                    | Error::TxApply(protocol::Error::ReplayAttempt(_))
-            ) {
-                self.commit_batch_hash(tx_data.replay_protection_hashes);
-            } else if let Error::TxApply(protocol::Error::ReplayAttempt(_)) =
-                err
-            {
-                // Remove the wrapper hash but keep the inner tx
-                // hash. A replay of the wrapper is impossible since
-                // the inner tx hash is committed to storage and
-                // we validate the wrapper against that hash too
-                let header_hash = tx_data
-                    .replay_protection_hashes
-                    .expect("This cannot fail")
-                    .header_hash;
-                self.state
-                    .redundant_tx_hash(&header_hash)
-                    .expect("Error while marking tx hash as redundant");
-            }
+        // If user transaction didn't fail because of out of gas nor replay
+        // attempt, commit its hash to prevent replays. If it failed because of
+        // a replay attempt just remove the redundant wrapper hash
+        if !matches!(
+            err,
+            Error::TxApply(protocol::Error::GasError(_))
+                | Error::TxApply(protocol::Error::ReplayAttempt(_))
+        ) {
+            self.commit_batch_hash(tx_data.replay_protection_hashes);
+        } else if let Error::TxApply(protocol::Error::ReplayAttempt(_)) = err {
+            // Remove the wrapper hash but keep the inner tx
+            // hash. A replay of the wrapper is impossible since
+            // the inner tx hash is committed to storage and
+            // we validate the wrapper against that hash too
+            let header_hash = tx_data
+                .replay_protection_hashes
+                .expect("This cannot fail")
+                .header_hash;
+            self.state
+                .redundant_tx_hash(&header_hash)
+                .expect("Error while marking tx hash as redundant");
         }
     }
 
@@ -1021,14 +1014,10 @@ impl<'finalize> TempTxLogs {
                     }
                 }
                 Err(e) => {
-                    // FIXME: what about wrong signatures???
                     tracing::trace!("Inner tx {} failed: {}", cmt_hash, e);
                     // If inner transaction didn't fail because of invalid
                     // section commitment, commit its hash to prevent replays
-                    // FIXME: need the match on the tx type?
-                    if matches!(tx_header.tx_type, TxType::Raw)
-                        && !matches!(e, protocol::Error::MissingSection(_))
-                    {
+                    if !matches!(e, protocol::Error::MissingSection(_)) {
                         flags.commit_batch_hash = true;
                     }
 
