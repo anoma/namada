@@ -256,6 +256,7 @@ where
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::masp::encode_asset_type;
     use namada_core::storage::Epoch;
+    use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, ResultExt};
     use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
@@ -487,12 +488,14 @@ where
             // Add a conversion from the previous asset type
             storage.conversion_state_mut().assets.insert(
                 old_asset,
-                (
-                    (token.clone(), denom, digit),
-                    prev_epoch,
-                    MaspAmount::zero().into(),
-                    0,
-                ),
+                ConversionLeaf {
+                    token: token.clone(),
+                    denom,
+                    digit_pos: digit,
+                    epoch: prev_epoch,
+                    conversion: MaspAmount::zero().into(),
+                    leaf_pos: 0,
+                },
             );
         }
     }
@@ -516,16 +519,18 @@ where
         .into_par_iter()
         .with_min_len(notes_per_thread_min)
         .with_max_len(notes_per_thread_max)
-        .map(|(idx, (asset, _epoch, conv, pos))| {
-            if let Some(current_conv) = current_convs.get(asset) {
+        .map(|(idx, leaf)| {
+            // Try to get the applicable conversion delta
+            let cur_conv_key = (leaf.token.clone(), leaf.denom, leaf.digit_pos);
+            if let Some(current_conv) = current_convs.get(&cur_conv_key) {
                 // Use transitivity to update conversion
-                *conv += current_conv.clone();
+                leaf.conversion += current_conv.clone();
             }
             // Update conversion position to leaf we are about to create
-            *pos = idx;
+            leaf.leaf_pos = idx;
             // The merkle tree need only provide the conversion commitment,
             // the remaining information is provided through the storage API
-            Node::new(conv.cmu().to_repr())
+            Node::new(leaf.conversion.cmu().to_repr())
         })
         .collect();
 
@@ -581,12 +586,14 @@ where
             let tree_size = storage.conversion_state().tree.size();
             storage.conversion_state_mut().assets.insert(
                 new_asset,
-                (
-                    (addr.clone(), denom, digit),
+                ConversionLeaf {
+                    token: addr.clone(),
+                    denom,
+                    digit_pos: digit,
                     epoch,
-                    MaspAmount::zero().into(),
-                    tree_size,
-                ),
+                    conversion: MaspAmount::zero().into(),
+                    leaf_pos: tree_size,
+                },
             );
         }
     }

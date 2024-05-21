@@ -149,6 +149,7 @@ tiny-bip39.workspace = true
 tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
+uint = "0.9.5"
 wasm-instrument = { workspace = true, optional = true }
 wasmer = { workspace = true, optional = true }
 wasmer-cache = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }

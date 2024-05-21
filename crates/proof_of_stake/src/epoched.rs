@@ -464,7 +464,12 @@ impl<Data, FutureEpochs, PastEpochs>
 where
     FutureEpochs: EpochOffset,
     PastEpochs: EpochOffset,
-    Data: BorshSerialize + BorshDeserialize + CheckedAdd + 'static + Debug,
+    Data: BorshSerialize
+        + BorshDeserialize
+        + Copy
+        + CheckedAdd<Output = Data>
+        + 'static
+        + Debug,
 {
     /// Open the handle
     pub fn open(key: storage::Key) -> Self {
