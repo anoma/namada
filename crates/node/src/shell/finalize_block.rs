@@ -358,9 +358,18 @@ where
     ) -> Option<WrapperCache> {
         match dispatch_result {
             Ok(tx_result) => match tx_data.tx.header.tx_type {
-                TxType::Wrapper(_) =>
-                // Return withouth emitting any events
-                {
+                TxType::Wrapper(_) => {
+                    // FIXME: review this, really need to do all this stuff?
+                    // Wait if the inenr transaction is empty (no cmts?)
+                    self.state.write_log_mut().commit_tx();
+                    self.state
+                        .in_mem_mut()
+                        .block
+                        .results
+                        .accept(tx_data.tx_index);
+                    tx_logs.tx_event.extend(Code(ResultCode::Ok));
+
+                    // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
@@ -555,9 +564,12 @@ where
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
         // If user transaction didn't fail because of out of gas nor
-        // invalid section commitment, commit its hash to prevent
+        // replay attempt, commit its hash to prevent
         // replays
-        if matches!(tx_data.tx.header.tx_type, TxType::Wrapper(_)) {
+        // FIXME: really need the match on the tx type? Wrapper cannot get here
+        // anyway and I don't know if this is a problem with protocol
+        // transactions
+        if matches!(tx_data.tx.header.tx_type, TxType::Raw) {
             if !matches!(
                 err,
                 Error::TxApply(protocol::Error::GasError(_))
@@ -1009,11 +1021,12 @@ impl<'finalize> TempTxLogs {
                     }
                 }
                 Err(e) => {
-                    // this branch can only be reached by inner txs
+                    // FIXME: what about wrong signatures???
                     tracing::trace!("Inner tx {} failed: {}", cmt_hash, e);
                     // If inner transaction didn't fail because of invalid
                     // section commitment, commit its hash to prevent replays
-                    if matches!(tx_header.tx_type, TxType::Wrapper(_))
+                    // FIXME: need the match on the tx type?
+                    if matches!(tx_header.tx_type, TxType::Raw)
                         && !matches!(e, protocol::Error::MissingSection(_))
                     {
                         flags.commit_batch_hash = true;
@@ -1304,9 +1317,8 @@ mod test_finalize_block {
         )
     }
 
-    /// Check that if a wrapper tx was rejected by [`process_proposal`],
-    /// check that the correct event is returned. Check that it does
-    /// not appear in the queue of txs to be decrypted
+    /// Check that if a wrapper tx was rejected by [`process_proposal`], the
+    /// correct event is returned.
     #[test]
     fn test_process_proposal_rejected_wrapper_tx() {
         let (mut shell, _, _, _) = setup();
@@ -1323,24 +1335,40 @@ mod test_finalize_block {
         )
         .unwrap();
 
+        // Need ordered tx hashes because the events can be emitted out of order
+        let mut ordered_hashes = vec![];
         // create some wrapper txs
         for i in 0u64..4 {
-            let (_, mut processed_tx) = mk_wrapper_tx(&shell, &keypair);
+            let (tx, mut processed_tx) = mk_wrapper_tx(&shell, &keypair);
             processed_tx.result.code = u32::try_from(i.rem_euclid(2)).unwrap();
             processed_txs.push(processed_tx);
+            ordered_hashes.push(tx.header_hash());
         }
 
         // check that the correct events were created
-        for (index, event) in shell
+        for event in shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs.clone(),
                 ..Default::default()
             })
             .expect("Test failed")
             .iter()
-            .enumerate()
         {
             assert_eq!(*event.kind(), APPLIED_TX);
+            let hash = event.read_attribute::<TxHash>().expect("Test failed");
+            let index = ordered_hashes
+                .iter()
+                .enumerate()
+                .find_map(
+                    |(idx, tx_hash)| {
+                        if tx_hash == &hash {
+                            Some(idx)
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .unwrap();
             let code = event
                 .read_attribute::<CodeAttr>()
                 .expect("Test failed")
@@ -3215,10 +3243,10 @@ mod test_finalize_block {
         // transaction
     }
 
-    /// Test that if a transaction fails because of out-of-gas,
-    ///  invalid signature or wrong section commitment, its hash
-    /// is not committed to storage. Also checks that a tx failing for other
-    /// reason has its hash written to storage.
+    /// Test that if a transaction fails because of out-of-gas, invalid
+    /// signature or wrong section commitment, its hash is not committed to
+    /// storage. Also checks that a tx failing for other reasons has its
+    /// hash written to storage.
     #[test]
     fn test_tx_hash_handling() {
         let (mut shell, _broadcaster, _, _) = setup();
