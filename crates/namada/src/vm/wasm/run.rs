@@ -32,7 +32,8 @@ use crate::vm::types::VpInput;
 use crate::vm::wasm::host_env::{tx_imports, vp_imports};
 use crate::vm::wasm::{memory, Cache, CacheName, VpCache};
 use crate::vm::{
-    validate_untrusted_wasm, MutHostRef, WasmCacheAccess, WasmValidationError,
+    validate_untrusted_wasm, HostRef, RwAccess, WasmCacheAccess,
+    WasmValidationError,
 };
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
@@ -336,7 +337,7 @@ where
         &mut vp_wasm_cache,
     );
 
-    let yielded_value_borrow = env.ctx.yielded_value.clone();
+    let yielded_value_borrow = env.ctx.yielded_value;
     let imports = vp_imports(&store, env);
 
     run_vp(
@@ -360,7 +361,7 @@ fn run_vp(
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
-    yielded_value: MutHostRef<'_, &'_ Option<Vec<u8>>>,
+    yielded_value: HostRef<RwAccess, Option<Vec<u8>>>,
 ) -> Result<()> {
     let input: VpInput<'_> = VpInput {
         addr: address,
@@ -444,7 +445,7 @@ fn run_vp(
         // `&mut` ptrs we shared with the guest
         _ = (instance, vp_imports);
 
-        unsafe { yielded_value.get() }.take().map_or_else(
+        unsafe { yielded_value.get_mut() }.take().map_or_else(
             || Err(Error::VpError(VpError::Unspecified)),
             |borsh_encoded_err| {
                 let vp_err = VpError::try_from_slice(&borsh_encoded_err)
@@ -459,9 +460,9 @@ fn run_vp(
 #[derive(Default, Debug)]
 pub struct VpEvalWasm<D, H, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     /// Phantom type for DB
     pub db: PhantomData<*const D>,
@@ -473,9 +474,9 @@ where
 
 impl<D, H, CA> VpEvaluator for VpEvalWasm<D, H, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     type CA = CA;
     type Db = D;
@@ -484,7 +485,7 @@ where
 
     fn eval(
         &self,
-        ctx: VpCtx<'static, D, H, Self, CA>,
+        ctx: VpCtx<D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
     ) -> HostEnvResult {
@@ -501,21 +502,21 @@ where
 
 impl<D, H, CA> VpEvalWasm<D, H, CA>
 where
-    D: DB + for<'iter> DBIter<'iter>,
-    H: StorageHasher,
-    CA: WasmCacheAccess,
+    D: DB + for<'iter> DBIter<'iter> + 'static,
+    H: StorageHasher + 'static,
+    CA: WasmCacheAccess + 'static,
 {
     /// Evaluate the given VP.
     pub fn eval_native_result(
         &self,
-        ctx: VpCtx<'static, D, H, Self, CA>,
+        ctx: VpCtx<D, H, Self, CA>,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
     ) -> Result<()> {
         let address = unsafe { ctx.address.get() };
         let keys_changed = unsafe { ctx.keys_changed.get() };
         let verifiers = unsafe { ctx.verifiers.get() };
-        let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get() };
+        let vp_wasm_cache = unsafe { ctx.vp_wasm_cache.get_mut() };
         let gas_meter = unsafe { ctx.gas_meter.get() };
 
         // Compile the wasm module
@@ -530,7 +531,7 @@ where
             memory: WasmMemory::default(),
             ctx,
         };
-        let yielded_value_borrow = env.ctx.yielded_value.clone();
+        let yielded_value_borrow = env.ctx.yielded_value;
         let imports = vp_imports(&store, env);
 
         run_vp(

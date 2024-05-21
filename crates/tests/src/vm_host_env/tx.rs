@@ -716,7 +716,6 @@ mod tests {
         setup: &TestSetup,
         test_env: &mut TestTxEnv,
     ) -> TxVmEnv<
-        'static,
         wasm::memory::WasmMemory,
         MockDB,
         Sha256Hasher,
