@@ -78,7 +78,7 @@ jobs:
         run: sccache --start-server
       - name: Install cargo-about
         if: "!startsWith(runner.os, 'Windows')"
-        run: curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.5.7! | bash
+        run: curl -k https://installer.heliax.click/EmbarkStudios/cargo-about@0.6.1! | bash
       - name: Install cargo-about (only windows)
         if: startsWith(runner.os, 'Windows')
         run: cargo install --locked cargo-about
