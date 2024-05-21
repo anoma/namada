@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-10]
+        nightly_version: [nightly-2024-05-15]
         make:
           - name: Audit
             command: audit

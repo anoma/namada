@@ -1,7 +1,7 @@
 # This docker is used for deterministic wasm builds
 
 # The version should be matching the version set in wasm/rust-toolchain.toml
-FROM rust:1.76.0-bookworm
+FROM rust:1.78.0-bookworm
 
 WORKDIR /__w/namada/namada
 

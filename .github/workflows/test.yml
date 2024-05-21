@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        nightly_version: [nightly-2024-02-10]
+        nightly_version: [nightly-2024-05-15]
         mold_version: [2.4.0]
         make:
           - name: ABCI
