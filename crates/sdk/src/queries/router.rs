@@ -657,6 +657,14 @@ macro_rules! router_type {
                 // paste the generated methods
                 $( $methods )*
             }
+
+            impl Default for $name {
+                fn default() -> Self {
+                    Self {
+                        prefix: String::new(),
+                    }
+                }
+            }
         }
     };
 

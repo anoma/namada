@@ -272,10 +272,7 @@ pub async fn process_tx(
 pub async fn is_reveal_pk_needed<C: crate::queries::Client + Sync>(
     client: &C,
     address: &Address,
-) -> Result<bool>
-where
-    C: crate::queries::Client + Sync,
-{
+) -> Result<bool> {
     // Check if PK revealed
     Ok(!has_revealed_pk(client, address).await?)
 }

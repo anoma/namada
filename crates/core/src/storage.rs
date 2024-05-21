@@ -1083,16 +1083,18 @@ macro_rules! impl_int_key_seg {
 
         impl KeySeg for $signed {
             fn parse(string: String) -> Result<Self> {
-                // get signed int from a unsigned int complemented with a min
+                // get signed int from a unsigned int complemented with a max
                 // value
                 let complemented = <$unsigned>::parse(string)?;
+                #[allow(clippy::cast_possible_wrap)]
                 let signed = (complemented as $signed) ^ <$signed>::MIN;
                 Ok(signed)
             }
 
             fn raw(&self) -> String {
                 // signed int is converted to unsigned int that preserves the
-                // order by complementing it with a min value
+                // order by complementing it with a max value
+                #[allow(clippy::cast_sign_loss)]
                 let complemented = (*self ^ <$signed>::MIN) as $unsigned;
                 complemented.raw()
             }

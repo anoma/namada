@@ -672,8 +672,7 @@ pub struct BenchShieldedUtils {
     context_dir: WrapperTempDir,
 }
 
-#[cfg_attr(feature = "async-send", async_trait::async_trait)]
-#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+#[async_trait::async_trait(?Send)]
 impl ShieldedUtils for BenchShieldedUtils {
     fn local_tx_prover(&self) -> LocalTxProver {
         if let Ok(params_dir) = std::env::var(masp::ENV_VAR_MASP_PARAMS_DIR) {
@@ -768,8 +767,7 @@ impl ShieldedUtils for BenchShieldedUtils {
     }
 }
 
-#[cfg_attr(feature = "async-send", async_trait::async_trait)]
-#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+#[async_trait::async_trait(?Send)]
 impl Client for BenchShell {
     type Error = std::io::Error;
 

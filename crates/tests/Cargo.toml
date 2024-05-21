@@ -45,8 +45,10 @@ flate2.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
 ibc-testkit.workspace = true
 ics23.workspace = true
+itertools.workspace = true
 lazy_static.workspace = true
 num-traits.workspace = true
+proptest.workspace = true
 prost.workspace = true
 regex.workspace = true
 serde.workspace = true
@@ -74,10 +76,8 @@ escargot = {workspace = true} # , features = ["print"]}
 expectrl.workspace = true
 eyre.workspace = true
 fs_extra.workspace = true
-itertools.workspace = true
 once_cell.workspace = true
 pretty_assertions.workspace = true
-proptest.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
 tendermint-light-client.workspace = true

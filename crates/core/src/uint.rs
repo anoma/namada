@@ -184,7 +184,7 @@ impl Uint {
                 q_hat
             } else {
                 // here q_hat >= q_j >= q_hat - 1
-                u64::max_value()
+                u64::MAX
             };
 
             // ex. 20:

@@ -160,8 +160,10 @@ mod test {
         /// tx wasm compilation cache
         pub tx_wasm_cache: TxCache<WasmCacheRoAccess>,
         /// VP wasm compilation cache directory
+        #[allow(dead_code)] // never read
         pub vp_cache_dir: TempDir,
         /// tx wasm compilation cache directory
+        #[allow(dead_code)] // never read
         pub tx_cache_dir: TempDir,
     }
 

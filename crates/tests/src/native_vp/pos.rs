@@ -574,7 +574,6 @@ mod tests {
 }
 
 /// Testing helpers
-#[cfg(any(test, feature = "testing"))]
 pub mod testing {
 
     use std::cell::RefCell;
