@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v0.36.1
+
+Namada 0.36.1 is a patch release that updates the Rust toolchain to 1.78.0 fixes a couple minor issues with the last minor release.
+
+### BUG FIXES
+
+- Switch off the "mainnet" feature by default for now.
+  ([\#3287](https://github.com/anoma/namada/pull/3287))
+
+### IMPROVEMENTS
+
+- Updated Rust toolchain to v1.78.0.
+  ([\#3254](https://github.com/anoma/namada/pull/3254))
+
 ## v0.36.0
 
 Namada 0.36.0 is a minor release includes various improvements, refactorings, dependencies clear-up and updates, and a new feature that enables to batch transactions.
