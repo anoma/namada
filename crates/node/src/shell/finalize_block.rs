@@ -660,7 +660,10 @@ where
             }
 
             //FIXME: rename?
-            let (dispatch_args, tx_gas_meter) = match &tx_header.tx_type {
+            let (dispatch_args, tx_gas_meter): (
+                DispatchArgs<'_, WasmCacheRwAccess>,
+                TxGasMeter,
+            ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
                     let tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
@@ -679,8 +682,6 @@ where
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
                             block_proposer: native_block_proposer_address,
-                            vp_wasm_cache: &mut self.vp_wasm_cache,
-                            tx_wasm_cache: &mut self.tx_wasm_cache,
                         },
                         tx_gas_meter,
                     )

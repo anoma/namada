@@ -192,9 +192,6 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         wrapper: &'a WrapperTx,
         tx_bytes: &'a [u8],
         block_proposer: &'a Address,
-        //FIXME: why does a wrapper need the caches? We don't, remove!
-        vp_wasm_cache: &'a mut VpCache<CA>,
-        tx_wasm_cache: &'a mut TxCache<CA>,
     },
 }
 
@@ -333,20 +330,14 @@ where
             wrapper,
             tx_bytes,
             block_proposer,
-            vp_wasm_cache,
-            tx_wasm_cache,
         } => {
             let tx_result = apply_wrapper_tx(
                 //FIXME: actually, do I need to pass ownership?
                 tx.to_owned(),
                 wrapper,
                 tx_bytes,
-                ShellParams {
-                    tx_gas_meter,
-                    state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                },
+                tx_gas_meter,
+                state,
                 Some(block_proposer),
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
@@ -378,40 +369,39 @@ where
 ///  - gas accounting
 // TODO(namada#2597): this must signal to the caller if we need masp fee payment
 // in the first inner tx of the batch
-pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
+pub(crate) fn apply_wrapper_tx<S, D, H>(
     tx: Tx,
+    //FIXME: pass dispatch args?
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
-    mut shell_params: ShellParams<'_, S, D, H, CA>,
+    tx_gas_meter: &RefCell<TxGasMeter>,
+    state: &mut S,
     block_proposer: Option<&Address>,
 ) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
 {
     let wrapper_tx_hash = tx.header_hash();
 
     // Write wrapper tx hash to storage
-    shell_params
-        .state
+    state
         .write_log_mut()
         .write_tx_hash(wrapper_tx_hash)
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
-    charge_fee(wrapper, wrapper_tx_hash, &mut shell_params, block_proposer)?;
+    charge_fee(wrapper, wrapper_tx_hash, state, block_proposer)?;
 
     // Account for gas
-    shell_params
-        .tx_gas_meter
+    tx_gas_meter
         .borrow_mut()
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(TxResult {
-        gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
+        gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
         batch_results: BatchResults::default(),
     })
 }
@@ -420,35 +410,30 @@ where
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<S, D, H, CA>(
+fn charge_fee<S, D, H>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
-    //FIXME: don't need the shell param here anymore, just the state!
-    shell_params: &mut ShellParams<'_, S, D, H, CA>,
+    state: &mut S,
     block_proposer: Option<&Address>,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
 {
     // Charge or check fees before propagating any possible error
     let payment_result = match block_proposer {
-        Some(block_proposer) => transfer_fee(
-            shell_params.state,
-            block_proposer,
-            wrapper,
-            wrapper_tx_hash,
-        ),
+        Some(block_proposer) => {
+            transfer_fee(state, block_proposer, wrapper, wrapper_tx_hash)
+        }
         None => {
-            check_fees(shell_params.state, wrapper)?;
+            check_fees(state, wrapper)?;
             Ok(())
         }
     };
 
     // Commit tx write log even in case of subsequent errors
-    shell_params.state.write_log_mut().commit_tx();
+    state.write_log_mut().commit_tx();
 
     payment_result
 }
