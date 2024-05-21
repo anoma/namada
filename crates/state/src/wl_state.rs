@@ -8,6 +8,7 @@ use namada_core::chain::ChainId;
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::{EmitEvents, EventToEmit};
+use namada_merkle_tree::NO_DIFF_KEY_PREFIX;
 use namada_parameters::EpochDuration;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
@@ -16,9 +17,9 @@ use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
 use crate::in_memory::InMemory;
 use crate::write_log::{StorageModification, WriteLog};
 use crate::{
-    is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, LastBlock,
-    MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result, State,
-    StateRead, StorageHasher, StorageResult, StoreType, DB,
+    is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, KeySeg,
+    LastBlock, MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result,
+    State, StateRead, StorageHasher, StorageResult, StoreType, DB,
     EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
 };
 
@@ -278,10 +279,12 @@ where
         } else {
             // Update the merkle tree
             if is_key_merklized && !persist_diffs {
-                self.in_mem.commit_only_data.add_no_diff_data(key, value);
+                let prefix =
+                    Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
+                self.in_mem.block.tree.update(&prefix.join(key), value)?;
             } else if is_key_merklized {
                 self.in_mem.block.tree.update(key, value)?;
-            }
+            };
         }
         Ok(self.db.batch_write_subspace_val(
             batch,
@@ -304,7 +307,8 @@ where
         let persist_diffs = (self.diff_key_filter)(key);
         // Update the merkle tree
         if is_key_merklized && !persist_diffs {
-            self.in_mem.commit_only_data.delete_no_diff_data(key);
+            let prefix = Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
+            self.in_mem.block.tree.delete(&prefix.join(key))?;
         } else if is_key_merklized {
             self.in_mem.block.tree.delete(key)?;
         }
@@ -723,7 +727,9 @@ where
         } else {
             // Update the merkle tree
             if is_key_merklized && !persist_diffs {
-                self.in_mem.commit_only_data.add_no_diff_data(key, value);
+                let prefix =
+                    Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
+                self.in_mem.block.tree.update(&prefix.join(key), value)?;
             } else if is_key_merklized {
                 self.in_mem.block.tree.update(key, value)?;
             }
@@ -757,7 +763,9 @@ where
             let is_key_merklized = (self.merkle_tree_key_filter)(key);
             let persist_diffs = (self.diff_key_filter)(key);
             if is_key_merklized && !persist_diffs {
-                self.in_mem.commit_only_data.delete_no_diff_data(key);
+                let prefix =
+                    Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
+                self.in_mem.block.tree.delete(&prefix.join(key))?;
             } else if is_key_merklized {
                 self.in_mem.block.tree.delete(key)?;
             }
@@ -876,12 +884,11 @@ where
             .pred_epochs
             .get_epoch(height)
             .unwrap_or_default();
-        let start_height = if store_type == Some(StoreType::CommitData) {
-            // CommitData is stored every height
-            height
-        } else {
+        let start_height = match store_type {
+            // subtree is stored every height
+            Some(st) if st.is_stored_every_block() => height,
             // others are stored at the first height of each epoch
-            match self
+            _ => match self
                 .in_mem
                 .block
                 .pred_epochs
@@ -890,7 +897,7 @@ where
                 Some(BlockHeight(0)) => BlockHeight(1),
                 Some(height) => height,
                 None => BlockHeight(1),
-            }
+            },
         };
         let stores = self
             .db
@@ -994,7 +1001,7 @@ where
             }
         }
 
-        // Restore the base tree and CommitData tree
+        // Restore the base tree and subtrees
         match store_type {
             Some(st) => {
                 // It is enough to get the base tree
@@ -1012,15 +1019,16 @@ where
                 tree = MerkleTree::<H>::new_partial(stores);
             }
             None => {
-                // Get the base and CommitData trees
+                // Get the base and subtrees stored in every block
                 let mut stores = self
                     .db
                     .read_merkle_tree_stores(epoch, height, None)?
                     .ok_or(Error::NoMerkleTree { height })?;
                 let restored_stores = tree.stores();
-                // Set all rebuilt subtrees except for CommitData tree
+                // Set all rebuilt subtrees except for the subtrees stored in
+                // every block
                 for st in StoreType::iter_subtrees() {
-                    if *st != StoreType::CommitData {
+                    if !st.is_stored_every_block() {
                         stores.set_root(st, *restored_stores.root(st));
                         stores.set_store(restored_stores.store(st).to_owned());
                     }

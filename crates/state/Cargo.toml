@@ -50,6 +50,7 @@ proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_merkle_tree = { path = "../merkle_tree", features = ["testing"] }
 
 assert_matches.workspace = true
 chrono.workspace = true

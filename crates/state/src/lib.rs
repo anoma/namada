@@ -676,6 +676,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
+    use merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_core::storage::DbKeySeg;
@@ -977,6 +978,11 @@ mod tests {
 
         // Check merkle tree inclusion of key-val-2 explicitly
         let is_merklized2 = state.in_mem().block.tree.has_key(&key2).unwrap();
+        assert!(!is_merklized2);
+        let no_diff_key2 =
+            Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key()).join(&key2);
+        let is_merklized2 =
+            state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
         assert!(is_merklized2);
 
         // Key3 should be in storage. Confirm by reading from
@@ -989,6 +995,11 @@ mod tests {
 
         // Check explicitly that key-val-3 is not in merkle tree
         let is_merklized3 = state.in_mem().block.tree.has_key(&key3).unwrap();
+        assert!(!is_merklized3);
+        let no_diff_key3 =
+            Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key()).join(&key3);
+        let is_merklized3 =
+            state.in_mem().block.tree.has_key(&no_diff_key3).unwrap();
         assert!(!is_merklized3);
 
         // Check that the proper diffs exist for key-val-1
@@ -1058,8 +1069,10 @@ mod tests {
 
         // Check that the key-vals don't exist in the merkle tree anymore
         let is_merklized1 = state.in_mem().block.tree.has_key(&key1).unwrap();
-        let is_merklized2 = state.in_mem().block.tree.has_key(&key2).unwrap();
-        let is_merklized3 = state.in_mem().block.tree.has_key(&key3).unwrap();
+        let is_merklized2 =
+            state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
+        let is_merklized3 =
+            state.in_mem().block.tree.has_key(&no_diff_key3).unwrap();
         assert!(!is_merklized1 && !is_merklized2 && !is_merklized3);
 
         // Check that key-val-1 diffs are properly updated for blocks 0 and 1

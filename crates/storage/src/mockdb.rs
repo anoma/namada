@@ -238,15 +238,11 @@ impl DB for MockDB {
 
         // Merkle tree
         for st in StoreType::iter() {
-            if *st == StoreType::Base
-                || *st == StoreType::CommitData
-                || is_full_commit
-            {
-                let key_prefix = match st {
-                    StoreType::Base | StoreType::CommitData => {
-                        tree_key_prefix_with_height(st, height)
-                    }
-                    _ => tree_key_prefix_with_epoch(st, epoch),
+            if st.is_stored_every_block() || is_full_commit {
+                let key_prefix = if st.is_stored_every_block() {
+                    tree_key_prefix_with_height(st, height)
+                } else {
+                    tree_key_prefix_with_epoch(st, epoch)
                 };
                 let root_key =
                     format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
@@ -302,11 +298,10 @@ impl DB for MockDB {
             .map(|st| Either::Left(std::iter::once(st)))
             .unwrap_or_else(|| Either::Right(StoreType::iter()));
         for st in store_types {
-            let key_prefix = match st {
-                StoreType::Base | StoreType::CommitData => {
-                    tree_key_prefix_with_height(st, base_height)
-                }
-                _ => tree_key_prefix_with_epoch(st, epoch),
+            let key_prefix = if st.is_stored_every_block() {
+                tree_key_prefix_with_height(st, base_height)
+            } else {
+                tree_key_prefix_with_epoch(st, epoch)
             };
             let root_key =
                 format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
