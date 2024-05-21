@@ -611,7 +611,6 @@ impl BenchShell {
             },
             defaults::albert_keypair().ref_to(),
             0.into(),
-            None,
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
@@ -904,7 +903,6 @@ impl Client for BenchShell {
                     .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
-                            wrapper_changed_keys: Default::default(),
                             batch_results: BatchResults(
                                 [(
                                     tx.first_commitments().unwrap().get_hash(),

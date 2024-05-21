@@ -664,18 +664,6 @@ pub async fn query_protocol_parameters(
         fee_unshielding_gas_limit
     );
 
-    let key = param_storage::get_fee_unshielding_descriptions_limit_key();
-    let fee_unshielding_descriptions_limit: u64 =
-        query_storage_value(context.client(), &key)
-            .await
-            .expect("Parameter should be defined.");
-    display_line!(
-        context.io(),
-        "{:4}Fee unshielding descriptions limit: {:?}",
-        "",
-        fee_unshielding_descriptions_limit
-    );
-
     let key = param_storage::get_gas_cost_key();
     let gas_cost_table: BTreeMap<Address, token::Amount> =
         query_storage_value(context.client(), &key)

@@ -173,7 +173,6 @@ mod tests {
             epochs_per_year: 365,
             max_signatures_per_transaction: 10,
             fee_unshielding_gas_limit: 0,
-            fee_unshielding_descriptions_limit: 0,
             minimum_gas_price: Default::default(),
             is_native_token_transferable: true,
         };

@@ -24,8 +24,6 @@ max_signatures_per_transaction = 15
 max_block_gas = 20000000
 # Fee unshielding gas limit
 fee_unshielding_gas_limit = 20000
-# Fee unshielding descriptions limit
-fee_unshielding_descriptions_limit = 15
 
 # Map of the cost per gas unit for every token allowed for fee payment
 [parameters.minimum_gas_price]

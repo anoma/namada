@@ -63,7 +63,6 @@ mod dry_run_tx {
                 let tx_result = protocol::apply_wrapper_tx(
                     tx.clone(),
                     &wrapper,
-                    None,
                     &request.data,
                     ShellParams::new(
                         &tx_gas_meter,

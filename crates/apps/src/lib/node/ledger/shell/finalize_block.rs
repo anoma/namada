@@ -9,14 +9,13 @@ use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
 use namada::ledger::events::extend::{
-    ComposeEvent, Height, Info, MaspTxBatchRefs, MaspTxBlockIndex,
-    MaspTxWrapper, TxHash,
+    ComposeEvent, Height, Info, MaspTxBatchRefs, MaspTxBlockIndex, TxHash,
 };
 use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::{DispatchError, WrapperArgs};
+use namada::ledger::protocol::DispatchError;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -214,7 +213,7 @@ where
                 continue;
             }
 
-            let (tx_gas_meter, mut wrapper_args) = match &tx_header.tx_type {
+            let (tx_gas_meter, block_proposer) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
                     let gas_limit = match Gas::try_from(wrapper.gas_limit) {
@@ -244,14 +243,7 @@ where
                             );
                         }
                     }
-
-                    (
-                        gas_meter,
-                        Some(WrapperArgs {
-                            block_proposer: &native_block_proposer_address,
-                            is_committed_fee_unshield: false,
-                        }),
-                    )
+                    (gas_meter, Some(&native_block_proposer_address))
                 }
                 TxType::Raw => {
                     tracing::error!(
@@ -334,7 +326,7 @@ where
                 &mut self.state,
                 &mut self.vp_wasm_cache,
                 &mut self.tx_wasm_cache,
-                wrapper_args.as_mut(),
+                block_proposer,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
@@ -353,7 +345,6 @@ where
                     replay_protection_hashes,
                     consumed_gas,
                     height,
-                    wrapper_args,
                 },
                 TxLogs {
                     tx_event: &mut tx_event,
@@ -545,20 +536,6 @@ where
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
     ) {
-        // Check the commitment of the fee unshielding regardless of the
-        // result, it could be committed even in case of errors
-        if tx_data
-            .wrapper_args
-            .as_ref()
-            .map(|args| args.is_committed_fee_unshield)
-            .unwrap_or_default()
-        {
-            tx_logs.tx_event.extend(MaspTxBlockIndex(
-                TxIndex::must_from_usize(tx_data.tx_index),
-            ));
-            tx_logs.tx_event.extend(MaspTxWrapper);
-        }
-
         match dispatch_result {
             Ok(tx_result) => self.handle_inner_tx_results(
                 response,
@@ -676,9 +653,6 @@ where
         }
 
         tx_logs
-            .changed_keys
-            .extend(tx_result.wrapper_changed_keys.iter().cloned());
-        tx_logs
             .tx_event
             .extend(GasUsed(tx_result.gas_used))
             .extend(Info("Check batch for result.".to_string()))
@@ -781,7 +755,6 @@ struct TxData<'tx> {
     replay_protection_hashes: Option<ReplayProtectionHashes>,
     consumed_gas: Gas,
     height: BlockHeight,
-    wrapper_args: Option<WrapperArgs<'tx>>,
 }
 
 struct TxLogs<'finalize> {
@@ -1091,7 +1064,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.set_data(Data::new(
@@ -1133,7 +1105,6 @@ mod test_finalize_block {
                 },
                 sk.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         batch.header.chain_id = shell.chain_id.clone();
         batch.header.atomic = set_atomic;
@@ -2918,7 +2889,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));
@@ -2932,7 +2902,6 @@ mod test_finalize_block {
             },
             keypair_2.ref_to(),
             WRAPPER_GAS_LIMIT.into(),
-            None,
         ))));
         new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
@@ -3027,7 +2996,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));
@@ -3050,7 +3018,6 @@ mod test_finalize_block {
             },
             keypair_2.ref_to(),
             WRAPPER_GAS_LIMIT.into(),
-            None,
         ))));
         new_wrapper.add_section(Section::Authorization(Authorization::new(
             vec![new_wrapper.raw_header_hash()],
@@ -3138,7 +3105,6 @@ mod test_finalize_block {
                     },
                     keypair.ref_to(),
                     0.into(),
-                    None,
                 ))));
             wrapper_tx.header.chain_id = shell.chain_id.clone();
             wrapper_tx.set_data(Data::new(
@@ -3169,7 +3135,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         unsigned_wrapper.header.chain_id = shell.chain_id.clone();
 
@@ -3368,7 +3333,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -3439,7 +3403,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(TestWasms::TxFail.read_bytes(), None));
@@ -3537,7 +3500,6 @@ mod test_finalize_block {
                 },
                 keypair.ref_to(),
                 WRAPPER_GAS_LIMIT.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -3631,7 +3593,6 @@ mod test_finalize_block {
                 },
                 crate::wallet::defaults::albert_keypair().ref_to(),
                 5_000_000.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new(tx_code, None));

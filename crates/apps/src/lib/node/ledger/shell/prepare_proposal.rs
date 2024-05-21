@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 
-use masp_primitives::transaction::Transaction;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::{Gas, TxGasMeter};
@@ -296,10 +295,10 @@ where
         super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
 
         // Check fees and extract the gas limit of this transaction
+        // TODO(namada#2597): check if masp fee payment is required
         match prepare_proposal_fee_check(
             &wrapper,
             tx.header_hash(),
-            protocol::get_fee_unshielding_transaction(&tx, &wrapper),
             block_proposer,
             proposer_local_config,
             &mut ShellParams::new(
@@ -321,7 +320,6 @@ where
 fn prepare_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
-    masp_transaction: Option<Transaction>,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
@@ -337,12 +335,7 @@ where
         shell_params.state,
     )?;
 
-    super::wrapper_fee_check(
-        wrapper,
-        masp_transaction,
-        minimum_gas_price,
-        shell_params,
-    )?;
+    super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
     protocol::transfer_fee(
         shell_params.state,
@@ -491,7 +484,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -766,7 +758,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -809,7 +800,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -845,7 +835,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -889,7 +878,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 GAS_LIMIT_MULTIPLIER.into(),
-                None,
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         let tx_code = Code::new("wasm_code".as_bytes().to_owned(), None);
@@ -910,7 +898,6 @@ mod test_prepare_proposal {
             },
             keypair_2.ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         ))));
         new_wrapper.add_section(Section::Authorization(Authorization::new(
             new_wrapper.sechashes(),
@@ -939,7 +926,6 @@ mod test_prepare_proposal {
                 },
                 keypair.ref_to(),
                 0.into(),
-                None,
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
         wrapper_tx.header.expiration = Some(DateTimeUtc::default());
@@ -987,7 +973,6 @@ mod test_prepare_proposal {
             },
             keypair.ref_to(),
             (block_gas_limit + 1).into(),
-            None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1025,7 +1010,6 @@ mod test_prepare_proposal {
             },
             keypair.ref_to(),
             0.into(),
-            None,
         );
 
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1079,7 +1063,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
 
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1126,7 +1109,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
 
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
@@ -1178,7 +1160,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1217,7 +1198,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1257,7 +1237,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
@@ -1297,7 +1276,6 @@ mod test_prepare_proposal {
             },
             crate::wallet::defaults::albert_keypair().ref_to(),
             GAS_LIMIT_MULTIPLIER.into(),
-            None,
         );
         let mut wrapper_tx = Tx::from_type(TxType::Wrapper(Box::new(wrapper)));
         wrapper_tx.header.chain_id = shell.chain_id.clone();

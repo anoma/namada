@@ -222,9 +222,6 @@ pub enum TxSubmitError {
     /// No Balance found for token
     #[error("{0}")]
     MaspError(String),
-    /// Error in the fee unshielding transaction
-    #[error("Error in fee unshielding: {0}")]
-    FeeUnshieldingError(String),
     /// Encoding transaction failure
     #[error("Encoding tx data, {0}, shouldn't fail")]
     EncodeTxFailure(String),

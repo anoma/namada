@@ -2017,8 +2017,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub wrapper_fee_payer: Option<C::PublicKey>,
     /// The token in which the fee is being paid
     pub fee_token: C::AddrOrNativeToken,
-    /// The optional spending key for fee unshielding
-    pub fee_unshield: Option<C::TransferSource>,
     /// The max amount of gas used to process tx
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
@@ -2125,13 +2123,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     fn fee_token(self, fee_token: C::Address) -> Self {
         self.tx(|x| Tx {
             fee_token: fee_token.into(),
-            ..x
-        })
-    }
-    /// The optional spending key for fee unshielding
-    fn fee_unshield(self, fee_unshield: C::TransferSource) -> Self {
-        self.tx(|x| Tx {
-            fee_unshield: Some(fee_unshield),
             ..x
         })
     }
