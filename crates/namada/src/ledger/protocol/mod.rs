@@ -16,7 +16,7 @@ use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-use namada_tx::data::protocol::ProtocolTxType;
+use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
     BatchResults, BatchedTxResult, TxResult, TxType, VpStatusFlags, VpsResult,
     WrapperTx,
@@ -178,30 +178,49 @@ impl From<Error> for DispatchError {
     }
 }
 
+/// Arguments for transactions' execution
+pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
+    //FIXME: do we need thide header and the wrapper one or should we get them from the tx itself?
+    Protocol(&'a ProtocolTx),
+    Raw {
+        tx_index: TxIndex,
+        wrapper_tx_result: Option<TxResult<Error>>,
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
+    Wrapper {
+        wrapper: &'a WrapperTx,
+        tx_bytes: &'a [u8],
+        block_proposer: &'a Address,
+        //FIXME: why does a wrapper need the caches? We don't, remove!
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
+}
+
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
-#[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: &Tx,
-    //FIXME: some params are only needed for some tx types, should also pass the txtype with the associated data here? Maybe yes
-    tx_bytes: &'a [u8],
-    tx_index: TxIndex,
+    //FIXME: rename?
+    dispatch_args: DispatchArgs<CA>,
+    //FIXME: try to move this into the args
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
-    block_proposer: Option<&Address>,
-    wrapper_tx_result: Option<TxResult<Error>>,
 ) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    match tx.header().tx_type {
-        // Raw trasaction type is allowed only for governance proposals
-        TxType::Raw => {
+    match dispatch_args {
+        DispatchArgs::Raw {
+            tx_index,
+            wrapper_tx_result,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        } => {
             if let Some(mut tx_result) = wrapper_tx_result {
                 // Replay protection check on the batch
                 let tx_hash = tx.raw_header_hash();
@@ -272,11 +291,11 @@ where
 
                 Ok(tx_result)
             } else {
-                // No bundles of governance transactions, just take the first one
+                // Governance proposal. We don't allow tx batches in this case, just take the first one
                 let cmt =
                     tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
                 let batched_tx_result = apply_wasm_tx(
-                    BatchedTxRef { tx: &tx, cmt },
+                    tx.batch_ref_tx(cmt),
                     &tx_index,
                     ShellParams {
                         tx_gas_meter,
@@ -295,7 +314,7 @@ where
                 })
             }
         }
-        TxType::Protocol(protocol_tx) => {
+        DispatchArgs::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
             let batched_tx_result =
@@ -310,9 +329,16 @@ where
                 ..Default::default()
             })
         }
-        TxType::Wrapper(ref wrapper) => {
+        DispatchArgs::Wrapper {
+            wrapper,
+            tx_bytes,
+            block_proposer,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        } => {
             let tx_result = apply_wrapper_tx(
-                tx.clone(),
+                //FIXME: actually, do I need to pass ownership?
+                tx.to_owned(),
                 wrapper,
                 tx_bytes,
                 ShellParams {
@@ -321,7 +347,7 @@ where
                     vp_wasm_cache,
                     tx_wasm_cache,
                 },
-                block_proposer,
+                Some(block_proposer),
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
 
@@ -397,6 +423,7 @@ where
 fn charge_fee<S, D, H, CA>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
+    //FIXME: don't need the shell param here anymore, just the state!
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
 ) -> Result<()>

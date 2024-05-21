@@ -15,7 +15,7 @@ use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::DispatchError;
+use namada::ledger::protocol::{DispatchArgs, DispatchError};
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -659,37 +659,46 @@ where
                 continue;
             }
 
-            let (tx_gas_meter, block_proposer) =
-                match &tx_header.tx_type {
-                    TxType::Wrapper(wrapper) => {
-                        stats.increment_wrapper_txs();
-                        let gas_meter = TxGasMeter::new(wrapper.gas_limit);
-                        for cmt in tx.commitments() {
-                            if let Some(code_sec) = tx
-                                .get_section(cmt.code_sechash())
-                                .and_then(|x| Section::code_sec(x.as_ref()))
-                            {
-                                stats.increment_tx_type(
-                                    code_sec.code.hash().to_string(),
-                                );
-                            }
+            //FIXME: rename?
+            let (dispatch_args, tx_gas_meter) = match &tx_header.tx_type {
+                TxType::Wrapper(wrapper) => {
+                    stats.increment_wrapper_txs();
+                    let tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+                    for cmt in tx.commitments() {
+                        if let Some(code_sec) = tx
+                            .get_section(cmt.code_sechash())
+                            .and_then(|x| Section::code_sec(x.as_ref()))
+                        {
+                            stats.increment_tx_type(
+                                code_sec.code.hash().to_string(),
+                            );
                         }
-                        (gas_meter, Some(native_block_proposer_address))
                     }
-                    TxType::Raw => {
-                        tracing::error!(
-                            "Internal logic error: FinalizeBlock received a \
+                    (
+                        DispatchArgs::Wrapper {
+                            wrapper,
+                            tx_bytes: processed_tx.tx.as_ref(),
+                            block_proposer: native_block_proposer_address,
+                            vp_wasm_cache: &mut self.vp_wasm_cache,
+                            tx_wasm_cache: &mut self.tx_wasm_cache,
+                        },
+                        tx_gas_meter,
+                    )
+                }
+                TxType::Raw => {
+                    tracing::error!(
+                        "Internal logic error: FinalizeBlock received a \
                          TxType::Raw transaction"
-                        );
-                        continue;
-                    }
-                    TxType::Protocol(protocol_tx) => match protocol_tx.tx {
+                    );
+                    continue;
+                }
+                TxType::Protocol(protocol_tx) => {
+                    match protocol_tx.tx {
                         ProtocolTxType::BridgePoolVext
                         | ProtocolTxType::BridgePool
                         | ProtocolTxType::ValSetUpdateVext
-                        | ProtocolTxType::ValidatorSetUpdate => {
-                            (TxGasMeter::new_from_sub_limit(0.into()), None)
-                        }
+                        | ProtocolTxType::ValidatorSetUpdate => (),
+
                         ProtocolTxType::EthEventsVext => {
                             let ext =
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
@@ -706,7 +715,6 @@ where
                                     self.mode.dequeue_eth_event(event);
                                 }
                             }
-                            (TxGasMeter::new_from_sub_limit(0.into()), None)
                         }
                         ProtocolTxType::EthereumEvents => {
                             let digest =
@@ -729,26 +737,25 @@ where
                                     }
                                 }
                             }
-                            (TxGasMeter::new_from_sub_limit(0.into()), None)
                         }
-                    },
-                };
-            let tx_gas_meter = RefCell::new(tx_gas_meter);
+                    }
+                    (
+                        DispatchArgs::Protocol(protocol_tx),
+                        TxGasMeter::new_from_sub_limit(0.into()),
+                    )
+                }
+            };
             let tx_event = new_tx_event(&tx, height.0);
             let is_atomic_batch = tx.header.atomic;
             let commitments_len = tx.commitments().len() as u64;
             let tx_hash = tx.header_hash();
+            let tx_gas_meter = RefCell::new(tx_gas_meter);
 
             let dispatch_result = protocol::dispatch_tx(
                 &tx,
-                processed_tx.tx.as_ref(),
-                TxIndex::must_from_usize(tx_index),
+                dispatch_args,
                 &tx_gas_meter,
                 &mut self.state,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                block_proposer,
-                None,
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
@@ -813,15 +820,14 @@ where
             let tx_gas_meter = RefCell::new(tx_gas_meter);
             let dispatch_result = protocol::dispatch_tx(
                 &tx,
-                // not needed here for gas computation
-                &[],
-                TxIndex::must_from_usize(tx_index),
+                DispatchArgs::Raw {
+                    tx_index: TxIndex::must_from_usize(tx_index),
+                    wrapper_tx_result: Some(wrapper_tx_result),
+                    vp_wasm_cache: &mut self.vp_wasm_cache,
+                    tx_wasm_cache: &mut self.tx_wasm_cache,
+                },
                 &tx_gas_meter,
                 &mut self.state,
-                &mut self.vp_wasm_cache,
-                &mut self.tx_wasm_cache,
-                None,
-                Some(wrapper_tx_result),
             );
             let tx_gas_meter = tx_gas_meter.into_inner();
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();

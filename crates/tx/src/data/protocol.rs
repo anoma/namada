@@ -56,6 +56,7 @@ impl ProtocolTx {
 }
 
 #[derive(
+    Copy,
     Clone,
     Debug,
     BorshSerialize,
