@@ -18,6 +18,9 @@ pub const TX_APPLIED_SUCCESS: &str = "was successfully applied";
 /// Inner transaction rejected by VP(s).
 pub const TX_REJECTED: &str = "was rejected by VPs";
 
+/// Inner transaction failed in execution of transfer with insufficient balance
+pub const TX_INSUFFICIENT_BALANCE: &str = "insufficient balance";
+
 /// Inner transaction failed in execution (no VPs ran).
 pub const TX_FAILED: &str = "failed with error";
 
