@@ -12,9 +12,9 @@ use borsh_ext::BorshSerializeExt;
 use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
-use masp_primitives::consensus::MainNetwork;
+use masp_primitives::consensus::MainNetwork as Network;
 #[cfg(not(feature = "mainnet"))]
-use masp_primitives::consensus::TestNetwork;
+use masp_primitives::consensus::TestNetwork as Network;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::ff::PrimeField;
 use masp_primitives::group::GroupEncoding;
@@ -90,10 +90,7 @@ pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
 
 /// The network to use for MASP
-#[cfg(feature = "mainnet")]
-const NETWORK: MainNetwork = MainNetwork;
-#[cfg(not(feature = "mainnet"))]
-const NETWORK: TestNetwork = TestNetwork;
+const NETWORK: Network = Network;
 
 // TODO these could be exported from masp_proof crate
 /// Spend circuit name
@@ -1655,7 +1652,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 u32::MAX - 20
             }
         };
-        let mut builder = Builder::<TestNetwork, _>::new(
+        let mut builder = Builder::<Network, _>::new(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
@@ -2674,7 +2671,7 @@ pub mod testing {
             value: u64,
         )(
             address in arb_transparent_address(),
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
@@ -2689,7 +2686,7 @@ pub mod testing {
                 .to_payment_address(div)
                 .expect("a PaymentAddress");
 
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -2835,7 +2832,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -2846,10 +2843,10 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -2902,7 +2899,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             txins in assets
                 .iter()
                 .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
@@ -2913,10 +2910,10 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -2945,7 +2942,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -2956,10 +2953,10 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
