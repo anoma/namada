@@ -1,5 +1,69 @@
 # CHANGELOG
 
+## v0.36.0
+
+Namada 0.36.0 is a minor release includes various improvements, refactorings, dependencies clear-up and updates, and a new feature that enables to batch transactions.
+
+### BUG FIXES
+
+- Light SDK objects must be clone-able.
+  ([\#2817](https://github.com/anoma/namada/pull/2817))
+- Harden the implementation of `BorshDeserialize` on `ProposalBytes`.
+  Moreover, avoid using magic numbers when configuring CometBFT.
+  ([\#3220](https://github.com/anoma/namada/pull/3220))
+- Default to consensus minimum gas price for some token
+  when the node-local value set by a validator is lower.
+  ([\#3228](https://github.com/anoma/namada/pull/3228))
+- Do not submit a tx to reveal a PK when `--force` flag is used with a
+  transaction. ([\#3245](https://github.com/anoma/namada/pull/3245))
+
+### FEATURES
+
+- Introduced transaction batches.
+  ([\#1356](https://github.com/anoma/namada/pull/1356))
+
+### IMPROVEMENTS
+
+- Upgrade docker base images to Debian 12 (Bookworm) ([#2975](https://github.com/anoma/namada/pull/2975)).
+- Make the internals of ValueSum (in the masp crate) private so we know that invariants of representation are maintained. ([\#3195](https://github.com/anoma/namada/pull/3195))
+- Clean up init/join network CLI commands and the `gen_localnet.py` script.
+  ([\#3196](https://github.com/anoma/namada/pull/3196))
+- Disallow use of floats in WASM.
+  ([\#3209](https://github.com/anoma/namada/pull/3209))
+- Sanitized unchecked arithmetics and conversions in the codebase.
+  ([\#3214](https://github.com/anoma/namada/pull/3214))
+- Removed fee unshielding from wrapper transactions.
+  ([\#3217](https://github.com/anoma/namada/pull/3217))
+- Dependency cleanup: remove unused ones, upgrade those with
+  security vulnerabilities, reduce the number of transitive deps.
+  ([\#3218](https://github.com/anoma/namada/pull/3218))
+- Bump tendermint-rs, tower-abci and ibc-rs
+  ([\#3225](https://github.com/anoma/namada/issues/3225))
+- Extends claps Arg and Command types with namada traits. These add configurable line wrapping and 
+  hyphenation policies. Also sets help to always be on the next line, but this is easily changeable later.
+  ([\#3226](https://github.com/anoma/namada/issues/3226))
+- Removed the remaining references to ferveo.
+  ([\#3241](https://github.com/anoma/namada/pull/3241))
+- Lint for left-over debug and print statements.
+  ([\#3257](https://github.com/anoma/namada/pull/3257))
+- Remove unused WASM memory export.
+  ([\#3258](https://github.com/anoma/namada/pull/3258))
+- Separated the apps library code from binaries code into a new crate
+  `namada_apps_lib`. ([\#3259](https://github.com/anoma/namada/pull/3259))
+- Updated the masp vp to accept multiple transfers in a single transaction.
+  ([\#3264](https://github.com/anoma/namada/pull/3264))
+- Separated the node library code from other apps lib code into a new crate
+  `namada_node`. ([\#3265](https://github.com/anoma/namada/pull/3265))
+- Refactor wasm host references code.
+  ([\#3273](https://github.com/anoma/namada/pull/3273))
+
+### MISCELLANEOUS
+
+- Emit CLI warning log msg on non 64-bit node hardware.
+  ([\#3215](https://github.com/anoma/namada/pull/3215))
+- Update tower-abci to fix windows build.
+  ([\#3216](https://github.com/anoma/namada/pull/3216))
+
 ## v0.35.1
 
 Namada 0.35.1 is a patch release that fixes a couple build issues with the last minor release.
