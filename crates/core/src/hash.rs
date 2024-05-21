@@ -1,6 +1,7 @@
 //! Types for working with 32 bytes hashes.
 
 use std::fmt::{self, Display};
+use std::ops::Add;
 use std::str::FromStr;
 
 use arse_merkle_tree::traits::Hasher;
@@ -153,6 +154,23 @@ impl Hash {
     /// Return the inner pointer to the hash data.
     pub const fn as_ptr(&self) -> *const u8 {
         self.0.as_ptr()
+    }
+}
+
+impl<'a> Add<&'a Hash> for Hash {
+    type Output = Self;
+
+    fn add(self, rhs: &'a Hash) -> Self::Output {
+        let mut hasher = Sha256::default();
+        if self.is_zero() {
+            *rhs
+        } else if rhs.is_zero() {
+            self
+        } else {
+            hasher.update(self.as_ref());
+            hasher.update(rhs.as_ref());
+            Self(hasher.finalize().into())
+        }
     }
 }
 

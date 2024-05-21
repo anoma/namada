@@ -1021,6 +1021,12 @@ where
                             // Temp storage changes must never be committed
                             Error::AccessForbidden((*internal_addr).clone()),
                         ),
+                        InternalAddress::ReplayProtection => Err(
+                            // Replay protection entries should never be
+                            // written to
+                            // via transactions
+                            Error::AccessForbidden((*internal_addr).clone()),
+                        ),
                     }
                 }
             };
