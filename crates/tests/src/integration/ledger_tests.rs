@@ -26,7 +26,9 @@ use crate::integration::helpers::{
     find_address, prepare_steward_commission_update_data,
 };
 use crate::integration::setup;
-use crate::strings::{TX_APPLIED_SUCCESS, TX_REJECTED};
+use crate::strings::{
+    TX_APPLIED_SUCCESS, TX_INSUFFICIENT_BALANCE, TX_REJECTED,
+};
 use crate::tx::tx_host_env::gov_storage::proposal::{
     PGFInternalTarget, PGFTarget,
 };
@@ -397,7 +399,7 @@ fn invalid_transactions() -> Result<()> {
         &validator_one_rpc,
     ];
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
-    assert!(captured.contains(TX_REJECTED));
+    assert!(captured.contains(TX_INSUFFICIENT_BALANCE));
 
     Ok(())
 }

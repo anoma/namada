@@ -203,9 +203,7 @@ pub async fn submit_reveal_aux(
             .find_public_key_by_pkh(pkh)
             .map_err(|e| error::Error::Other(e.to_string()))?;
 
-        if tx::is_reveal_pk_needed(context.client(), address, args.force)
-            .await?
-        {
+        if tx::is_reveal_pk_needed(context.client(), address).await? {
             display_line!(
                 context.io(),
                 "Submitting a tx to reveal the public key for address \
