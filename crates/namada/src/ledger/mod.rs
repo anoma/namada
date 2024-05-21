@@ -61,7 +61,7 @@ mod dry_run_tx {
                     Gas::try_from(wrapper.gas_limit).into_storage_result()?;
                 let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
                 let tx_result = protocol::apply_wrapper_tx(
-                    tx.clone(),
+                    &tx,
                     &wrapper,
                     &request.data,
                     &tx_gas_meter,
@@ -252,8 +252,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client(
-    ) -> namada_state::StorageResult<()> {
+    async fn test_shell_queries_router_with_client()
+    -> namada_state::StorageResult<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code
@@ -287,15 +287,17 @@ mod test {
             .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
-        assert!(result
-            .data
-            .batch_results
-            .0
-            .get(&cmt.get_hash())
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .is_accepted());
+        assert!(
+            result
+                .data
+                .batch_results
+                .0
+                .get(&cmt.get_hash())
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_accepted()
+        );
 
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();

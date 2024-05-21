@@ -18,7 +18,7 @@ use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, TxResult, TxType, VpStatusFlags, VpsResult,
+    BatchResults, BatchedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx};
@@ -180,17 +180,27 @@ impl From<Error> for DispatchError {
 
 /// Arguments for transactions' execution
 pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
-    //FIXME: do we need thide header and the wrapper one or should we get them from the tx itself?
+    /// Protocoli tx data
     Protocol(&'a ProtocolTx),
+    /// Raw tx data
     Raw {
+        /// The tx index
         tx_index: TxIndex,
+        /// The result of the corresponding wrapper tx (missing if governance
+        /// transaction)
         wrapper_tx_result: Option<TxResult<Error>>,
+        /// Vp cache
         vp_wasm_cache: &'a mut VpCache<CA>,
+        /// Tx cache
         tx_wasm_cache: &'a mut TxCache<CA>,
     },
+    /// Wrapper tx data
     Wrapper {
+        /// The wrapper header
         wrapper: &'a WrapperTx,
+        /// The transaction bytes for gas accounting
         tx_bytes: &'a [u8],
+        /// The block proposer
         block_proposer: &'a Address,
     },
 }
@@ -200,9 +210,7 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
 /// environment, in which case validity predicates will be bypassed.
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: &Tx,
-    //FIXME: rename?
     dispatch_args: DispatchArgs<CA>,
-    //FIXME: try to move this into the args
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
 ) -> std::result::Result<TxResult<Error>, DispatchError>
@@ -230,8 +238,8 @@ where
                     });
                 }
 
-                // TODO(namada#2597): handle masp fee payment in the first inner tx
-                // if necessary
+                // TODO(namada#2597): handle masp fee payment in the first inner
+                // tx if necessary
                 for cmt in tx.commitments() {
                     match apply_wasm_tx(
                         tx.batch_ref_tx(cmt),
@@ -244,7 +252,8 @@ where
                         },
                     ) {
                         Err(Error::GasError(ref msg)) => {
-                            // Gas error aborts the execution of the entire batch
+                            // Gas error aborts the execution of the entire
+                            // batch
                             tx_result.gas_used =
                                 tx_gas_meter.borrow().get_tx_consumed_gas();
                             tx_result.batch_results.0.insert(
@@ -272,8 +281,8 @@ where
                                 state.write_log_mut().drop_tx();
 
                                 if tx.header.atomic {
-                                    // Stop the execution of an atomic batch at the
-                                    // first failed transaction
+                                    // Stop the execution of an atomic batch at
+                                    // the first failed transaction
                                     return Err(DispatchError {
                                         error: Error::FailingAtomicBatch(
                                             cmt.get_hash(),
@@ -288,7 +297,8 @@ where
 
                 Ok(tx_result)
             } else {
-                // Governance proposal. We don't allow tx batches in this case, just take the first one
+                // Governance proposal. We don't allow tx batches in this case,
+                // just take the first one
                 let cmt =
                     tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
                 let batched_tx_result = apply_wasm_tx(
@@ -332,8 +342,7 @@ where
             block_proposer,
         } => {
             let tx_result = apply_wrapper_tx(
-                //FIXME: actually, do I need to pass ownership?
-                tx.to_owned(),
+                tx,
                 wrapper,
                 tx_bytes,
                 tx_gas_meter,
@@ -370,8 +379,7 @@ where
 // TODO(namada#2597): this must signal to the caller if we need masp fee payment
 // in the first inner tx of the batch
 pub(crate) fn apply_wrapper_tx<S, D, H>(
-    tx: Tx,
-    //FIXME: pass dispatch args?
+    tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     tx_gas_meter: &RefCell<TxGasMeter>,
@@ -1291,7 +1299,7 @@ mod tests {
 
         // "execute" a dummy tx, by manually performing its state changes
         let (dummy_tx, changed_keys, verifiers) = {
-            let mut tx = Tx::from_type(TxType::Raw);
+            let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
             tx.set_code(namada_tx::Code::new(vec![], None));
             tx.set_data(namada_tx::Data::new(vec![]));
 

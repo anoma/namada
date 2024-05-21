@@ -142,7 +142,9 @@ where
                      proposer from tendermint raw hash",
                 )
         };
-        //FIXME: need uni test on fee pyament when inner txs touch balance of fee payer (also run this test on the old version with the bug to check that the bug was indeed there)
+        // FIXME: need uni test on fee pyament when inner txs touch balance of
+        // fee payer (also run this test on the old version with the bug to
+        // check that the bug was indeed there)
 
         // Tracks the accepted transactions
         self.state.in_mem_mut().block.results = BlockResults::default();
@@ -341,7 +343,9 @@ where
     }
 
     // Evaluate the result of a transaction. Commit or drop the storage changes,
-    // update stats and event, manage replay protection. For successful wrapper transactions return the relevant data and delay the evaluation after the batch execution
+    // update stats and event, manage replay protection. For successful wrapper
+    // transactions return the relevant data and delay the evaluation after the
+    // batch execution
     fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
@@ -578,7 +582,9 @@ where
         }
     }
 
-    // Get the transactions from the consensus engine, preprocess and execute them. Return the cache of successful wrapper transactions later used when executing the inner txs.
+    // Get the transactions from the consensus engine, preprocess and execute
+    // them. Return the cache of successful wrapper transactions later used when
+    // executing the inner txs.
     fn retrieve_and_execute_transactions(
         &mut self,
         native_block_proposer_address: &Address,
@@ -659,7 +665,6 @@ where
                 continue;
             }
 
-            //FIXME: rename?
             let (dispatch_args, tx_gas_meter): (
                 DispatchArgs<'_, WasmCacheRwAccess>,
                 TxGasMeter,
@@ -865,7 +870,8 @@ struct ExecutionArgs<'finalize> {
     height: BlockHeight,
 }
 
-// Caches the execution of a wrapper transaction to be used when later executing the inner batch
+// Caches the execution of a wrapper transaction to be used when later executing
+// the inner batch
 struct WrapperCache {
     tx: Tx,
     tx_index: usize,
