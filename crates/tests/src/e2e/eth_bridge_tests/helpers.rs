@@ -16,7 +16,7 @@ use namada::ledger::eth_bridge::{
     MinimumConfirmations, UpgradeableContract,
 };
 use namada::token;
-use namada_apps::config::ethereum_bridge;
+use namada_apps_lib::config::ethereum_bridge;
 
 use crate::e2e::helpers::{
     get_actor_rpc, rpc_client_do, strip_trailing_newline,

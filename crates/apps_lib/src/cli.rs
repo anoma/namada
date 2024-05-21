@@ -22,7 +22,7 @@ pub use utils::{safe_exit, Cmd};
 pub use self::context::Context;
 use crate::cli::api::CliIo;
 
-include!("../../version.rs");
+include!("../version.rs");
 
 const APP_NAME: &str = "Namada";
 

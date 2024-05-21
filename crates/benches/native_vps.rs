@@ -56,13 +56,13 @@ use namada::sdk::masp_proofs::sapling::SaplingVerificationContext;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada::token::{Amount, Transfer};
 use namada::tx::{BatchedTx, Code, Section, Tx};
-use namada_apps::bench_utils::{
+use namada_apps_lib::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
-use namada_apps::wallet::defaults;
+use namada_apps_lib::wallet::defaults;
 
 fn governance(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_governance");

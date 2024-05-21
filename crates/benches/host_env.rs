@@ -6,12 +6,12 @@ use namada::ledger::storage::DB;
 use namada::token::{Amount, Transfer};
 use namada::tx::Authorization;
 use namada::vm::wasm::TxCache;
-use namada_apps::bench_utils::{
+use namada_apps_lib::bench_utils::{
     BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
     TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM, WASM_DIR,
 };
-use namada_apps::wallet::defaults;
-use namada_apps::wasm_loader;
+use namada_apps_lib::wallet::defaults;
+use namada_apps_lib::wasm_loader;
 
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction

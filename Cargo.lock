@@ -4467,6 +4467,31 @@ dependencies = [
 name = "namada_apps"
 version = "0.35.1"
 dependencies = [
+ "assert_matches",
+ "bit-set",
+ "bytes",
+ "color-eyre",
+ "eyre",
+ "git2",
+ "namada",
+ "namada_apps_lib",
+ "namada_test_utils",
+ "proptest",
+ "test-log",
+ "tokio",
+ "tokio-test",
+ "toml 0.5.11",
+ "tracing",
+ "tracing-subscriber",
+ "warp",
+ "winapi",
+ "zeroize",
+]
+
+[[package]]
+name = "namada_apps_lib"
+version = "0.35.1"
+dependencies = [
  "ark-serialize",
  "ark-std",
  "assert_matches",
@@ -4568,7 +4593,7 @@ dependencies = [
  "lazy_static",
  "masp_primitives",
  "namada",
- "namada_apps",
+ "namada_apps_lib",
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
@@ -4709,7 +4734,7 @@ dependencies = [
  "borsh 1.2.1",
  "data-encoding",
  "masp_proofs",
- "namada_apps",
+ "namada_apps_lib",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -5080,7 +5105,7 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "namada",
- "namada_apps",
+ "namada_apps_lib",
  "namada_core",
  "namada_sdk",
  "namada_test_utils",

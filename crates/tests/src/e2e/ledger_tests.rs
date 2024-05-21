@@ -22,10 +22,10 @@ use color_eyre::owo_colors::OwoColorize;
 use namada::core::address::Address;
 use namada::core::storage::Epoch;
 use namada::token;
-use namada_apps::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps::config::ethereum_bridge;
-use namada_apps::config::utils::convert_tm_addr_to_socket_addr;
-use namada_apps::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
+use namada_apps_lib::config::ethereum_bridge;
+use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
+use namada_apps_lib::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_test_utils::TestWasms;
@@ -1067,8 +1067,8 @@ fn double_signing_gets_slashed() -> Result<()> {
     use std::str::FromStr;
 
     use namada::core::key::{self, ed25519, SigScheme};
-    use namada_apps::client;
-    use namada_apps::config::Config;
+    use namada_apps_lib::client;
+    use namada_apps_lib::config::Config;
 
     let mut pipeline_len = 0;
     let mut unbonding_len = 0;
@@ -1136,7 +1136,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         .join(test.net.chain_id.as_str())
         .join(client::utils::NET_ACCOUNTS_DIR)
         .join("validator-0-copy")
-        .join(namada_apps::config::DEFAULT_BASE_DIR);
+        .join(namada_apps_lib::config::DEFAULT_BASE_DIR);
     fs_extra::dir::copy(
         validator_0_base_dir,
         &validator_0_base_dir_copy,
@@ -1867,7 +1867,7 @@ fn change_consensus_key() -> Result<()> {
         "Setting up the new validator consensus key in CometBFT...".blue()
     );
     let chain_dir = test.get_chain_dir(Who::Validator(0));
-    let mut wallet = namada_apps::wallet::load(&chain_dir).unwrap();
+    let mut wallet = namada_apps_lib::wallet::load(&chain_dir).unwrap();
 
     // =========================================================================
     // 4. Configure validator-0 node with the new key
@@ -1877,7 +1877,7 @@ fn change_consensus_key() -> Result<()> {
     let new_sk = wallet.find_secret_key(new_key_alias, None).unwrap();
     // Write the key to CometBFT dir
     let cometbft_dir = test.get_cometbft_home(Who::Validator(0));
-    namada_apps::node::ledger::tendermint_node::write_validator_key(
+    namada_apps_lib::node::ledger::tendermint_node::write_validator_key(
         cometbft_dir,
         &new_sk,
     )
@@ -2164,7 +2164,7 @@ fn test_sync_chain() -> Result<()> {
     }
     // Add seed nodes if any given
     if let Ok(seed_nodes) = std::env::var(ENV_VAR_NAMADA_SEED_NODES) {
-        let mut config = namada_apps::config::Config::load(
+        let mut config = namada_apps_lib::config::Config::load(
             base_dir,
             &test.net.chain_id,
             None,

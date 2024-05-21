@@ -17,8 +17,8 @@ mod test_bridge_pool_vp {
     use namada::gas::VpGasMeter;
     use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
     use namada::tx::Tx;
-    use namada_apps::wallet::defaults::{albert_address, bertha_address};
-    use namada_apps::wasm_loader;
+    use namada_apps_lib::wallet::defaults::{albert_address, bertha_address};
+    use namada_apps_lib::wasm_loader;
     use namada_sdk::eth_bridge::{
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,

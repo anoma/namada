@@ -18,7 +18,7 @@ mainnet = [
   "namada/mainnet",
 ]
 wasm-runtime = ["namada/wasm-runtime"]
-integration = ["namada_apps/integration"]
+integration = ["namada_apps_lib/integration"]
 migrations = [
   "namada/migrations",
   "namada_sdk/migrations",
@@ -27,7 +27,7 @@ migrations = [
 namada-eth-bridge = [
   "namada/namada-eth-bridge",
   "namada_sdk/namada-eth-bridge",
-  "namada_apps/namada-eth-bridge",
+  "namada_apps_lib/namada-eth-bridge",
 ]
 
 [dependencies]
@@ -60,7 +60,7 @@ tracing-subscriber.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-namada_apps = {path = "../apps", features = ["testing"]}
+namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
 namada_vm_env = {path = "../vm_env"}
 assert_cmd.workspace = true
 assert_matches.workspace = true
