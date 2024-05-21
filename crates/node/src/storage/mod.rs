@@ -79,7 +79,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::shell::is_merklized_storage_key;
+    use crate::shell::{is_key_diff_storable, is_merklized_storage_key};
 
     #[test]
     fn test_crud_value() {
@@ -92,6 +92,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
@@ -144,6 +145,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
         state
             .in_mem_mut()
@@ -206,6 +208,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let (loaded_root, height) =
             state.in_mem().get_state().expect("no block exists");
@@ -227,6 +230,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         let mut expected = Vec::new();
@@ -271,6 +275,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
         state
             .in_mem_mut()
@@ -343,6 +348,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         // 1. For each `blocks_write_value`, write the current block height if
@@ -437,6 +443,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         let num_keys = 5;
@@ -559,6 +566,7 @@ mod tests {
             address::testing::nam(),
             Some(5),
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let new_epoch_start = BlockHeight(1);
         let signed_root_key = bridge_pool::get_signed_root_key();
@@ -681,6 +689,7 @@ mod tests {
             address::testing::nam(),
             None,
             is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         let prefix = storage::Key::parse("prefix").unwrap();
@@ -788,6 +797,7 @@ mod tests {
             address::testing::nam(),
             None,
             // Only merkelize and persist diffs for `test_key_1`
+            |key: &Key| -> bool { key == &test_key_1() },
             |key: &Key| -> bool { key == &test_key_1() },
         );
         // Start the first block

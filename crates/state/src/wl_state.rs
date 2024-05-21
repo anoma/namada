@@ -46,6 +46,8 @@ where
     pub(crate) in_mem: InMemory<H>,
     /// Static merkle tree storage key filter
     pub merkle_tree_key_filter: fn(&storage::Key) -> bool,
+    /// Static diff storage key filter
+    pub diff_key_filter: fn(&storage::Key) -> bool,
 }
 
 /// State with a temporary write log. This is used for dry-running txs and ABCI
@@ -102,6 +104,7 @@ where
         native_token: Address,
         storage_read_past_height_limit: Option<u64>,
         merkle_tree_key_filter: fn(&storage::Key) -> bool,
+        diff_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
         let write_log = WriteLog::default();
         let db = D::open(db_path, cache);
@@ -115,6 +118,7 @@ where
             db,
             in_mem,
             merkle_tree_key_filter,
+            diff_key_filter,
         });
         state.load_last_state();
         state
@@ -264,6 +268,7 @@ where
     ) -> Result<i64> {
         let value = value.as_ref();
         let is_key_merklized = (self.merkle_tree_key_filter)(key);
+        let persist_diffs = (self.diff_key_filter)(key);
 
         if is_pending_transfer_key(key) {
             // The tree of the bridge pool stores the current height for the
@@ -272,7 +277,9 @@ where
             self.in_mem.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if is_key_merklized {
+            if is_key_merklized && !persist_diffs {
+                self.in_mem.commit_only_data.add_no_diff_data(key, value);
+            } else if is_key_merklized {
                 self.in_mem.block.tree.update(key, value)?;
             }
         }
@@ -281,7 +288,7 @@ where
             self.in_mem.block.height,
             key,
             value,
-            is_key_merklized,
+            persist_diffs,
         )?)
     }
 
@@ -294,15 +301,18 @@ where
         key: &Key,
     ) -> Result<i64> {
         let is_key_merklized = (self.merkle_tree_key_filter)(key);
+        let persist_diffs = (self.diff_key_filter)(key);
         // Update the merkle tree
-        if is_key_merklized {
+        if is_key_merklized && !persist_diffs {
+            self.in_mem.commit_only_data.delete_no_diff_data(key);
+        } else if is_key_merklized {
             self.in_mem.block.tree.delete(key)?;
         }
         Ok(self.db.batch_delete_subspace_val(
             batch,
             self.in_mem.block.height,
             key,
-            is_key_merklized,
+            persist_diffs,
         )?)
     }
 
@@ -668,7 +678,7 @@ where
         {
             self.db_read(key)
         } else {
-            if !(self.merkle_tree_key_filter)(key) {
+            if !(self.diff_key_filter)(key) {
                 return Ok((None, 0));
             }
 
@@ -703,6 +713,7 @@ where
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
         let is_key_merklized = (self.merkle_tree_key_filter)(key);
+        let persist_diffs = (self.diff_key_filter)(key);
 
         if is_pending_transfer_key(key) {
             // The tree of the bright pool stores the current height for the
@@ -711,7 +722,9 @@ where
             self.in_mem.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if is_key_merklized {
+            if is_key_merklized && !persist_diffs {
+                self.in_mem.commit_only_data.add_no_diff_data(key, value);
+            } else if is_key_merklized {
                 self.in_mem.block.tree.update(key, value)?;
             }
         }
@@ -723,7 +736,7 @@ where
             self.in_mem.block.height,
             key,
             value,
-            is_key_merklized,
+            persist_diffs,
         )?;
         Ok((gas, size_diff))
     }
@@ -742,13 +755,16 @@ where
         let mut deleted_bytes_len = 0;
         if self.db_has_key(key)?.0 {
             let is_key_merklized = (self.merkle_tree_key_filter)(key);
-            if is_key_merklized {
+            let persist_diffs = (self.diff_key_filter)(key);
+            if is_key_merklized && !persist_diffs {
+                self.in_mem.commit_only_data.delete_no_diff_data(key);
+            } else if is_key_merklized {
                 self.in_mem.block.tree.delete(key)?;
             }
             deleted_bytes_len = self.db.delete_subspace_val(
                 self.in_mem.block.height,
                 key,
-                is_key_merklized,
+                persist_diffs,
             )?;
         }
         let gas = (key.len() + deleted_bytes_len as usize) as u64

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::hash::Hash;
+use namada_core::storage::Key;
 use regex::Regex;
 
 /// A key-value pair as raw bytes
@@ -69,11 +70,23 @@ impl<I> std::fmt::Debug for PatternIterator<I> {
 pub struct CommitOnlyData {
     /// Map from tx hashes to their gas cost
     pub tx_gas: BTreeMap<Hash, u64>,
+    pub no_diff_data: BTreeMap<Hash, Hash>,
 }
 
 impl CommitOnlyData {
     /// Serialize to bytes
     pub fn serialize(&self) -> Vec<u8> {
         self.serialize_to_vec()
+    }
+
+    pub fn add_no_diff_data(&mut self, key: &Key, value: impl AsRef<[u8]>) {
+        let key_hash = Hash::sha256(key.to_string());
+        let val_hash = Hash::sha256(value);
+        self.no_diff_data.insert(key_hash, val_hash);
+    }
+
+    pub fn delete_no_diff_data(&mut self, key: &Key) {
+        let key_hash = Hash::sha256(key.to_string());
+        self.no_diff_data.remove(&key_hash);
     }
 }
