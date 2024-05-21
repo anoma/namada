@@ -67,6 +67,7 @@ where
 // NOTE: we are testing `namada::ledger::queries_ext`,
 // which is not possible from `namada` since we do not have
 // access to the `Shell` there
+#[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_queries {
     use namada::core::storage::Epoch;

@@ -17,6 +17,8 @@ version.workspace = true
 [features]
 default = ["tendermint-rpc", "download-params", "std", "rand", "migrations"]
 
+mainnet = ["namada_core/mainnet", "namada_events/mainnet"]
+
 multicore = ["masp_proofs/multicore"]
 
 namada-sdk = ["tendermint-rpc", "masp_primitives/transparent-inputs"]

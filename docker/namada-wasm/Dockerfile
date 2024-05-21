@@ -6,7 +6,7 @@ FROM rust:1.78.0-bookworm
 WORKDIR /__w/namada/namada
 
 # The version should be matching the version set above
-RUN rustup toolchain install 1.76.0 --profile minimal
+RUN rustup toolchain install 1.78.0 --profile minimal
 RUN rustup target add wasm32-unknown-unknown
 
 RUN apt-get update && apt-get install -y \

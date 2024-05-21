@@ -5200,7 +5200,7 @@ dependencies = [
  "namada_gas",
  "namada_macros",
  "namada_migrations",
- "num-derive 0.3.3",
+ "num-derive 0.4.2",
  "num-traits 0.2.17",
  "proptest",
  "prost 0.12.3",
