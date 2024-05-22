@@ -25,7 +25,7 @@ where
     let env = FunctionEnv::new(wasm_store, env);
 
     wasmer::imports! {
-        // default namespace
+        // Default namespace
         "env" => {
             // Gas injection hook
             "gas" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_charge_gas)),
@@ -76,7 +76,7 @@ where
     let env = FunctionEnv::new(wasm_store, env);
 
     wasmer::imports! {
-        // default namespace
+        // Default namespace
         "env" => {
             // Gas injection hook
             "gas" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_charge_gas)),
