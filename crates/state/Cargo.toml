@@ -16,7 +16,11 @@ version.workspace = true
 default = []
 
 # for integration tests and test utilities
-testing = ["proptest", "namada_core/testing"]
+testing = [
+    "proptest",
+    "namada_core/testing",
+    "namada_merkle_tree/testing"
+]
 migrations = [
     "namada_migrations",
     "linkme",
