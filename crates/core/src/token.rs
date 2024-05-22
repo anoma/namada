@@ -13,10 +13,8 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::address::Address;
 use crate::arith::{self, checked, CheckedAdd, CheckedSub};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
-use crate::hash::Hash;
 use crate::ibc::apps::transfer::types::Amount as IbcAmount;
 use crate::storage;
 use crate::storage::{DbKeySeg, KeySeg};
@@ -950,34 +948,6 @@ impl From<DenominatedAmount> for IbcAmount {
     }
 }
 
-/// A simple bilateral token transfer
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-    Hash,
-    Eq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-)]
-pub struct Transfer {
-    /// Source address will spend the tokens
-    pub source: Address,
-    /// Target address will receive the tokens
-    pub target: Address,
-    /// Token's address
-    pub token: Address,
-    /// The amount of tokens
-    pub amount: DenominatedAmount,
-    /// Shielded transaction part
-    pub shielded: Option<Hash>,
-}
-
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum AmountError {
@@ -994,9 +964,6 @@ pub mod testing {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::address::testing::{
-        arb_established_address, arb_non_internal_address,
-    };
 
     impl std::ops::Add for Amount {
         type Output = Self;
@@ -1075,24 +1042,6 @@ pub mod testing {
             denom in arb_denomination(),
         ) -> DenominatedAmount {
             DenominatedAmount::new(amount, denom)
-        }
-    }
-
-    prop_compose! {
-        /// Generate a transfer
-        pub fn arb_transfer()(
-            source in arb_non_internal_address(),
-            target in arb_non_internal_address(),
-            token in arb_established_address().prop_map(Address::Established),
-            amount in arb_denominated_amount(),
-        ) -> Transfer {
-            Transfer {
-                source,
-                target,
-                token,
-                amount,
-                shielded: None,
-            }
         }
     }
 
