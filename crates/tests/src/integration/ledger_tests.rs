@@ -5,13 +5,15 @@ use assert_matches::assert_matches;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::account::AccountPublicKeysMap;
 use namada::core::collections::HashMap;
-use namada::token;
-use namada_apps_lib::wallet::defaults;
+use namada::token::{self, Amount, DenominatedAmount};
+use namada_apps_lib::wallet::defaults::{self, albert_keypair};
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
+use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
@@ -1326,10 +1328,8 @@ fn pgf_steward_change_commission() -> Result<()> {
     assert!(
         captured.contains(&format!("- 0.7 to {}", defaults::bertha_address()))
     );
-    assert!(
-        captured
-            .contains(&format!("- 0.05 to {}", defaults::christel_address()))
-    );
+    assert!(captured
+        .contains(&format!("- 0.05 to {}", defaults::christel_address())));
     assert!(captured.contains("Pgf fundings: no fundings are currently set."));
 
     Ok(())
@@ -1576,5 +1576,220 @@ fn change_validator_metadata() -> Result<()> {
     assert!(captured.contains("commission rate:"));
     assert!(captured.contains("max change per epoch:"));
 
+    Ok(())
+}
+
+// Test that fee payment is enforced and aligned with process proposal. The test
+// generates a tx that subtract funds from the fee payer of a following tx. Test
+// that wrappers (and fee payments) are evaluated before the inner transactions.
+#[test]
+fn enforce_fee_payment() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (node, _services) = setup::setup()?;
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let mut txs_bytes = vec![];
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000000"));
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            // We want this transaction to consume all the remaining available
+            // balance. If we executed the inner txs right after the
+            // corresponding wrapper's fee paymwent this would succeed (but
+            // this is not the case)
+            "1900000",
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            CHRISTEL,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let sk = albert_keypair();
+    let pk = sk.to_public();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .in_mem()
+        .native_token
+        .clone();
+
+    let mut txs = vec![];
+    for bytes in txs_bytes {
+        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        tx.add_wrapper(
+            namada::tx::data::wrapper_tx::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::native_whole(1),
+                ),
+                token: native_token.clone(),
+            },
+            pk.clone(),
+            100_000.into(),
+        );
+        tx.sign_raw(vec![sk.clone()], AccountPublicKeysMap::default(), None);
+        tx.sign_wrapper(sk.clone());
+
+        txs.push(tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+    {
+        let results = node.results.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!results.is_empty());
+
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+    // Finalize the next block to execute the txs
+    node.clear_results();
+    node.finalize_and_commit();
+    {
+        let results = node.results.lock().unwrap();
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+
+    // Assert balances
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // This is the result of the two fee payemnts and the successful transfer to
+    // Christel
+    assert!(captured.contains("nam: 1799950"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                BERTHA,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // Bertha must not receive anything because the transaction fails. This is
+    // because we evaluate fee payments before the inner transactions, so by the
+    // time we execute the transfer, Albert doesn't have enough funds anynmore
+    assert!(captured.contains("nam: 2000000"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                CHRISTEL,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000050"));
     Ok(())
 }

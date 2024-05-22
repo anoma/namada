@@ -142,9 +142,6 @@ where
                      proposer from tendermint raw hash",
                 )
         };
-        // FIXME: need uni test on fee pyament when inner txs touch balance of
-        // fee payer (also run this test on the old version with the bug to
-        // check that the bug was indeed there)
 
         // Tracks the accepted transactions
         self.state.in_mem_mut().block.results = BlockResults::default();
