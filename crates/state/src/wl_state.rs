@@ -243,7 +243,7 @@ where
                         batch,
                         &replay_protection::current_key(hash),
                     )?;
-                    acc = acc + hash;
+                    acc = acc.concat(hash);
                     Ok::<_, Error>(acc)
                 })?;
         self.write(&replay_prot_key, new_commitment)?;
