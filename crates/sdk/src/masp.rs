@@ -2219,6 +2219,7 @@ pub mod testing {
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::Signature;
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
+    use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
     use masp_proofs::bellman::groth16::Proof;
     use proptest::prelude::*;
@@ -2990,19 +2991,20 @@ pub mod testing {
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 
@@ -3020,19 +3022,20 @@ pub mod testing {
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 
@@ -3050,19 +3053,20 @@ pub mod testing {
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 }

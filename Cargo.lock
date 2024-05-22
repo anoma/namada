@@ -4141,7 +4141,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
+source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
 dependencies = [
  "borsh 1.2.1",
  "chacha20",
@@ -4154,7 +4154,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
+source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
 dependencies = [
  "aes",
  "bip0039",
@@ -4186,7 +4186,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=3aacc707c5948e7423589ac617305448bead9842#3aacc707c5948e7423589ac617305448bead9842"
+source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4699,6 +4699,7 @@ version = "0.36.1"
 dependencies = [
  "borsh 1.2.1",
  "data-encoding",
+ "masp_primitives",
  "masp_proofs",
  "namada_apps_lib",
  "namada_macros",
