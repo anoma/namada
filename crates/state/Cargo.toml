@@ -39,15 +39,11 @@ namada_replay_protection = { path = "../replay_protection" }
 namada_storage = { path = "../storage" }
 namada_tx = { path = "../tx" }
 
-arse-merkle-tree.workspace = true
 borsh.workspace = true
-ics23.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
-sha2.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true
-tiny-keccak.workspace = true
 tracing.workspace = true
 patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }

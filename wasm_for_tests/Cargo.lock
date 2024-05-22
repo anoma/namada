@@ -1894,18 +1894,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "filetime"
-version = "0.2.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ee447700ac8aa0b2f2bd7bc4462ad686ba06baa6727ac149a2d6277f0d240fd"
-dependencies = [
- "cfg-if 1.0.0",
- "libc",
- "redox_syscall",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "fixed-hash"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1922,16 +1910,6 @@ name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
-
-[[package]]
-name = "flate2"
-version = "1.0.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f54427cfd1c7829e2a139fcefea601bf088ebca651d2bf53ebc600eac295dae"
-dependencies = [
- "crc32fast",
- "miniz_oxide",
-]
 
 [[package]]
 name = "flex-error"
@@ -3549,20 +3527,12 @@ name = "namada"
 version = "0.37.0"
 dependencies = [
  "async-trait",
- "bimap",
  "borsh 1.2.1",
  "borsh-ext",
- "circular-queue",
  "clru",
- "data-encoding",
- "derivation-path",
- "derivative",
- "ethbridge-bridge-contract",
  "ethers",
  "eyre",
- "futures",
  "itertools 0.12.1",
- "konst",
  "loupe",
  "masp_primitives",
  "masp_proofs",
@@ -3573,7 +3543,6 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
- "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_replay_protection",
@@ -3584,30 +3553,19 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
- "num-traits 0.2.17",
- "num256",
- "orion",
- "owo-colors",
  "parity-wasm",
- "paste",
  "proptest",
  "prost",
  "rand 0.8.5",
- "rand_core 0.6.4",
  "rayon",
- "regex",
  "ripemd",
- "serde",
  "serde_json",
  "sha2 0.9.9",
- "slip10_ed25519",
  "smooth-operator",
  "tempfile",
  "thiserror",
  "tiny-bip39",
- "tiny-hderive",
  "tokio",
- "toml 0.5.11",
  "tracing",
  "uint",
  "wasm-instrument",
@@ -3619,8 +3577,6 @@ dependencies = [
  "wasmer-vm",
  "wasmparser 0.107.0",
  "wasmtimer",
- "wat",
- "zeroize",
 ]
 
 [[package]]
@@ -3694,7 +3650,6 @@ name = "namada_ethereum_bridge"
 version = "0.37.0"
 dependencies = [
  "borsh 1.2.1",
- "ethabi",
  "ethers",
  "eyre",
  "itertools 0.12.1",
@@ -3710,11 +3665,7 @@ dependencies = [
  "namada_trans_token",
  "namada_tx",
  "namada_vote_ext",
- "rand 0.8.5",
  "serde",
- "serde_json",
- "tendermint 0.36.0",
- "tendermint-proto 0.36.0",
  "thiserror",
  "tracing",
 ]
@@ -3778,14 +3729,12 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
- "namada_gas",
  "namada_governance",
  "namada_macros",
  "namada_parameters",
  "namada_state",
  "namada_storage",
  "namada_token",
- "namada_tx",
  "primitive-types",
  "proptest",
  "prost",
@@ -3825,7 +3774,6 @@ dependencies = [
 name = "namada_parameters"
 version = "0.37.0"
 dependencies = [
- "borsh 1.2.1",
  "namada_core",
  "namada_macros",
  "namada_storage",
@@ -3837,7 +3785,6 @@ name = "namada_proof_of_stake"
 version = "0.37.0"
 dependencies = [
  "borsh 1.2.1",
- "data-encoding",
  "konst",
  "namada_account",
  "namada_controller",
@@ -3848,7 +3795,6 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
- "num-traits 0.2.17",
  "once_cell",
  "proptest",
  "serde",
@@ -3919,7 +3865,6 @@ dependencies = [
  "sha2 0.9.9",
  "slip10_ed25519",
  "smooth-operator",
- "tendermint-config",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
@@ -3942,7 +3887,6 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
- "namada_tx",
  "serde",
  "smooth-operator",
  "tracing",
@@ -3953,7 +3897,6 @@ name = "namada_state"
 version = "0.37.0"
 dependencies = [
  "borsh 1.2.1",
- "ics23",
  "itertools 0.12.1",
  "namada_core",
  "namada_events",
@@ -3966,11 +3909,8 @@ dependencies = [
  "namada_tx",
  "patricia_tree",
  "proptest",
- "sha2 0.9.9",
  "smooth-operator",
- "sparse-merkle-tree",
  "thiserror",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -3985,7 +3925,6 @@ dependencies = [
  "namada_merkle_tree",
  "namada_replay_protection",
  "regex",
- "serde",
  "smooth-operator",
  "thiserror",
  "tracing",
@@ -4004,35 +3943,27 @@ dependencies = [
 name = "namada_tests"
 version = "0.37.0"
 dependencies = [
- "async-trait",
- "chrono",
  "concat-idents",
  "derivative",
- "flate2",
  "hyper",
  "ibc-testkit",
  "ics23",
  "itertools 0.12.1",
- "lazy_static",
  "namada",
  "namada_core",
  "namada_sdk",
  "namada_test_utils",
  "namada_tx_prelude",
  "namada_vp_prelude",
- "num-traits 0.2.17",
  "proptest",
  "prost",
  "regex",
  "serde",
  "serde_json",
  "sha2 0.9.9",
- "tar",
  "tempfile",
  "test-log",
  "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -4110,8 +4041,6 @@ dependencies = [
  "namada_tx",
  "namada_tx_env",
  "namada_vm_env",
- "sha2 0.9.9",
- "thiserror",
 ]
 
 [[package]]
@@ -4146,7 +4075,6 @@ dependencies = [
  "namada_storage",
  "namada_tx",
  "smooth-operator",
- "thiserror",
 ]
 
 [[package]]
@@ -4168,7 +4096,6 @@ dependencies = [
  "namada_vm_env",
  "namada_vp_env",
  "sha2 0.9.9",
- "thiserror",
 ]
 
 [[package]]
@@ -5935,17 +5862,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
-name = "tar"
-version = "0.4.40"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b16afcea1f22891c49a00c751c7b63b2233284064f11a200fc624137c51e2ddb"
-dependencies = [
- "filetime",
- "libc",
- "xattr",
-]
-
-[[package]]
 name = "target-lexicon"
 version = "0.12.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6520,11 +6436,8 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 name = "tx_fail"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6536,11 +6449,8 @@ dependencies = [
 name = "tx_infinite_guest_gas"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6552,11 +6462,8 @@ dependencies = [
 name = "tx_infinite_host_gas"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6568,11 +6475,8 @@ dependencies = [
 name = "tx_invalid_data"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6584,11 +6488,8 @@ dependencies = [
 name = "tx_memory_limit"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6600,11 +6501,8 @@ dependencies = [
 name = "tx_no_op"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6616,11 +6514,8 @@ dependencies = [
 name = "tx_proposal_code"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6632,11 +6527,8 @@ dependencies = [
 name = "tx_proposal_ibc_token_inflation"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6648,11 +6540,8 @@ dependencies = [
 name = "tx_proposal_masp_reward"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6664,11 +6553,8 @@ dependencies = [
 name = "tx_read_storage_key"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6680,11 +6566,9 @@ dependencies = [
 name = "tx_write"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
- "namada_vp_prelude",
  "proptest",
  "test-log",
  "tracing",
@@ -6849,10 +6733,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_always_false"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
- "namada_tx_prelude",
  "namada_vp_prelude",
  "proptest",
  "test-log",
@@ -6865,10 +6746,7 @@ dependencies = [
 name = "vp_always_true"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
- "namada_tx_prelude",
  "namada_vp_prelude",
  "proptest",
  "test-log",
@@ -6881,8 +6759,6 @@ dependencies = [
 name = "vp_eval"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
@@ -6897,10 +6773,7 @@ dependencies = [
 name = "vp_infinite_guest_gas"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
- "namada_tx_prelude",
  "namada_vp_prelude",
  "proptest",
  "test-log",
@@ -6913,8 +6786,6 @@ dependencies = [
 name = "vp_infinite_host_gas"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
@@ -6929,10 +6800,7 @@ dependencies = [
 name = "vp_memory_limit"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
- "namada_tx_prelude",
  "namada_vp_prelude",
  "proptest",
  "test-log",
@@ -6945,10 +6813,7 @@ dependencies = [
 name = "vp_read_storage_key"
 version = "0.37.0"
 dependencies = [
- "getrandom 0.2.11",
- "namada_test_utils",
  "namada_tests",
- "namada_tx_prelude",
  "namada_vp_prelude",
  "proptest",
  "test-log",
@@ -7690,17 +7555,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "xattr"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8da84f1a25939b27f6820d92aed108f83ff920fdf11a7b19366c27c4cda81d4f"
-dependencies = [
- "libc",
- "linux-raw-sys",
- "rustix",
 ]
 
 [[package]]

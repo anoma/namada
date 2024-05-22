@@ -23,7 +23,6 @@ namada_core = { path = "../core" }
 namada_parameters = { path = "../parameters" }
 namada_storage = { path = "../storage" }
 namada_trans_token = { path = "../trans_token" }
-namada_tx = { path = "../tx" }
 
 borsh.workspace = true
 masp_primitives.workspace = true

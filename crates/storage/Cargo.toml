@@ -33,7 +33,6 @@ borsh.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
 regex.workspace = true
-serde.workspace = true
 smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

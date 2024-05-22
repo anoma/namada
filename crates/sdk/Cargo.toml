@@ -126,7 +126,6 @@ serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
 smooth-operator.workspace = true
-tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, optional = true }
 thiserror.workspace = true
 tiny-bip39.workspace = true
