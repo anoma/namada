@@ -2520,15 +2520,14 @@ pub mod testing {
         S: State,
         CA: WasmCacheAccess,
     {
-        let store = crate::vm::wasm::compilation_cache::common::store();
-        let initial_memory =
-            crate::vm::wasm::memory::prepare_tx_memory(&store).unwrap();
-        let mut wasm_memory = WasmMemory::default();
-        wasm_memory.inner.initialize(initial_memory);
+        let mut store = crate::vm::wasm::compilation_cache::common::store();
+
+        let wasm_memory =
+            crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
 
         let (write_log, in_mem, db) = state.split_borrow();
         TxVmEnv::new(
-            wasm_memory,
+            WasmMemory::owned(wasm_memory),
             write_log,
             in_mem,
             db,

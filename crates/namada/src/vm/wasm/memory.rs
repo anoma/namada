@@ -57,7 +57,7 @@ pub const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 pub const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 
 /// Prepare memory for instantiating a transaction module
-pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_tx_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         TX_MEMORY_INIT_PAGES,
         Some(TX_MEMORY_MAX_PAGES),
@@ -67,7 +67,7 @@ pub fn prepare_tx_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
 }
 
 /// Prepare memory for instantiating a validity predicate module
-pub fn prepare_vp_memory(store: &wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_vp_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         VP_MEMORY_INIT_PAGES,
         Some(VP_MEMORY_MAX_PAGES),
@@ -249,10 +249,32 @@ fn write_memory_bytes(
     Ok(())
 }
 
+/// Inner implementation of some [`WasmMemory`].
+#[derive(Debug, Clone)]
+enum WasmMemoryInner {
+    /// The memory is borrowed from elsewhere.
+    Borrowed {
+        /// The borrowed wasm memory object.
+        memory: Option<NonNull<wasmer::Memory>>,
+    },
+    /// The memory is owned.
+    Owned {
+        /// The owned wasm memory object.
+        memory: wasmer::Memory,
+    },
+}
+
+impl Default for WasmMemoryInner {
+    #[inline]
+    fn default() -> Self {
+        Self::Borrowed { memory: None }
+    }
+}
+
 /// The wasm memory
 #[derive(Debug, Clone, Default)]
 pub struct WasmMemory {
-    pub(crate) inner: Option<NonNull<wasmer::Memory>>,
+    inner: WasmMemoryInner,
 }
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
@@ -261,6 +283,13 @@ unsafe impl Send for WasmMemory {}
 unsafe impl Sync for WasmMemory {}
 
 impl WasmMemory {
+    /// Initialize wasm memory from an existing instance.
+    pub const fn owned(memory: wasmer::Memory) -> Self {
+        Self {
+            inner: WasmMemoryInner::Owned { memory },
+        }
+    }
+
     /// Initialize the host memory with a pointer to the guest's memory.
     ///
     /// ## Safety
@@ -271,17 +300,27 @@ impl WasmMemory {
     ///
     /// Additionally, the guest memory cannot be accessed concurrently.
     pub unsafe fn init_from_guest(&mut self, guest_memory: &Memory) {
-        if self.inner.is_some() {
+        let WasmMemoryInner::Borrowed { memory } = self else {
+            tracing::error!("wasm memory is owned");
+            return;
+        };
+        if memory.is_some() {
             tracing::error!("wasm memory is already initialized");
             return;
         }
-        self.inner =
+        *memory =
             Some(NonNull::new_unchecked(guest_memory as *const _ as *mut _));
     }
 
     /// Get a reference to the inner [`Memory`].
+    #[inline]
     unsafe fn get_ref(&self) -> Option<&Memory> {
-        self.inner.as_ref().map(|mem| mem.as_ref())
+        match &self.inner {
+            WasmMemoryInner::Borrowed { memory } => {
+                memory.as_ref().map(|mem| mem.as_ref())
+            }
+            WasmMemoryInner::Owned { memory } => Some(memory),
+        }
     }
 }
 
