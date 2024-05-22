@@ -15,7 +15,6 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::address::raw::Discriminant;
 use crate::ethereum_events::EthAddress;
 use crate::ibc::primitives::Signer;
 use crate::ibc::IbcTokenHash;
