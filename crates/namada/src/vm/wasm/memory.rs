@@ -3,7 +3,6 @@
 
 use std::ptr::NonNull;
 use std::str::Utf8Error;
-use std::sync::Arc;
 
 use borsh_ext::BorshSerializeExt;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
@@ -255,6 +254,11 @@ fn write_memory_bytes(
 pub struct WasmMemory {
     pub(crate) inner: Option<NonNull<wasmer::Memory>>,
 }
+
+// TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
+// it for now for the code to compile.
+unsafe impl Send for WasmMemory {}
+unsafe impl Sync for WasmMemory {}
 
 impl WasmMemory {
     /// Initialize the host memory with a pointer to the guest's memory.

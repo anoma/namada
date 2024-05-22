@@ -220,7 +220,7 @@ where
         tx_wasm_cache,
     );
 
-    let imports = tx_imports(&store, env);
+    let imports = tx_imports(&store, env.clone());
 
     // Instantiate the wasm module
     let instance = wasmer::Instance::new(&module, &imports)

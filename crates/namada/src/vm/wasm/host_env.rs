@@ -4,7 +4,7 @@
 //! imports, so they can be called from inside the wasm.
 
 use namada_state::{DBIter, StorageHasher, DB};
-use wasmer::{Function, FunctionEnv, Imports, Instance, Store};
+use wasmer::{Function, FunctionEnv, Imports, Store};
 
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
@@ -15,46 +15,48 @@ use crate::vm::{host_env, WasmCacheAccess};
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
     wasm_store: &mut Store,
-    env: &FunctionEnv<TxVmEnv<WasmMemory, D, H, CA>>,
+    env: TxVmEnv<WasmMemory, D, H, CA>,
 ) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,
     H: StorageHasher + 'static,
     CA: WasmCacheAccess + 'static,
 {
+    let env = FunctionEnv::new(wasm_store, env);
+
     wasmer::imports! {
         // default namespace
         "env" => {
             // Gas injection hook
-            "gas" => Function::new_typed_with_env(wasm_store, env, host_env::tx_charge_gas),
+            "gas" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_charge_gas)),
             // Tx Host functions
-            "namada_tx_delete" => Function::new_typed_with_env(wasm_store, env, host_env::tx_delete),
-            "namada_tx_emit_event" => Function::new_typed_with_env(wasm_store, env, host_env::tx_emit_event),
-            "namada_tx_get_block_epoch" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_epoch),
-            "namada_tx_get_block_header" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_header),
-            "namada_tx_get_block_height" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_block_height),
-            "namada_tx_get_chain_id" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_chain_id),
-            "namada_tx_get_events" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_events),
-            "namada_tx_get_native_token" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_native_token),
-            "namada_tx_get_pred_epochs" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_pred_epochs),
-            "namada_tx_get_tx_index" => Function::new_typed_with_env(wasm_store, env, host_env::tx_get_tx_index),
-            "namada_tx_has_key" => Function::new_typed_with_env(wasm_store, env, host_env::tx_has_key),
-            "namada_tx_ibc_execute" => Function::new_typed_with_env(wasm_store, env, host_env::tx_ibc_execute),
-            "namada_tx_init_account" => Function::new_typed_with_env(wasm_store, env, host_env::tx_init_account),
-            "namada_tx_insert_verifier" => Function::new_typed_with_env(wasm_store, env, host_env::tx_insert_verifier),
-            "namada_tx_iter_next" => Function::new_typed_with_env(wasm_store, env, host_env::tx_iter_next),
-            "namada_tx_iter_prefix" => Function::new_typed_with_env(wasm_store, env, host_env::tx_iter_prefix),
-            "namada_tx_log_string" => Function::new_typed_with_env(wasm_store, env, host_env::tx_log_string),
-            "namada_tx_read" => Function::new_typed_with_env(wasm_store, env, host_env::tx_read),
-            "namada_tx_read_temp" => Function::new_typed_with_env(wasm_store, env, host_env::tx_read_temp),
-            "namada_tx_result_buffer" => Function::new_typed_with_env(wasm_store, env, host_env::tx_result_buffer),
-            "namada_tx_set_commitment_sentinel" => Function::new_typed_with_env(wasm_store, env, host_env::tx_set_commitment_sentinel),
-            "namada_tx_update_masp_note_commitment_tree" => Function::new_typed_with_env(wasm_store, env, host_env::tx_update_masp_note_commitment_tree),
-            "namada_tx_update_validity_predicate" => Function::new_typed_with_env(wasm_store, env, host_env::tx_update_validity_predicate),
-            "namada_tx_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, env, host_env::tx_verify_tx_section_signature),
-            "namada_tx_write" => Function::new_typed_with_env(wasm_store, env, host_env::tx_write),
-            "namada_tx_write_temp" => Function::new_typed_with_env(wasm_store, env, host_env::tx_write_temp),
-            "namada_tx_yield_value" => Function::new_typed_with_env(wasm_store, env, host_env::tx_yield_value),
+            "namada_tx_delete" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_delete)),
+            "namada_tx_emit_event" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_emit_event)),
+            "namada_tx_get_block_epoch" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_get_block_epoch)),
+            "namada_tx_get_block_header" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_get_block_header)),
+            "namada_tx_get_block_height" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_get_block_height)),
+            "namada_tx_get_chain_id" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_get_chain_id)),
+            "namada_tx_get_events" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_get_events)),
+            "namada_tx_get_native_token" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_get_native_token)),
+            "namada_tx_get_pred_epochs" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_get_pred_epochs)),
+            "namada_tx_get_tx_index" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_get_tx_index)),
+            "namada_tx_has_key" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_has_key)),
+            "namada_tx_ibc_execute" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_ibc_execute)),
+            "namada_tx_init_account" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_7(host_env::tx_init_account)),
+            "namada_tx_insert_verifier" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_insert_verifier)),
+            "namada_tx_iter_next" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_iter_next)),
+            "namada_tx_iter_prefix" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_iter_prefix)),
+            "namada_tx_log_string" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_log_string)),
+            "namada_tx_read" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_read)),
+            "namada_tx_read_temp" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_read_temp)),
+            "namada_tx_result_buffer" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_1(host_env::tx_result_buffer)),
+            "namada_tx_set_commitment_sentinel" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_set_commitment_sentinel)),
+            "namada_tx_update_masp_note_commitment_tree" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_update_masp_note_commitment_tree)),
+            "namada_tx_update_validity_predicate" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_6(host_env::tx_update_validity_predicate)),
+            "namada_tx_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_7(host_env::tx_verify_tx_section_signature)),
+            "namada_tx_write" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_4(host_env::tx_write)),
+            "namada_tx_write_temp" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_4(host_env::tx_write_temp)),
+            "namada_tx_yield_value" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_yield_value)),
         },
     }
 }
@@ -72,6 +74,7 @@ where
     CA: WasmCacheAccess + 'static,
 {
     let env = FunctionEnv::new(wasm_store, env);
+
     wasmer::imports! {
         // default namespace
         "env" => {
@@ -97,9 +100,322 @@ where
             "namada_vp_read_pre" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_read_pre),
             "namada_vp_read_temp" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_read_temp),
             "namada_vp_result_buffer" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_result_buffer),
-            "namada_vp_verify_masp" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_verify_masp),
             "namada_vp_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_verify_tx_section_signature),
             "namada_vp_yield_value" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_yield_value),
         },
+    }
+}
+
+// TODO: Attempt to reduce the boilerplate of this module with macros, traits
+// or something of this sort...
+mod wrap_tx {
+    //! Wrap tx host functions with any number of arguments in a callback
+    //! that can be passed to [`wasmer`], to be used by the guest wasm code.
+
+    #![allow(missing_docs)]
+
+    use namada_state::{DBIter, StorageHasher, DB};
+    use wasmer::FunctionEnvMut;
+
+    use crate::vm::host_env::TxVmEnv;
+    use crate::vm::wasm::memory::WasmMemory;
+    use crate::vm::WasmCacheAccess;
+
+    pub(super) fn _0<F, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>) -> RET,
+    {
+        move |env| f(env.data())
+    }
+
+    pub(super) fn _1<F, ARG0, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>, ARG0) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0) -> RET,
+    {
+        move |env, arg0| f(env.data(), arg0)
+    }
+
+    pub(super) fn _2<F, ARG0, ARG1, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>, ARG0, ARG1) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1) -> RET,
+    {
+        move |env, arg0, arg1| f(env.data(), arg0, arg1)
+    }
+
+    pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1, ARG2, ARG3) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3| f(env.data(), arg0, arg1, arg2, arg3)
+    }
+
+    pub(super) fn _6<F, ARG0, ARG1, ARG2, ARG3, ARG4, ARG5, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &TxVmEnv<WasmMemory, D, H, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+            ARG5,
+        ) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3, arg4, arg5| {
+            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5)
+        }
+    }
+
+    pub(super) fn _7<
+        F,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+        RET,
+        D,
+        H,
+        CA,
+    >(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &TxVmEnv<WasmMemory, D, H, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+            ARG5,
+            ARG6,
+        ) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
+            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+        }
+    }
+}
+
+// TODO: Attempt to reduce the boilerplate of this module with macros, traits
+// or something of this sort...
+mod wrap_vp {
+    //! Wrap vp host functions with any number of arguments in a callback
+    //! that can be passed to [`wasmer`], to be used by the guest wasm code.
+
+    #![allow(missing_docs)]
+
+    use namada_state::{DBIter, StorageHasher, DB};
+    use wasmer::FunctionEnvMut;
+
+    use crate::vm::host_env::{VpEvaluator, VpVmEnv};
+    use crate::vm::wasm::memory::WasmMemory;
+    use crate::vm::WasmCacheAccess;
+
+    pub(super) fn _0<F, RET, D, H, EVAL, CA>(
+        f: F,
+    ) -> impl Fn(FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
+        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>) -> RET,
+    {
+        move |env| f(env.data())
+    }
+
+    pub(super) fn _1<F, ARG0, RET, D, H, EVAL, CA>(
+        f: F,
+    ) -> impl Fn(FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>, ARG0) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
+    {
+        move |env, arg0| f(env.data(), arg0)
+    }
+
+    pub(super) fn _2<F, ARG0, ARG1, RET, D, H, EVAL, CA>(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+        ARG1,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
+    {
+        move |env, arg0, arg1| f(env.data(), arg0, arg1)
+    }
+
+    pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, EVAL, CA>(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+        ) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3| f(env.data(), arg0, arg1, arg2, arg3)
+    }
+
+    pub(super) fn _6<
+        F,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        RET,
+        D,
+        H,
+        EVAL,
+        CA,
+    >(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+            ARG5,
+        ) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3, arg4, arg5| {
+            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5)
+        }
+    }
+
+    pub(super) fn _7<
+        F,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+        RET,
+        D,
+        H,
+        CA,
+    >(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+            ARG5,
+            ARG6,
+        ) -> RET,
+    {
+        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
+            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+        }
     }
 }
