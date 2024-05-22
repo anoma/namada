@@ -143,7 +143,7 @@ impl From<raw::Address<'_, raw::Validated>> for Address {
             raw::Discriminant::TempStorage => {
                 Address::Internal(InternalAddress::TempStorage)
             }
-            Discriminant::ReplayProtection => {
+            raw::Discriminant::ReplayProtection => {
                 Address::Internal(InternalAddress::ReplayProtection)
             }
         }
