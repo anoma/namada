@@ -78,30 +78,30 @@ where
     wasmer::imports! {
         // default namespace
         "env" => {
-            // Wasm middleware gas injection hook
-            "gas" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_charge_gas),
+            // Gas injection hook
+            "gas" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_charge_gas)),
             // VP Host functions
-            "namada_vp_eval" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_eval),
-            "namada_vp_get_block_header" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_block_header),
-            "namada_vp_get_block_height" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_block_height),
-            "namada_vp_get_chain_id" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_chain_id),
-            "namada_vp_get_events" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_events),
-            "namada_vp_get_native_token" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_native_token),
-            "namada_vp_get_pred_epochs" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_pred_epochs),
-            "namada_vp_get_tx_code_hash" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_tx_code_hash),
-            "namada_vp_get_tx_index" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_get_tx_index),
-            "namada_vp_has_key_post" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_has_key_post),
-            "namada_vp_has_key_pre" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_has_key_pre),
-            "namada_vp_iter_next" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_iter_next),
-            "namada_vp_iter_prefix_post" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_iter_prefix_pre),
-            "namada_vp_iter_prefix_pre" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_iter_prefix_pre),
-            "namada_vp_log_string" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_log_string),
-            "namada_vp_read_post" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_read_post),
-            "namada_vp_read_pre" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_read_pre),
-            "namada_vp_read_temp" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_read_temp),
-            "namada_vp_result_buffer" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_result_buffer),
-            "namada_vp_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_verify_tx_section_signature),
-            "namada_vp_yield_value" => Function::new_typed_with_env(wasm_store, &env, host_env::vp_yield_value),
+            "namada_vp_eval" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_4(host_env::vp_eval)),
+            "namada_vp_get_block_header" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_get_block_header)),
+            "namada_vp_get_block_height" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_0(host_env::vp_get_block_height)),
+            "namada_vp_get_chain_id" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_get_chain_id)),
+            "namada_vp_get_events" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_get_events)),
+            "namada_vp_get_native_token" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_get_native_token)),
+            "namada_vp_get_pred_epochs" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_0(host_env::vp_get_pred_epochs)),
+            "namada_vp_get_tx_code_hash" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_get_tx_code_hash)),
+            "namada_vp_get_tx_index" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_0(host_env::vp_get_tx_index)),
+            "namada_vp_has_key_post" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_has_key_post)),
+            "namada_vp_has_key_pre" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_has_key_pre)),
+            "namada_vp_iter_next" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_iter_next)),
+            "namada_vp_iter_prefix_post" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_iter_prefix_post)),
+            "namada_vp_iter_prefix_pre" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_iter_prefix_pre)),
+            "namada_vp_log_string" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_log_string)),
+            "namada_vp_read_post" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_read_post)),
+            "namada_vp_read_pre" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_read_pre)),
+            "namada_vp_read_temp" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_read_temp)),
+            "namada_vp_result_buffer" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_result_buffer)),
+            "namada_vp_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_9(host_env::vp_verify_tx_section_signature)),
+            "namada_vp_yield_value" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_yield_value)),
         },
     }
 }
@@ -286,6 +286,7 @@ mod wrap_vp {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
     {
         move |env, arg0| f(env.data(), arg0)
@@ -302,6 +303,7 @@ mod wrap_vp {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
     {
         move |env, arg0, arg1| f(env.data(), arg0, arg1)
@@ -320,6 +322,7 @@ mod wrap_vp {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
             &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
@@ -331,7 +334,7 @@ mod wrap_vp {
         move |env, arg0, arg1, arg2, arg3| f(env.data(), arg0, arg1, arg2, arg3)
     }
 
-    pub(super) fn _6<
+    pub(super) fn _9<
         F,
         ARG0,
         ARG1,
@@ -339,6 +342,9 @@ mod wrap_vp {
         ARG3,
         ARG4,
         ARG5,
+        ARG6,
+        ARG7,
+        ARG8,
         RET,
         D,
         H,
@@ -354,55 +360,15 @@ mod wrap_vp {
         ARG3,
         ARG4,
         ARG5,
+        ARG6,
+        ARG7,
+        ARG8,
     ) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(
-            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
-            ARG0,
-            ARG1,
-            ARG2,
-            ARG3,
-            ARG4,
-            ARG5,
-        ) -> RET,
-    {
-        move |env, arg0, arg1, arg2, arg3, arg4, arg5| {
-            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5)
-        }
-    }
-
-    pub(super) fn _7<
-        F,
-        ARG0,
-        ARG1,
-        ARG2,
-        ARG3,
-        ARG4,
-        ARG5,
-        ARG6,
-        RET,
-        D,
-        H,
-        CA,
-    >(
-        f: F,
-    ) -> impl Fn(
-        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
-        ARG0,
-        ARG1,
-        ARG2,
-        ARG3,
-        ARG4,
-        ARG5,
-        ARG6,
-    ) -> RET
-    where
-        D: DB + for<'iter> DBIter<'iter> + 'static,
-        H: StorageHasher + 'static,
-        CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
             &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
@@ -412,10 +378,23 @@ mod wrap_vp {
             ARG4,
             ARG5,
             ARG6,
+            ARG7,
+            ARG8,
         ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
-            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8| {
+            f(
+                env.data(),
+                arg0,
+                arg1,
+                arg2,
+                arg3,
+                arg4,
+                arg5,
+                arg6,
+                arg7,
+                arg8,
+            )
         }
     }
 }
