@@ -612,14 +612,9 @@ pub mod testing {
                 write_log: Default::default(),
                 db: MockDB::default(),
                 in_mem: Default::default(),
-                merkle_tree_key_filter: merklize_all_keys,
                 diff_key_filter: diff_all_keys,
             })
         }
-    }
-
-    fn merklize_all_keys(_key: &storage::Key) -> bool {
-        true
     }
 
     fn diff_all_keys(_key: &storage::Key) -> bool {
@@ -901,32 +896,21 @@ mod tests {
         Key::parse("testing2").unwrap()
     }
 
-    fn test_key_3() -> Key {
-        Key::parse("testing3").unwrap()
-    }
-
-    fn merkle_tree_key_filter(key: &Key) -> bool {
-        key == &test_key_1() || key == &test_key_2()
-    }
-
     fn diff_key_filter(key: &Key) -> bool {
         key == &test_key_1()
     }
 
     #[test]
-    fn test_writing_without_merklizing_or_diffs() {
+    fn test_writing_without_diffs() {
         let mut state = TestState::default();
         assert_eq!(state.in_mem().block.height.0, 0);
 
-        (state.0.merkle_tree_key_filter) = merkle_tree_key_filter;
         (state.0.diff_key_filter) = diff_key_filter;
 
         let key1 = test_key_1();
         let val1 = 1u64;
         let key2 = test_key_2();
         let val2 = 2u64;
-        let key3 = test_key_3();
-        let val3 = 3u64;
 
         // Standard write of key-val-1
         state.write(&key1, val1).unwrap();
@@ -946,13 +930,6 @@ mod tests {
         // Read from state should return val2
         let res = state.read::<u64>(&key2).unwrap().unwrap();
         assert_eq!(res, val2);
-
-        // Write key-val-3 without merklizing or diffs
-        state.write(&key3, val3).unwrap();
-
-        // Read from state should return val3
-        let res = state.read::<u64>(&key3).unwrap().unwrap();
-        assert_eq!(res, val3);
 
         // Commit block and storage changes
         state.commit_block().unwrap();
@@ -985,23 +962,6 @@ mod tests {
             state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
         assert!(is_merklized2);
 
-        // Key3 should be in storage. Confirm by reading from
-        // state and also by reading DB subspace directly
-        let res3 = state.read::<u64>(&key3).unwrap().unwrap();
-        assert_eq!(res3, val3);
-        let res3 = state.db().read_subspace_val(&key3).unwrap().unwrap();
-        let res3 = u64::try_from_slice(&res3).unwrap();
-        assert_eq!(res3, val3);
-
-        // Check explicitly that key-val-3 is not in merkle tree
-        let is_merklized3 = state.in_mem().block.tree.has_key(&key3).unwrap();
-        assert!(!is_merklized3);
-        let no_diff_key3 =
-            Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key()).join(&key3);
-        let is_merklized3 =
-            state.in_mem().block.tree.has_key(&no_diff_key3).unwrap();
-        assert!(!is_merklized3);
-
         // Check that the proper diffs exist for key-val-1
         let res1 = state
             .db()
@@ -1032,25 +992,9 @@ mod tests {
         let res2 = u64::try_from_slice(&res2).unwrap();
         assert_eq!(res2, val2);
 
-        // Check that there are diffs for key-val-3 in block 0, since all keys
-        // need to have diffs for at least 1 block for rollback purposes
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(0), true)
-            .unwrap();
-        assert!(res3.is_none());
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(0), false)
-            .unwrap()
-            .unwrap();
-        let res3 = u64::try_from_slice(&res3).unwrap();
-        assert_eq!(res3, val3);
-
         // Now delete the keys properly
         state.delete(&key1).unwrap();
         state.delete(&key2).unwrap();
-        state.delete(&key3).unwrap();
 
         // Commit the block again
         state.commit_block().unwrap();
@@ -1060,20 +1004,16 @@ mod tests {
         // Check the key-vals are removed from the storage subspace
         let res1 = state.read::<u64>(&key1).unwrap();
         let res2 = state.read::<u64>(&key2).unwrap();
-        let res3 = state.read::<u64>(&key3).unwrap();
-        assert!(res1.is_none() && res2.is_none() && res3.is_none());
+        assert!(res1.is_none() && res2.is_none());
         let res1 = state.db().read_subspace_val(&key1).unwrap();
         let res2 = state.db().read_subspace_val(&key2).unwrap();
-        let res3 = state.db().read_subspace_val(&key3).unwrap();
-        assert!(res1.is_none() && res2.is_none() && res3.is_none());
+        assert!(res1.is_none() && res2.is_none());
 
         // Check that the key-vals don't exist in the merkle tree anymore
         let is_merklized1 = state.in_mem().block.tree.has_key(&key1).unwrap();
         let is_merklized2 =
             state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
-        let is_merklized3 =
-            state.in_mem().block.tree.has_key(&no_diff_key3).unwrap();
-        assert!(!is_merklized1 && !is_merklized2 && !is_merklized3);
+        assert!(!is_merklized1 && !is_merklized2);
 
         // Check that key-val-1 diffs are properly updated for blocks 0 and 1
         let res1 = state
@@ -1116,18 +1056,6 @@ mod tests {
             .unwrap();
         assert!(res2.is_none());
 
-        // Check that key-val-3 diffs don't exist for block 0 anymore
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(0), true)
-            .unwrap();
-        assert!(res3.is_none());
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(0), false)
-            .unwrap();
-        assert!(res3.is_none());
-
         // Check that the block 1 diffs for key-val-2 include an "old" value of
         // val2 and no "new" value
         let res2 = state
@@ -1142,21 +1070,6 @@ mod tests {
             .read_diffs_val(&key2, BlockHeight(1), false)
             .unwrap();
         assert!(res2.is_none());
-
-        // Check that the block 1 diffs for key-val-2 include an "old" value of
-        // val2 and no "new" value
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(1), true)
-            .unwrap()
-            .unwrap();
-        let res3 = u64::try_from_slice(&res3).unwrap();
-        assert_eq!(res3, val3);
-        let res3 = state
-            .db()
-            .read_diffs_val(&key3, BlockHeight(1), false)
-            .unwrap();
-        assert!(res3.is_none());
     }
 
     proptest! {

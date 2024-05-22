@@ -81,7 +81,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::shell::{is_key_diff_storable, is_merklized_storage_key};
+    use crate::shell::is_key_diff_storable;
 
     #[test]
     fn test_crud_value() {
@@ -93,7 +93,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
@@ -146,7 +145,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
         state
@@ -209,7 +207,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
         let (loaded_root, height) =
@@ -231,7 +228,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
 
@@ -276,7 +272,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
         state
@@ -349,7 +344,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
 
@@ -444,9 +438,10 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
+        // Prepare written keys for non-probable data, probable data (IBC), and
+        // no diffed data
         let make_key = |suffix: u64| {
             match suffix % 3u64 {
                 0 => Key::parse(format!("key{suffix}")).unwrap(),
@@ -529,6 +524,7 @@ mod tests {
                 }
             }
         }
+        // save the last root
         roots.insert(state.in_mem().block.height, state.in_mem().merkle_root());
         state.commit_block_from_batch(batch)?;
 
@@ -543,6 +539,7 @@ mod tests {
                 continue;
             }
             let tree = state.get_merkle_tree(height, Some(StoreType::Ibc))?;
+            // Check if the rebuilt tree's root is the same as the saved one
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
@@ -578,6 +575,7 @@ mod tests {
                     .join(&key);
             let tree =
                 state.get_merkle_tree(height, Some(StoreType::NoDiff))?;
+            // Check if the rebuilt tree's root is the same as the saved one
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
@@ -612,7 +610,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             Some(5),
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
         let new_epoch_start = BlockHeight(1);
@@ -735,7 +732,6 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
             is_key_diff_storable,
         );
 
@@ -844,7 +840,6 @@ mod tests {
             address::testing::nam(),
             None,
             // Only merkelize and persist diffs for `test_key_1`
-            |key: &Key| -> bool { key == &test_key_1() },
             |key: &Key| -> bool { key == &test_key_1() },
         );
         // Start the first block

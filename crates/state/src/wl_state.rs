@@ -45,8 +45,6 @@ where
     pub(crate) db: D,
     /// State in memory
     pub(crate) in_mem: InMemory<H>,
-    /// Static merkle tree storage key filter
-    pub merkle_tree_key_filter: fn(&storage::Key) -> bool,
     /// Static diff storage key filter
     pub diff_key_filter: fn(&storage::Key) -> bool,
 }
@@ -104,7 +102,6 @@ where
         chain_id: ChainId,
         native_token: Address,
         storage_read_past_height_limit: Option<u64>,
-        merkle_tree_key_filter: fn(&storage::Key) -> bool,
         diff_key_filter: fn(&storage::Key) -> bool,
     ) -> Self {
         let write_log = WriteLog::default();
@@ -118,7 +115,6 @@ where
             write_log,
             db,
             in_mem,
-            merkle_tree_key_filter,
             diff_key_filter,
         });
         state.load_last_state();
@@ -268,7 +264,6 @@ where
         value: impl AsRef<[u8]>,
     ) -> Result<i64> {
         let value = value.as_ref();
-        let is_key_merklized = (self.merkle_tree_key_filter)(key);
         let persist_diffs = (self.diff_key_filter)(key);
 
         if is_pending_transfer_key(key) {
@@ -278,11 +273,11 @@ where
             self.in_mem.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if is_key_merklized && !persist_diffs {
+            if !persist_diffs {
                 let prefix =
                     Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
                 self.in_mem.block.tree.update(&prefix.join(key), value)?;
-            } else if is_key_merklized {
+            } else {
                 self.in_mem.block.tree.update(key, value)?;
             };
         }
@@ -303,13 +298,12 @@ where
         batch: &mut D::WriteBatch,
         key: &Key,
     ) -> Result<i64> {
-        let is_key_merklized = (self.merkle_tree_key_filter)(key);
         let persist_diffs = (self.diff_key_filter)(key);
         // Update the merkle tree
-        if is_key_merklized && !persist_diffs {
+        if !persist_diffs {
             let prefix = Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
             self.in_mem.block.tree.delete(&prefix.join(key))?;
-        } else if is_key_merklized {
+        } else {
             self.in_mem.block.tree.delete(key)?;
         }
         Ok(self.db.batch_delete_subspace_val(
@@ -716,7 +710,6 @@ where
         // but with gas and storage bytes len diff accounting
         tracing::debug!("storage write key {}", key,);
         let value = value.as_ref();
-        let is_key_merklized = (self.merkle_tree_key_filter)(key);
         let persist_diffs = (self.diff_key_filter)(key);
 
         if is_pending_transfer_key(key) {
@@ -726,11 +719,11 @@ where
             self.in_mem.block.tree.update(key, height)?;
         } else {
             // Update the merkle tree
-            if is_key_merklized && !persist_diffs {
+            if !persist_diffs {
                 let prefix =
                     Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
                 self.in_mem.block.tree.update(&prefix.join(key), value)?;
-            } else if is_key_merklized {
+            } else {
                 self.in_mem.block.tree.update(key, value)?;
             }
         }
@@ -760,13 +753,12 @@ where
         // but with gas and storage bytes len diff accounting
         let mut deleted_bytes_len = 0;
         if self.db_has_key(key)?.0 {
-            let is_key_merklized = (self.merkle_tree_key_filter)(key);
             let persist_diffs = (self.diff_key_filter)(key);
-            if is_key_merklized && !persist_diffs {
+            if !persist_diffs {
                 let prefix =
                     Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key());
                 self.in_mem.block.tree.delete(&prefix.join(key))?;
-            } else if is_key_merklized {
+            } else {
                 self.in_mem.block.tree.delete(key)?;
             }
             deleted_bytes_len = self.db.delete_subspace_val(
@@ -931,38 +923,32 @@ where
                         match old.0.cmp(&new.0) {
                             Ordering::Equal => {
                                 // the value was updated
-                                if (self.merkle_tree_key_filter)(&new_key) {
-                                    tree.update(
-                                        &new_key,
-                                        if is_pending_transfer_key(&new_key) {
-                                            target_height.serialize_to_vec()
-                                        } else {
-                                            new.1.clone()
-                                        },
-                                    )?;
-                                }
+                                tree.update(
+                                    &new_key,
+                                    if is_pending_transfer_key(&new_key) {
+                                        target_height.serialize_to_vec()
+                                    } else {
+                                        new.1.clone()
+                                    },
+                                )?;
                                 old_diff = old_diff_iter.next();
                                 new_diff = new_diff_iter.next();
                             }
                             Ordering::Less => {
                                 // the value was deleted
-                                if (self.merkle_tree_key_filter)(&old_key) {
-                                    tree.delete(&old_key)?;
-                                }
+                                tree.delete(&old_key)?;
                                 old_diff = old_diff_iter.next();
                             }
                             Ordering::Greater => {
                                 // the value was inserted
-                                if (self.merkle_tree_key_filter)(&new_key) {
-                                    tree.update(
-                                        &new_key,
-                                        if is_pending_transfer_key(&new_key) {
-                                            target_height.serialize_to_vec()
-                                        } else {
-                                            new.1.clone()
-                                        },
-                                    )?;
-                                }
+                                tree.update(
+                                    &new_key,
+                                    if is_pending_transfer_key(&new_key) {
+                                        target_height.serialize_to_vec()
+                                    } else {
+                                        new.1.clone()
+                                    },
+                                )?;
                                 new_diff = new_diff_iter.next();
                             }
                         }
@@ -971,10 +957,7 @@ where
                         // the value was deleted
                         let key = Key::parse(old.0.clone())
                             .expect("the key should be parsable");
-
-                        if (self.merkle_tree_key_filter)(&key) {
-                            tree.delete(&key)?;
-                        }
+                        tree.delete(&key)?;
 
                         old_diff = old_diff_iter.next();
                     }
@@ -983,16 +966,14 @@ where
                         let key = Key::parse(new.0.clone())
                             .expect("the key should be parsable");
 
-                        if (self.merkle_tree_key_filter)(&key) {
-                            tree.update(
-                                &key,
-                                if is_pending_transfer_key(&key) {
-                                    target_height.serialize_to_vec()
-                                } else {
-                                    new.1.clone()
-                                },
-                            )?;
-                        }
+                        tree.update(
+                            &key,
+                            if is_pending_transfer_key(&key) {
+                                target_height.serialize_to_vec()
+                            } else {
+                                new.1.clone()
+                            },
+                        )?;
 
                         new_diff = new_diff_iter.next();
                     }
