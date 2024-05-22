@@ -210,7 +210,7 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
 /// environment, in which case validity predicates will be bypassed.
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: &Tx,
-    dispatch_args: DispatchArgs<CA>,
+    dispatch_args: DispatchArgs<'a, CA>,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
 ) -> std::result::Result<TxResult<Error>, DispatchError>

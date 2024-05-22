@@ -1328,8 +1328,10 @@ fn pgf_steward_change_commission() -> Result<()> {
     assert!(
         captured.contains(&format!("- 0.7 to {}", defaults::bertha_address()))
     );
-    assert!(captured
-        .contains(&format!("- 0.05 to {}", defaults::christel_address())));
+    assert!(
+        captured
+            .contains(&format!("- 0.05 to {}", defaults::christel_address()))
+    );
     assert!(captured.contains("Pgf fundings: no fundings are currently set."));
 
     Ok(())
@@ -1696,7 +1698,7 @@ fn enforce_fee_payment() -> Result<()> {
     for bytes in txs_bytes {
         let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
         tx.add_wrapper(
-            namada::tx::data::wrapper_tx::Fee {
+            namada::tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(
                     Amount::native_whole(1),
                 ),

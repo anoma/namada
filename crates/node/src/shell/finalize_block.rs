@@ -584,7 +584,7 @@ where
             changed_keys,
             stats,
             height,
-        }: ExecutionArgs,
+        }: ExecutionArgs<'_>,
     ) -> Vec<WrapperCache> {
         let mut successful_wrappers = vec![];
 
@@ -661,7 +661,24 @@ where
             ) = match &tx_header.tx_type {
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
-                    let tx_gas_meter = TxGasMeter::new(wrapper.gas_limit);
+
+                    let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                        Ok(value) => value,
+                        Err(_) => {
+                            response.events.emit(
+                                new_tx_event(&tx, height.0)
+                                    .with(Code(ResultCode::InvalidTx))
+                                    .with(Info(
+                                        "The wrapper gas limit overflowed gas \
+                                         representation"
+                                            .to_owned(),
+                                    ))
+                                    .with(GasUsed(0.into())),
+                            );
+                            continue;
+                        }
+                    };
+                    let tx_gas_meter = TxGasMeter::new(gas_limit);
                     for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
                             .get_section(cmt.code_sechash())
@@ -793,7 +810,7 @@ where
             changed_keys,
             stats,
             height,
-        }: ExecutionArgs,
+        }: ExecutionArgs<'_>,
     ) {
         for WrapperCache {
             mut tx,
