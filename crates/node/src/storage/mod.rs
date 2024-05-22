@@ -443,8 +443,11 @@ mod tests {
         // Prepare written keys for non-probable data, probable data (IBC), and
         // no diffed data
         let make_key = |suffix: u64| {
+            // For three type keys
             match suffix % 3u64 {
+                // for non-probable data
                 0 => Key::parse(format!("key{suffix}")).unwrap(),
+                // for probable data
                 1 => ibc_key(format!("key{suffix}")).unwrap(),
                 // for no diff
                 _ => client_counter_key(),
@@ -543,6 +546,7 @@ mod tests {
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
+                    // data was not updated
                     if *current_state.get(&key).unwrap() {
                         assert!(tree.has_key(&key)?);
                     } else {
@@ -550,10 +554,12 @@ mod tests {
                     }
                 }
                 1 | 3 => {
+                    // data was deleted
                     assert!(!tree.has_key(&key)?);
                     current_state.insert(key, false);
                 }
                 _ => {
+                    // data was updated
                     assert!(tree.has_key(&key)?);
                     current_state.insert(key, true);
                 }
@@ -579,6 +585,7 @@ mod tests {
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
+                    // data was not updated
                     if *current_state.get(&key).unwrap() {
                         assert!(tree.has_key(&merkle_key)?);
                     } else {
@@ -586,10 +593,12 @@ mod tests {
                     }
                 }
                 1 | 3 => {
+                    // data was deleted
                     assert!(!tree.has_key(&merkle_key)?);
                     current_state.insert(key, false);
                 }
                 _ => {
+                    // data was updated
                     assert!(tree.has_key(&merkle_key)?);
                     current_state.insert(key, true);
                 }
