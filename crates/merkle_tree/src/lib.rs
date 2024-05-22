@@ -48,6 +48,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use thiserror::Error;
 
+/// Key prefix for the data not stored to diffs
 pub const NO_DIFF_KEY_PREFIX: &str = "no_diff";
 
 /// Trait for reading from a merkle tree that is a sub-tree
