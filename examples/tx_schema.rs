@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 
+use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
 use namada_sdk::borsh::BorshSchema;
 use namada_sdk::tx::Tx;
 
@@ -12,6 +13,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut definitions = BTreeMap::new();
     Tx::add_definitions_recursively(&mut definitions);
+    StoredBuildParams::add_definitions_recursively(&mut definitions);
     std::fs::write(&args[1], format!("{:#?}", definitions))
         .expect("unable to save schema");
     Ok(())

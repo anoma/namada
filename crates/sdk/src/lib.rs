@@ -782,6 +782,7 @@ pub mod testing {
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
+    use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
@@ -849,6 +850,7 @@ pub mod testing {
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
         Transfer(Transfer),
+        MaspTransfer(Transfer, (StoredBuildParams, String)),
         Bond(Bond),
         Redelegation(Redelegation),
         UpdateStewardCommission(UpdateStewardCommission),
@@ -1053,7 +1055,7 @@ pub mod testing {
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (masp_tx_type, (shielded_transfer, asset_types)) in prop_oneof![
+            (masp_tx_type, (shielded_transfer, asset_types, build_params)) in prop_oneof![
                 (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
                 (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfer.source), 1)),
                 (Just(MaspTxType::Deshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
@@ -1102,7 +1104,9 @@ pub mod testing {
                 // Link the Builder to the Transaction by hash code
                 target: masp_tx_hash,
             });
-            (tx, TxData::Transfer(transfer))
+            let build_param_bytes =
+                data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+            (tx, TxData::MaspTransfer(transfer, (build_params, build_param_bytes)))
         }
     }
 
