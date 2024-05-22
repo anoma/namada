@@ -159,12 +159,12 @@ impl Hash {
     /// but if one value is the zero hash, the other
     /// value is returned.
     pub fn concat(self, rhs: &Hash) -> Self {
-        let mut hasher = Sha256::default();
         if self.is_zero() {
             *rhs
         } else if rhs.is_zero() {
             self
         } else {
+            let mut hasher = Sha256::default();
             hasher.update(self.as_ref());
             hasher.update(rhs.as_ref());
             Self(hasher.finalize().into())
