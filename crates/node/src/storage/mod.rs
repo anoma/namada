@@ -440,14 +440,14 @@ mod tests {
             None,
             is_key_diff_storable,
         );
-        // Prepare written keys for non-probable data, probable data (IBC), and
+        // Prepare written keys for non-provable data, provable data (IBC), and
         // no diffed data
         let make_key = |suffix: u64| {
             // For three type keys
             match suffix % 3u64 {
-                // for non-probable data
+                // for non-provable data
                 0 => Key::parse(format!("key{suffix}")).unwrap(),
-                // for probable data
+                // for provable data
                 1 => ibc_key(format!("key{suffix}")).unwrap(),
                 // for no diff
                 _ => client_counter_key(),
