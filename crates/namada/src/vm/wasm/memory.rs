@@ -1,7 +1,9 @@
 //! Wasm memory is used for bi-directionally passing data between the host and a
 //! wasm instance.
 
+use std::cell::RefCell;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::str::Utf8Error;
 
 use borsh_ext::BorshSerializeExt;
@@ -10,7 +12,7 @@ use namada_sdk::arith::{self, checked};
 use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::{
-    vm, BaseTunables, Memory, MemoryError, MemoryType, Pages, TableType,
+    vm, BaseTunables, Memory, MemoryError, MemoryType, Pages, Store, TableType,
     Target, Tunables, WASM_PAGE_SIZE,
 };
 use wasmer_vm::{
@@ -27,8 +29,10 @@ pub enum Error {
     OverflowingOffset(u64, usize),
     #[error("Failed initializing the memory: {0}")]
     InitMemoryError(wasmer::MemoryError),
-    #[error("Memory ouf of bounds: {0}")]
-    MemoryOutOfBounds(wasmer::MemoryError),
+    #[error("Failed to grow memory: {0}")]
+    Grow(wasmer::MemoryError),
+    #[error("Wasm memory access error: {0}")]
+    Access(#[from] wasmer::MemoryAccessError),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Memory is not initialized")]
@@ -57,7 +61,9 @@ pub const VP_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 pub const VP_MEMORY_MAX_PAGES: u32 = 200; // 12.8 MiB
 
 /// Prepare memory for instantiating a transaction module
-pub fn prepare_tx_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_tx_memory(
+    store: &mut impl wasmer::AsStoreMut,
+) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         TX_MEMORY_INIT_PAGES,
         Some(TX_MEMORY_MAX_PAGES),
@@ -67,7 +73,9 @@ pub fn prepare_tx_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
 }
 
 /// Prepare memory for instantiating a validity predicate module
-pub fn prepare_vp_memory(store: &mut wasmer::Store) -> Result<wasmer::Memory> {
+pub fn prepare_vp_memory(
+    store: &mut impl wasmer::AsStoreMut,
+) -> Result<wasmer::Memory> {
     let mem_type = wasmer::MemoryType::new(
         VP_MEMORY_INIT_PAGES,
         Some(VP_MEMORY_MAX_PAGES),
@@ -88,6 +96,7 @@ pub struct TxCallInput {
 
 /// Write transaction inputs into wasm memory
 pub fn write_tx_inputs(
+    store: &mut impl wasmer::AsStoreMut,
     memory: &wasmer::Memory,
     tx_data: &BatchedTxRef<'_>,
 ) -> Result<TxCallInput> {
@@ -95,7 +104,7 @@ pub fn write_tx_inputs(
     let tx_data_bytes = tx_data.serialize_to_vec();
     let tx_data_len = tx_data_bytes.len() as _;
 
-    write_memory_bytes(memory, tx_data_ptr, tx_data_bytes)?;
+    write_memory_bytes(store, memory, tx_data_ptr, tx_data_bytes)?;
 
     Ok(TxCallInput {
         tx_data_ptr,
@@ -126,6 +135,7 @@ pub struct VpCallInput {
 
 /// Write validity predicate inputs into wasm memory
 pub fn write_vp_inputs(
+    store: &mut impl wasmer::AsStoreMut,
     memory: &wasmer::Memory,
     VpInput {
         addr,
@@ -157,7 +167,7 @@ pub fn write_vp_inputs(
         &verifiers_bytes[..],
     ]
     .concat();
-    write_memory_bytes(memory, addr_ptr, bytes)?;
+    write_memory_bytes(store, memory, addr_ptr, bytes)?;
 
     Ok(VpCallInput {
         addr_ptr,
@@ -173,12 +183,22 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
+// TODO: avoid growing memory if we're only performing reads; return an Err
+// instead
+fn check_bounds(
+    store: &mut impl wasmer::AsStoreMut,
+    memory: &Memory,
+    base_addr: u64,
+    offset: usize,
+) -> Result<()> {
+    let store_mut = store.as_store_mut();
+    let memview = memory.view(&store_mut);
+
     tracing::debug!(
         "check_bounds pages {}, data_size {}, base_addr {base_addr}, offset \
          {offset}",
-        memory.size().0,
-        memory.data_size(),
+        memview.size().0,
+        memview.data_size(),
     );
     let desired_offset = base_addr
         .checked_add(offset as u64)
@@ -192,8 +212,8 @@ fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
             }
         })
         .ok_or(Error::OverflowingOffset(base_addr, offset))?;
-    if memory.data_size() < desired_offset {
-        let cur_pages = memory.size().0 as usize;
+    if memview.data_size() < desired_offset {
+        let cur_pages = memview.size().0 as usize;
         let capacity = checked!(cur_pages * WASM_PAGE_SIZE)?;
         // usizes should be at least 32 bits wide on most architectures,
         // so this cast shouldn't cause panics, given the invariant that
@@ -208,9 +228,9 @@ fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
             checked!((missing + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE)?;
         let req_pages: u32 = u32::try_from(req_pages)?;
         tracing::debug!(req_pages, "Attempting to grow wasm memory");
-        memory.grow(req_pages).map_err(Error::MemoryOutOfBounds)?;
+        memory.grow(store, req_pages).map_err(Error::Grow)?;
         tracing::debug!(
-            mem_size = memory.data_size(),
+            mem_size = memory.view(&store.as_store_mut()).data_size(),
             "Wasm memory size has been successfully extended"
         );
     }
@@ -219,62 +239,35 @@ fn check_bounds(memory: &Memory, base_addr: u64, offset: usize) -> Result<()> {
 
 /// Read bytes from memory at the given offset and length
 fn read_memory_bytes(
+    store: &mut impl wasmer::AsStoreMut,
     memory: &Memory,
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>> {
-    check_bounds(memory, offset, len)?;
-    let offset = usize::try_from(offset)?;
-    let vec: Vec<_> = memory.view()[offset..checked!(offset + len)?]
-        .iter()
-        .map(|cell| cell.get())
-        .collect();
-    Ok(vec)
+    check_bounds(store, memory, offset, len)?;
+    let mut buf = vec![0; len];
+    memory.view(&store.as_store_mut()).read(offset, &mut buf)?;
+    Ok(buf)
 }
 
 /// Write bytes into memory at the given offset
 fn write_memory_bytes(
+    store: &mut impl wasmer::AsStoreMut,
     memory: &Memory,
     offset: u64,
     bytes: impl AsRef<[u8]>,
 ) -> Result<()> {
-    let slice = bytes.as_ref();
-    let len = slice.len();
-    check_bounds(memory, offset, len as _)?;
-    let offset = usize::try_from(offset)?;
-    memory.view()[offset..checked!(offset + len)?]
-        .iter()
-        .zip(slice.iter())
-        .for_each(|(cell, v)| cell.set(*v));
+    let buf = bytes.as_ref();
+    check_bounds(store, memory, offset, buf.len() as _)?;
+    memory.view(&store.as_store_mut()).write(offset, buf)?;
     Ok(())
 }
 
-/// Inner implementation of some [`WasmMemory`].
-#[derive(Debug, Clone)]
-enum WasmMemoryInner {
-    /// The memory is borrowed from elsewhere.
-    Borrowed {
-        /// The borrowed wasm memory object.
-        memory: Option<NonNull<wasmer::Memory>>,
-    },
-    /// The memory is owned.
-    Owned {
-        /// The owned wasm memory object.
-        memory: wasmer::Memory,
-    },
-}
-
-impl Default for WasmMemoryInner {
-    #[inline]
-    fn default() -> Self {
-        Self::Borrowed { memory: None }
-    }
-}
-
 /// The wasm memory
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct WasmMemory {
-    inner: WasmMemoryInner,
+    store: Rc<RefCell<Store>>,
+    inner: Option<wasmer::Memory>,
 }
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
@@ -283,44 +276,24 @@ unsafe impl Send for WasmMemory {}
 unsafe impl Sync for WasmMemory {}
 
 impl WasmMemory {
-    /// Initialize wasm memory from an existing instance.
-    pub const fn owned(memory: wasmer::Memory) -> Self {
-        Self {
-            inner: WasmMemoryInner::Owned { memory },
-        }
+    /// Build a new wasm memory.
+    pub const fn new(store: Rc<RefCell<Store>>) -> Self {
+        Self { store, inner: None }
     }
 
-    /// Initialize the host memory with a pointer to the guest's memory.
-    ///
-    /// ## Safety
-    ///
-    /// The inner [`Memory`] lives in a [`wasmer::Store`], which is owned
-    /// by a [`wasmer::Instance`]. The instance must outlive the access to
-    /// the memory object, to avoid use-after-free errors.
-    ///
-    /// Additionally, the guest memory cannot be accessed concurrently.
-    pub unsafe fn init_from_guest(&mut self, guest_memory: &Memory) {
-        let WasmMemoryInner::Borrowed { memory } = self else {
-            tracing::error!("wasm memory is owned");
-            return;
-        };
-        if memory.is_some() {
+    /// Initialize the host memory with a pointer to the given memory.
+    pub fn init_from(&mut self, memory: &Memory) {
+        if self.inner.is_some() {
             tracing::error!("wasm memory is already initialized");
             return;
         }
-        *memory =
-            Some(NonNull::new_unchecked(guest_memory as *const _ as *mut _));
+        self.inner = Some(memory.clone());
     }
 
     /// Get a reference to the inner [`Memory`].
     #[inline]
-    unsafe fn get_ref(&self) -> Option<&Memory> {
-        match &self.inner {
-            WasmMemoryInner::Borrowed { memory } => {
-                memory.as_ref().map(|mem| mem.as_ref())
-            }
-            WasmMemoryInner::Owned { memory } => Some(memory),
-        }
+    fn get_ref(&self) -> Option<&Memory> {
+        self.inner.as_ref()
     }
 }
 
@@ -330,9 +303,9 @@ impl VmMemory for WasmMemory {
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
-        let memory = unsafe { self.inner.get_ref() }
-            .ok_or(Error::UninitializedMemory)?;
-        let bytes = read_memory_bytes(memory, offset, len)?;
+        let memory = self.get_ref().ok_or(Error::UninitializedMemory)?;
+        let mut store = self.store.borrow_mut();
+        let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
         let len = bytes.len() as u64;
         let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
         Ok((bytes, gas))
@@ -345,9 +318,9 @@ impl VmMemory for WasmMemory {
         // allocated
         let len = bytes.as_ref().len() as u64;
         let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-        let memory = unsafe { self.inner.get_ref() }
-            .ok_or(Error::UninitializedMemory)?;
-        write_memory_bytes(memory, offset, bytes)?;
+        let memory = self.get_ref().ok_or(Error::UninitializedMemory)?;
+        let mut store = self.store.borrow_mut();
+        write_memory_bytes(&mut *store, memory, offset, bytes)?;
         Ok(gas)
     }
 
@@ -529,7 +502,7 @@ pub mod tests {
 
         // Any compiler and any engine do the job here
         let compiler = Cranelift::default();
-        let mut engine = Engine::new(
+        let mut engine = <Engine as NativeEngineExt>::new(
             Box::new(compiler),
             Target::default(),
             Features::default(),
@@ -541,7 +514,7 @@ pub mod tests {
         engine.set_tunables(tunables);
 
         // Create a store, that holds the engine and our custom tunables
-        let store = Store::new(engine);
+        let mut store = Store::new(engine);
 
         println!("Compiling module...");
         let module = Module::new(&store, wasm_bytes).unwrap();
@@ -550,7 +523,7 @@ pub mod tests {
         let import_object = wasmer::imports! {};
 
         // Now at this point, our custom tunables are used
-        let instance = Instance::new(&module, &import_object).unwrap();
+        let instance = Instance::new(&mut store, &module, &import_object).unwrap();
 
         // Check what happened
         let mut memories: Vec<Memory> = instance
@@ -563,6 +536,6 @@ pub mod tests {
 
         let first_memory = memories.pop().unwrap();
         println!("Memory of this instance: {:?}", first_memory);
-        assert_eq!(first_memory.ty().maximum.unwrap(), limit);
+        assert_eq!(first_memory.ty(&store).maximum.unwrap(), limit);
     }
 }

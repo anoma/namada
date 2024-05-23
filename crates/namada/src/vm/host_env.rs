@@ -1,5 +1,6 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -2454,6 +2455,8 @@ where
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
+    use std::rc::Rc;
+
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
     use crate::vm::wasm::memory::WasmMemory;
@@ -2526,8 +2529,8 @@ pub mod testing {
             crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
 
         let (write_log, in_mem, db) = state.split_borrow();
-        TxVmEnv::new(
-            WasmMemory::owned(wasm_memory),
+        let mut env = TxVmEnv::new(
+            WasmMemory::new(Rc::new(RefCell::new(store))),
             write_log,
             in_mem,
             db,
@@ -2544,7 +2547,10 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
-        )
+        );
+
+        env.memory.init_from(&wasm_memory);
+        env
     }
 
     /// Setup a validity predicate environment

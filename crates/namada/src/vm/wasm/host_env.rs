@@ -4,7 +4,7 @@
 //! imports, so they can be called from inside the wasm.
 
 use namada_state::{DBIter, StorageHasher, DB};
-use wasmer::{Function, FunctionEnv, Imports, Store};
+use wasmer::{Function, FunctionEnv, Imports};
 
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::vm::wasm::memory::WasmMemory;
@@ -14,7 +14,7 @@ use crate::vm::{host_env, WasmCacheAccess};
 /// transaction code
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
-    wasm_store: &mut Store,
+    wasm_store: &mut impl wasmer::AsStoreMut,
     env: TxVmEnv<WasmMemory, D, H, CA>,
 ) -> Imports
 where
@@ -64,7 +64,7 @@ where
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// validity predicate code
 pub fn vp_imports<D, H, EVAL, CA>(
-    wasm_store: &mut Store,
+    wasm_store: &mut impl wasmer::AsStoreMut,
     env: VpVmEnv<WasmMemory, D, H, EVAL, CA>,
 ) -> Imports
 where
