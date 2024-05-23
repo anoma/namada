@@ -353,9 +353,9 @@ where
     event_log: EventLog,
 }
 
-/// Merkle tree storage key filter. Return `false` for keys that shouldn't be
-/// merklized.
-pub fn is_merklized_storage_key(key: &namada_sdk::storage::Key) -> bool {
+/// Storage key filter to store the diffs into the storage. Return `false` for
+/// keys whose diffs shouldn't be stored.
+pub fn is_key_diff_storable(key: &namada_sdk::storage::Key) -> bool {
     !(token::storage_key::is_masp_key(key)
         && *key != token::storage_key::masp_convert_anchor_key()
         && *key != token::storage_key::masp_token_map_key()
@@ -441,7 +441,7 @@ where
             chain_id.clone(),
             native_token,
             config.shell.storage_read_past_height_limit,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let vp_wasm_cache_dir =
             base_dir.join(chain_id.as_str()).join("vp_wasm_cache");

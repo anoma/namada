@@ -612,12 +612,12 @@ pub mod testing {
                 write_log: Default::default(),
                 db: MockDB::default(),
                 in_mem: Default::default(),
-                merkle_tree_key_filter: merklize_all_keys,
+                diff_key_filter: diff_all_keys,
             })
         }
     }
 
-    fn merklize_all_keys(_key: &storage::Key) -> bool {
+    fn diff_all_keys(_key: &storage::Key) -> bool {
         true
     }
 
@@ -671,6 +671,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use chrono::{TimeZone, Utc};
+    use merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_core::storage::DbKeySeg;
@@ -895,16 +896,16 @@ mod tests {
         Key::parse("testing2").unwrap()
     }
 
-    fn merkle_tree_key_filter(key: &Key) -> bool {
+    fn diff_key_filter(key: &Key) -> bool {
         key == &test_key_1()
     }
 
     #[test]
-    fn test_writing_without_merklizing_or_diffs() {
+    fn test_writing_without_diffs() {
         let mut state = TestState::default();
         assert_eq!(state.in_mem().block.height.0, 0);
 
-        (state.0.merkle_tree_key_filter) = merkle_tree_key_filter;
+        (state.0.diff_key_filter) = diff_key_filter;
 
         let key1 = test_key_1();
         let val1 = 1u64;
@@ -952,9 +953,14 @@ mod tests {
         let res2 = u64::try_from_slice(&res2).unwrap();
         assert_eq!(res2, val2);
 
-        // Check explicitly that key-val-2 is not in merkle tree
+        // Check merkle tree inclusion of key-val-2 explicitly
         let is_merklized2 = state.in_mem().block.tree.has_key(&key2).unwrap();
         assert!(!is_merklized2);
+        let no_diff_key2 =
+            Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key()).join(&key2);
+        let is_merklized2 =
+            state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
+        assert!(is_merklized2);
 
         // Check that the proper diffs exist for key-val-1
         let res1 = state
@@ -1005,7 +1011,8 @@ mod tests {
 
         // Check that the key-vals don't exist in the merkle tree anymore
         let is_merklized1 = state.in_mem().block.tree.has_key(&key1).unwrap();
-        let is_merklized2 = state.in_mem().block.tree.has_key(&key2).unwrap();
+        let is_merklized2 =
+            state.in_mem().block.tree.has_key(&no_diff_key2).unwrap();
         assert!(!is_merklized1 && !is_merklized2);
 
         // Check that key-val-1 diffs are properly updated for blocks 0 and 1

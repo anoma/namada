@@ -16,7 +16,11 @@ version.workspace = true
 default = []
 
 # for integration tests and test utilities
-testing = ["proptest", "namada_core/testing"]
+testing = [
+    "proptest",
+    "namada_core/testing",
+    "namada_merkle_tree/testing"
+]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -50,6 +54,7 @@ proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_merkle_tree = { path = "../merkle_tree", features = ["testing"] }
 
 assert_matches.workspace = true
 chrono.workspace = true

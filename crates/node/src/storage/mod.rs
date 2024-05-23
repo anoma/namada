@@ -61,17 +61,19 @@ mod tests {
     use namada::core::ethereum_events::Uint;
     use namada::core::hash::Hash;
     use namada::core::keccak::KeccakHash;
-    use namada::core::storage::{BlockHeight, Key};
+    use namada::core::storage::{BlockHeight, Key, KeySeg};
     use namada::core::time::DurationSecs;
     use namada::core::{address, storage};
     use namada::eth_bridge::storage::proof::BridgePoolRootProof;
+    use namada::ibc::storage::is_ibc_key;
     use namada::ledger::eth_bridge::storage::bridge_pool;
     use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
-    use namada::ledger::ibc::storage::ibc_key;
+    use namada::ledger::ibc::storage::{client_counter_key, ibc_key};
     use namada::ledger::parameters::{EpochDuration, Parameters};
     use namada::state::{self, StorageRead, StorageWrite, StoreType, DB};
     use namada::token::conversion::update_allowed_conversions;
     use namada::{decode, encode, parameters};
+    use namada_sdk::state::merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_sdk::state::StateRead;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -79,7 +81,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::shell::is_merklized_storage_key;
+    use crate::shell::is_key_diff_storable;
 
     #[test]
     fn test_crud_value() {
@@ -91,7 +93,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let key = Key::parse("key").expect("cannot parse the key string");
         let value: u64 = 1;
@@ -143,7 +145,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         state
             .in_mem_mut()
@@ -205,7 +207,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let (loaded_root, height) =
             state.in_mem().get_state().expect("no block exists");
@@ -226,7 +228,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         let mut expected = Vec::new();
@@ -270,7 +272,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         state
             .in_mem_mut()
@@ -342,7 +344,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         // 1. For each `blocks_write_value`, write the current block height if
@@ -436,16 +438,28 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
+        // Prepare written keys for non-provable data, provable data (IBC), and
+        // no diffed data
+        let make_key = |suffix: u64| {
+            // For three type keys
+            match suffix % 3u64 {
+                // for non-provable data
+                0 => Key::parse(format!("key{suffix}")).unwrap(),
+                // for provable data
+                1 => ibc_key(format!("key{suffix}")).unwrap(),
+                // for no diff
+                _ => client_counter_key(),
+            }
+        };
 
         let num_keys = 5;
         let blocks_write_type = blocks_write_type.into_iter().enumerate().map(
             |(index, write_type)| {
                 // try to update some keys at each height
                 let height = BlockHeight::from(index as u64 / num_keys + 1);
-                let key =
-                    ibc_key(format!("key{}", index as u64 % num_keys)).unwrap();
+                let key = make_key(index as u64 % num_keys);
                 (height, key, write_type)
             },
         );
@@ -454,7 +468,7 @@ mod tests {
 
         // write values at Height 0 like init_storage
         for i in 0..num_keys {
-            let key = ibc_key(format!("key{}", i)).unwrap();
+            let key = make_key(i);
             let value_bytes = encode(&state.in_mem().block.height);
             state.db_write(&key, value_bytes)?;
         }
@@ -513,20 +527,26 @@ mod tests {
                 }
             }
         }
+        // save the last root
         roots.insert(state.in_mem().block.height, state.in_mem().merkle_root());
         state.commit_block_from_batch(batch)?;
 
         let mut current_state = HashMap::new();
         for i in 0..num_keys {
-            let key = ibc_key(format!("key{}", i)).unwrap();
+            let key = make_key(i);
             current_state.insert(key, true);
         }
-        // Check a Merkle tree
-        for (height, key, write_type) in blocks_write_type {
+        // Check IBC subtree
+        for (height, key, write_type) in blocks_write_type.clone() {
+            if !is_ibc_key(&key) || key == client_counter_key() {
+                continue;
+            }
             let tree = state.get_merkle_tree(height, Some(StoreType::Ibc))?;
+            // Check if the rebuilt tree's root is the same as the saved one
             assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
             match write_type {
                 0 => {
+                    // data was not updated
                     if *current_state.get(&key).unwrap() {
                         assert!(tree.has_key(&key)?);
                     } else {
@@ -534,11 +554,52 @@ mod tests {
                     }
                 }
                 1 | 3 => {
+                    // data was deleted
                     assert!(!tree.has_key(&key)?);
                     current_state.insert(key, false);
                 }
                 _ => {
+                    // data was updated
                     assert!(tree.has_key(&key)?);
+                    current_state.insert(key, true);
+                }
+            }
+        }
+
+        // Check NoDiff subtree
+        let mut current_state = HashMap::new();
+        for i in 0..num_keys {
+            let key = make_key(i);
+            current_state.insert(key, true);
+        }
+        for (height, key, write_type) in blocks_write_type {
+            if key != client_counter_key() {
+                continue;
+            }
+            let merkle_key =
+                Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key())
+                    .join(&key);
+            let tree =
+                state.get_merkle_tree(height, Some(StoreType::NoDiff))?;
+            // Check if the rebuilt tree's root is the same as the saved one
+            assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
+            match write_type {
+                0 => {
+                    // data was not updated
+                    if *current_state.get(&key).unwrap() {
+                        assert!(tree.has_key(&merkle_key)?);
+                    } else {
+                        assert!(!tree.has_key(&merkle_key)?);
+                    }
+                }
+                1 | 3 => {
+                    // data was deleted
+                    assert!(!tree.has_key(&merkle_key)?);
+                    current_state.insert(key, false);
+                }
+                _ => {
+                    // data was updated
+                    assert!(tree.has_key(&merkle_key)?);
                     current_state.insert(key, true);
                 }
             }
@@ -558,7 +619,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             Some(5),
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
         let new_epoch_start = BlockHeight(1);
         let signed_root_key = bridge_pool::get_signed_root_key();
@@ -680,7 +741,7 @@ mod tests {
             ChainId::default(),
             address::testing::nam(),
             None,
-            is_merklized_storage_key,
+            is_key_diff_storable,
         );
 
         let prefix = storage::Key::parse("prefix").unwrap();
