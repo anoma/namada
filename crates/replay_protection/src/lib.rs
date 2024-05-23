@@ -17,10 +17,21 @@
     clippy::print_stderr
 )]
 
+use namada_core::address::{Address, InternalAddress};
 use namada_core::hash::Hash;
-use namada_core::storage::Key;
+use namada_core::storage::{DbKeySeg, Key};
 
 const ERROR_MSG: &str = "Cannot obtain a valid db key";
+
+/// Get the key under which we store a hash which is commitment
+/// to all replay protection entries.
+pub fn commitment_key() -> Key {
+    Key::from(DbKeySeg::AddressSeg(Address::Internal(
+        InternalAddress::ReplayProtection,
+    )))
+    .push(&"commitment".to_string())
+    .expect("Should be able to form this key")
+}
 
 /// Get the transaction hash key
 pub fn key(hash: &Hash) -> Key {

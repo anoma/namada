@@ -143,6 +143,9 @@ impl From<raw::Address<'_, raw::Validated>> for Address {
             raw::Discriminant::TempStorage => {
                 Address::Internal(InternalAddress::TempStorage)
             }
+            raw::Discriminant::ReplayProtection => {
+                Address::Internal(InternalAddress::ReplayProtection)
+            }
         }
     }
 }
@@ -241,6 +244,13 @@ impl<'addr> From<&'addr Address> for raw::Address<'addr, raw::Validated> {
                 raw::Address::from_discriminant(raw::Discriminant::TempStorage)
                     .validate()
                     .expect("This raw address is valid")
+            }
+            Address::Internal(InternalAddress::ReplayProtection) => {
+                raw::Address::from_discriminant(
+                    raw::Discriminant::ReplayProtection,
+                )
+                .validate()
+                .expect("This raw address is valid")
             }
         }
     }
@@ -575,6 +585,8 @@ pub enum InternalAddress {
     Pgf,
     /// Masp
     Masp,
+    /// Replay protection
+    ReplayProtection,
     /// Address with temporary storage is used to pass data from txs to VPs
     /// which is never committed to DB
     TempStorage,
@@ -599,6 +611,7 @@ impl Display for InternalAddress {
                 Self::Multitoken => "Multitoken".to_string(),
                 Self::Pgf => "PublicGoodFundings".to_string(),
                 Self::Masp => "MASP".to_string(),
+                Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::TempStorage => "TempStorage".to_string(),
             }
         )
@@ -615,6 +628,7 @@ impl InternalAddress {
             "bridgepool" => Some(InternalAddress::EthBridgePool),
             "governance" => Some(InternalAddress::Governance),
             "masp" => Some(InternalAddress::Masp),
+            "replayprotection" => Some(InternalAddress::ReplayProtection),
             _ => None,
         }
     }
@@ -821,6 +835,7 @@ pub mod testing {
             InternalAddress::Pgf => {}
             InternalAddress::Masp => {}
             InternalAddress::Multitoken => {}
+            InternalAddress::ReplayProtection => {}
             InternalAddress::TempStorage => {} /* Add new addresses in the
                                                 * `prop_oneof` below. */
         };
@@ -838,6 +853,7 @@ pub mod testing {
             Just(InternalAddress::Multitoken),
             Just(InternalAddress::Pgf),
             Just(InternalAddress::Masp),
+            Just(InternalAddress::ReplayProtection),
             Just(InternalAddress::TempStorage),
         ]
     }

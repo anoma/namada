@@ -2817,6 +2817,15 @@ mod test_finalize_block {
                 .has_key(&wrapper_hash_key)
                 .unwrap()
         );
+
+        // test that a commitment to replay protection gets added.
+        let reprot_key = replay_protection::commitment_key();
+        let reprot_commitment: Hash = shell
+            .state
+            .read(&reprot_key)
+            .expect("Test failed")
+            .expect("Test failed");
+        assert_eq!(wrapper_tx.raw_header_hash(), reprot_commitment);
     }
 
     /// Test that masp anchor keys are added to the merkle tree

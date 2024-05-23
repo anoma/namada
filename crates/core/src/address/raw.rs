@@ -67,6 +67,8 @@ pub enum Discriminant {
     Masp = 14,
     /// Temporary storage address.
     TempStorage = 15,
+    /// Replay protection
+    ReplayProtection = 16,
 }
 
 /// Raw address representation.

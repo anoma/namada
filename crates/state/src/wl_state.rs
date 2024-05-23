@@ -11,7 +11,9 @@ use namada_events::{EmitEvents, EventToEmit};
 use namada_parameters::EpochDuration;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
-use namada_storage::{BlockHeight, BlockStateRead, BlockStateWrite, ResultExt};
+use namada_storage::{
+    BlockHeight, BlockStateRead, BlockStateWrite, ResultExt, StorageRead,
+};
 
 use crate::in_memory::InMemory;
 use crate::write_log::{StorageModification, WriteLog};
@@ -227,14 +229,24 @@ where
         // hashes from the previous block to the general bucket
         self.move_current_replay_protection_entries(batch)?;
 
-        for hash in
-            std::mem::take(&mut self.0.write_log.replay_protection).iter()
-        {
-            self.write_replay_protection_entry(
-                batch,
-                &replay_protection::current_key(hash),
-            )?;
-        }
+        let replay_prot_key = replay_protection::commitment_key();
+        let commitment: Hash = self
+            .read(&replay_prot_key)
+            .expect("Could not read db")
+            .unwrap_or_default();
+        let new_commitment =
+            std::mem::take(&mut self.0.write_log.replay_protection)
+                .iter()
+                .try_fold(commitment, |mut acc, hash| {
+                    self.write_replay_protection_entry(
+                        batch,
+                        &replay_protection::current_key(hash),
+                    )?;
+                    acc = acc.concat(hash);
+                    Ok::<_, Error>(acc)
+                })?;
+        self.batch_write_subspace_val(batch, &replay_prot_key, new_commitment)?;
+
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
         if let Some(address_gen) = self.0.write_log.block_address_gen.take() {
