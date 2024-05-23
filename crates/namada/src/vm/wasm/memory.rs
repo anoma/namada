@@ -11,9 +11,10 @@ use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_sdk::arith::{self, checked};
 use namada_tx::BatchedTxRef;
 use thiserror::Error;
+use wasmer::sys::BaseTunables;
 use wasmer::{
-    vm, BaseTunables, Memory, MemoryError, MemoryType, Pages, Store, TableType,
-    Target, Tunables, WASM_PAGE_SIZE,
+    vm, Memory, MemoryError, MemoryType, Pages, Store, TableType, Target,
+    Tunables, WASM_PAGE_SIZE,
 };
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
@@ -482,9 +483,10 @@ impl<T: Tunables> Tunables for Limit<T> {
 
 #[cfg(test)]
 pub mod tests {
+    use wasmer::sys::Features;
     use wasmer::{
-        wat2wasm, Cranelift, Engine, Features, Instance, Module,
-        NativeEngineExt, Store, Target,
+        wat2wasm, Cranelift, Engine, Instance, Module, NativeEngineExt, Store,
+        Target,
     };
 
     use super::*;
@@ -523,7 +525,8 @@ pub mod tests {
         let import_object = wasmer::imports! {};
 
         // Now at this point, our custom tunables are used
-        let instance = Instance::new(&mut store, &module, &import_object).unwrap();
+        let instance =
+            Instance::new(&mut store, &module, &import_object).unwrap();
 
         // Check what happened
         let mut memories: Vec<Memory> = instance

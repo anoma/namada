@@ -17,9 +17,8 @@ use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
-use wasmer::{
-    BaseTunables, Engine, Features, Module, NativeEngineExt, Store, Target,
-};
+use wasmer::sys::{BaseTunables, Features};
+use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;

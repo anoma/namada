@@ -190,10 +190,10 @@ tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
-wasmer = "3.3.0"
-wasmer-cache = "3.3.0"
-wasmer-compiler-singlepass = "3.3.0"
-wasmer-vm = "3.3.0"
+wasmer = "4.3.0"
+wasmer-cache = "4.3.0"
+wasmer-compiler-singlepass = "4.3.0"
+wasmer-vm = "4.3.0"
 winapi = "0.3.9"
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }

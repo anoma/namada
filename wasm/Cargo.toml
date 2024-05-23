@@ -40,7 +40,7 @@ namada_vp_prelude = { path = "../crates/vp_prelude" }
 
 once_cell = { version = "1.8.0" }
 wee_alloc = "0.4.5"
-getrandom = { version = "0.2", features = ["custom"] }
+getrandom = { version = "0.2.15", features = ["custom"] }
 
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)
