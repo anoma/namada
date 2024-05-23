@@ -66,7 +66,7 @@ pub enum PgfAction {
 /// MASP tx action.
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub struct MaspAction {
-    /// The hash of the masp [`Section`]
+    /// The hash of the masp [`crate::types::Section`]
     pub masp_section_ref: Hash,
 }
 
