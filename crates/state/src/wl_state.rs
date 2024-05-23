@@ -1345,7 +1345,6 @@ where
     }
 }
 
-//FIXME: can join this with FullAccessState?
 impl<D, H> namada_tx::action::Read for WlState<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,

@@ -9,7 +9,7 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_core::storage::Key;
 use namada_events::extend::{
-    ComposeEvent, Height as HeightAttr, MaspTxRef, TxHash as TxHashAttr
+    ComposeEvent, Height as HeightAttr, MaspTxRef, TxHash as TxHashAttr,
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
@@ -164,7 +164,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct DispatchError {
     /// The result of the function call
     pub error: Error,
-    /// The extended tx result produced. It could be produced even in case of an error
+    /// The extended tx result produced. It could be produced even in case of
+    /// an error
     pub tx_result: Option<ExtendedTxResult<Error>>,
 }
 
@@ -264,89 +265,115 @@ where
                 });
             }
 
-            let mut extended_tx_result = tx_result.to_extended_result(None);
+            dispatch_inner_txs(
+                tx,
+                tx_result,
+                tx_index,
+                tx_gas_meter,
+                state,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            )
+        }
+    }
+}
 
-            // TODO(namada#2597): handle masp fee payment in the first inner tx
-            // if necessary
-            for cmt in tx.commitments() {
-                match apply_wasm_tx(
-                    tx.batch_ref_tx(cmt),
-                    &tx_index,
-                    ShellParams {
-                        tx_gas_meter,
-                        state,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                    },
-                ) {
-                    Err(Error::GasError(ref msg)) => {
-                        // Gas error aborts the execution of the entire batch
-                        extended_tx_result.tx_result.gas_used =
-                            tx_gas_meter.borrow().get_tx_consumed_gas();
-                        extended_tx_result.tx_result.batch_results.0.insert(
-                            cmt.get_hash(),
-                            Err(Error::GasError(msg.to_owned())),
-                        );
-                        state.write_log_mut().drop_tx();
+fn dispatch_inner_txs<'a, D, H, CA>(
+    tx: Tx,
+    tx_result: TxResult<Error>,
+    tx_index: TxIndex,
+    tx_gas_meter: &'a RefCell<TxGasMeter>,
+    state: &'a mut WlState<D, H>,
+    vp_wasm_cache: &'a mut VpCache<CA>,
+    tx_wasm_cache: &'a mut TxCache<CA>,
+) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    let mut extended_tx_result = tx_result.to_extended_result(None);
+
+    // TODO(namada#2597): handle masp fee payment in the first inner tx
+    // if necessary
+    for cmt in tx.commitments() {
+        match apply_wasm_tx(
+            tx.batch_ref_tx(cmt),
+            &tx_index,
+            ShellParams {
+                tx_gas_meter,
+                state,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            },
+        ) {
+            Err(Error::GasError(ref msg)) => {
+                // Gas error aborts the execution of the entire batch
+                extended_tx_result.tx_result.gas_used =
+                    tx_gas_meter.borrow().get_tx_consumed_gas();
+                extended_tx_result.tx_result.batch_results.0.insert(
+                    cmt.get_hash(),
+                    Err(Error::GasError(msg.to_owned())),
+                );
+                state.write_log_mut().drop_tx();
+                return Err(DispatchError {
+                    error: Error::GasError(msg.to_owned()),
+                    tx_result: Some(extended_tx_result),
+                });
+            }
+            res => {
+                let is_accepted =
+                    matches!(&res, Ok(result) if result.is_accepted());
+
+                extended_tx_result
+                    .tx_result
+                    .batch_results
+                    .0
+                    .insert(cmt.get_hash(), res);
+                extended_tx_result.tx_result.gas_used =
+                    tx_gas_meter.borrow().get_tx_consumed_gas();
+                if is_accepted {
+                    // If the transaction was a masp one append the
+                    // transaction refs for the events
+                    if let Some(masp_section_ref) = state
+                        .read_actions()
+                        .map_err(|e| Error::StateError(e))?
+                        .into_iter()
+                        .find_map(|action| {
+                            // In case of multiple masp actions we get the first one
+                            if let Action::Masp(MaspAction {
+                                masp_section_ref,
+                            }) = action
+                            {
+                                Some(masp_section_ref)
+                            } else {
+                                None
+                            }
+                        })
+                    {
+                        extended_tx_result.masp_tx_refs.0.push(MaspTxRef {
+                            cmt: cmt.get_hash(),
+                            masp_section_ref,
+                        });
+                    }
+                    state.write_log_mut().commit_tx_to_batch();
+                } else {
+                    state.write_log_mut().drop_tx();
+
+                    if tx.header.atomic {
+                        // Stop the execution of an atomic batch at the
+                        // first failed transaction
                         return Err(DispatchError {
-                            error: Error::GasError(msg.to_owned()),
+                            error: Error::FailingAtomicBatch(cmt.get_hash()),
                             tx_result: Some(extended_tx_result),
                         });
                     }
-                    res => {
-                        //FIXME: move out to seaparate function, maybe the entire loop
-                        let is_accepted =
-                            matches!(&res, Ok(result) if result.is_accepted());
-
-                        extended_tx_result
-                            .tx_result
-                            .batch_results
-                            .0
-                            .insert(cmt.get_hash(), res);
-                        extended_tx_result.tx_result.gas_used =
-                            tx_gas_meter.borrow().get_tx_consumed_gas();
-                        if is_accepted {
-                            // If the transaction was a masp one append the transaction refs for the events
-                            if let Some(masp_section_ref) = state.read_actions().map_err(|e| Error::StateError(e))?.into_iter().find_map(|action| 
- // In case of multiple masp actions we only get the first one
-                if let Action::Masp(MaspAction{
-                    masp_section_ref,
-                }) = action
-                {
-                                    Some(masp_section_ref)
-
-                } else {
-                    None
                 }
-
-                            ) {
-                                
-                                extended_tx_result.masp_tx_refs.0.push(MaspTxRef {
-                                    cmt: cmt.get_hash(),
-                                    masp_section_ref 
-                                });
-                            }
-                            state.write_log_mut().commit_tx_to_batch();
-                        } else {
-                            state.write_log_mut().drop_tx();
-
-                            if tx.header.atomic {
-                                // Stop the execution of an atomic batch at the
-                                // first failed transaction
-                                return Err(DispatchError {
-                                    error: Error::FailingAtomicBatch(
-                                        cmt.get_hash(),
-                                    ),
-                                    tx_result: Some(extended_tx_result),
-                                });
-                            }
-                        }
-                    }
-                };
             }
-            Ok(extended_tx_result)
-        }
+        };
     }
+
+    Ok(extended_tx_result)
 }
 
 /// Load the wasm hash for a transfer from storage.

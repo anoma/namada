@@ -866,8 +866,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // is not safe. We don't validate the sections attached to a
         // transaction se we could end up with transactions carrying
         // an unnecessary masp section. We must instead look for the
-        // required masp sections in the signed commitments (hashes)
-        // of the transactions' data sections
+        // required masp sections coming from the events
         let mut txs = vec![];
 
         for MaspTxRef {
@@ -875,22 +874,27 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             masp_section_ref,
         } in &masp_section_refs.0
         {
-            //FIXME: improve here
-            let masp_section = tx.get_section(masp_section_ref);
+            let transaction = tx
+                .get_section(masp_section_ref)
+                .map(|section| section.masp_tx())
+                .flatten()
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing expected masp transaction".to_string(),
+                    )
+                })?;
 
-            let maybe_transaction =
-                masp_section.map(|section| section.masp_tx()).flatten();
+            let cmt = tx
+                .commitments()
+                .iter()
+                .find(|inner_tx| &inner_tx.get_hash() == cmt)
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing expected inner transaction".to_string(),
+                    )
+                })?;
 
-            if let Some(transaction) = maybe_transaction {
-                let inner_tx = tx
-                    .commitments()
-                    .iter()
-                    .find(|inner_tx| &inner_tx.get_hash() == cmt);
-
-                if let Some(cmt) = inner_tx {
-                    txs.push((cmt.to_owned(), transaction));
-                }
-            }
+            txs.push((cmt.to_owned(), transaction));
         }
 
         Ok(ExtractedMaspTxs(txs))
