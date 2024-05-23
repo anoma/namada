@@ -1626,7 +1626,7 @@ fn enforce_fee_payment() -> Result<()> {
             "--amount",
             // We want this transaction to consume all the remaining available
             // balance. If we executed the inner txs right after the
-            // corresponding wrapper's fee paymwent this would succeed (but
+            // corresponding wrapper's fee payment this would succeed (but
             // this is not the case)
             "1900000",
             "--output-folder-path",

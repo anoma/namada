@@ -180,7 +180,7 @@ impl From<Error> for DispatchError {
 
 /// Arguments for transactions' execution
 pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
-    /// Protocoli tx data
+    /// Protocol tx data
     Protocol(&'a ProtocolTx),
     /// Raw tx data
     Raw {

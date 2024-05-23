@@ -67,7 +67,6 @@ impl ProtocolTx {
     Deserialize,
     PartialEq,
 )]
-#[allow(clippy::large_enum_variant)]
 /// Types of protocol messages to be sent
 pub enum ProtocolTxType {
     /// Ethereum events contained in vote extensions that
