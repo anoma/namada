@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::masp::BatchMaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
 
 use super::*;
@@ -498,42 +499,13 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     }
 }
 
-//FIXME: move to tx crate?
-/// Reference to a valid masp transaction
-#[derive(Clone, Serialize, Deserialize)]
-pub struct MaspTxRef {
-    //FIXME: actually, are we using the commitment? Probably if I give the masp section ref I don't need the commitment anymore right?
-    //FIXME: If we don't need the commitment then we definetely need to section ref to be in the event and not in the result otherwise we need to loop
-    pub cmt: Hash,
-    pub masp_section_ref: Hash,
-}
-
-/// The collection of valid masp transactions
-#[derive(Default, Clone, Serialize, Deserialize)]
-//FIXME: move somewhere else?
-//FIXME: maybe rename, yes
-pub struct ValidMaspTxs(pub Vec<MaspTxRef>);
-
-impl Display for ValidMaspTxs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
-    }
-}
-
-impl FromStr for ValidMaspTxs {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
-    }
-}
-
 /// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
-/// inner transactions inside the batch that are valid masp txs and the references to the relative masp sections..
-pub struct MaspTxBatchRefs(pub ValidMaspTxs);
+/// inner transactions inside the batch that are valid masp txs and the
+/// references to the relative masp sections.
+pub struct MaspTxBatchRefs(pub BatchMaspTxRefs);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
-    type Value = ValidMaspTxs;
+    type Value = BatchMaspTxRefs;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";

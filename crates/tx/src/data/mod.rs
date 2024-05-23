@@ -21,8 +21,8 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::hash::Hash;
+use namada_core::masp::BatchMaspTxRefs;
 use namada_core::storage;
-use namada_events::extend::{MaspTxRef, ValidMaspTxs};
 use namada_events::Event;
 use namada_gas::{Gas, VpsGas};
 use namada_macros::BorshDeserializer;
@@ -239,10 +239,11 @@ impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for BatchResults<T> {
     }
 }
 
-/// The extended transaction result, containing the optional references to masp sections
+/// The extended transaction result, containing the references to masp
+/// sections (if any)
 pub struct ExtendedTxResult<T> {
     pub tx_result: TxResult<T>,
-    pub masp_tx_refs: ValidMaspTxs,
+    pub masp_tx_refs: BatchMaspTxRefs,
 }
 
 impl<T> Default for ExtendedTxResult<T> {
@@ -299,7 +300,7 @@ impl<T: Display> TxResult<T> {
     /// Converts this result to [`ExtendedTxResult`]
     pub fn to_extended_result(
         self,
-        masp_tx_refs: Option<ValidMaspTxs>,
+        masp_tx_refs: Option<BatchMaspTxRefs>,
     ) -> ExtendedTxResult<T> {
         ExtendedTxResult {
             tx_result: self,

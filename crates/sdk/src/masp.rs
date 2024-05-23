@@ -57,13 +57,13 @@ pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
+use namada_core::masp::{BatchMaspTxRefs, MaspTxRef};
 use namada_core::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_events::extend::{
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
-    MaspTxBlockIndex as MaspTxBlockIndexAttr, MaspTxRef,
-    ReadFromEventAttributes, ValidMaspTxs,
+    MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
 use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
@@ -860,7 +860,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Extract the relevant shield portions of a [`Tx`], if any.
     async fn extract_masp_tx(
         tx: &Tx,
-        masp_section_refs: &ValidMaspTxs,
+        masp_section_refs: &BatchMaspTxRefs,
     ) -> Result<ExtractedMaspTxs, Error> {
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
@@ -2020,7 +2020,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, ValidMaspTxs)>>, Error> {
+) -> Result<Option<Vec<(TxIndex, BatchMaspTxRefs)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client

@@ -27,9 +27,7 @@ use namada::core::masp::{
 use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::core::time::DateTimeUtc;
 use namada::core::token::{Amount, DenominatedAmount, Transfer};
-use namada::events::extend::{
-    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex, MaspTxRef, ValidMaspTxs,
-};
+use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
 use namada::events::Event;
 use namada::governance::storage::proposal::ProposalType;
 use namada::governance::InitProposalData;
@@ -76,6 +74,7 @@ use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada::masp::{BatchMaspTxRefs, MaspTxRef};
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
@@ -924,7 +923,7 @@ impl Client for BenchShell {
                             .with(MaspTxBlockIndex(TxIndex::must_from_usize(
                                 idx,
                             )))
-                            .with(MaspTxBatchRefs(ValidMaspTxs(vec![
+                            .with(MaspTxBatchRefs(BatchMaspTxRefs(vec![
                                 MaspTxRef {
                                     cmt: tx
                                         .first_commitments()

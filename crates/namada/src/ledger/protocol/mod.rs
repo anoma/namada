@@ -7,9 +7,10 @@ use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
+use namada_core::masp::MaspTxRef;
 use namada_core::storage::Key;
 use namada_events::extend::{
-    ComposeEvent, Height as HeightAttr, MaspTxRef, TxHash as TxHashAttr,
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
@@ -335,6 +336,7 @@ where
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
+                    //FIXME: should join this logic with the one used by the vp?
                     if let Some(masp_section_ref) = state
                         .read_actions()
                         .map_err(|e| Error::StateError(e))?
