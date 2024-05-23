@@ -13,7 +13,6 @@ use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{
     BlockHeight, BlockStateRead, BlockStateWrite, ResultExt, StorageRead,
-    StorageWrite,
 };
 
 use crate::in_memory::InMemory;
@@ -246,7 +245,7 @@ where
                     acc = acc.concat(hash);
                     Ok::<_, Error>(acc)
                 })?;
-        self.write(&replay_prot_key, new_commitment)?;
+        self.batch_write_subspace_val(batch, &replay_prot_key, new_commitment)?;
 
         debug_assert!(self.0.write_log.replay_protection.is_empty());
 
