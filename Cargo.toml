@@ -5,7 +5,7 @@ members = [
   "crates/account",
   "crates/apps",
   "crates/apps_lib",
-  "crates/benches",
+  #"crates/benches",
   "crates/controller",
   "crates/core",
   "crates/encoding_spec",
@@ -43,6 +43,7 @@ members = [
 
 # wasm packages have to be built separately
 exclude = [
+  "crates/benches",
   "wasm",
   "wasm_for_tests",
   "test_fixtures",

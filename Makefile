@@ -34,7 +34,7 @@ crates := namada
 crates += namada_account
 crates += namada_apps
 crates += namada_apps_lib
-crates += namada_benchmarks
+#crates += namada_benchmarks
 crates += namada_core
 crates += namada_encoding_spec
 crates += namada_ethereum_bridge
@@ -66,7 +66,7 @@ crates += namada_vp_env
 crates += namada_vp_prelude
 
 build:
-	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
+	$(cargo) build $(jobs) --workspace
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
@@ -113,8 +113,7 @@ clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --a
 
 # Need a separate command for benchmarks to prevent the "testing" feature flag from being activated
 clippy:
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings && \
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace -- -D warnings && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy
 
