@@ -7,7 +7,6 @@ use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
-use namada_core::masp::MaspTxRef;
 use namada_core::storage::Key;
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
@@ -15,9 +14,8 @@ use namada_events::extend::{
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
-use namada_state::{StateRead, StorageWrite};
+use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-use namada_tx::action::{Action, MaspAction, Read};
 use namada_tx::data::protocol::ProtocolTxType;
 use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, TxType,
@@ -338,12 +336,12 @@ where
                     // transaction refs for the events
                     if let Some(masp_section_ref) =
                         namada_tx::action::get_masp_section_ref(state)
-                            .map_err(|e| Error::StateError(e))?
+                            .map_err(Error::StateError)?
                     {
-                        extended_tx_result.masp_tx_refs.0.push(MaspTxRef {
-                            cmt: cmt.get_hash(),
-                            masp_section_ref,
-                        });
+                        extended_tx_result
+                            .masp_tx_refs
+                            .0
+                            .push(masp_section_ref);
                     }
                     state.write_log_mut().commit_tx_to_batch();
                 } else {

@@ -25,7 +25,6 @@ use namada_proof_of_stake::Epoch;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
-use namada_tx::action::{Action, MaspAction, Read};
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use ripemd::Digest as RipemdDigest;
@@ -364,8 +363,7 @@ where
         let shielded_tx = tx_data
             .tx
             .get_section(&masp_section_ref)
-            .map(|section| section.masp_tx())
-            .flatten()
+            .and_then(|section| section.masp_tx())
             .ok_or_else(|| {
                 native_vp::Error::new_const(
                     "Missing MASP section in transaction",

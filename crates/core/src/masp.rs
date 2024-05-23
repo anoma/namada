@@ -534,28 +534,17 @@ impl FromStr for MaspValue {
     }
 }
 
-/// Reference to a masp transaction inside a [`BatchedTx`]
-#[derive(Clone, Serialize, Deserialize)]
-pub struct MaspTxRef {
-    // FIXME: actually, are we using the commitment? Probably if I give the
-    // masp section ref I don't need the commitment anymore right?
-    /// The inner tx commitment's hash
-    pub cmt: Hash,
-    /// The hash of the masp [`Section::MaspTx`]
-    pub masp_section_ref: Hash,
-}
-
 /// The masp transactions' references of a given batch
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct BatchMaspTxRefs(pub Vec<MaspTxRef>);
+pub struct MaspTxRefs(pub Vec<Hash>);
 
-impl Display for BatchMaspTxRefs {
+impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 
-impl FromStr for BatchMaspTxRefs {
+impl FromStr for MaspTxRefs {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

@@ -2,12 +2,12 @@
 
 use std::fmt::Display;
 use std::marker::PhantomData;
-use std::ops::{ControlFlow, DerefMut};
+use std::ops::ControlFlow;
 use std::str::FromStr;
 
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
-use namada_core::masp::BatchMaspTxRefs;
+use namada_core::masp::MaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
 
 use super::*;
@@ -502,10 +502,10 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
 /// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
 /// inner transactions inside the batch that are valid masp txs and the
 /// references to the relative masp sections.
-pub struct MaspTxBatchRefs(pub BatchMaspTxRefs);
+pub struct MaspTxBatchRefs(pub MaspTxRefs);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
-    type Value = BatchMaspTxRefs;
+    type Value = MaspTxRefs;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";
@@ -607,8 +607,8 @@ where
 }
 
 /// Return a new implementation of [`EventAttributeChecker`].
-pub fn attribute_checker<'value, DATA, ATTR>(
-) -> Box<dyn EventAttributeChecker<'value, ATTR>>
+pub fn attribute_checker<'value, DATA, ATTR>()
+-> Box<dyn EventAttributeChecker<'value, ATTR>>
 where
     DATA: EventAttributeEntry<'value> + 'static,
     ATTR: AttributesMap,

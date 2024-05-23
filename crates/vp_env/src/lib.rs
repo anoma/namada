@@ -24,7 +24,6 @@ use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
-use namada_core::token::Transfer;
 use namada_events::{Event, EventType};
 use namada_storage::StorageRead;
 use namada_tx::BatchedTxRef;

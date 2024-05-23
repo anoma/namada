@@ -53,11 +53,11 @@ use masp_proofs::sapling::SaplingVerificationContext;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
+use namada_core::masp::MaspTxRefs;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
-use namada_core::masp::{BatchMaspTxRefs, MaspTxRef};
 use namada_core::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
@@ -65,13 +65,12 @@ use namada_events::extend::{
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
-use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::StorageError;
-use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::{IndexedTx, Tx, TxCommitments};
+use namada_token::{self as token, Denomination, MaspDigitPos};
+use namada_tx::{IndexedTx, Tx};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
@@ -103,10 +102,10 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Transaction);
+pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 
 /// Shielded transfer
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
@@ -143,9 +142,6 @@ pub enum TransferErr {
     #[error("{0}")]
     General(#[from] Error),
 }
-
-#[derive(Debug, Clone)]
-struct ExtractedMaspTxs(Vec<(TxCommitments, Transaction)>);
 
 /// MASP verifying keys
 pub struct PVKs {
@@ -668,35 +664,37 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Update the merkle tree of witnesses the first time we
-    /// scan a new MASP transaction.
+    /// scan new MASP transactions.
     fn update_witness_map(
         &mut self,
         indexed_tx: IndexedTx,
-        shielded: &Transaction,
+        shielded: &[Transaction],
     ) -> Result<(), Error> {
         let mut note_pos = self.tree.size();
         self.tx_note_map.insert(indexed_tx, note_pos);
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Create merkle tree leaf node from note commitment
-            let node = Node::new(so.cmu.to_repr());
-            // Update each merkle tree in the witness map with the latest
-            // addition
-            for (_, witness) in self.witness_map.iter_mut() {
-                witness.append(node).map_err(|()| {
+
+        for tx in shielded {
+            for so in
+                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
+            {
+                // Create merkle tree leaf node from note commitment
+                let node = Node::new(so.cmu.to_repr());
+                // Update each merkle tree in the witness map with the latest
+                // addition
+                for (_, witness) in self.witness_map.iter_mut() {
+                    witness.append(node).map_err(|()| {
+                        Error::Other("note commitment tree is full".to_string())
+                    })?;
+                }
+                self.tree.append(node).map_err(|()| {
                     Error::Other("note commitment tree is full".to_string())
                 })?;
+                // Finally, make it easier to construct merkle paths to this new
+                // note
+                let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
+                self.witness_map.insert(note_pos, witness);
+                note_pos += 1;
             }
-            self.tree.append(node).map_err(|()| {
-                Error::Other("note commitment tree is full".to_string())
-            })?;
-            // Finally, make it easier to construct merkle paths to this new
-            // note
-            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
-            self.witness_map.insert(note_pos, witness);
-            note_pos += 1;
         }
         Ok(())
     }
@@ -841,16 +839,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let extracted_masp_txs =
                     Self::extract_masp_tx(&tx, &masp_sections_refs).await?;
                 // Collect the current transactions
-                for (inner_tx, transaction) in extracted_masp_txs.0 {
-                    shielded_txs.insert(
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            inner_tx,
-                        },
-                        transaction,
-                    );
-                }
+                shielded_txs.insert(
+                    IndexedTx {
+                        height: height.into(),
+                        index: idx,
+                    },
+                    extracted_masp_txs,
+                );
             }
         }
 
@@ -860,44 +855,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Extract the relevant shield portions of a [`Tx`], if any.
     async fn extract_masp_tx(
         tx: &Tx,
-        masp_section_refs: &BatchMaspTxRefs,
-    ) -> Result<ExtractedMaspTxs, Error> {
+        masp_section_refs: &MaspTxRefs,
+    ) -> Result<Vec<Transaction>, Error> {
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
         // transaction se we could end up with transactions carrying
         // an unnecessary masp section. We must instead look for the
         // required masp sections coming from the events
-        let mut txs = vec![];
 
-        for MaspTxRef {
-            cmt,
-            masp_section_ref,
-        } in &masp_section_refs.0
-        {
-            let transaction = tx
-                .get_section(masp_section_ref)
-                .map(|section| section.masp_tx())
-                .flatten()
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing expected masp transaction".to_string(),
-                    )
-                })?;
-
-            let cmt = tx
-                .commitments()
-                .iter()
-                .find(|inner_tx| &inner_tx.get_hash() == cmt)
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing expected inner transaction".to_string(),
-                    )
-                })?;
-
-            txs.push((cmt.to_owned(), transaction));
-        }
-
-        Ok(ExtractedMaspTxs(txs))
+        masp_section_refs
+            .0
+            .iter()
+            .try_fold(vec![], |mut acc, hash| {
+                match tx
+                    .get_section(hash)
+                    .and_then(|section| section.masp_tx())
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing expected masp transaction".to_string(),
+                        )
+                    }) {
+                    Ok(transaction) => {
+                        acc.push(transaction);
+                        Ok(acc)
+                    }
+                    Err(e) => Err(e),
+                }
+            })
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -911,7 +895,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub fn scan_tx(
         &mut self,
         indexed_tx: IndexedTx,
-        shielded: &Transaction,
+        shielded: &[Transaction],
         vk: &ViewingKey,
     ) -> Result<(), Error> {
         // For tracking the account changes caused by this Transaction
@@ -920,42 +904,78 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let mut note_pos = self.tx_note_map[&indexed_tx];
             // Listen for notes sent to our viewing keys, only if we are syncing
             // (i.e. in a confirmed status)
-            for so in shielded
-                .sapling_bundle()
-                .map_or(&vec![], |x| &x.shielded_outputs)
-            {
-                // Let's try to see if this viewing key can decrypt latest
-                // note
-                let notes = self.pos_map.entry(*vk).or_default();
-                let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+            for tx in shielded {
+                for so in
+                    tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
+                {
+                    // Let's try to see if this viewing key can decrypt latest
+                    // note
+                    let notes = self.pos_map.entry(*vk).or_default();
+                    let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
                 &NETWORK,
                 1.into(),
                 &PreparedIncomingViewingKey::new(&vk.ivk()),
                 so,
             );
-                // So this current viewing key does decrypt this current note...
-                if let Some((note, pa, memo)) = decres {
-                    // Add this note to list of notes decrypted by this viewing
-                    // key
-                    notes.insert(note_pos);
-                    // Compute the nullifier now to quickly recognize when spent
-                    let nf = note.nf(
-                        &vk.nk,
-                        note_pos.try_into().map_err(|_| {
-                            Error::Other("Can not get nullifier".to_string())
-                        })?,
-                    );
-                    self.note_map.insert(note_pos, note);
-                    self.memo_map.insert(note_pos, memo);
-                    // The payment address' diversifier is required to spend
-                    // note
-                    self.div_map.insert(note_pos, *pa.diversifier());
-                    self.nf_map.insert(nf, note_pos);
+                    // So this current viewing key does decrypt this current
+                    // note...
+                    if let Some((note, pa, memo)) = decres {
+                        // Add this note to list of notes decrypted by this
+                        // viewing key
+                        notes.insert(note_pos);
+                        // Compute the nullifier now to quickly recognize when
+                        // spent
+                        let nf = note.nf(
+                            &vk.nk,
+                            note_pos.try_into().map_err(|_| {
+                                Error::Other(
+                                    "Can not get nullifier".to_string(),
+                                )
+                            })?,
+                        );
+                        self.note_map.insert(note_pos, note);
+                        self.memo_map.insert(note_pos, memo);
+                        // The payment address' diversifier is required to spend
+                        // note
+                        self.div_map.insert(note_pos, *pa.diversifier());
+                        self.nf_map.insert(nf, note_pos);
+                        // Note the account changes
+                        let balance = transaction_delta
+                            .entry(*vk)
+                            .or_insert_with(I128Sum::zero);
+                        *balance += I128Sum::from_nonnegative(
+                            note.asset_type,
+                            note.value as i128,
+                        )
+                        .map_err(|()| {
+                            Error::Other(
+                                "found note with invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?;
+                        self.vk_map.insert(note_pos, *vk);
+                    }
+                    note_pos += 1;
+                }
+            }
+        }
+
+        // Cancel out those of our notes that have been spent
+        for tx in shielded {
+            for ss in
+                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends)
+            {
+                // If the shielded spend's nullifier is in our map, then target
+                // note is rendered unusable
+                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                    self.spents.insert(*note_pos);
                     // Note the account changes
                     let balance = transaction_delta
-                        .entry(*vk)
+                        .entry(self.vk_map[note_pos])
                         .or_insert_with(I128Sum::zero);
-                    *balance += I128Sum::from_nonnegative(
+                    let note = self.note_map[note_pos];
+
+                    *balance -= I128Sum::from_nonnegative(
                         note.asset_type,
                         note.value as i128,
                     )
@@ -965,37 +985,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 .to_string(),
                         )
                     })?;
-                    self.vk_map.insert(note_pos, *vk);
                 }
-                note_pos += 1;
-            }
-        }
-
-        // Cancel out those of our notes that have been spent
-        for ss in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_spends)
-        {
-            // If the shielded spend's nullifier is in our map, then target note
-            // is rendered unusable
-            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                self.spents.insert(*note_pos);
-                // Note the account changes
-                let balance = transaction_delta
-                    .entry(self.vk_map[note_pos])
-                    .or_insert_with(I128Sum::zero);
-                let note = self.note_map[note_pos];
-
-                *balance -= I128Sum::from_nonnegative(
-                    note.asset_type,
-                    note.value as i128,
-                )
-                .map_err(|()| {
-                    Error::Other(
-                        "found note with invalid value or asset type"
-                            .to_string(),
-                    )
-                })?;
             }
         }
 
@@ -1899,7 +1889,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(context, &masp_tx)
+                .pre_cache_transaction(context, &[masp_tx.clone()])
                 .await?;
         }
 
@@ -1918,7 +1908,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     async fn pre_cache_transaction(
         &mut self,
         context: &impl Namada,
-        masp_tx: &Transaction,
+        masp_tx: &[Transaction],
     ) -> Result<(), Error> {
         let vks: Vec<_> = context
             .wallet()
@@ -1938,7 +1928,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .index
                         .checked_add(1)
                         .expect("Tx index shouldn't overflow"),
-                    inner_tx: TxCommitments::default(),
                 }
             });
         self.sync_status = ContextSyncStatus::Speculative;
@@ -2020,7 +2009,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, BatchMaspTxRefs)>>, Error> {
+) -> Result<Option<Vec<(TxIndex, MaspTxRefs)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2053,45 +2042,6 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                 })
                 .collect::<Vec<_>>()
         }))
-}
-
-// Extract the Transaction hash from a masp over ibc message
-async fn extract_payload_from_shielded_action(
-    tx_data: &[u8],
-) -> Result<Transfer, Error> {
-    let message = namada_ibc::decode_message(tx_data)
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let result = match message {
-        IbcMessage::Transfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::NftTransfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::RecvPacket(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::AckPacket(msg) => {
-            // Refund tokens by the ack message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Timeout(msg) => {
-            // Refund tokens by the timeout message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Envelope(_) => {
-            return Err(Error::Other(
-                "Unexpected ibc message for masp".to_string(),
-            ));
-        }
-    };
-
-    Ok(result)
 }
 
 mod tests {

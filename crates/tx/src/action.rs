@@ -66,6 +66,7 @@ pub enum PgfAction {
 /// MASP tx action.
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub struct MaspAction {
+    /// The hash of the masp [`Section`]
     pub masp_section_ref: Hash,
 }
 
@@ -117,7 +118,9 @@ fn storage_key() -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
-/// Helper function to get the optional masp section reference from the [`Actions`]. If more than one [`MaspAction`] has been found we return the first one
+/// Helper function to get the optional masp section reference from the
+/// [`Actions`]. If more than one [`MaspAction`] has been found we return the
+/// first one
 pub fn get_masp_section_ref<T: Read>(
     reader: &T,
 ) -> Result<Option<Hash>, <T as Read>::Err> {

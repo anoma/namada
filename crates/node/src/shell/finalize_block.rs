@@ -16,7 +16,7 @@ use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::DispatchError;
-use namada::masp::BatchMaspTxRefs;
+use namada::masp::MaspTxRefs;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -824,7 +824,7 @@ impl<'finalize> TempTxLogs {
     fn check_inner_results(
         &mut self,
         tx_result: &namada::tx::data::TxResult<protocol::Error>,
-        masp_tx_refs: BatchMaspTxRefs,
+        masp_tx_refs: MaspTxRefs,
         tx_header: &namada::tx::Header,
         tx_index: usize,
         height: BlockHeight,
