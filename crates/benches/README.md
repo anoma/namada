@@ -25,5 +25,5 @@ cargo test --bench native_vps
 To benchmark a selected bench with a minimum sample size use e.g.:
 
 ```shell
-cargo bench --bench allowed_txs -- --sample-size 10
+cargo bench --bench native_vps -- --sample-size 10
 ```
