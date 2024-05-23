@@ -6436,6 +6436,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 name = "tx_fail"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6449,6 +6450,7 @@ dependencies = [
 name = "tx_infinite_guest_gas"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6462,6 +6464,7 @@ dependencies = [
 name = "tx_infinite_host_gas"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6475,6 +6478,7 @@ dependencies = [
 name = "tx_invalid_data"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6488,6 +6492,7 @@ dependencies = [
 name = "tx_memory_limit"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6501,6 +6506,7 @@ dependencies = [
 name = "tx_no_op"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6514,6 +6520,7 @@ dependencies = [
 name = "tx_proposal_code"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6527,6 +6534,7 @@ dependencies = [
 name = "tx_proposal_ibc_token_inflation"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6540,6 +6548,7 @@ dependencies = [
 name = "tx_proposal_masp_reward"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6553,6 +6562,7 @@ dependencies = [
 name = "tx_read_storage_key"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
@@ -6566,6 +6576,7 @@ dependencies = [
 name = "tx_write"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -6733,6 +6744,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 name = "vp_always_false"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
  "proptest",
@@ -6746,6 +6758,7 @@ dependencies = [
 name = "vp_always_true"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
  "proptest",
@@ -6759,6 +6772,7 @@ dependencies = [
 name = "vp_eval"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
@@ -6773,6 +6787,7 @@ dependencies = [
 name = "vp_infinite_guest_gas"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
  "proptest",
@@ -6786,6 +6801,7 @@ dependencies = [
 name = "vp_infinite_host_gas"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_tx_prelude",
  "namada_vp_prelude",
@@ -6800,6 +6816,7 @@ dependencies = [
 name = "vp_memory_limit"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
  "proptest",
@@ -6813,6 +6830,7 @@ dependencies = [
 name = "vp_read_storage_key"
 version = "0.37.0"
 dependencies = [
+ "getrandom 0.2.11",
  "namada_tests",
  "namada_vp_prelude",
  "proptest",
