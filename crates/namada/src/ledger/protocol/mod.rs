@@ -336,22 +336,9 @@ where
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
-                    //FIXME: should join this logic with the one used by the vp?
-                    if let Some(masp_section_ref) = state
-                        .read_actions()
-                        .map_err(|e| Error::StateError(e))?
-                        .into_iter()
-                        .find_map(|action| {
-                            // In case of multiple masp actions we get the first one
-                            if let Action::Masp(MaspAction {
-                                masp_section_ref,
-                            }) = action
-                            {
-                                Some(masp_section_ref)
-                            } else {
-                                None
-                            }
-                        })
+                    if let Some(masp_section_ref) =
+                        namada_tx::action::get_masp_section_ref(state)
+                            .map_err(|e| Error::StateError(e))?
                     {
                         extended_tx_result.masp_tx_refs.0.push(MaspTxRef {
                             cmt: cmt.get_hash(),

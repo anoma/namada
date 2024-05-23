@@ -353,21 +353,19 @@ where
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
 
         // Get the Transaction object from the actions
-        let shielded_tx = self
-            .ctx
-            .read_actions()?
-            .iter()
-            .find_map(|action| {
-                // In case of multiple masp actions we only get the first one
-                if let Action::Masp(MaspAction {
-                    ref masp_section_ref,
-                }) = action
-                {
-                    tx_data.tx.get_section(masp_section_ref)?.masp_tx()
-                } else {
-                    None
-                }
-            })
+        let masp_section_ref = namada_tx::action::get_masp_section_ref(
+            &self.ctx,
+        )?
+        .ok_or_else(|| {
+            native_vp::Error::new_const(
+                "Missing MASP section reference in action",
+            )
+        })?;
+        let shielded_tx = tx_data
+            .tx
+            .get_section(&masp_section_ref)
+            .map(|section| section.masp_tx())
+            .flatten()
             .ok_or_else(|| {
                 native_vp::Error::new_const(
                     "Missing MASP section in transaction",
