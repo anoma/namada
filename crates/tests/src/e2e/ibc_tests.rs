@@ -260,28 +260,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
-    // Transfer a token and it will time out and refund
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let receiver = find_address(&test_b, BERTHA)?;
-    // Send a token from Chain A
-    transfer(
-        &test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        100000.0,
-        ALBERT_KEY,
-        &port_id_a,
-        &channel_id_a,
-        Some(Duration::new(0, 0)),
-        None,
-        false,
-    )?;
-    // wait for the timeout and the refund
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
-    // The balance should not be changed
-    check_balances_after_back(&port_id_b, &channel_id_b, &test_a, &test_b)?;
-
     // Send a token to the shielded address on Chain A
     transfer_on_chain(
         &test_a,

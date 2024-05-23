@@ -84,9 +84,6 @@ pub const WASM_MEMORY_PAGE_GAS: u32 =
 pub const IBC_ACTION_VALIDATE_GAS: u64 = 1_472_023;
 /// The cost to execute an Ibc action
 pub const IBC_ACTION_EXECUTE_GAS: u64 = 3_678_745;
-/// The cost to execute an ibc transaction TODO: remove once ibc tx goes back to
-/// wasm
-pub const IBC_TX_GAS: u64 = 111_825_500;
 /// The cost to verify a masp spend note
 pub const MASP_VERIFY_SPEND_GAS: u64 = 66_822_000;
 /// The cost to verify a masp convert note

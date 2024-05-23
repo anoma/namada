@@ -7,7 +7,6 @@ use std::num::TryFromIntError;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use gas::IBC_TX_GAS;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
 use namada_core::arith::{self, checked};
@@ -79,10 +78,6 @@ pub enum TxRuntimeError {
     NumConversionError(#[from] TryFromIntError),
     #[error("Memory error: {0}")]
     MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
-    #[error("Missing tx data")]
-    MissingTxData,
-    #[error("IBC: {0}")]
-    Ibc(#[from] namada_ibc::Error),
     #[error("No value found in result buffer")]
     NoValueInResultBuffer,
     #[error("VP code is not allowed in allowlist parameter.")]
@@ -2061,70 +2056,6 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tracing::info!("WASM Transaction log: {}", str);
     Ok(())
-}
-
-/// Execute IBC tx.
-// Temporarily the IBC tx execution is implemented via a host function to
-// workaround wasm issue.
-pub fn tx_ibc_execute<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
-) -> TxResult<i64>
-where
-    MEM: VmMemory,
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-    CA: WasmCacheAccess,
-{
-    use std::rc::Rc;
-
-    use namada_ibc::{IbcActions, NftTransferModule, TransferModule};
-
-    tx_charge_gas::<MEM, D, H, CA>(env, IBC_TX_GAS)?;
-
-    let tx = unsafe { env.ctx.tx.get() };
-    let cmt = unsafe { env.ctx.cmt.get() };
-    let tx_data = tx.data(cmt).ok_or_else(|| {
-        let sentinel = unsafe { env.ctx.sentinel.get() };
-        sentinel.borrow_mut().set_invalid_commitment();
-        TxRuntimeError::MissingTxData
-    })?;
-    let state = Rc::new(RefCell::new(env.state()));
-    // Verifier set populated in tx execution
-    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-    // Scoped to drop `verifiers.clone`s after `actions.execute`
-    let transfer = {
-        let mut actions = IbcActions::new(state.clone(), verifiers.clone());
-        let module = TransferModule::new(state.clone(), verifiers.clone());
-        actions.add_transfer_module(module);
-        let module = NftTransferModule::new(state);
-        actions.add_transfer_module(module);
-        actions.execute(&tx_data)?
-    };
-    // NB: There must be no other strong references to this Rc
-    let verifiers = Rc::into_inner(verifiers)
-        .expect("There must be only one strong ref to verifiers set")
-        .into_inner();
-
-    // Insert all the verifiers from the tx into the verifier set in env
-    let verifiers_in_env = unsafe { env.ctx.verifiers.get_mut() };
-    for addr in verifiers.into_iter() {
-        tx_charge_gas::<MEM, D, H, CA>(
-            env,
-            (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
-                .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
-                .expect("Consts mul that cannot overflow"),
-        )?;
-        verifiers_in_env.insert(addr);
-    }
-
-    let value = transfer.serialize_to_vec();
-    let len: i64 = value
-        .len()
-        .try_into()
-        .map_err(TxRuntimeError::NumConversionError)?;
-    let result_buffer = unsafe { env.ctx.result_buffer.get_mut() };
-    result_buffer.replace(value);
-    Ok(len)
 }
 
 /// Validate a VP WASM code hash in a tx environment.

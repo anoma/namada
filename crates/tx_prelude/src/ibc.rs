@@ -23,11 +23,9 @@ use crate::{Ctx, Error};
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
 /// execution.
-pub fn ibc_actions(
-    ctx: &mut Ctx,
-    verifiers: Rc<RefCell<BTreeSet<Address>>>,
-) -> IbcActions<'_, Ctx> {
+pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<'_, Ctx> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
+    let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
     let module = TransferModule::new(ctx.clone(), verifiers);
     actions.add_transfer_module(module);
@@ -68,14 +66,6 @@ impl IbcStorageContext for Ctx {
         transfer(self, src, dest, token, amount)
     }
 
-    fn handle_masp_tx(
-        &mut self,
-        shielded: &masp_primitives::transaction::Transaction,
-    ) -> Result<(), Error> {
-        namada_token::utils::handle_masp_tx(self, shielded)?;
-        namada_token::utils::update_note_commitment_tree(self, shielded)
-    }
-
     fn mint_token(
         &mut self,
         target: &Address,
@@ -92,6 +82,10 @@ impl IbcStorageContext for Ctx {
         amount: Amount,
     ) -> Result<(), Error> {
         burn_tokens(self, target, token, amount)
+    }
+
+    fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
+        TxEnv::insert_verifier(self, addr)
     }
 
     fn log_string(&self, message: String) {

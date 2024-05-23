@@ -80,7 +80,6 @@ where
             "namada_tx_get_pred_epochs" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_pred_epochs),
             "namada_tx_get_native_token" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_get_native_token),
             "namada_tx_log_string" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_log_string),
-            "namada_tx_ibc_execute" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_ibc_execute),
             "namada_tx_set_commitment_sentinel" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_set_commitment_sentinel),
             "namada_tx_verify_tx_section_signature" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_verify_tx_section_signature),
             "namada_tx_update_masp_note_commitment_tree" => Function::new_native_with_env(wasm_store, env.clone(), host_env::tx_update_masp_note_commitment_tree),

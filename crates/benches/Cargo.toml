@@ -13,11 +13,6 @@ repository.workspace = true
 version.workspace = true
 
 [[bench]]
-name = "allowed_txs"
-harness = false
-path = "txs.rs"
-
-[[bench]]
 name = "native_vps"
 harness = false
 path = "native_vps.rs"
