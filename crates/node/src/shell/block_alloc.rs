@@ -32,16 +32,12 @@
 
 pub mod states;
 
-// TODO: what if a tx has a size greater than the threshold for
-// its bin? how do we handle this? if we keep it in the mempool
+// TODO(namada#3250): what if a tx has a size greater than the threshold
+// for its bin? how do we handle this? if we keep it in the mempool
 // forever, it'll be a DoS vec, as we can make nodes run out of
 // memory! maybe we should allow block decisions for txs that are
 // too big to fit in their respective bin? in these special block
 // decisions, we would only decide proposals with "large" txs??
-//
-// MAYBE: in the state machine impl, reset to beginning state, and
-// and alloc space for large tx right at the start. the problem with
-// this is that then we may not have enough space for decrypted txs
 
 use std::marker::PhantomData;
 

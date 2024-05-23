@@ -118,7 +118,6 @@ impl<const N: usize> Encode<N> for AbiEncode<N> {
     }
 }
 
-// TODO: test signatures here once we merge secp keys
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

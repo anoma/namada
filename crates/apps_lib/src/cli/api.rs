@@ -3,6 +3,7 @@ use namada::tendermint_rpc::HttpClient;
 use namada_sdk::error::Error;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::wait_until_node_is_synched;
+use tendermint_rpc::client::CompatMode;
 use tendermint_rpc::Url as TendermintUrl;
 
 /// Trait for clients that can be used with the CLI.
@@ -18,7 +19,11 @@ pub trait CliClient: Client + Sync {
 #[async_trait::async_trait(?Send)]
 impl CliClient for HttpClient {
     fn from_tendermint_address(address: &TendermintUrl) -> Self {
-        HttpClient::new(address.clone()).unwrap()
+        HttpClient::builder(address.clone().try_into().unwrap())
+            .compat_mode(CompatMode::V0_37)
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap()
     }
 
     async fn wait_until_node_is_synced(

@@ -116,7 +116,6 @@ impl RpcClient for Provider<Http> {
     where
         Self: Sized,
     {
-        // TODO: return a result here?
         Provider::<Http>::try_from(url).expect("Invalid Ethereum RPC url")
     }
 
@@ -995,8 +994,6 @@ mod test_oracle {
         }
 
         // check that the oracle hasn't yet checked any further blocks
-        // TODO: check this in a deterministic way rather than just waiting a
-        // bit
         assert!(
             timeout(
                 std::time::Duration::from_secs(1),
@@ -1093,8 +1090,6 @@ mod test_oracle {
         assert_eq!(block_processed, Uint256::from(confirmed_block_height - 4));
 
         // check that the oracle hasn't yet checked any further blocks
-        // TODO: check this in a deterministic way rather than just waiting a
-        // bit
         let res = timeout(
             std::time::Duration::from_secs(3),
             blocks_processed_recv.recv(),

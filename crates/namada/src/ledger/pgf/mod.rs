@@ -113,8 +113,8 @@ where
             match key_type {
                 KeyType::Stewards(steward_address) => {
                     let stewards_have_increased = {
-                        // TODO: maybe we should check errors here, which could
-                        // be out-of-gas related?
+                        // TODO(namada#3238): we should check errors here, which
+                        // could be out-of-gas related
                         let total_stewards_pre = pgf_storage::stewards_handle()
                             .len(&self.ctx.pre())
                             .unwrap_or_default();

@@ -1004,9 +1004,6 @@ impl ConcretePosState {
         // Post-condition: the validator stake at the pipeline should be
         // decremented at most by the bond amount (because slashing can reduce
         // the actual amount unbonded)
-        //
-        // TODO: is this a weak assertion here? Seems cumbersome to calculate
-        // the exact amount considering the slashing applied can be complicated
         assert!(
             stake_at_pipeline
                 >= validator_stake_before_unbond_pipeline
@@ -2175,7 +2172,6 @@ impl ConcretePosState {
                 }
             }
         }
-        // TODO: expand this to include jailed validators
     }
 }
 
@@ -4776,7 +4772,6 @@ impl AbstractPosState {
             .unwrap_or_default()
             .iter()
             .filter(|&slash| {
-                // TODO: check bounds!
                 start <= slash.epoch
                     && slash.epoch + self.params.slash_processing_epoch_offset()
                         <= epoch
@@ -5738,7 +5733,6 @@ impl AbstractPosState {
         let updated_amount = computed_slashes
             .iter()
             .filter(|(&epoch, _)| {
-                // TODO: check if bounds correct!
                 // slashes that have already been applied and processed
                 epoch + params.slash_processing_epoch_offset() <= slash.epoch
             })

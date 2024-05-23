@@ -550,6 +550,8 @@ where
 
 /// We test the failure cases of [`process_proposal`]. The happy flows
 /// are covered by the e2e tests.
+// TODO(namada#3249): write tests for validator set update vote extensions in
+// process proposals
 #[cfg(test)]
 mod test_process_proposal {
     use namada::core::key::*;

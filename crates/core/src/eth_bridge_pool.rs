@@ -301,7 +301,7 @@ impl From<&PendingTransfer> for TransferToEthereumEvent {
 
 impl Encode<6> for PendingTransfer {
     fn tokenize(&self) -> [Token; 6] {
-        // TODO: This version should be looked up from storage
+        // TODO(namada#249): This version should be looked up from storage
         let version = Token::Uint(VERSION.into());
         let namespace = Token::String(NAMESPACE.into());
         let from = Token::Address(self.transfer.asset.0.into());
@@ -314,7 +314,7 @@ impl Encode<6> for PendingTransfer {
 
 impl Encode<6> for TransferToEthereumEvent {
     fn tokenize(&self) -> [Token; 6] {
-        // TODO: This version should be looked up from storage
+        // TODO(namada#249): This version should be looked up from storage
         let version = Token::Uint(VERSION.into());
         let namespace = Token::String(NAMESPACE.into());
         let from = Token::Address(self.asset.0.into());

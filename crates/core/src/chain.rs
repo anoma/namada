@@ -95,7 +95,10 @@ impl<'de> Deserialize<'de> for ProposalBytes {
             }
 
             // NOTE: this is only needed because of a bug in the toml parser
-            // https://github.com/toml-rs/toml-rs/issues/256
+            // - https://github.com/toml-rs/toml-rs/issues/256
+            // - https://github.com/toml-rs/toml/issues/512
+            //
+            // TODO(namada#3243): switch to `toml_edit` for TOML parsing
             fn visit_i64<E>(self, size: i64) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,

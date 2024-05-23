@@ -228,7 +228,7 @@ where
         .map(|pk| {
             let pkh = PublicKeyHash::from(&pk);
             wallet
-                // TODO: optionally encrypt validator keys
+                // TODO(namada#3251): optionally encrypt validator keys
                 .find_key_by_pkh(&pkh, None)
                 .ok()
                 .or_else(|| wallet.get_validator_data().map(extract_key))

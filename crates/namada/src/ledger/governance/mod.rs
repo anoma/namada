@@ -305,65 +305,9 @@ where
             .into());
         }
 
-        // TODO: should any checks happen in the VP for the target validators?
-        // Not sure, since ultimately whether the vote counts or not is
-        // determined by the validator state at the end epoch, which likely has
-        // not occurred yet during VP execution
-
-        // // Check the target validator of the bond used to vote
-        // let delegations_targets = find_delegation_validators(
-        //     &self.ctx.pre(),
-        //     voter,
-        //     &pre_voting_end_epoch,
-        // )
-        // .unwrap_or_default();
-
-        // if delegations_targets.is_empty() {
-        //     return Err(native_vp::Error::new_alloc(format!(
-        //         "No delegations found for {voter}"
-        //     ))
-        //     .into());
-        // }
-
-        // if !delegations_targets.contains(validator) {
-        //     return Err(native_vp::Error::new_alloc(format!(
-        //         "The vote key is not valid due to {voter} not having \
-        //          delegations to {validator}"
-        //     ))
-        //     .into());
-        // }
-
-        // let validator_state = read_validator_state(&self.ctx.pre(),
-        // validator, &pre_voting_end_epoch)?; if !matches!
-        // (validator_state, ValidatorState::Consensus |
-        // ValidatorState::BelowCapacity | ValidatorState::BelowThreshold) {
-        //     if validator_state.is_none() {
-        //         return Err(native_vp::Error::new_alloc(format!(
-        //             "The vote key is invalid because the validator
-        // {validator} is not in \              the active set (jailed
-        // or inactive)"         ))
-        //         .into());
-        //     } else {
-        //         return Err(native_vp::Error::new_alloc(format!(
-        //             "The vote key is invalid because the validator
-        // {validator} is not in \              the active set (jailed
-        // or inactive)"         ))
-        //         .into());
-        //     }
-
-        // }
-
-        // // this is safe as we check above that validator is part of the
-        // hashmap if !matches!(
-        //     delegations_targets.get(validator).unwrap(),
-        //     ValidatorState::Consensus
-        // ) {
-        //     return Err(native_vp::Error::new_alloc(format!(
-        //         "The vote key is not valid due to {validator} being not in \
-        //          the active set"
-        //     ))
-        //     .into());
-        // }
+        // No checks for the target validators, since ultimately whether the
+        // vote counts or not is determined by the validator state at the end
+        // epoch
 
         // Voted outside of voting window. We dont check for validator because
         // if the proposal type is validator, we need to let

@@ -149,13 +149,16 @@ fn validate_ibc_event_type(
 
     let event_type = namada_event.kind().sub_domain();
 
+    // TODO(namada#3229): validate IBC event types. eg:
+    //
+    // ```ignore
     // if !matches!(
     //    event_type,
-    //    // TODO: add other ibc event types that we use in namada
     //    "update_client" | "send_packet" | "write_acknowledgement"
-    //) {
-    //    return Err(EventError::InvalidEventType);
-    //}
+    // ) {
+    //     return Err(EventError::InvalidEventType);
+    // }
+    // ```
 
     Ok(IbcEventType(event_type.to_owned()))
 }

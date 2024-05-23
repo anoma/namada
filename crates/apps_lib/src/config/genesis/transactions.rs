@@ -591,7 +591,7 @@ pub type SignedBondTx<T> = Signed<BondTx<T>>;
 pub struct ValidatorAccountTx<PK: Ord> {
     /// The address of the validator.
     pub address: StringEncoded<EstablishedAddress>,
-    // TODO: remove the vp field
+    // TODO(namada#2554): remove the vp field
     pub vp: String,
     /// Commission rate charged on rewards for delegators (bounded inside
     /// 0-1)

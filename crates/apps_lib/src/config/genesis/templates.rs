@@ -263,10 +263,10 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Enable the native token transfer if it is true
     pub is_native_token_transferable: bool,
     /// Minimum number of blocks per epoch.
-    // TODO: u64 only works with values up to i64::MAX with toml-rs!
+    // NB: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
     /// Maximum duration per block (in seconds).
-    // TODO: this is i64 because datetime wants it
+    // NB: this is i64 because datetime wants it
     pub max_expected_time_per_block: i64,
     /// Max payload size, in bytes, for a tx batch proposal.
     ///

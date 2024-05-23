@@ -316,76 +316,62 @@ impl super::Signature for Signature {
     }
 }
 
-// Would ideally like Serialize, Deserialize to be implemented in k256,
-// may try to do so and merge upstream in the future.
+// NB: `RecoveryId` does not implement `serde` traits, so we can't derive them
+// either
 impl Serialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let arr = self.0.to_bytes();
-        // TODO: implement the line below, currently cannot support [u8; 64]
-        // serde::Serialize::serialize(&arr, serializer)
+        let mut seq = serializer.serialize_tuple(2)?;
 
-        // There is no way the bytes len + 1 will overflow
-        #[allow(clippy::arithmetic_side_effects)]
-        let mut seq = serializer.serialize_tuple(arr.len() + 1)?;
-        for elem in &arr[..] {
-            seq.serialize_element(elem)?;
-        }
+        seq.serialize_element(&self.0)?;
         seq.serialize_element(&self.1.to_byte())?;
+
         seq.end()
     }
 }
 
+// NB: `RecoveryId` does not implement `serde` traits, so we can't derive them
+// either
 impl<'de> Deserialize<'de> for Signature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        struct ByteArrayVisitor;
+        struct SigVisitor;
 
-        impl<'de> Visitor<'de> for ByteArrayVisitor {
-            type Value = [u8; SIGNATURE_SIZE];
+        impl<'de> Visitor<'de> for SigVisitor {
+            type Value = Signature;
 
             fn expecting(
                 &self,
                 formatter: &mut fmt::Formatter<'_>,
             ) -> fmt::Result {
-                formatter.write_str(&format!(
-                    "an array of length {}",
-                    SIGNATURE_SIZE,
-                ))
+                formatter.write_str("a secp256k1 signature")
             }
 
-            fn visit_seq<A>(
-                self,
-                mut seq: A,
-            ) -> Result<[u8; SIGNATURE_SIZE], A::Error>
+            fn visit_seq<A>(self, mut seq: A) -> Result<Signature, A::Error>
             where
                 A: SeqAccess<'de>,
             {
-                let mut arr = [0u8; SIGNATURE_SIZE];
-                #[allow(clippy::needless_range_loop)]
-                for i in 0..SIGNATURE_SIZE {
-                    arr[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| Error::invalid_length(i, &self))?;
-                }
-                Ok(arr)
+                let inner_sig: k256::ecdsa::Signature = seq
+                    .next_element()?
+                    .ok_or_else(|| Error::custom("Missing inner signature"))?;
+                let recovery_id = seq.next_element()?.ok_or_else(|| {
+                    Error::custom("Missing signature recovery id")
+                })?;
+
+                let recovery_id = RecoveryId::from_byte(recovery_id)
+                    .ok_or_else(|| {
+                        Error::custom("Invalid signature recovery id")
+                    })?;
+
+                Ok(Signature(inner_sig, recovery_id))
             }
         }
 
-        let arr_res =
-            deserializer.deserialize_tuple(SIGNATURE_SIZE, ByteArrayVisitor)?;
-        let sig_array: [u8; 64] = arr_res[..64].try_into().unwrap();
-        let sig = k256::ecdsa::Signature::from_slice(&sig_array)
-            .map_err(D::Error::custom);
-        Ok(Signature(
-            sig.unwrap(),
-            RecoveryId::from_byte(arr_res[64])
-                .ok_or_else(|| Error::custom("Invalid recovery byte"))?,
-        ))
+        deserializer.deserialize_tuple(2, SigVisitor)
     }
 }
 

@@ -27,7 +27,6 @@ impl CliApi {
                 match cmd {
                     // Ledger cmds
                     Sub::TxCustom(TxCustom(args)) => {
-                        // TODO: too much boilerplate to setup client
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.tx.ledger_address);

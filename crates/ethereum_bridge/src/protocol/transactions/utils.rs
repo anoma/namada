@@ -54,7 +54,6 @@ where
     Ok(voting_powers)
 }
 
-// TODO: we might be able to remove allocation here
 pub(super) fn get_consensus_validators<D, H>(
     state: &WlState<D, H>,
     block_heights: HashSet<BlockHeight>,

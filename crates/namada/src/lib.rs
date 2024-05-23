@@ -17,6 +17,7 @@
     clippy::print_stderr
 )]
 
+// TODO(namada#3248): only re-export v037 `tendermint-rs`
 pub use namada_core::{
     address, chain, dec, decode, encode, eth_abi, eth_bridge_pool,
     ethereum_events, ethereum_structs, hash, internal, keccak, key, masp,
@@ -24,6 +25,7 @@ pub use namada_core::{
     validity_predicate, voting_power,
 };
 pub use namada_sdk::{control_flow, io};
+// TODO(namada#3248): only re-export v037 `tendermint-rs`
 #[cfg(feature = "tendermint-rpc")]
 pub use tendermint_rpc;
 pub use {

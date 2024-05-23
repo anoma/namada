@@ -62,7 +62,6 @@ mod tests {
         }
     }
 
-    // TODO: more assertions needed!!
     fn test_tx_redelegate_aux(
         initial_stake: token::Amount,
         redelegation: transaction::pos::Redelegation,

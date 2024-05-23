@@ -41,7 +41,7 @@ const VP_ENTRYPOINT: &str = "_validate_tx";
 const WASM_STACK_LIMIT: u32 = u16::MAX as u32;
 
 /// The error type returned by transactions.
-// TODO: move this to `core`, to be shared with the wasm vm,
+// TODO(namada#2980): move this to `core`, to be shared with the wasm vm,
 // and make it an `enum` of different variants
 type TxError = String;
 

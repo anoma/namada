@@ -18,9 +18,11 @@ use namada_core::ethereum_events::{
 };
 use namada_core::hints;
 use namada_core::storage::{BlockHeight, Key, KeySeg};
+use namada_core::uint::Uint;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::denominated;
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use token::{burn_tokens, decrement_total_supply, increment_total_supply};
 
@@ -118,21 +120,27 @@ where
         let mut changed = if asset != &wrapped_native_erc20 {
             let (asset_count, changed) =
                 mint_eth_assets(state, asset, receiver, amount)?;
-            // TODO: query denomination of the whitelisted token from storage,
-            // and print this amount with the proper formatting; for now, use
-            // NAM's formatting
             if asset_count.should_mint_erc20s() {
+                let denominated_amount = denominated(
+                    asset_count.erc20_amount,
+                    &erc20_token_address(asset),
+                    state,
+                )
+                .expect("The ERC20 token should have been whitelisted");
+
                 tracing::info!(
-                    "Minted wrapped ERC20s - (asset - {asset}, receiver - \
-                     {receiver}, amount - {})",
-                    asset_count.erc20_amount.to_string_native(),
+                    %asset,
+                    %receiver,
+                    %denominated_amount,
+                    "Minted wrapped ERC20s",
                 );
             }
             if asset_count.should_mint_nuts() {
                 tracing::info!(
-                    "Minted NUTs - (asset - {asset}, receiver - {receiver}, \
-                     amount - {})",
-                    asset_count.nut_amount.to_string_native(),
+                    %asset,
+                    %receiver,
+                    undenominated_amount = %Uint::from(asset_count.nut_amount),
+                    "Minted NUTs",
                 );
             }
             changed
@@ -305,7 +313,10 @@ where
         return Ok((changed_keys, tx_events));
     }
 
-    // TODO the timeout height is min_num_blocks of an epoch for now
+    // NB: the timeout height was chosen as the minimum number of
+    // blocks of an epoch. transfers that reside in the Bridge pool
+    // for a period longer than this number of blocks will be removed
+    // and refunded.
     let epoch_duration = read_epoch_duration_parameter(state)?;
     let timeout_offset = epoch_duration.min_num_of_blocks;
 

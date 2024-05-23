@@ -1046,13 +1046,20 @@ pub async fn query_bonded_stake<N: Namada>(
                 get_validator_stake(context.client(), epoch, &validator).await;
             match stake {
                 Some(stake) => {
-                    // TODO: show if it's in consensus set, below capacity, or
-                    // below threshold set
                     display_line!(
                         context.io(),
                         "Bonded stake of validator {validator}: {}",
                         stake.to_string_native()
+                    );
+                    query_and_print_validator_state(
+                        context,
+                        args::QueryValidatorState {
+                            query: args.query,
+                            validator,
+                            epoch: args.epoch,
+                        },
                     )
+                    .await;
                 }
                 None => {
                     display_line!(

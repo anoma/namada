@@ -19,7 +19,7 @@ use namada_migrations::*;
 use namada_tx::Signed;
 
 // the contract versions and namespaces plugged into validator set hashes
-// TODO: ideally, these values should not be hardcoded
+// TODO(namada#249): ideally, these values should not be hardcoded
 const BRIDGE_CONTRACT_VERSION: u8 = 1;
 const BRIDGE_CONTRACT_NAMESPACE: &str = "bridge";
 const GOVERNANCE_CONTRACT_VERSION: u8 = 1;
@@ -128,9 +128,11 @@ pub struct ValidatorSetUpdateVext {
     /// values. The arrays are sorted in descending order based
     /// on the voting power of each validator.
     pub voting_powers: VotingPowersMap,
-    /// TODO: the validator's address is temporarily being included
-    /// until we're able to map a Tendermint address to a validator
-    /// address (see <https://github.com/anoma/namada/issues/200>)
+    /// The address of the validator who submitted the vote extension.
+    // NOTE: The validator's established address was included as a workaround
+    // for `namada#200`, which prevented us from mapping a CometBFT validator
+    // address to a Namada address. Since then, we have committed to keeping
+    // this `validator_addr` field.
     pub validator_addr: Address,
     /// The value of Namada's [`Epoch`] at the creation of this
     /// [`Vext`].
@@ -363,7 +365,6 @@ fn encode_validator_data(
     BorshDeserializer,
     BorshSchema,
 )]
-// TODO: find a new home for this type
 pub struct ValidatorSetArgs {
     /// Ethereum addresses of the validators.
     pub validators: Vec<EthAddress>,

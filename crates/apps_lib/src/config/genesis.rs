@@ -598,7 +598,6 @@ pub mod tests {
         let (protocol_keypair, _eth_hot_bridge_keypair) =
             wallet::defaults::validator_keys();
 
-        // TODO: derive validator eth address from an eth keypair
         let eth_cold_gov_keypair: common::SecretKey =
             secp256k1::SigScheme::generate(&mut rng)
                 .try_to_sk()
