@@ -61,7 +61,9 @@ use namada_core::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_events::extend::{
-    MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
+    MaspTxBatchRefs as MaspTxBatchRefsAttr,
+    MaspTxBlockIndex as MaspTxBlockIndexAttr, MaspTxRef,
+    ReadFromEventAttributes, ValidMaspTxs,
 };
 use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
@@ -833,10 +835,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for idx in txs_results {
+            for (idx, masp_sections_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs = Self::extract_masp_tx(&tx).await?;
+                let extracted_masp_txs =
+                    Self::extract_masp_tx(&tx, &masp_sections_refs).await?;
                 // Collect the current transactions
                 for (inner_tx, transaction) in extracted_masp_txs.0 {
                     shielded_txs.insert(
@@ -855,7 +858,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx(tx: &Tx) -> Result<ExtractedMaspTxs, Error> {
+    async fn extract_masp_tx(
+        tx: &Tx,
+        masp_section_refs: &ValidMaspTxs,
+    ) -> Result<ExtractedMaspTxs, Error> {
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
         // transaction se we could end up with transactions carrying
@@ -864,47 +870,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // of the transactions' data sections
         let mut txs = vec![];
 
-        // Expect transaction
-        // FIXME: update this to rely on the masp section hash emitted in the
-        // event instead of deserializing to Transfer
-        for cmt in tx.commitments() {
-            let tx_data = tx.data(cmt).ok_or_else(|| {
-                Error::Other("Missing data section".to_string())
-            })?;
-            let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-                Ok(transfer) => Some(transfer),
-                Err(_) => {
-                    // This should be a MASP over IBC transaction, it
-                    // could be a ShieldedTransfer or an Envelope
-                    // message, need to try both
-                    extract_payload_from_shielded_action(&tx_data).await.ok()
-                }
-            }
-            .map(|transfer| {
-                if let Some(hash) = transfer.shielded {
-                    let masp_tx = tx
-                        .get_section(&hash)
-                        .ok_or_else(|| {
-                            Error::Other(
-                                "Missing masp section in transaction"
-                                    .to_string(),
-                            )
-                        })?
-                        .masp_tx()
-                        .ok_or_else(|| {
-                            Error::Other("Missing masp transaction".to_string())
-                        })?;
+        for MaspTxRef {
+            cmt,
+            masp_section_ref,
+        } in &masp_section_refs.0
+        {
+            //FIXME: improve here
+            let masp_section = tx.get_section(masp_section_ref);
 
-                    Ok::<_, Error>(Some(masp_tx))
-                } else {
-                    Ok(None)
-                }
-            })
-            .transpose()?
-            .flatten();
+            let maybe_transaction =
+                masp_section.map(|section| section.masp_tx()).flatten();
 
-            if let Some(transaction) = maybe_masp_tx {
-                txs.push((cmt.to_owned(), transaction));
+            if let Some(transaction) = maybe_transaction {
+                let inner_tx = tx
+                    .commitments()
+                    .iter()
+                    .find(|inner_tx| &inner_tx.get_hash() == cmt);
+
+                if let Some(cmt) = inner_tx {
+                    txs.push((cmt.to_owned(), transaction));
+                }
             }
         }
 
@@ -2031,7 +2016,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<TxIndex>>, Error> {
+) -> Result<Option<Vec<(TxIndex, ValidMaspTxs)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2050,7 +2035,14 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                         .ok()?;
 
                     if tx_index >= first_idx_to_query {
-                        Some(tx_index)
+                        // Extract the references to the correct masp sections
+                        let masp_section_refs =
+                            MaspTxBatchRefsAttr::read_from_event_attributes(
+                                &event.attributes,
+                            )
+                            .ok()?;
+
+                        Some((tx_index, masp_section_refs))
                     } else {
                         None
                     }

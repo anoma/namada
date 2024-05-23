@@ -511,12 +511,20 @@ pub struct MaspTxRef {
 /// The collection of valid masp transactions
 #[derive(Default, Clone, Serialize, Deserialize)]
 //FIXME: move somewhere else?
-//FIXME: maybe rename
+//FIXME: maybe rename, yes
 pub struct ValidMaspTxs(pub Vec<MaspTxRef>);
 
 impl Display for ValidMaspTxs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for ValidMaspTxs {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }
 
