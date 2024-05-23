@@ -268,7 +268,7 @@ fn write_memory_bytes(
 #[derive(Debug, Clone)]
 pub struct WasmMemory {
     store: Rc<RefCell<Store>>,
-    inner: Option<wasmer::Memory>,
+    memory: Rc<RefCell<Option<wasmer::Memory>>>,
 }
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
@@ -278,23 +278,31 @@ unsafe impl Sync for WasmMemory {}
 
 impl WasmMemory {
     /// Build a new wasm memory.
-    pub const fn new(store: Rc<RefCell<Store>>) -> Self {
-        Self { store, inner: None }
+    pub fn new(store: Rc<RefCell<Store>>) -> Self {
+        Self {
+            store,
+            memory: Rc::new(RefCell::new(None)),
+        }
     }
 
     /// Initialize the host memory with a pointer to the given memory.
     pub fn init_from(&mut self, memory: &Memory) {
-        if self.inner.is_some() {
+        if self.memory.borrow().is_some() {
             tracing::error!("wasm memory is already initialized");
             return;
         }
-        self.inner = Some(memory.clone());
+        *self.memory.borrow_mut() = Some(memory.clone());
     }
 
-    /// Get a reference to the inner [`Memory`].
+    /// Access the inner [`Memory`].
     #[inline]
-    fn get_ref(&self) -> Option<&Memory> {
-        self.inner.as_ref()
+    fn access<F, T>(&self, f: F) -> Result<T>
+    where
+        F: FnOnce(&Memory) -> Result<T>,
+    {
+        let borrow = self.memory.borrow();
+        let memory = borrow.as_ref().ok_or(Error::UninitializedMemory)?;
+        f(memory)
     }
 }
 
@@ -304,25 +312,27 @@ impl VmMemory for WasmMemory {
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
     fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
-        let memory = self.get_ref().ok_or(Error::UninitializedMemory)?;
-        let mut store = self.store.borrow_mut();
-        let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
-        let len = bytes.len() as u64;
-        let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-        Ok((bytes, gas))
+        self.access(|memory| {
+            let mut store = self.store.borrow_mut();
+            let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
+            let len = bytes.len() as u64;
+            let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
+            Ok((bytes, gas))
+        })
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
     fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
-        // No need for a separate gas multiplier for writes since we are only
-        // writing to memory and we already charge gas for every memory page
-        // allocated
-        let len = bytes.as_ref().len() as u64;
-        let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-        let memory = self.get_ref().ok_or(Error::UninitializedMemory)?;
-        let mut store = self.store.borrow_mut();
-        write_memory_bytes(&mut *store, memory, offset, bytes)?;
-        Ok(gas)
+        self.access(|memory| {
+            // No need for a separate gas multiplier for writes since we are
+            // only writing to memory and we already charge gas for
+            // every memory page allocated
+            let len = bytes.as_ref().len() as u64;
+            let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
+            let mut store = self.store.borrow_mut();
+            write_memory_bytes(&mut *store, memory, offset, bytes)?;
+            Ok(gas)
+        })
     }
 
     /// Read string from memory at the given offset and bytes length, and return
