@@ -4,23 +4,20 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_core::address::{Address, InternalAddress};
-use namada_core::ibc::apps::transfer::context::{
+use ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
-use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::{
-    Memo, PrefixedCoin, PrefixedDenom,
-};
-use namada_core::ibc::core::channel::types::error::ChannelError;
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::IBC_ESCROW_ADDRESS;
+use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
+use ibc::core::channel::types::error::ChannelError;
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::address::{Address, InternalAddress};
 use namada_core::uint::Uint;
 use namada_token::{read_denom, Amount, Denomination};
 
 use super::common::IbcCommonContext;
-use crate::storage;
+use crate::{storage, IBC_ESCROW_ADDRESS};
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]

@@ -20,6 +20,8 @@
 mod actions;
 pub mod context;
 pub mod event;
+mod msg;
+mod nft;
 pub mod parameters;
 pub mod storage;
 
@@ -27,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -39,44 +42,53 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
-use namada_core::address::{Address, MASP};
-use namada_core::ibc::apps::nft_transfer::handler::{
+use ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
-use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
-use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
-use namada_core::ibc::apps::nft_transfer::types::{
+use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use ibc::apps::nft_transfer::types::{
     is_receiver_chain_source as is_nft_receiver_chain_source, PrefixedClassId,
-    TokenId, TracePrefix as NftTracePrefix,
+    TokenId, TracePath as NftTracePath, TracePrefix as NftTracePrefix,
 };
-use namada_core::ibc::apps::transfer::handler::{
+use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
-use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::ibc::apps::transfer::types::{
-    is_receiver_chain_source, TracePrefix,
+use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::packet::PacketData;
+use ibc::apps::transfer::types::{
+    is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
 };
-use namada_core::ibc::core::channel::types::acknowledgement::{
+use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
-use namada_core::ibc::core::channel::types::msgs::{
+use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
-use namada_core::ibc::core::entrypoint::{execute, validate};
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
-use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_core::ibc::core::host::types::error::IdentifierError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::core::router::types::error::RouterError;
-use namada_core::ibc::primitives::proto::Any;
-pub use namada_core::ibc::*;
+use ibc::core::entrypoint::{execute, validate};
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::handler::types::events::Error as RawIbcEventError;
+use ibc::core::handler::types::msgs::MsgEnvelope;
+use ibc::core::host::types::error::IdentifierError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use ibc::core::router::types::error::RouterError;
+use ibc::primitives::proto::Any;
+pub use ibc::*;
+pub use msg::*;
+use namada_core::address::{self, Address, MASP};
 use namada_core::masp::PaymentAddress;
 use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
-use namada_token::Transfer;
+use namada_token::UnshieldingTransfer;
+pub use nft::*;
 use prost::Message;
 use thiserror::Error;
+
+/// The event type defined in ibc-rs for receiving a token
+pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
+/// The event type defined in ibc-rs for receiving an NFT
+pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
+/// The escrow address for IBC transfer
+pub const IBC_ESCROW_ADDRESS: Address = address::IBC;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -142,7 +154,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<Option<Transfer>, Error> {
+    ) -> Result<Option<UnshieldingTransfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -547,6 +559,37 @@ pub fn received_ibc_token(
     } else {
         Address::decode(ibc_trace)
             .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
+    }
+}
+
+/// Returns the trace path and the token string if the denom is an IBC
+/// denom.
+pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
+    let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
+    let base_denom = prefixed_denom.base_denom.to_string();
+    if prefixed_denom.trace_path.is_empty() || base_denom.contains('/') {
+        // The denom is just a token or an NFT trace
+        return None;
+    }
+    // The base token isn't decoded because it could be non Namada token
+    Some((prefixed_denom.trace_path, base_denom))
+}
+
+/// Returns the trace path and the token string if the trace is an NFT one
+pub fn is_nft_trace(
+    trace: impl AsRef<str>,
+) -> Option<(NftTracePath, String, String)> {
+    // The trace should be {port}/{channel}/.../{class_id}/{token_id}
+    if let Some((class_id, token_id)) = trace.as_ref().rsplit_once('/') {
+        let prefixed_class_id = PrefixedClassId::from_str(class_id).ok()?;
+        // The base token isn't decoded because it could be non Namada token
+        Some((
+            prefixed_class_id.trace_path,
+            prefixed_class_id.base_class_id.to_string(),
+            token_id.to_string(),
+        ))
+    } else {
+        None
     }
 }
 

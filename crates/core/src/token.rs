@@ -7,6 +7,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
 use ethabi::ethereum_types::U256;
+use ibc::apps::transfer::types::Amount as IbcAmount;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -15,7 +16,6 @@ use thiserror::Error;
 
 use crate::arith::{self, checked, CheckedAdd, CheckedSub};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
-use crate::ibc::apps::transfer::types::Amount as IbcAmount;
 use crate::storage;
 use crate::storage::{DbKeySeg, KeySeg};
 use crate::uint::{self, Uint, I256};
