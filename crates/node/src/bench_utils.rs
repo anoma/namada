@@ -74,6 +74,7 @@ use namada::ledger::native_vp::ibc::get_dummy_header;
 use namada::ledger::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
+use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
@@ -922,12 +923,18 @@ impl Client for BenchShell {
                             .with(MaspTxBlockIndex(TxIndex::must_from_usize(
                                 idx,
                             )))
-                            .with(MaspTxBatchRefs(
-                                vec![
-                                    tx.first_commitments().unwrap().get_hash(),
-                                ]
-                                .into(),
-                            ))
+                            .with(MaspTxBatchRefs(MaspTxRefs(vec![
+                                tx.sections
+                                    .iter()
+                                    .find_map(|section| {
+                                        if let Section::MaspTx(_) = section {
+                                            Some(section.get_hash())
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap(),
+                            ])))
                             .into();
                         namada::tendermint::abci::Event::from(event)
                     })

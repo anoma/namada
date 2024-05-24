@@ -1730,9 +1730,8 @@ impl<'tx> Tx {
     }
 }
 
-/// Represents the pointers of an indexed tx, which are the block height, the
-/// index inside that block and the commitment inside the tx bundle (if inner
-/// tx)
+/// Represents the pointers to a indexed tx, which are the block height and the
+/// index inside that block
 #[derive(
     Debug,
     Clone,
@@ -1750,8 +1749,6 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
-    /// This is a pointer to the inner tx inside the batch
-    pub inner_tx: TxCommitments,
 }
 
 impl Default for IndexedTx {
@@ -1759,7 +1756,6 @@ impl Default for IndexedTx {
         Self {
             height: BlockHeight::first(),
             index: TxIndex(0),
-            inner_tx: TxCommitments::default(),
         }
     }
 }

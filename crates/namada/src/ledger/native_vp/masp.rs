@@ -350,7 +350,25 @@ where
     ) -> Result<()> {
         let epoch = self.ctx.get_block_epoch()?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let shielded_tx = self.ctx.get_shielded_action(tx_data)?;
+
+        // Get the Transaction object from the actions
+        let masp_section_ref = namada_tx::action::get_masp_section_ref(
+            &self.ctx,
+        )?
+        .ok_or_else(|| {
+            native_vp::Error::new_const(
+                "Missing MASP section reference in action",
+            )
+        })?;
+        let shielded_tx = tx_data
+            .tx
+            .get_section(&masp_section_ref)
+            .and_then(|section| section.masp_tx())
+            .ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "Missing MASP section in transaction",
+                )
+            })?;
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())

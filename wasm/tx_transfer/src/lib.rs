@@ -2,6 +2,7 @@
 //! This tx uses `token::Transfer` wrapped inside `SignedTxData`
 //! as its input as declared in `namada` crate.
 
+use namada_tx_prelude::action::{Action, MaspAction, Write};
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -20,28 +21,23 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     )
     .wrap_err("Token transfer failed")?;
 
-    let shielded = transfer
-        .shielded
-        .as_ref()
-        .map(|hash| {
-            tx_data
-                .tx
-                .get_section(hash)
-                .and_then(|x| x.as_ref().masp_tx())
-                .ok_or_err_msg(
-                    "Unable to find required shielded section in tx data",
-                )
-                .map_err(|err| {
-                    ctx.set_commitment_sentinel();
-                    err
-                })
-        })
-        .transpose()?;
-    if let Some(shielded) = shielded {
+    if let Some(masp_section_ref) = transfer.shielded {
+        let shielded = tx_data
+            .tx
+            .get_section(&masp_section_ref)
+            .and_then(|x| x.as_ref().masp_tx())
+            .ok_or_err_msg(
+                "Unable to find required shielded section in tx data",
+            )
+            .map_err(|err| {
+                ctx.set_commitment_sentinel();
+                err
+            })?;
         token::utils::handle_masp_tx(ctx, &shielded)
             .wrap_err("Encountered error while handling MASP transaction")?;
         update_masp_note_commitment_tree(&shielded)
             .wrap_err("Failed to update the MASP commitment tree")?;
+        ctx.push_action(Action::Masp(MaspAction { masp_section_ref }))?;
     }
     Ok(())
 }

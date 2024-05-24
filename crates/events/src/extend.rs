@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::masp::MaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
 
 use super::*;
@@ -498,28 +499,13 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     }
 }
 
-/// A displyable collection of hashes.
-#[derive(Serialize, Deserialize)]
-pub struct DisplayableHashVec(Vec<Hash>);
-
-impl Display for DisplayableHashVec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
-    }
-}
-
-impl From<Vec<Hash>> for DisplayableHashVec {
-    fn from(value: Vec<Hash>) -> Self {
-        Self(value)
-    }
-}
-
 /// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
-/// inner transactions inside the batch that are valid masp txs.
-pub struct MaspTxBatchRefs(pub DisplayableHashVec);
+/// inner transactions inside the batch that are valid masp txs and the
+/// references to the relative masp sections.
+pub struct MaspTxBatchRefs(pub MaspTxRefs);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
-    type Value = DisplayableHashVec;
+    type Value = MaspTxRefs;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";

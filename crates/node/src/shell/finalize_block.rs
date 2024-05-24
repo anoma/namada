@@ -15,14 +15,14 @@ use namada::ledger::events::EmitEvents;
 use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
-use namada::ledger::protocol::{DispatchArgs, DispatchError};
+use namada::ledger::protocol::DispatchArgs;
+use namada::masp::MaspTxRefs;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
-use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
 use namada::tx::event::{Batch, Code};
@@ -346,8 +346,8 @@ where
     fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        dispatch_result: std::result::Result<
-            namada::tx::data::TxResult<protocol::Error>,
+        extended_dispatch_result: std::result::Result<
+            namada::tx::data::ExtendedTxResult<protocol::Error>,
             DispatchError,
         >,
         tx_data: TxData<'_>,
@@ -434,7 +434,7 @@ where
     fn handle_inner_tx_results(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -444,7 +444,8 @@ where
             commit_batch_hash,
             is_any_tx_invalid,
         } = temp_log.check_inner_results(
-            &tx_result,
+            &extended_tx_result.tx_result,
+            extended_tx_result.masp_tx_refs,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -455,8 +456,10 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(tx_result.batch_results.0.len())
-                        .expect("Should be able to convert to u64"),
+                    u64::try_from(
+                        extended_tx_result.tx_result.batch_results.0.len(),
+                    )
+                    .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
@@ -485,16 +488,16 @@ where
 
         tx_logs
             .tx_event
-            .extend(GasUsed(tx_result.gas_used))
+            .extend(GasUsed(extended_tx_result.tx_result.gas_used))
             .extend(Info("Check batch for result.".to_string()))
-            .extend(Batch(&tx_result.to_result_string()));
+            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
 
     fn handle_batch_error(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -504,7 +507,8 @@ where
             commit_batch_hash,
             is_any_tx_invalid: _,
         } = temp_log.check_inner_results(
-            &tx_result,
+            &extended_tx_result.tx_result,
+            extended_tx_result.masp_tx_refs,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -512,8 +516,10 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(tx_result.batch_results.0.len())
-                    .expect("Should be able to convert to u64"),
+                u64::try_from(
+                    extended_tx_result.tx_result.batch_results.0.len(),
+                )
+                .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
@@ -544,7 +550,7 @@ where
 
         tx_logs
             .tx_event
-            .extend(Batch(&tx_result.to_result_string()));
+            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
@@ -958,19 +964,16 @@ impl<'finalize> TempTxLogs {
     fn check_inner_results(
         &mut self,
         tx_result: &namada::tx::data::TxResult<protocol::Error>,
+        masp_tx_refs: MaspTxRefs,
         tx_index: usize,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
-        let mut masp_cmts = vec![];
 
         for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
-                        if is_masp_tx(&result.changed_keys) {
-                            masp_cmts.push(*cmt_hash);
-                        }
                         tracing::trace!(
                             "all VPs accepted inner tx {} storage \
                              modification {:#?}",
@@ -1030,10 +1033,10 @@ impl<'finalize> TempTxLogs {
 
         // If at least one of the inner transactions is a valid masp tx, update
         // the events
-        if !masp_cmts.is_empty() {
+        if !masp_tx_refs.0.is_empty() {
             self.tx_event
                 .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
-            self.tx_event.extend(MaspTxBatchRefs(masp_cmts.into()));
+            self.tx_event.extend(MaspTxBatchRefs(masp_tx_refs));
         }
 
         flags
@@ -1351,7 +1354,11 @@ mod test_finalize_block {
                 .enumerate()
                 .find_map(
                     |(idx, tx_hash)| {
-                        if tx_hash == &hash { Some(idx) } else { None }
+                        if tx_hash == &hash {
+                            Some(idx)
+                        } else {
+                            None
+                        }
                     },
                 )
                 .unwrap();
@@ -2945,25 +2952,21 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
 
         // Check transaction's hash in storage
-        assert!(
-            shell
-                .shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_tx.raw_header_hash())
-        );
+        assert!(shell
+            .shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_tx.raw_header_hash()));
         // Check that the hash is not present in the merkle tree
         shell.state.commit_block().unwrap();
-        assert!(
-            !shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&wrapper_hash_key)
-                .unwrap()
-        );
+        assert!(!shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&wrapper_hash_key)
+            .unwrap());
 
         // test that a commitment to replay protection gets added.
         let reprot_key = replay_protection::commitment_key();
@@ -3010,26 +3013,22 @@ mod test_finalize_block {
         assert_eq!(root_pre.0, root_post.0);
         // Check that the hashes are present in the merkle tree
         shell.state.commit_block().unwrap();
-        assert!(
-            shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&convert_key)
-                .unwrap()
-        );
-        assert!(
-            shell
-                .shell
-                .state
-                .in_mem()
-                .block
-                .tree
-                .has_key(&commitment_key)
-                .unwrap()
-        );
+        assert!(shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&convert_key)
+            .unwrap());
+        assert!(shell
+            .shell
+            .state
+            .in_mem()
+            .block
+            .tree
+            .has_key(&commitment_key)
+            .unwrap());
     }
 
     /// Test that a tx that has already been applied in the same block
@@ -3107,34 +3106,26 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::WasmRuntimeError);
 
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-            );
-            assert!(
-                !shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&wrapper.header_hash())
-            );
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.raw_header_hash()));
+            assert!(!shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&wrapper.header_hash()));
         }
         // Commit to check the hashes from storage
         shell.commit();
         for wrapper in [&wrapper, &new_wrapper] {
-            assert!(
-                shell
-                    .state
-                    .has_replay_protection_entry(&wrapper.raw_header_hash())
-                    .unwrap()
-            );
-            assert!(
-                !shell
-                    .state
-                    .has_replay_protection_entry(&wrapper.header_hash())
-                    .unwrap()
-            );
+            assert!(shell
+                .state
+                .has_replay_protection_entry(&wrapper.raw_header_hash())
+                .unwrap());
+            assert!(!shell
+                .state
+                .has_replay_protection_entry(&wrapper.header_hash())
+                .unwrap());
         }
     }
 
@@ -3417,29 +3408,23 @@ mod test_finalize_block {
             &unsigned_wrapper,
             &wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell.state.write_log().has_replay_protection_entry(
-                    &valid_wrapper.raw_header_hash()
-                )
-            );
-            assert!(
-                shell
-                    .state
-                    .write_log()
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-            );
-        }
-        assert!(
-            shell.state.write_log().has_replay_protection_entry(
-                &failing_wrapper.raw_header_hash()
-            )
-        );
-        assert!(
-            !shell
+            assert!(!shell
                 .state
                 .write_log()
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-        );
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash()));
+            assert!(shell
+                .state
+                .write_log()
+                .has_replay_protection_entry(&valid_wrapper.header_hash()));
+        }
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash()));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&failing_wrapper.header_hash()));
 
         // Commit to check the hashes from storage
         shell.commit();
@@ -3448,33 +3433,23 @@ mod test_finalize_block {
             unsigned_wrapper,
             wrong_commitment_wrapper,
         ] {
-            assert!(
-                !shell
-                    .state
-                    .has_replay_protection_entry(
-                        &valid_wrapper.raw_header_hash()
-                    )
-                    .unwrap()
-            );
-            assert!(
-                shell
-                    .state
-                    .has_replay_protection_entry(&valid_wrapper.header_hash())
-                    .unwrap()
-            );
+            assert!(!shell
+                .state
+                .has_replay_protection_entry(&valid_wrapper.raw_header_hash())
+                .unwrap());
+            assert!(shell
+                .state
+                .has_replay_protection_entry(&valid_wrapper.header_hash())
+                .unwrap());
         }
-        assert!(
-            shell
-                .state
-                .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
-                .unwrap()
-        );
-        assert!(
-            !shell
-                .state
-                .has_replay_protection_entry(&failing_wrapper.header_hash())
-                .unwrap()
-        );
+        assert!(shell
+            .state
+            .has_replay_protection_entry(&failing_wrapper.raw_header_hash())
+            .unwrap());
+        assert!(!shell
+            .state
+            .has_replay_protection_entry(&failing_wrapper.header_hash())
+            .unwrap());
     }
 
     #[test]
@@ -3534,18 +3509,14 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
 
-        assert!(
-            shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper_hash)
-        );
-        assert!(
-            !shell
-                .state
-                .write_log()
-                .has_replay_protection_entry(&wrapper.raw_header_hash())
-        );
+        assert!(shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper_hash));
+        assert!(!shell
+            .state
+            .write_log()
+            .has_replay_protection_entry(&wrapper.raw_header_hash()));
     }
 
     // Test that the fees are paid even if the inner transaction fails and its
@@ -3943,11 +3914,9 @@ mod test_finalize_block {
                 .unwrap(),
             Some(ValidatorState::Consensus)
         );
-        assert!(
-            enqueued_slashes_handle()
-                .at(&Epoch::default())
-                .is_empty(&shell.state)?
-        );
+        assert!(enqueued_slashes_handle()
+            .at(&Epoch::default())
+            .is_empty(&shell.state)?);
         assert_eq!(
             get_num_consensus_validators(&shell.state, Epoch::default())
                 .unwrap(),
@@ -3966,21 +3935,17 @@ mod test_finalize_block {
                     .unwrap(),
                 Some(ValidatorState::Jailed)
             );
-            assert!(
-                enqueued_slashes_handle()
-                    .at(&epoch)
-                    .is_empty(&shell.state)?
-            );
+            assert!(enqueued_slashes_handle()
+                .at(&epoch)
+                .is_empty(&shell.state)?);
             assert_eq!(
                 get_num_consensus_validators(&shell.state, epoch).unwrap(),
                 5_u64
             );
         }
-        assert!(
-            !enqueued_slashes_handle()
-                .at(&processing_epoch)
-                .is_empty(&shell.state)?
-        );
+        assert!(!enqueued_slashes_handle()
+            .at(&processing_epoch)
+            .is_empty(&shell.state)?);
 
         // Advance to the processing epoch
         loop {
@@ -4003,11 +3968,9 @@ mod test_finalize_block {
                 // println!("Reached processing epoch");
                 break;
             } else {
-                assert!(
-                    enqueued_slashes_handle()
-                        .at(&shell.state.in_mem().block.epoch)
-                        .is_empty(&shell.state)?
-                );
+                assert!(enqueued_slashes_handle()
+                    .at(&shell.state.in_mem().block.epoch)
+                    .is_empty(&shell.state)?);
                 let stake1 = read_validator_stake(
                     &shell.state,
                     &params,
@@ -4491,13 +4454,11 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(misbehavior_epoch));
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         tracing::debug!("Advancing to epoch 7");
 
@@ -4562,22 +4523,18 @@ mod test_finalize_block {
             )
             .unwrap();
         assert_eq!(last_slash, Some(Epoch(4)));
-        assert!(
-            namada_proof_of_stake::is_validator_frozen(
-                &shell.state,
-                &val1.address,
-                current_epoch,
-                &params
-            )
-            .unwrap()
-        );
-        assert!(
-            namada_proof_of_stake::storage::validator_slashes_handle(
-                &val1.address
-            )
-            .is_empty(&shell.state)
-            .unwrap()
-        );
+        assert!(namada_proof_of_stake::is_validator_frozen(
+            &shell.state,
+            &val1.address,
+            current_epoch,
+            &params
+        )
+        .unwrap());
+        assert!(namada_proof_of_stake::storage::validator_slashes_handle(
+            &val1.address
+        )
+        .is_empty(&shell.state)
+        .unwrap());
 
         let pre_stake_10 =
             namada_proof_of_stake::storage::read_validator_stake(
@@ -5455,11 +5412,9 @@ mod test_finalize_block {
             shell.vp_wasm_cache.clone(),
         );
         let parameters = ParametersVp { ctx };
-        assert!(
-            parameters
-                .validate_tx(&batched_tx, &keys_changed, &verifiers)
-                .is_ok()
-        );
+        assert!(parameters
+            .validate_tx(&batched_tx, &keys_changed, &verifiers)
+            .is_ok());
 
         // we advance forward to the next epoch
         let mut req = FinalizeBlock::default();
@@ -5532,13 +5487,11 @@ mod test_finalize_block {
         let inner_results = inner_tx_result.batch_results.0;
 
         for cmt in batch.commitments() {
-            assert!(
-                inner_results
-                    .get(&cmt.get_hash())
-                    .unwrap()
-                    .clone()
-                    .is_ok_and(|res| res.is_accepted())
-            );
+            assert!(inner_results
+                .get(&cmt.get_hash())
+                .unwrap()
+                .clone()
+                .is_ok_and(|res| res.is_accepted()));
         }
 
         // Check storage modifications
@@ -5576,24 +5529,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications are missing
         for key in ["random_key_1", "random_key_2", "random_key_3"] {
@@ -5624,27 +5571,21 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[2].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
+        assert!(inner_results
+            .get(&batch.commitments()[2].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
 
         // Check storage modifications
         assert_eq!(
@@ -5655,12 +5596,10 @@ mod test_finalize_block {
                 .unwrap(),
             STORAGE_VALUE
         );
-        assert!(
-            !shell
-                .state
-                .has_key(&"random_key_2".parse().unwrap())
-                .unwrap()
-        );
+        assert!(!shell
+            .state
+            .has_key(&"random_key_2".parse().unwrap())
+            .unwrap());
         assert_eq!(
             shell
                 .state
@@ -5692,24 +5631,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications are missing
         for key in ["random_key_1", "random_key_2", "random_key_3"] {
@@ -5739,24 +5672,18 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let inner_results = inner_tx_result.batch_results.0;
 
-        assert!(
-            inner_results
-                .get(&batch.commitments()[0].get_hash())
-                .unwrap()
-                .clone()
-                .is_ok_and(|res| res.is_accepted())
-        );
-        assert!(
-            inner_results
-                .get(&batch.commitments()[1].get_hash())
-                .unwrap()
-                .clone()
-                .is_err()
-        );
+        assert!(inner_results
+            .get(&batch.commitments()[0].get_hash())
+            .unwrap()
+            .clone()
+            .is_ok_and(|res| res.is_accepted()));
+        assert!(inner_results
+            .get(&batch.commitments()[1].get_hash())
+            .unwrap()
+            .clone()
+            .is_err());
         // Assert that the last tx didn't run
-        assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
-        );
+        assert!(!inner_results.contains_key(&batch.commitments()[2].get_hash()));
 
         // Check storage modifications
         assert_eq!(
