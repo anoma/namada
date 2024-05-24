@@ -133,7 +133,7 @@ mod wrap_tx {
         ) -> TxVmEnv<WasmMemory, D, H, CA> {
             TxVmEnv {
                 // SAFETY: This store ref is short lived.
-                memory: unsafe { self.memory.clone().access(store) },
+                memory: unsafe { self.memory.access(store) },
                 ctx: self.ctx.clone(),
             }
         }
@@ -339,7 +339,7 @@ mod wrap_vp {
         ) -> VpVmEnv<WasmMemory, D, H, EVAL, CA> {
             VpVmEnv {
                 // SAFETY: This store ref is short lived.
-                memory: unsafe { self.memory.clone().access(store) },
+                memory: unsafe { self.memory.access(store) },
                 ctx: self.ctx.clone(),
             }
         }

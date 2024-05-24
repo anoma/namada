@@ -304,7 +304,7 @@ impl InertWasmMemory {
     ///
     /// Ensure [`WasmMemory`] does not live longer than the given `store`.
     pub unsafe fn access(
-        self,
+        &self,
         store: &mut impl wasmer::AsStoreMut,
     ) -> WasmMemory {
         let store = store.as_store_mut();
@@ -314,7 +314,7 @@ impl InertWasmMemory {
 
         WasmMemory {
             store,
-            memory: self.memory,
+            memory: self.memory.borrow().clone(),
         }
     }
 }
@@ -322,9 +322,10 @@ impl InertWasmMemory {
 /// The wasm memory
 pub struct WasmMemory {
     store: wasmer::StoreMut<'static>,
-    memory: Rc<RefCell<Option<wasmer::Memory>>>,
+    memory: Option<wasmer::Memory>,
 }
 
+// TODO: Remove clone from VmMemory
 impl Clone for WasmMemory {
     #[inline(never)]
     #[track_caller]
@@ -349,8 +350,7 @@ impl WasmMemory {
     where
         F: FnOnce(&Memory, &mut wasmer::StoreMut<'_>) -> Result<T>,
     {
-        let borrow = self.memory.borrow();
-        let memory = borrow.as_ref().ok_or(Error::UninitializedMemory)?;
+        let memory = self.memory.as_ref().ok_or(Error::UninitializedMemory)?;
         f(memory, &mut self.store)
     }
 }
