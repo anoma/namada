@@ -759,7 +759,7 @@ mod tests {
             batched_tx,
         } = test_env;
 
-        let tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+        let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
             state,
             iterators,
             verifiers,

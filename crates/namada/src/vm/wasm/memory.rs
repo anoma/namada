@@ -311,7 +311,11 @@ impl VmMemory for WasmMemory {
 
     /// Read bytes from memory at the given offset and length, return the bytes
     /// and the gas cost
-    fn read_bytes(&self, offset: u64, len: usize) -> Result<(Vec<u8>, u64)> {
+    fn read_bytes(
+        &mut self,
+        offset: u64,
+        len: usize,
+    ) -> Result<(Vec<u8>, u64)> {
         self.access(|memory| {
             let mut store = self.store.borrow_mut();
             let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
@@ -322,7 +326,11 @@ impl VmMemory for WasmMemory {
     }
 
     /// Write bytes into memory at the given offset and return the gas cost
-    fn write_bytes(&self, offset: u64, bytes: impl AsRef<[u8]>) -> Result<u64> {
+    fn write_bytes(
+        &mut self,
+        offset: u64,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<u64> {
         self.access(|memory| {
             // No need for a separate gas multiplier for writes since we are
             // only writing to memory and we already charge gas for
@@ -337,7 +345,11 @@ impl VmMemory for WasmMemory {
 
     /// Read string from memory at the given offset and bytes length, and return
     /// the gas cost
-    fn read_string(&self, offset: u64, len: usize) -> Result<(String, u64)> {
+    fn read_string(
+        &mut self,
+        offset: u64,
+        len: usize,
+    ) -> Result<(String, u64)> {
         let (bytes, gas) = self.read_bytes(offset, len)?;
         let string = std::str::from_utf8(&bytes)
             .map_err(Error::InvalidUtf8String)?
@@ -347,7 +359,7 @@ impl VmMemory for WasmMemory {
 
     /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    fn write_string(&self, offset: u64, string: String) -> Result<u64> {
+    fn write_string(&mut self, offset: u64, string: String) -> Result<u64> {
         self.write_bytes(offset, string.as_bytes())
     }
 }
