@@ -93,7 +93,6 @@ pub type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 /// A transaction's host environment
 pub struct TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -151,7 +150,6 @@ where
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -229,7 +227,7 @@ where
 
 impl<MEM, D, H, CA> Clone for TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
+    MEM: Clone,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -307,7 +305,6 @@ where
 /// A validity predicate's host environment
 pub struct VpVmEnv<MEM, D, H, EVAL, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -393,7 +390,6 @@ impl<MEM, D, H, EVAL, CA> VpVmEnv<MEM, D, H, EVAL, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    MEM: VmMemory,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -453,7 +449,7 @@ where
 
 impl<MEM, D, H, EVAL, CA> Clone for VpVmEnv<MEM, D, H, EVAL, CA>
 where
-    MEM: VmMemory,
+    MEM: Clone,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
