@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## v0.37.0
+
+Namada 0.37.0 is a minor release that adds replay protection entries to consensus and enables merklizing data without diffs.
+
+### FEATURES
+
+- Enable to write data to be updated in the subspace and Merkle tree, but not to
+  be updated in diffs ([\#3293](https://github.com/anoma/namada/issues/3293))
+
+### IMPROVEMENTS
+
+- Revert IBC transaction wasm not to use host_env function.
+  But it required to enable floating-point support again
+  ([\#1831](https://github.com/anoma/namada/issues/1831))
+- Audit TODOs in the codebase.
+  ([\#3234](https://github.com/anoma/namada/pull/3234))
+- Replay protection entries need to be verifiable and thus should contribute to the app hash. This PR makes
+  a cryptographic commitment to all replay protection entries (the root of some implicit merkle tree) which is itself
+  merklized. ([\#3284](https://github.com/anoma/namada/pull/3284))
+
 ## v0.36.1
 
 Namada 0.36.1 is a patch release that updates the Rust toolchain to 1.78.0 fixes a couple minor issues with the last minor release.
@@ -324,9 +344,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
