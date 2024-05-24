@@ -34,10 +34,8 @@ namada_parameters = { path = "../parameters" }
 namada_trans_token = { path = "../trans_token" }
 
 borsh.workspace = true
-data-encoding.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
-num-traits.workspace = true
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true

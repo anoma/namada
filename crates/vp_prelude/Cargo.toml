@@ -32,4 +32,3 @@ namada_vp_env = { path = "../vp_env" }
 
 borsh.workspace = true
 sha2.workspace = true
-thiserror.workspace = true

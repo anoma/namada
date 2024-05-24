@@ -24,5 +24,4 @@ namada_core = { path = "../core" }
 namada_macros = { path = "../macros" }
 namada_storage = { path = "../storage" }
 
-borsh.workspace = true
 thiserror.workspace = true
