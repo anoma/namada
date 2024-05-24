@@ -18,8 +18,8 @@ use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, 
-    VpStatusFlags, VpsResult, WrapperTx,
+    BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
+    VpsResult, WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -225,31 +225,29 @@ where
             vp_wasm_cache,
             tx_wasm_cache,
         } => {
-            if let Some(mut tx_result) = wrapper_tx_result {
+            if let Some(tx_result) = wrapper_tx_result {
                 // TODO(namada#2597): handle masp fee payment in the first inner
                 // tx if necessary
-  // Replay protection check on the batch
-            let tx_hash = tx.raw_header_hash();
-            if state.write_log().has_replay_protection_entry(&tx_hash) {
-                // If the same batch has already been committed in
-                // this block, skip execution and return
-                return Err(DispatchError {
-                    error: Error::ReplayAttempt(tx_hash),
-                    tx_result: None,
-                });
-            }
+                // Replay protection check on the batch
+                let tx_hash = tx.raw_header_hash();
+                if state.write_log().has_replay_protection_entry(&tx_hash) {
+                    // If the same batch has already been committed in
+                    // this block, skip execution and return
+                    return Err(DispatchError {
+                        error: Error::ReplayAttempt(tx_hash),
+                        tx_result: None,
+                    });
+                }
 
-            dispatch_inner_txs(
-                tx,
-                tx_result,
-                tx_index,
-                tx_gas_meter,
-                state,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            )
-
-
+                dispatch_inner_txs(
+                    tx,
+                    tx_result,
+                    tx_index,
+                    tx_gas_meter,
+                    state,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                )
             } else {
                 // Governance proposal. We don't allow tx batches in this case,
                 // just take the first one
@@ -273,8 +271,7 @@ where
                             .collect(),
                     ),
                 }
-                    .to_extended_result(None))
-        )
+                .to_extended_result(None))
             }
         }
         DispatchArgs::Protocol(protocol_tx) => {
@@ -308,13 +305,13 @@ where
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
 
-            Ok(tx_result)
+            Ok(tx_result.to_extended_result(None))
         }
     }
 }
 
 fn dispatch_inner_txs<'a, D, H, CA>(
-    tx: Tx,
+    tx: &Tx,
     tx_result: TxResult<Error>,
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
