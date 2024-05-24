@@ -3388,7 +3388,7 @@ pub mod args {
                     .requires(PATH_OPT.name)
                     .requires(BLOCK_HEIGHT_OPT.name)
                     .help(wrap!(
-                        "Hash to verify contents of optinally provided \
+                        "Hash to verify contents of optionally provided \
                          migrations file."
                     )),
             )
