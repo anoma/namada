@@ -127,9 +127,9 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>) -> RET,
     {
-        move |env| f(env.data())
+        move |mut env| f(env.data_mut())
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, CA>(
@@ -139,9 +139,9 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0) -> RET,
     {
-        move |env, arg0| f(env.data(), arg0)
+        move |mut env, arg0| f(env.data_mut(), arg0)
     }
 
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, CA>(
@@ -151,9 +151,9 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1) -> RET,
     {
-        move |env, arg0, arg1| f(env.data(), arg0, arg1)
+        move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
     }
 
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, CA>(
@@ -169,9 +169,17 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1, ARG2, ARG3) -> RET,
+        F: Fn(
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+        ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3| f(env.data(), arg0, arg1, arg2, arg3)
+        move |mut env, arg0, arg1, arg2, arg3| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3)
+        }
     }
 
     pub(super) fn _6<F, ARG0, ARG1, ARG2, ARG3, ARG4, ARG5, RET, D, H, CA>(
@@ -190,7 +198,7 @@ mod wrap_tx {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         F: Fn(
-            &TxVmEnv<WasmMemory, D, H, CA>,
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -199,8 +207,8 @@ mod wrap_tx {
             ARG5,
         ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3, arg4, arg5| {
-            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5)
+        move |mut env, arg0, arg1, arg2, arg3, arg4, arg5| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4, arg5)
         }
     }
 
@@ -234,7 +242,7 @@ mod wrap_tx {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         F: Fn(
-            &TxVmEnv<WasmMemory, D, H, CA>,
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -244,8 +252,8 @@ mod wrap_tx {
             ARG6,
         ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
-            f(env.data(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+        move |mut env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
         }
     }
 }
@@ -273,9 +281,9 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>) -> RET,
     {
-        move |env| f(env.data())
+        move |mut env| f(env.data_mut())
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, EVAL, CA>(
@@ -286,9 +294,9 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
     {
-        move |env, arg0| f(env.data(), arg0)
+        move |mut env, arg0| f(env.data_mut(), arg0)
     }
 
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, EVAL, CA>(
@@ -303,9 +311,9 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
     {
-        move |env, arg0, arg1| f(env.data(), arg0, arg1)
+        move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
     }
 
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, EVAL, CA>(
@@ -323,14 +331,16 @@ mod wrap_vp {
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
-            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
             ARG3,
         ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3| f(env.data(), arg0, arg1, arg2, arg3)
+        move |mut env, arg0, arg1, arg2, arg3| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3)
+        }
     }
 
     pub(super) fn _9<
@@ -369,7 +379,7 @@ mod wrap_vp {
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
-            &VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -381,9 +391,9 @@ mod wrap_vp {
             ARG8,
         ) -> RET,
     {
-        move |env, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8| {
+        move |mut env, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8| {
             f(
-                env.data(),
+                env.data_mut(),
                 arg0,
                 arg1,
                 arg2,
