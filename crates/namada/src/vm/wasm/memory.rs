@@ -305,10 +305,21 @@ impl InertWasmMemory {
 }
 
 /// The wasm memory
-#[derive(Debug, Clone)]
 pub struct WasmMemory<'st> {
     store: wasmer::StoreMut<'st>,
     memory: Rc<RefCell<Option<wasmer::Memory>>>,
+}
+
+impl Clone for WasmMemory<'_> {
+    #[inline(never)]
+    #[track_caller]
+    fn clone(&self) -> Self {
+        let caller = std::panic::Location::caller();
+        unreachable!(
+            "Attempted to clone WasmMemory from {caller}, whose instances \
+             cannot be cloned"
+        );
+    }
 }
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
@@ -319,13 +330,13 @@ unsafe impl Sync for WasmMemory<'_> {}
 impl WasmMemory<'_> {
     /// Access the inner [`Memory`].
     #[inline]
-    fn access<F, T>(&self, f: F) -> Result<T>
+    fn access<F, T>(&mut self, f: F) -> Result<T>
     where
-        F: FnOnce(&Memory) -> Result<T>,
+        F: FnOnce(&Memory, &mut wasmer::StoreMut<'_>) -> Result<T>,
     {
         let borrow = self.memory.borrow();
         let memory = borrow.as_ref().ok_or(Error::UninitializedMemory)?;
-        f(memory)
+        f(memory, &mut self.store)
     }
 }
 
@@ -339,9 +350,8 @@ impl VmMemory for WasmMemory<'_> {
         offset: u64,
         len: usize,
     ) -> Result<(Vec<u8>, u64)> {
-        self.access(|memory| {
-            let bytes =
-                read_memory_bytes(&mut self.store, memory, offset, len)?;
+        self.access(|memory, store| {
+            let bytes = read_memory_bytes(store, memory, offset, len)?;
             let len = bytes.len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
             Ok((bytes, gas))
@@ -354,13 +364,13 @@ impl VmMemory for WasmMemory<'_> {
         offset: u64,
         bytes: impl AsRef<[u8]>,
     ) -> Result<u64> {
-        self.access(|memory| {
+        self.access(|memory, store| {
             // No need for a separate gas multiplier for writes since we are
             // only writing to memory and we already charge gas for
             // every memory page allocated
             let len = bytes.as_ref().len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-            write_memory_bytes(&mut self.store, memory, offset, bytes)?;
+            write_memory_bytes(store, memory, offset, bytes)?;
             Ok(gas)
         })
     }

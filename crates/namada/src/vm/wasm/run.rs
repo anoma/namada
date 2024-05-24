@@ -6,7 +6,6 @@ use std::error::Error as _;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
-use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpError;
@@ -20,7 +19,7 @@ use thiserror::Error;
 use wasmer::sys::{BaseTunables, Features};
 use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
-use super::memory::{InertWasmMemory, Limit, WasmMemory};
+use super::memory::{InertWasmMemory, Limit};
 use super::TxCache;
 use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
@@ -240,11 +239,8 @@ where
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = {
-        let mut store = store.borrow_mut();
-        memory::write_tx_inputs(&mut *store, guest_memory, &batched_tx)
-            .map_err(Error::MemoryError)?
-    };
+    } = memory::write_tx_inputs(&mut store, guest_memory, &batched_tx)
+        .map_err(Error::MemoryError)?;
 
     // Get the module's entrypoint to be called
     let apply_tx = {

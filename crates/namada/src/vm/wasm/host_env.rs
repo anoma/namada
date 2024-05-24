@@ -130,8 +130,8 @@ mod wrap_tx {
             &self,
             store: &'st mut impl wasmer::AsStoreMut,
         ) -> TxVmEnv<WasmMemory<'st>, D, H, CA> {
-            Self {
-                memory: self.memory.access(store),
+            TxVmEnv {
+                memory: self.memory.clone().access(store),
                 ctx: self.ctx.clone(),
             }
         }
@@ -144,9 +144,12 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(&mut TxVmEnv<WasmMemory<'st>, D, H, CA>) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>) -> RET,
     {
-        move |mut env| f(env.data_mut())
+        move |mut env| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store))
+        }
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, CA>(
@@ -156,9 +159,12 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(&mut TxVmEnv<WasmMemory<'st>, D, H, CA>, ARG0) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>, ARG0) -> RET,
     {
-        move |mut env, arg0| f(env.data_mut(), arg0)
+        move |mut env, arg0| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0)
+        }
     }
 
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, CA>(
@@ -172,13 +178,12 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(
-            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
-            ARG0,
-            ARG1,
-        ) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>, ARG0, ARG1) -> RET,
     {
-        move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
+        move |mut env, arg0, arg1| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0, arg1)
+        }
     }
 
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, CA>(
@@ -194,8 +199,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(
-            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
+        F: Fn(
+            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -203,7 +208,8 @@ mod wrap_tx {
         ) -> RET,
     {
         move |mut env, arg0, arg1, arg2, arg3| {
-            f(env.data_mut(), arg0, arg1, arg2, arg3)
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0, arg1, arg2, arg3)
         }
     }
 
@@ -222,8 +228,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(
-            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
+        F: Fn(
+            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -233,7 +239,16 @@ mod wrap_tx {
         ) -> RET,
     {
         move |mut env, arg0, arg1, arg2, arg3, arg4, arg5| {
-            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4, arg5)
+            let (env, mut store) = env.data_and_store_mut();
+            f(
+                &mut env.with_store(&mut store),
+                arg0,
+                arg1,
+                arg2,
+                arg3,
+                arg4,
+                arg5,
+            )
         }
     }
 
@@ -266,8 +281,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: for<'st> Fn(
-            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
+        F: Fn(
+            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -278,7 +293,17 @@ mod wrap_tx {
         ) -> RET,
     {
         move |mut env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
-            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+            let (env, mut store) = env.data_and_store_mut();
+            f(
+                &mut env.with_store(&mut store),
+                arg0,
+                arg1,
+                arg2,
+                arg3,
+                arg4,
+                arg5,
+                arg6,
+            )
         }
     }
 }
@@ -309,8 +334,8 @@ mod wrap_vp {
             &self,
             store: &'st mut impl wasmer::AsStoreMut,
         ) -> VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA> {
-            Self {
-                memory: self.memory.access(store),
+            VpVmEnv {
+                memory: self.memory.clone().access(store),
                 ctx: self.ctx.clone(),
             }
         }
@@ -324,9 +349,12 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: for<'st> Fn(&mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>) -> RET,
     {
-        move |mut env| f(env.data_mut())
+        move |mut env| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store))
+        }
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, EVAL, CA>(
@@ -340,12 +368,12 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: for<'st> Fn(
-            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
-            ARG0,
-        ) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>, ARG0) -> RET,
     {
-        move |mut env, arg0| f(env.data_mut(), arg0)
+        move |mut env, arg0| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0)
+        }
     }
 
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, EVAL, CA>(
@@ -360,13 +388,12 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: for<'st> Fn(
-            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
-            ARG0,
-            ARG1,
-        ) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
     {
-        move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
+        move |mut env, arg0, arg1| {
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0, arg1)
+        }
     }
 
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, EVAL, CA>(
@@ -383,8 +410,8 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: for<'st> Fn(
-            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
+        F: Fn(
+            &mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -392,7 +419,8 @@ mod wrap_vp {
         ) -> RET,
     {
         move |mut env, arg0, arg1, arg2, arg3| {
-            f(env.data_mut(), arg0, arg1, arg2, arg3)
+            let (env, mut store) = env.data_and_store_mut();
+            f(&mut env.with_store(&mut store), arg0, arg1, arg2, arg3)
         }
     }
 
@@ -431,8 +459,8 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: for<'st> Fn(
-            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
+        F: Fn(
+            &mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -445,8 +473,9 @@ mod wrap_vp {
         ) -> RET,
     {
         move |mut env, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8| {
+            let (env, mut store) = env.data_and_store_mut();
             f(
-                env.data_mut(),
+                &mut env.with_store(&mut store),
                 arg0,
                 arg1,
                 arg2,
