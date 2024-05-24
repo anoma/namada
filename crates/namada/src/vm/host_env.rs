@@ -2391,11 +2391,9 @@ where
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
-    use std::rc::Rc;
-
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
-    use crate::vm::wasm::memory::WasmMemory;
+    use crate::vm::wasm::memory::InertWasmMemory;
 
     /// Setup a transaction environment
     #[allow(clippy::too_many_arguments)]
@@ -2454,7 +2452,10 @@ pub mod testing {
         yielded_value: &mut Option<Vec<u8>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
-    ) -> TxVmEnv<WasmMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
+    ) -> (
+        wasmer::Store,
+        TxVmEnv<InertWasmMemory, <S as StateRead>::D, <S as StateRead>::H, CA>,
+    )
     where
         S: State,
         CA: WasmCacheAccess,
@@ -2465,8 +2466,8 @@ pub mod testing {
             crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
 
         let (write_log, in_mem, db) = state.split_borrow();
-        let mut env = TxVmEnv::new(
-            WasmMemory::new(Rc::new(RefCell::new(store))),
+        let env = TxVmEnv::new(
+            InertWasmMemory::new(),
             write_log,
             in_mem,
             db,
@@ -2486,7 +2487,7 @@ pub mod testing {
         );
 
         env.memory.init_from(&wasm_memory);
-        env
+        (store, env)
     }
 
     /// Setup a validity predicate environment

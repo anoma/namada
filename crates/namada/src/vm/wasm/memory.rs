@@ -13,8 +13,8 @@ use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::sys::BaseTunables;
 use wasmer::{
-    vm, Memory, MemoryError, MemoryType, Pages, Store, TableType, Target,
-    Tunables, WASM_PAGE_SIZE,
+    vm, Memory, MemoryError, MemoryType, Pages, TableType, Target, Tunables,
+    WASM_PAGE_SIZE,
 };
 use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
@@ -264,29 +264,27 @@ fn write_memory_bytes(
     Ok(())
 }
 
-/// The wasm memory
+/// Wasm memory that cannot be accessed.
 #[derive(Debug, Clone)]
-pub struct WasmMemory {
-    store: Rc<RefCell<Store>>,
+pub struct InertWasmMemory {
     memory: Rc<RefCell<Option<wasmer::Memory>>>,
 }
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
 // it for now for the code to compile.
-unsafe impl Send for WasmMemory {}
-unsafe impl Sync for WasmMemory {}
+unsafe impl Send for InertWasmMemory {}
+unsafe impl Sync for InertWasmMemory {}
 
-impl WasmMemory {
+impl InertWasmMemory {
     /// Build a new wasm memory.
-    pub fn new(store: Rc<RefCell<Store>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            store,
             memory: Rc::new(RefCell::new(None)),
         }
     }
 
     /// Initialize the host memory with a pointer to the given memory.
-    pub fn init_from(&mut self, memory: &Memory) {
+    pub fn init_from(&self, memory: &Memory) {
         if self.memory.borrow().is_some() {
             tracing::error!("wasm memory is already initialized");
             return;
@@ -294,6 +292,31 @@ impl WasmMemory {
         *self.memory.borrow_mut() = Some(memory.clone());
     }
 
+    /// Access this wasm memory.
+    pub fn access<'st>(
+        self,
+        store: &'st mut impl wasmer::AsStoreMut,
+    ) -> WasmMemory<'st> {
+        WasmMemory {
+            memory: self.memory,
+            store: store.as_store_mut(),
+        }
+    }
+}
+
+/// The wasm memory
+#[derive(Debug, Clone)]
+pub struct WasmMemory<'st> {
+    store: wasmer::StoreMut<'st>,
+    memory: Rc<RefCell<Option<wasmer::Memory>>>,
+}
+
+// TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
+// it for now for the code to compile.
+unsafe impl Send for WasmMemory<'_> {}
+unsafe impl Sync for WasmMemory<'_> {}
+
+impl WasmMemory<'_> {
     /// Access the inner [`Memory`].
     #[inline]
     fn access<F, T>(&self, f: F) -> Result<T>
@@ -306,7 +329,7 @@ impl WasmMemory {
     }
 }
 
-impl VmMemory for WasmMemory {
+impl VmMemory for WasmMemory<'_> {
     type Error = Error;
 
     /// Read bytes from memory at the given offset and length, return the bytes
@@ -317,8 +340,8 @@ impl VmMemory for WasmMemory {
         len: usize,
     ) -> Result<(Vec<u8>, u64)> {
         self.access(|memory| {
-            let mut store = self.store.borrow_mut();
-            let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
+            let bytes =
+                read_memory_bytes(&mut self.store, memory, offset, len)?;
             let len = bytes.len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
             Ok((bytes, gas))
@@ -337,8 +360,7 @@ impl VmMemory for WasmMemory {
             // every memory page allocated
             let len = bytes.as_ref().len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-            let mut store = self.store.borrow_mut();
-            write_memory_bytes(&mut *store, memory, offset, bytes)?;
+            write_memory_bytes(&mut self.store, memory, offset, bytes)?;
             Ok(gas)
         })
     }

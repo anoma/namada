@@ -20,7 +20,7 @@ use thiserror::Error;
 use wasmer::sys::{BaseTunables, Features};
 use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
-use super::memory::{Limit, WasmMemory};
+use super::memory::{InertWasmMemory, Limit, WasmMemory};
 use super::TxCache;
 use crate::address::Address;
 use crate::hash::{Error as TxHashError, Hash};
@@ -191,9 +191,8 @@ where
         }
     }
 
-    let (module, store) =
+    let (module, mut store) =
         fetch_or_compile(tx_wasm_cache, &tx_code.code, state, gas_meter)?;
-    let store = Rc::new(RefCell::new(store));
 
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
@@ -203,8 +202,8 @@ where
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
-    let mut env = TxVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+    let env = TxVmEnv::new(
+        InertWasmMemory::new(),
         write_log,
         in_mem,
         db,
@@ -223,9 +222,8 @@ where
 
     // Instantiate the wasm module
     let instance = {
-        let mut store = store.borrow_mut();
-        let imports = tx_imports(&mut *store, env.clone());
-        wasmer::Instance::new(&mut *store, &module, &imports)
+        let imports = tx_imports(&mut store, env.clone());
+        wasmer::Instance::new(&mut store, &module, &imports)
             .map_err(|e| Error::InstantiationError(Box::new(e)))?
     };
 
@@ -250,23 +248,18 @@ where
 
     // Get the module's entrypoint to be called
     let apply_tx = {
-        let store = store.borrow();
         instance
             .exports
             .get_function(TX_ENTRYPOINT)
             .map_err(Error::MissingModuleEntrypoint)?
-            .typed::<(u64, u64), u64>(&*store)
+            .typed::<(u64, u64), u64>(&store)
             .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
                 entrypoint: TX_ENTRYPOINT,
                 error,
             })?
     };
     let ok = apply_tx
-        .call(
-            unsafe { &mut *RefCell::as_ptr(&*store) },
-            tx_data_ptr,
-            tx_data_len,
-        )
+        .call(&mut store, tx_data_ptr, tx_data_len)
         .map_err(|err| {
             tracing::debug!("Tx WASM failed with {}", err);
             match *sentinel.borrow() {
@@ -321,13 +314,12 @@ where
     CA: 'static + WasmCacheAccess,
 {
     // Compile the wasm module
-    let (module, store) = fetch_or_compile(
+    let (module, mut store) = fetch_or_compile(
         &mut vp_wasm_cache,
         &Commitment::Hash(vp_code_hash),
         state,
         gas_meter,
     )?;
-    let store = Rc::new(RefCell::new(store));
 
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
@@ -340,8 +332,8 @@ where
             cache_access: PhantomData,
         };
     let BatchedTxRef { tx, cmt } = batched_tx;
-    let mut env = VpVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+    let env = VpVmEnv::new(
+        InertWasmMemory::new(),
         address,
         state.write_log(),
         state.in_mem(),
@@ -361,10 +353,7 @@ where
 
     let yielded_value_borrow = env.ctx.yielded_value;
 
-    let imports = {
-        let mut store = store.borrow_mut();
-        vp_imports(&mut *store, env.clone())
-    };
+    let imports = vp_imports(&mut store, env.clone());
 
     run_vp(
         store,
@@ -382,7 +371,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 fn run_vp<F>(
-    store: Rc<RefCell<wasmer::Store>>,
+    mut store: wasmer::Store,
     module: wasmer::Module,
     vp_imports: wasmer::Imports,
     vp_code_hash: &Hash,
@@ -404,11 +393,8 @@ where
     };
 
     // Instantiate the wasm module
-    let instance = {
-        let mut store = store.borrow_mut();
-        wasmer::Instance::new(&mut *store, &module, &vp_imports)
-            .map_err(|e| Error::InstantiationError(Box::new(e)))?
-    };
+    let instance = wasmer::Instance::new(&mut store, &module, &vp_imports)
+        .map_err(|e| Error::InstantiationError(Box::new(e)))?;
 
     // Fetch guest's main memory
     let guest_memory = instance
@@ -429,28 +415,22 @@ where
         keys_changed_len,
         verifiers_ptr,
         verifiers_len,
-    } = {
-        let mut store = store.borrow_mut();
-        memory::write_vp_inputs(&mut *store, guest_memory, input)
-            .map_err(Error::MemoryError)?
-    };
+    } = memory::write_vp_inputs(&mut store, guest_memory, input)
+        .map_err(Error::MemoryError)?;
 
     // Get the module's entrypoint to be called
-    let validate_tx = {
-        let store = store.borrow();
-        instance
-            .exports
-            .get_function(VP_ENTRYPOINT)
-            .map_err(Error::MissingModuleEntrypoint)?
-            .typed::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>(&*store)
-            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-                entrypoint: VP_ENTRYPOINT,
-                error,
-            })?
-    };
+    let validate_tx = instance
+        .exports
+        .get_function(VP_ENTRYPOINT)
+        .map_err(Error::MissingModuleEntrypoint)?
+        .typed::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>(&store)
+        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+            entrypoint: VP_ENTRYPOINT,
+            error,
+        })?;
     let is_valid = validate_tx
         .call(
-            unsafe { &mut *RefCell::as_ptr(&*store) },
+            &mut store,
             addr_ptr,
             addr_len,
             data_ptr,
@@ -567,23 +547,19 @@ where
         let gas_meter = unsafe { ctx.gas_meter.get() };
 
         // Compile the wasm module
-        let (module, store) = fetch_or_compile(
+        let (module, mut store) = fetch_or_compile(
             vp_wasm_cache,
             &Commitment::Hash(vp_code_hash),
             &ctx.state(),
             gas_meter,
         )?;
-        let store = Rc::new(RefCell::new(store));
 
-        let mut env = VpVmEnv {
-            memory: WasmMemory::new(Rc::clone(&store)),
+        let env = VpVmEnv {
+            memory: InertWasmMemory::new(),
             ctx,
         };
         let yielded_value_borrow = env.ctx.yielded_value;
-        let imports = {
-            let mut store = store.borrow_mut();
-            vp_imports(&mut *store, env.clone())
-        };
+        let imports = vp_imports(&mut store, env.clone());
 
         run_vp(
             store,

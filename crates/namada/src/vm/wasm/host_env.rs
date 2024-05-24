@@ -7,7 +7,7 @@ use namada_state::{DBIter, StorageHasher, DB};
 use wasmer::{Function, FunctionEnv, Imports};
 
 use crate::vm::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
-use crate::vm::wasm::memory::WasmMemory;
+use crate::vm::wasm::memory::InertWasmMemory;
 use crate::vm::{host_env, WasmCacheAccess};
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
@@ -15,7 +15,7 @@ use crate::vm::{host_env, WasmCacheAccess};
 #[allow(clippy::too_many_arguments)]
 pub fn tx_imports<D, H, CA>(
     wasm_store: &mut impl wasmer::AsStoreMut,
-    env: TxVmEnv<WasmMemory, D, H, CA>,
+    env: TxVmEnv<InertWasmMemory, D, H, CA>,
 ) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,
@@ -64,7 +64,7 @@ where
 /// validity predicate code
 pub fn vp_imports<D, H, EVAL, CA>(
     wasm_store: &mut impl wasmer::AsStoreMut,
-    env: VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+    env: VpVmEnv<InertWasmMemory, D, H, EVAL, CA>,
 ) -> Imports
 where
     D: DB + for<'iter> DBIter<'iter> + 'static,
@@ -117,41 +117,66 @@ mod wrap_tx {
     use wasmer::FunctionEnvMut;
 
     use crate::vm::host_env::TxVmEnv;
-    use crate::vm::wasm::memory::WasmMemory;
+    use crate::vm::wasm::memory::{InertWasmMemory, WasmMemory};
     use crate::vm::WasmCacheAccess;
+
+    impl<D, H, CA> TxVmEnv<InertWasmMemory, D, H, CA>
+    where
+        D: DB + for<'iter> DBIter<'iter>,
+        H: StorageHasher,
+        CA: WasmCacheAccess,
+    {
+        fn with_store<'st>(
+            &self,
+            store: &'st mut impl wasmer::AsStoreMut,
+        ) -> TxVmEnv<WasmMemory<'st>, D, H, CA> {
+            Self {
+                memory: self.memory.access(store),
+                ctx: self.ctx.clone(),
+            }
+        }
+    }
 
     pub(super) fn _0<F, RET, D, H, CA>(
         f: F,
-    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>) -> RET
+    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>) -> RET,
+        F: for<'st> Fn(&mut TxVmEnv<WasmMemory<'st>, D, H, CA>) -> RET,
     {
         move |mut env| f(env.data_mut())
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, CA>(
         f: F,
-    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>, ARG0) -> RET
+    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>, ARG0) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0) -> RET,
+        F: for<'st> Fn(&mut TxVmEnv<WasmMemory<'st>, D, H, CA>, ARG0) -> RET,
     {
         move |mut env, arg0| f(env.data_mut(), arg0)
     }
 
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, CA>(
         f: F,
-    ) -> impl Fn(FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>, ARG0, ARG1) -> RET
+    ) -> impl Fn(
+        FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>,
+        ARG0,
+        ARG1,
+    ) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1) -> RET,
+        F: for<'st> Fn(
+            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
+            ARG0,
+            ARG1,
+        ) -> RET,
     {
         move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
     }
@@ -159,7 +184,7 @@ mod wrap_tx {
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, CA>(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>,
         ARG0,
         ARG1,
         ARG2,
@@ -169,8 +194,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(
-            &mut TxVmEnv<WasmMemory, D, H, CA>,
+        F: for<'st> Fn(
+            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -185,7 +210,7 @@ mod wrap_tx {
     pub(super) fn _6<F, ARG0, ARG1, ARG2, ARG3, ARG4, ARG5, RET, D, H, CA>(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>,
         ARG0,
         ARG1,
         ARG2,
@@ -197,8 +222,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(
-            &mut TxVmEnv<WasmMemory, D, H, CA>,
+        F: for<'st> Fn(
+            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -228,7 +253,7 @@ mod wrap_tx {
     >(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        FunctionEnvMut<'_, TxVmEnv<InertWasmMemory, D, H, CA>>,
         ARG0,
         ARG1,
         ARG2,
@@ -241,8 +266,8 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(
-            &mut TxVmEnv<WasmMemory, D, H, CA>,
+        F: for<'st> Fn(
+            &mut TxVmEnv<WasmMemory<'st>, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -270,31 +295,55 @@ mod wrap_vp {
     use wasmer::FunctionEnvMut;
 
     use crate::vm::host_env::{VpEvaluator, VpVmEnv};
-    use crate::vm::wasm::memory::WasmMemory;
+    use crate::vm::wasm::memory::{InertWasmMemory, WasmMemory};
     use crate::vm::WasmCacheAccess;
+
+    impl<D, H, EVAL, CA> VpVmEnv<InertWasmMemory, D, H, EVAL, CA>
+    where
+        D: DB + for<'iter> DBIter<'iter>,
+        H: StorageHasher,
+        EVAL: VpEvaluator,
+        CA: WasmCacheAccess,
+    {
+        fn with_store<'st>(
+            &self,
+            store: &'st mut impl wasmer::AsStoreMut,
+        ) -> VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA> {
+            Self {
+                memory: self.memory.access(store),
+                ctx: self.ctx.clone(),
+            }
+        }
+    }
 
     pub(super) fn _0<F, RET, D, H, EVAL, CA>(
         f: F,
-    ) -> impl Fn(FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>) -> RET
+    ) -> impl Fn(FunctionEnvMut<'_, VpVmEnv<InertWasmMemory, D, H, EVAL, CA>>) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>) -> RET,
+        F: for<'st> Fn(&mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>) -> RET,
     {
         move |mut env| f(env.data_mut())
     }
 
     pub(super) fn _1<F, ARG0, RET, D, H, EVAL, CA>(
         f: F,
-    ) -> impl Fn(FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>, ARG0) -> RET
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<InertWasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+    ) -> RET
     where
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
+        F: for<'st> Fn(
+            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
+            ARG0,
+        ) -> RET,
     {
         move |mut env, arg0| f(env.data_mut(), arg0)
     }
@@ -302,7 +351,7 @@ mod wrap_vp {
     pub(super) fn _2<F, ARG0, ARG1, RET, D, H, EVAL, CA>(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        FunctionEnvMut<'_, VpVmEnv<InertWasmMemory, D, H, EVAL, CA>>,
         ARG0,
         ARG1,
     ) -> RET
@@ -311,7 +360,11 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
+        F: for<'st> Fn(
+            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
+            ARG0,
+            ARG1,
+        ) -> RET,
     {
         move |mut env, arg0, arg1| f(env.data_mut(), arg0, arg1)
     }
@@ -319,7 +372,7 @@ mod wrap_vp {
     pub(super) fn _4<F, ARG0, ARG1, ARG2, ARG3, RET, D, H, EVAL, CA>(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        FunctionEnvMut<'_, VpVmEnv<InertWasmMemory, D, H, EVAL, CA>>,
         ARG0,
         ARG1,
         ARG2,
@@ -330,8 +383,8 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(
-            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+        F: for<'st> Fn(
+            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -362,7 +415,7 @@ mod wrap_vp {
     >(
         f: F,
     ) -> impl Fn(
-        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        FunctionEnvMut<'_, VpVmEnv<InertWasmMemory, D, H, EVAL, CA>>,
         ARG0,
         ARG1,
         ARG2,
@@ -378,8 +431,8 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(
-            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+        F: for<'st> Fn(
+            &mut VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
