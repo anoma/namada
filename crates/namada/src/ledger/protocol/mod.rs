@@ -16,9 +16,9 @@ use namada_gas::TxGasMeter;
 use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-use namada_tx::data::protocol::ProtocolTxType;
+use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, TxResult, TxType, VpStatusFlags, VpsResult,
+    BatchResults, BatchedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx};
@@ -178,51 +178,150 @@ impl From<Error> for DispatchError {
     }
 }
 
+/// Arguments for transactions' execution
+pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
+    /// Protocol tx data
+    Protocol(&'a ProtocolTx),
+    /// Raw tx data
+    Raw {
+        /// The tx index
+        tx_index: TxIndex,
+        /// The result of the corresponding wrapper tx (missing if governance
+        /// transaction)
+        wrapper_tx_result: Option<TxResult<Error>>,
+        /// Vp cache
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        /// Tx cache
+        tx_wasm_cache: &'a mut TxCache<CA>,
+    },
+    /// Wrapper tx data
+    Wrapper {
+        /// The wrapper header
+        wrapper: &'a WrapperTx,
+        /// The transaction bytes for gas accounting
+        tx_bytes: &'a [u8],
+        /// The block proposer
+        block_proposer: &'a Address,
+    },
+}
+
 /// Dispatch a given transaction to be applied based on its type. Some storage
 /// updates may be derived and applied natively rather than via the wasm
 /// environment, in which case validity predicates will be bypassed.
-#[allow(clippy::too_many_arguments)]
 pub fn dispatch_tx<'a, D, H, CA>(
-    tx: Tx,
-    tx_bytes: &'a [u8],
-    tx_index: TxIndex,
+    tx: &Tx,
+    dispatch_args: DispatchArgs<'a, CA>,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
-    vp_wasm_cache: &'a mut VpCache<CA>,
-    tx_wasm_cache: &'a mut TxCache<CA>,
-    block_proposer: Option<&Address>,
 ) -> std::result::Result<TxResult<Error>, DispatchError>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    match tx.header().tx_type {
-        // Raw trasaction type is allowed only for governance proposals
-        TxType::Raw => {
-            // No bundles of governance transactions, just take the first one
-            let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
-            let batched_tx_result = apply_wasm_tx(
-                BatchedTxRef { tx: &tx, cmt },
-                &tx_index,
-                ShellParams {
-                    tx_gas_meter,
-                    state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                },
-            )?;
+    match dispatch_args {
+        DispatchArgs::Raw {
+            tx_index,
+            wrapper_tx_result,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        } => {
+            if let Some(mut tx_result) = wrapper_tx_result {
+                // Replay protection check on the batch
+                let tx_hash = tx.raw_header_hash();
+                if state.write_log().has_replay_protection_entry(&tx_hash) {
+                    // If the same batch has already been committed in
+                    // this block, skip execution and return
+                    return Err(DispatchError {
+                        error: Error::ReplayAttempt(tx_hash),
+                        tx_result: None,
+                    });
+                }
 
-            Ok(TxResult {
-                gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                batch_results: BatchResults(
-                    [(cmt.get_hash(), Ok(batched_tx_result))]
-                        .into_iter()
-                        .collect(),
-                ),
-            })
+                // TODO(namada#2597): handle masp fee payment in the first inner
+                // tx if necessary
+                for cmt in tx.commitments() {
+                    match apply_wasm_tx(
+                        tx.batch_ref_tx(cmt),
+                        &tx_index,
+                        ShellParams {
+                            tx_gas_meter,
+                            state,
+                            vp_wasm_cache,
+                            tx_wasm_cache,
+                        },
+                    ) {
+                        Err(Error::GasError(ref msg)) => {
+                            // Gas error aborts the execution of the entire
+                            // batch
+                            tx_result.gas_used =
+                                tx_gas_meter.borrow().get_tx_consumed_gas();
+                            tx_result.batch_results.0.insert(
+                                cmt.get_hash(),
+                                Err(Error::GasError(msg.to_owned())),
+                            );
+                            state.write_log_mut().drop_tx();
+                            return Err(DispatchError {
+                                error: Error::GasError(msg.to_owned()),
+                                tx_result: Some(tx_result),
+                            });
+                        }
+                        res => {
+                            let is_accepted = matches!(&res, Ok(result) if result.is_accepted());
+
+                            tx_result
+                                .batch_results
+                                .0
+                                .insert(cmt.get_hash(), res);
+                            tx_result.gas_used =
+                                tx_gas_meter.borrow().get_tx_consumed_gas();
+                            if is_accepted {
+                                state.write_log_mut().commit_tx_to_batch();
+                            } else {
+                                state.write_log_mut().drop_tx();
+
+                                if tx.header.atomic {
+                                    // Stop the execution of an atomic batch at
+                                    // the first failed transaction
+                                    return Err(DispatchError {
+                                        error: Error::FailingAtomicBatch(
+                                            cmt.get_hash(),
+                                        ),
+                                        tx_result: Some(tx_result),
+                                    });
+                                }
+                            }
+                        }
+                    };
+                }
+
+                Ok(tx_result)
+            } else {
+                // Governance proposal. We don't allow tx batches in this case,
+                // just take the first one
+                let cmt =
+                    tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
+                let batched_tx_result = apply_wasm_tx(
+                    tx.batch_ref_tx(cmt),
+                    &tx_index,
+                    ShellParams {
+                        tx_gas_meter,
+                        state,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    },
+                )?;
+                Ok(TxResult {
+                    gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
+                    batch_results: BatchResults(
+                        [(cmt.get_hash(), Ok(batched_tx_result))]
+                            .into_iter()
+                            .collect(),
+                    ),
+                })
+            }
         }
-        TxType::Protocol(protocol_tx) => {
+        DispatchArgs::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
             let batched_tx_result =
@@ -237,85 +336,21 @@ where
                 ..Default::default()
             })
         }
-        TxType::Wrapper(ref wrapper) => {
-            let mut tx_result = apply_wrapper_tx(
-                tx.clone(),
+        DispatchArgs::Wrapper {
+            wrapper,
+            tx_bytes,
+            block_proposer,
+        } => {
+            let tx_result = apply_wrapper_tx(
+                tx,
                 wrapper,
                 tx_bytes,
-                ShellParams {
-                    tx_gas_meter,
-                    state,
-                    vp_wasm_cache,
-                    tx_wasm_cache,
-                },
-                block_proposer,
+                tx_gas_meter,
+                state,
+                Some(block_proposer),
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
 
-            // Replay protection check on the batch
-            let tx_hash = tx.raw_header_hash();
-            if state.write_log().has_replay_protection_entry(&tx_hash) {
-                // If the same batch has already been committed in
-                // this block, skip execution and return
-                return Err(DispatchError {
-                    error: Error::ReplayAttempt(tx_hash),
-                    tx_result: None,
-                });
-            }
-
-            // TODO(namada#2597): handle masp fee payment in the first inner tx
-            // if necessary
-            for cmt in tx.commitments() {
-                match apply_wasm_tx(
-                    tx.batch_ref_tx(cmt),
-                    &tx_index,
-                    ShellParams {
-                        tx_gas_meter,
-                        state,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                    },
-                ) {
-                    Err(Error::GasError(ref msg)) => {
-                        // Gas error aborts the execution of the entire batch
-                        tx_result.gas_used =
-                            tx_gas_meter.borrow().get_tx_consumed_gas();
-                        tx_result.batch_results.0.insert(
-                            cmt.get_hash(),
-                            Err(Error::GasError(msg.to_owned())),
-                        );
-                        state.write_log_mut().drop_tx();
-                        return Err(DispatchError {
-                            error: Error::GasError(msg.to_owned()),
-                            tx_result: Some(tx_result),
-                        });
-                    }
-                    res => {
-                        let is_accepted =
-                            matches!(&res, Ok(result) if result.is_accepted());
-
-                        tx_result.batch_results.0.insert(cmt.get_hash(), res);
-                        tx_result.gas_used =
-                            tx_gas_meter.borrow().get_tx_consumed_gas();
-                        if is_accepted {
-                            state.write_log_mut().commit_tx_to_batch();
-                        } else {
-                            state.write_log_mut().drop_tx();
-
-                            if tx.header.atomic {
-                                // Stop the execution of an atomic batch at the
-                                // first failed transaction
-                                return Err(DispatchError {
-                                    error: Error::FailingAtomicBatch(
-                                        cmt.get_hash(),
-                                    ),
-                                    tx_result: Some(tx_result),
-                                });
-                            }
-                        }
-                    }
-                };
-            }
             Ok(tx_result)
         }
     }
@@ -343,40 +378,38 @@ where
 ///  - gas accounting
 // TODO(namada#2597): this must signal to the caller if we need masp fee payment
 // in the first inner tx of the batch
-pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
-    tx: Tx,
+pub(crate) fn apply_wrapper_tx<S, D, H>(
+    tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
-    mut shell_params: ShellParams<'_, S, D, H, CA>,
+    tx_gas_meter: &RefCell<TxGasMeter>,
+    state: &mut S,
     block_proposer: Option<&Address>,
 ) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
 {
     let wrapper_tx_hash = tx.header_hash();
 
     // Write wrapper tx hash to storage
-    shell_params
-        .state
+    state
         .write_log_mut()
         .write_tx_hash(wrapper_tx_hash)
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
-    charge_fee(wrapper, wrapper_tx_hash, &mut shell_params, block_proposer)?;
+    charge_fee(wrapper, wrapper_tx_hash, state, block_proposer)?;
 
     // Account for gas
-    shell_params
-        .tx_gas_meter
+    tx_gas_meter
         .borrow_mut()
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(TxResult {
-        gas_used: shell_params.tx_gas_meter.borrow().get_tx_consumed_gas(),
+        gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
         batch_results: BatchResults::default(),
     })
 }
@@ -385,34 +418,30 @@ where
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<S, D, H, CA>(
+fn charge_fee<S, D, H>(
     wrapper: &WrapperTx,
     wrapper_tx_hash: Hash,
-    shell_params: &mut ShellParams<'_, S, D, H, CA>,
+    state: &mut S,
     block_proposer: Option<&Address>,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
 {
     // Charge or check fees before propagating any possible error
     let payment_result = match block_proposer {
-        Some(block_proposer) => transfer_fee(
-            shell_params.state,
-            block_proposer,
-            wrapper,
-            wrapper_tx_hash,
-        ),
+        Some(block_proposer) => {
+            transfer_fee(state, block_proposer, wrapper, wrapper_tx_hash)
+        }
         None => {
-            check_fees(shell_params.state, wrapper)?;
+            check_fees(state, wrapper)?;
             Ok(())
         }
     };
 
     // Commit tx write log even in case of subsequent errors
-    shell_params.state.write_log_mut().commit_tx();
+    state.write_log_mut().commit_tx();
 
     payment_result
 }
@@ -1270,7 +1299,7 @@ mod tests {
 
         // "execute" a dummy tx, by manually performing its state changes
         let (dummy_tx, changed_keys, verifiers) = {
-            let mut tx = Tx::from_type(TxType::Raw);
+            let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
             tx.set_code(namada_tx::Code::new(vec![], None));
             tx.set_data(namada_tx::Data::new(vec![]));
 
