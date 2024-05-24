@@ -126,12 +126,13 @@ mod wrap_tx {
         H: StorageHasher,
         CA: WasmCacheAccess,
     {
-        fn with_store<'st>(
+        fn with_store(
             &self,
-            store: &'st mut impl wasmer::AsStoreMut,
-        ) -> TxVmEnv<WasmMemory<'st>, D, H, CA> {
+            store: &mut impl wasmer::AsStoreMut,
+        ) -> TxVmEnv<WasmMemory, D, H, CA> {
             TxVmEnv {
-                memory: self.memory.clone().access(store),
+                // SAFETY: This store ref is short lived.
+                memory: unsafe { self.memory.clone().access(store) },
                 ctx: self.ctx.clone(),
             }
         }
@@ -144,7 +145,7 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>) -> RET,
     {
         move |mut env| {
             let (env, mut store) = env.data_and_store_mut();
@@ -159,7 +160,7 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>, ARG0) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0) -> RET,
     {
         move |mut env, arg0| {
             let (env, mut store) = env.data_and_store_mut();
@@ -178,7 +179,7 @@ mod wrap_tx {
         D: DB + for<'iter> DBIter<'iter> + 'static,
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
-        F: Fn(&mut TxVmEnv<WasmMemory<'_>, D, H, CA>, ARG0, ARG1) -> RET,
+        F: Fn(&mut TxVmEnv<WasmMemory, D, H, CA>, ARG0, ARG1) -> RET,
     {
         move |mut env, arg0, arg1| {
             let (env, mut store) = env.data_and_store_mut();
@@ -200,7 +201,7 @@ mod wrap_tx {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         F: Fn(
-            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -229,7 +230,7 @@ mod wrap_tx {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         F: Fn(
-            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -282,7 +283,7 @@ mod wrap_tx {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         F: Fn(
-            &mut TxVmEnv<WasmMemory<'_>, D, H, CA>,
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -330,12 +331,13 @@ mod wrap_vp {
         EVAL: VpEvaluator,
         CA: WasmCacheAccess,
     {
-        fn with_store<'st>(
+        fn with_store(
             &self,
-            store: &'st mut impl wasmer::AsStoreMut,
-        ) -> VpVmEnv<WasmMemory<'st>, D, H, EVAL, CA> {
+            store: &mut impl wasmer::AsStoreMut,
+        ) -> VpVmEnv<WasmMemory, D, H, EVAL, CA> {
             VpVmEnv {
-                memory: self.memory.clone().access(store),
+                // SAFETY: This store ref is short lived.
+                memory: unsafe { self.memory.clone().access(store) },
                 ctx: self.ctx.clone(),
             }
         }
@@ -349,7 +351,7 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>) -> RET,
     {
         move |mut env| {
             let (env, mut store) = env.data_and_store_mut();
@@ -368,7 +370,7 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>, ARG0) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0) -> RET,
     {
         move |mut env, arg0| {
             let (env, mut store) = env.data_and_store_mut();
@@ -388,7 +390,7 @@ mod wrap_vp {
         H: StorageHasher + 'static,
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
-        F: Fn(&mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
+        F: Fn(&mut VpVmEnv<WasmMemory, D, H, EVAL, CA>, ARG0, ARG1) -> RET,
     {
         move |mut env, arg0, arg1| {
             let (env, mut store) = env.data_and_store_mut();
@@ -411,7 +413,7 @@ mod wrap_vp {
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
-            &mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>,
+            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,
@@ -460,7 +462,7 @@ mod wrap_vp {
         CA: WasmCacheAccess + 'static,
         EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
         F: Fn(
-            &mut VpVmEnv<WasmMemory<'_>, D, H, EVAL, CA>,
+            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
             ARG0,
             ARG1,
             ARG2,

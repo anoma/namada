@@ -275,6 +275,12 @@ pub struct InertWasmMemory {
 unsafe impl Send for InertWasmMemory {}
 unsafe impl Sync for InertWasmMemory {}
 
+impl Default for InertWasmMemory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InertWasmMemory {
     /// Build a new wasm memory.
     pub fn new() -> Self {
@@ -293,24 +299,33 @@ impl InertWasmMemory {
     }
 
     /// Access this wasm memory.
-    pub fn access<'st>(
+    ///
+    /// ## Safety
+    ///
+    /// Ensure [`WasmMemory`] does not live longer than the given `store`.
+    pub unsafe fn access(
         self,
-        store: &'st mut impl wasmer::AsStoreMut,
-    ) -> WasmMemory<'st> {
+        store: &mut impl wasmer::AsStoreMut,
+    ) -> WasmMemory {
+        let store = store.as_store_mut();
+
+        // SAFETY: The ref is short lived.
+        let store: wasmer::StoreMut<'static> = std::mem::transmute(store);
+
         WasmMemory {
+            store,
             memory: self.memory,
-            store: store.as_store_mut(),
         }
     }
 }
 
 /// The wasm memory
-pub struct WasmMemory<'st> {
-    store: wasmer::StoreMut<'st>,
+pub struct WasmMemory {
+    store: wasmer::StoreMut<'static>,
     memory: Rc<RefCell<Option<wasmer::Memory>>>,
 }
 
-impl Clone for WasmMemory<'_> {
+impl Clone for WasmMemory {
     #[inline(never)]
     #[track_caller]
     fn clone(&self) -> Self {
@@ -324,10 +339,10 @@ impl Clone for WasmMemory<'_> {
 
 // TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
 // it for now for the code to compile.
-unsafe impl Send for WasmMemory<'_> {}
-unsafe impl Sync for WasmMemory<'_> {}
+unsafe impl Send for WasmMemory {}
+unsafe impl Sync for WasmMemory {}
 
-impl WasmMemory<'_> {
+impl WasmMemory {
     /// Access the inner [`Memory`].
     #[inline]
     fn access<F, T>(&mut self, f: F) -> Result<T>
@@ -340,7 +355,7 @@ impl WasmMemory<'_> {
     }
 }
 
-impl VmMemory for WasmMemory<'_> {
+impl VmMemory for WasmMemory {
     type Error = Error;
 
     /// Read bytes from memory at the given offset and length, return the bytes
