@@ -582,7 +582,7 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_read(
@@ -608,7 +608,7 @@ mod tests {
 
     fn test_tx_charge_gas_cannot_panic_aux(setup: TestSetup, gas: u64) {
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_charge_gas(&mut tx_env, gas);
@@ -627,7 +627,7 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_has_key(
@@ -650,7 +650,7 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_write(
@@ -682,7 +682,7 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_delete(
@@ -705,7 +705,7 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let mut tx_env = setup_host_env(&setup, &mut test_env);
+        let (_store, mut tx_env) = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_iter_prefix(
@@ -723,12 +723,15 @@ mod tests {
     fn setup_host_env(
         setup: &TestSetup,
         test_env: &mut TestTxEnv,
-    ) -> TxVmEnv<
-        wasm::memory::WasmMemory,
-        MockDB,
-        Sha256Hasher,
-        WasmCacheRwAccess,
-    > {
+    ) -> (
+        wasmer::Store,
+        TxVmEnv<
+            wasm::memory::InertWasmMemory,
+            MockDB,
+            Sha256Hasher,
+            WasmCacheRwAccess,
+        >,
+    ) {
         if setup.write_to_storage {
             // Write the key-val to storage which may affect `tx_read` execution
             // path
@@ -759,7 +762,7 @@ mod tests {
             batched_tx,
         } = test_env;
 
-        let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+        let (store, tx_env) = vm::host_env::testing::tx_env_with_wasm_memory(
             state,
             iterators,
             verifiers,
@@ -776,13 +779,14 @@ mod tests {
 
         if setup.write_to_memory {
             let key_bytes = setup.key_bytes();
+            let mut tx_env = tx_env.with_store(&mut store);
             // Write the key-val to memory which may affect `tx_read` execution
             // path. Can fail, but must not panic
             let _res =
                 tx_env.memory.write_bytes(setup.key_memory_ptr, key_bytes);
         }
 
-        tx_env
+        (store, tx_env)
     }
 
     fn arb_test_setup() -> impl Strategy<Value = TestSetup> {

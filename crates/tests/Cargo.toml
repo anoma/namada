@@ -60,6 +60,7 @@ test-log.workspace = true
 tokio = {workspace = true, features = ["full"]}
 tracing-subscriber.workspace = true
 tracing.workspace = true
+wasmer.workspace = true
 
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}

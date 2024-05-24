@@ -126,7 +126,8 @@ mod wrap_tx {
         H: StorageHasher,
         CA: WasmCacheAccess,
     {
-        fn with_store(
+        #[allow(missing_docs)]
+        pub fn with_store(
             &self,
             store: &mut impl wasmer::AsStoreMut,
         ) -> TxVmEnv<WasmMemory, D, H, CA> {
@@ -331,7 +332,8 @@ mod wrap_vp {
         EVAL: VpEvaluator,
         CA: WasmCacheAccess,
     {
-        fn with_store(
+        #[allow(missing_docs)]
+        pub fn with_store(
             &self,
             store: &mut impl wasmer::AsStoreMut,
         ) -> VpVmEnv<WasmMemory, D, H, EVAL, CA> {
