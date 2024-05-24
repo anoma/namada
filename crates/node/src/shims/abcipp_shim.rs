@@ -16,7 +16,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
+use super::abcipp_shim_types::shim::{
+    Error, Request, Response, TakeSnapshot, TxBytes,
+};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
 use crate::facade::tendermint::v0_37::abci::{
@@ -24,6 +26,7 @@ use crate::facade::tendermint::v0_37::abci::{
 };
 use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
+use crate::storage::SnapshotCreator;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -37,6 +40,7 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
 }
 
 impl AbcippShim {
@@ -74,6 +78,7 @@ impl AbcippShim {
                 begin_block_request: None,
                 delivered_txs: vec![],
                 shell_recv,
+                snapshot_task: None,
             },
             AbciService {
                 shell_send,
@@ -160,6 +165,14 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                 }
+                Req::Commit => match self.service.call(Request::Commit) {
+                    Ok(Response::Commit(res, take_snapshot)) => {
+                        self.update_snapshot_task(take_snapshot);
+                        Ok(Resp::Commit(res))
+                    }
+                    Ok(resp) => Err(Error::ConvertResp(resp)),
+                    Err(e) => Err(Error::Shell(e)),
+                },
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self
                         .service
@@ -176,6 +189,44 @@ impl AbcippShim {
                 tracing::info!("ABCI response channel is closed")
             }
         }
+    }
+
+    fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
+        if self
+            .snapshot_task
+            .as_ref()
+            .map(|t| t.is_finished())
+            .unwrap_or_default()
+        {
+            let task = self.snapshot_task.take().unwrap();
+            match task.join() {
+                Ok(Err(e)) => tracing::error!(
+                    "Failed to create snapshot with error: {:?}",
+                    e
+                ),
+                Err(e) => tracing::error!(
+                    "Failed to join thread creating snapshot: {:?}",
+                    e
+                ),
+                _ => {}
+            }
+
+        }
+        let TakeSnapshot::Yes(db_path) = take_snapshot else {
+            return;
+        };
+        // it's important that this block the thread although it will
+        // be incredibly fast.
+        let Ok(snapshot_creator) = SnapshotCreator::new(db_path) else {
+            tracing::error!("Could not open the DB in order to take a snapshot");
+            return
+        };
+        let snapshot_task = std::thread::spawn(move || {
+            snapshot_creator.write_to_file()
+            // do stuff with snapshot;
+        });
+        // TODO: What to do if an old snapshot task is still running?
+        self.snapshot_task.replace(snapshot_task);
     }
 }
 

@@ -121,10 +121,11 @@ pub struct RocksDB(rocksdb::DB);
 pub struct RocksDBWriteBatch(WriteBatch);
 
 /// Open RocksDB for the DB
-pub fn open(
+fn open(
     path: impl AsRef<Path>,
+    read_only: bool,
     cache: Option<&rocksdb::Cache>,
-) -> Result<RocksDB> {
+) -> Result<rocksdb::DB> {
     let logical_cores = num_cpus::get();
     let compaction_threads = i32::try_from(num_of_threads(
         ENV_VAR_ROCKSDB_COMPACTION_THREADS,
@@ -218,10 +219,13 @@ pub fn open(
         REPLAY_PROTECTION_CF,
         replay_protection_cf_opts,
     ));
-
-    rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
-        .map(RocksDB)
-        .map_err(|e| Error::DBError(e.into_string()))
+    if read_only {
+        rocksdb::DB::open_cf_descriptors_read_only(&db_opts, path, cfs, false)
+            .map_err(|e| Error::DBError(e.into_string()))
+    } else {
+        rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
+            .map_err(|e| Error::DBError(e.into_string()))
+    }
 }
 
 impl Drop for RocksDB {
@@ -703,7 +707,11 @@ impl DB for RocksDB {
         db_path: impl AsRef<std::path::Path>,
         cache: Option<&Self::Cache>,
     ) -> Self {
-        open(db_path, cache).expect("cannot open the DB")
+        Self(open(db_path, false, cache).expect("cannot open the DB"))
+    }
+
+    fn path(&self) -> Option<&Path> {
+        Some(self.0.path())
     }
 
     fn flush(&self, wait: bool) -> Result<()> {
@@ -1431,6 +1439,29 @@ impl DB for RocksDB {
     }
 }
 
+pub struct SnapshotCreator<'a> {
+    db: rocksdb::DB,
+    snapshot: Option<rocksdb::Snapshot<'a>>,
+}
+
+impl<'a> SnapshotCreator<'a> {
+    /// Creates a new snapshot of RocksDB.
+    pub fn new(db_path: impl AsRef<Path>) -> Result<SnapshotCreator<'a>> {
+        let db = open(db_path, true, None)?;
+        let mut snap = Self {
+            db,
+            snapshot: None
+        };
+        snap.snapshot = Some((&snap.db).snapshot());
+        Ok(snap)
+    }
+
+    pub fn write_to_file(&self) -> std::result::Result<(), std::io::Error> {
+
+        Ok(())
+    }
+}
+
 /// A struct that can visit a set of updates,
 /// registering them all in the batch
 pub struct RocksDBUpdateVisitor<'db> {
@@ -1836,7 +1867,7 @@ mod test {
     #[test]
     fn test_load_state() {
         let dir = tempdir().unwrap();
-        let db = open(dir.path(), None).unwrap();
+        let db = RocksDB::open(dir.path(), None);
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight::default();
@@ -1869,7 +1900,7 @@ mod test {
     #[test]
     fn test_read() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let mut db = RocksDB::open(dir.path(), None);
 
         let key = Key::parse("test").unwrap();
         let batch_key = Key::parse("batch").unwrap();
@@ -1971,7 +2002,7 @@ mod test {
     #[test]
     fn test_prefix_iter() {
         let dir = tempdir().unwrap();
-        let db = open(dir.path(), None).unwrap();
+        let db = RocksDB::open(dir.path(), None);
 
         let prefix_0 = Key::parse("0").unwrap();
         let key_0_a = prefix_0.push(&"a".to_string()).unwrap();
@@ -2024,7 +2055,7 @@ mod test {
             println!("Running with persist_diffs: {persist_diffs}");
 
             let dir = tempdir().unwrap();
-            let mut db = open(dir.path(), None).unwrap();
+            let mut db = RocksDB::open(dir.path(), None);
 
             // A key that's gonna be added on a second block
             let add_key = Key::parse("add").unwrap();
@@ -2185,7 +2216,7 @@ mod test {
     #[test]
     fn test_diffs() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let mut db = RocksDB::open(dir.path(), None);
 
         let key_with_diffs = Key::parse("with_diffs").unwrap();
         let key_without_diffs = Key::parse("without_diffs").unwrap();

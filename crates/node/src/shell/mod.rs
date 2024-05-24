@@ -659,7 +659,7 @@ where
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
-    pub fn commit(&mut self) -> response::Commit {
+    pub fn commit(&mut self) -> shim::Response {
         self.bump_last_processed_eth_block();
 
         self.state
@@ -679,13 +679,16 @@ where
 
         self.broadcast_queued_txs();
 
-        response::Commit {
-            // NB: by passing 0, we forbid CometBFT from deleting
-            // data pertaining to past blocks
-            retain_height: tendermint::block::Height::from(0_u32),
-            // NB: current application hash
-            data: merkle_root.0.to_vec().into(),
-        }
+        shim::Response::Commit(
+            response::Commit {
+                // NB: by passing 0, we forbid CometBFT from deleting
+                // data pertaining to past blocks
+                retain_height: tendermint::block::Height::from(0_u32),
+                // NB: current application hash
+                data: merkle_root.0.to_vec().into(),
+            },
+            self.state.db().path().into(),
+        )
     }
 
     /// Updates the Ethereum oracle's last processed block.
