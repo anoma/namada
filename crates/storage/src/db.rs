@@ -153,7 +153,7 @@ pub trait DB: Debug {
     fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
 
     /// Read the merkle tree stores with the given epoch. If a store_type is
-    /// given, it reads only the the specified tree. Otherwise, it reads all
+    /// given, it reads only the specified tree. Otherwise, it reads all
     /// trees.
     fn read_merkle_tree_stores(
         &self,
