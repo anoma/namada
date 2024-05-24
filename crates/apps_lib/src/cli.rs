@@ -862,6 +862,9 @@ pub mod cmds {
                     // The `run` command is the default if no sub-command given
                     .or(Some(Self::Run(LedgerRun(args::LedgerRun {
                         start_time: None,
+                        migration_path: None,
+                        migration_hash: None,
+                        migration_height: None,
                     }))))
             })
         }
@@ -2984,6 +2987,7 @@ pub mod args {
     use namada::core::time::DateTimeUtc;
     use namada::core::token;
     use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada::hash::Hash;
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada::tx::data::GasLimit;
     pub use namada_sdk::args::*;
@@ -3135,6 +3139,7 @@ pub mod args {
         arg("validator");
     pub const HALT_ACTION: ArgFlag = flag("halt");
     pub const HASH: Arg<String> = arg("hash");
+    pub const HASH_OPT: ArgOpt<String> = arg_opt("hash");
     pub const HASH_LIST: Arg<String> = arg("hash-list");
     pub const HD_DERIVATION_PATH: ArgDefault<String> =
         arg_default("hd-path", DefaultFn(|| "default".to_string()));
@@ -3164,6 +3169,7 @@ pub mod args {
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
+    pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -3177,6 +3183,7 @@ pub mod args {
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
+    pub const PATH_OPT: ArgOpt<PathBuf> = arg_opt("path");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3339,12 +3346,24 @@ pub mod args {
     #[derive(Clone, Debug)]
     pub struct LedgerRun {
         pub start_time: Option<DateTimeUtc>,
+        pub migration_path: Option<PathBuf>,
+        pub migration_hash: Option<Hash>,
+        pub migration_height: Option<BlockHeight>,
     }
 
     impl Args for LedgerRun {
         fn parse(matches: &ArgMatches) -> Self {
             let start_time = NAMADA_START_TIME.parse(matches);
-            Self { start_time }
+            let migration_path = PATH_OPT.parse(matches);
+            let migration_hash = HASH_OPT.parse(matches);
+            let migration_height = BLOCK_HEIGHT_OPT.parse(matches);
+            Self {
+                start_time,
+                migration_path,
+                migration_hash: migration_hash
+                    .map(|h| Hash::try_from(h).unwrap()),
+                migration_height,
+            }
         }
 
         fn def(app: App) -> App {
@@ -3356,6 +3375,33 @@ pub mod args {
                  equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
                  12:12:12Z\n2023-  01-20T12:  12:12Z"
             )))
+            .arg(
+                PATH_OPT
+                    .def()
+                    .requires(HASH_OPT.name)
+                    .requires(BLOCK_HEIGHT_OPT.name)
+                    .help(wrap!("Optional path to a migrations JSON file.")),
+            )
+            .arg(
+                HASH_OPT
+                    .def()
+                    .requires(PATH_OPT.name)
+                    .requires(BLOCK_HEIGHT_OPT.name)
+                    .help(wrap!(
+                        "Hash to verify contents of optinally provided \
+                         migrations file."
+                    )),
+            )
+            .arg(
+                BLOCK_HEIGHT_OPT
+                    .def()
+                    .requires(PATH_OPT.name)
+                    .requires(HASH_OPT.name)
+                    .help(wrap!(
+                        "Height for which the optionally provided migration \
+                         should be executed."
+                    )),
+            )
         }
     }
 

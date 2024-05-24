@@ -14,6 +14,8 @@ use namada_merkle_tree::{
     StoreType,
 };
 use regex::Regex;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
@@ -121,6 +123,10 @@ pub trait DB: Debug {
     type Cache;
     /// A handle for batch writes
     type WriteBatch: DBWriteBatch;
+
+    /// A type that can apply a key-value
+    /// change to DB.
+    type Migrator: DbMigration + DeserializeOwned;
 
     /// Open the database from provided path
     fn open(
@@ -277,6 +283,15 @@ pub trait DB: Debug {
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()>;
+
+    /// Apply a series of key-value changes
+    /// to the DB.
+    fn apply_migration_to_batch(
+        &self,
+        _updates: impl IntoIterator<Item = Self::Migrator>,
+    ) -> Result<Self::WriteBatch> {
+        unimplemented!()
+    }
 }
 
 /// A database prefix iterator.
@@ -329,3 +344,8 @@ pub trait DBIter<'iter> {
 
 /// Atomic batch write.
 pub trait DBWriteBatch {}
+
+/// A type that can apply a key-value change to a DB
+pub trait DbMigration: Debug + Clone + Serialize {}
+
+impl DbMigration for () {}

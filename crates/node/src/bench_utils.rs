@@ -180,6 +180,7 @@ impl Default for BenchShell {
             sender,
             None,
             None,
+            None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
         );

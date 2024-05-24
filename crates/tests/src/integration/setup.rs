@@ -211,6 +211,7 @@ fn create_node(
             shell_handlers.tx_broadcaster,
             shell_handlers.eth_oracle_channels,
             None,
+            None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
         ))),

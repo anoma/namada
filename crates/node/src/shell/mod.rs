@@ -64,6 +64,8 @@ use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
 use namada::vote_ext::EthereumTxData;
 use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
+use namada_sdk::migrations;
+use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::tendermint::AppHash;
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
@@ -351,6 +353,7 @@ where
     storage_read_past_height_limit: Option<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
+    scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -401,6 +404,7 @@ where
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
         db_cache: Option<&D::Cache>,
+        scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
     ) -> Self {
@@ -510,6 +514,17 @@ where
             TendermintMode::Seed => ShellMode::Seed,
         };
 
+        if let Some(schedule_migration) = scheduled_migration.as_ref() {
+            let current = state.get_block_height().unwrap_or_default();
+            if schedule_migration.height < current {
+                panic!(
+                    "Cannot schedule a migration earlier than the latest \
+                     block height({})",
+                    current
+                );
+            }
+        }
+
         let mut shell = Self {
             chain_id,
             state,
@@ -531,6 +546,7 @@ where
             storage_read_past_height_limit,
             // TODO(namada#3237): config event log params
             event_log: EventLog::default(),
+            scheduled_migration,
         };
         shell.update_eth_oracle(&Default::default());
         shell
@@ -648,9 +664,14 @@ where
         self.state
             .commit_block()
             .expect("Encountered a storage error while committing a block");
-
-        let merkle_root = self.state.in_mem().merkle_root();
         let committed_height = self.state.in_mem().get_last_block_height();
+        self.scheduled_migration = migrations::commit(
+            self.state.db(),
+            committed_height,
+            self.scheduled_migration.take(),
+        );
+        let merkle_root = self.state.in_mem().merkle_root();
+
         tracing::info!(
             "Committed block hash: {merkle_root}, height: {committed_height}",
         );
@@ -1512,6 +1533,7 @@ mod test_utils {
                 top_level_directory().join("wasm"),
                 sender,
                 Some(eth_oracle),
+                None,
                 None,
                 vp_wasm_compilation_cache,
                 tx_wasm_compilation_cache,
