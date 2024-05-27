@@ -131,14 +131,12 @@ where
     }
 
     /// Initialize a new epoch when the current epoch is finished. Returns
-    /// `true` on a new epoch. Also returns a second boolean stating if a new
-    /// masp epoch has begun.
+    /// `true` on a new epoch.
     pub fn update_epoch(
         &mut self,
         height: BlockHeight,
         time: DateTimeUtc,
-        // FIXME: return a struct?
-    ) -> StorageResult<(bool, bool)> {
+    ) -> StorageResult<bool> {
         let parameters = namada_parameters::read(self)
             .expect("Couldn't read protocol parameters");
 
@@ -164,9 +162,7 @@ where
         };
         let new_epoch =
             matches!(self.in_mem.update_epoch_blocks_delay, Some(0));
-        let mut masp_new_epoch = false;
 
-        // FIXME: need testing
         if new_epoch {
             // Reset the delay tracker
             self.in_mem.update_epoch_blocks_delay = None;
@@ -188,20 +184,27 @@ where
 
             self.in_mem.block.pred_epochs.new_epoch(height);
             tracing::info!("Began a new epoch {}", self.in_mem.block.epoch);
-
-            // FIXME: need a protocol param
-            // FIXME: checked operations or use Epoch operations?
-            masp_new_epoch = (u64::from(self.in_mem.block.epoch) % 4) == 0;
-            if masp_new_epoch {
-                tracing::info!(
-                    "Began a new masp epoch {}",
-                    // FIXME: checked operation
-                    u64::from(self.in_mem.block.epoch) / 4
-                );
-            }
         }
 
-        Ok((new_epoch, masp_new_epoch))
+        Ok(new_epoch)
+    }
+
+    /// Returns `true` if a new masp epoch has begun
+    pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> bool {
+        // FIXME: need a protocol param
+        // FIXME: checked operations or use Epoch operations?
+        let masp_new_epoch =
+            is_new_epoch && (u64::from(self.in_mem.block.epoch) % 4) == 0;
+
+        if masp_new_epoch {
+            tracing::info!(
+                "Began a new masp epoch {}",
+                // FIXME: checked operation
+                u64::from(self.in_mem.block.epoch) / 4
+            );
+        }
+
+        masp_new_epoch
     }
 
     /// Commit the current block's write log to the storage and commit the block
