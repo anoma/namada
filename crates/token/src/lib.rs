@@ -54,12 +54,12 @@ where
 pub fn finalize_block<S>(
     storage: &mut S,
     _events: &mut impl EmitEvents,
-    is_new_epoch: bool,
+    is_new_masp_epoch: bool,
 ) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
 {
-    if is_new_epoch {
+    if is_new_masp_epoch {
         conversion::update_allowed_conversions(storage)?;
     }
     Ok(())

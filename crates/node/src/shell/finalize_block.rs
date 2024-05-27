@@ -66,7 +66,8 @@ where
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
-        let (height, new_epoch) = self.update_state(req.header);
+        let (height, (new_epoch, masp_new_epoch)) =
+            self.update_state(req.header);
 
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let update_for_tendermint = matches!(
@@ -76,7 +77,7 @@ where
 
         tracing::info!(
             "Block height: {height}, epoch: {current_epoch}, is new epoch: \
-             {new_epoch}."
+             {new_epoch}, is masp new epoxh: {masp_new_epoch}."
         );
         if update_for_tendermint {
             tracing::info!(
@@ -111,7 +112,7 @@ where
             new_epoch,
         )?;
         // - Token
-        token::finalize_block(&mut self.state, emit_events, new_epoch)?;
+        token::finalize_block(&mut self.state, emit_events, masp_new_epoch)?;
         // - PoS
         //    - Must be applied after governance in case it changes PoS params
         proof_of_stake::finalize_block(
@@ -219,9 +220,9 @@ where
 
     /// Sets the metadata necessary for a new block, including the height,
     /// validator changes, and evidence of byzantine behavior. Applies slashes
-    /// if necessary. Returns a bool indicating if a new epoch began and the
-    /// height of the new block.
-    fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
+    /// if necessary. Returns two booleans indicating if a new epoch and a new
+    /// masp epoch began and the height of the new block.
+    fn update_state(&mut self, header: Header) -> (BlockHeight, (bool, bool)) {
         let height = self.state.in_mem().get_last_block_height().next_height();
 
         self.state
