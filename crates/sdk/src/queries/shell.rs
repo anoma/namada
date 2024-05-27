@@ -342,7 +342,8 @@ where
                 "Missing expected masp epoch multiplier parameter",
             )
         })?;
-    Ok(MaspEpoch::from_epoch(epoch, masp_epoch_multiplier))
+    MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier)
+        .map_err(namada_storage::Error::new_const)
 }
 
 fn native_token<D, H, V, T>(

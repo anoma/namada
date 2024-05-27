@@ -205,13 +205,15 @@ where
             && MaspEpoch::is_masp_new_epoch(
                 self.in_mem.block.epoch,
                 masp_epoch_multiplier,
-            );
+            )
+            .map_err(namada_storage::Error::new_const)?;
 
         if masp_new_epoch {
-            let masp_epoch = MaspEpoch::from_epoch(
+            let masp_epoch = MaspEpoch::try_from_epoch(
                 self.in_mem.block.epoch,
                 masp_epoch_multiplier,
-            );
+            )
+            .map_err(namada_storage::Error::new_const)?;
             tracing::info!("Began a new masp epoch {masp_epoch}");
         }
 

@@ -62,13 +62,15 @@ impl FromStr for MaspEpoch {
 impl MaspEpoch {
     /// Converts and `Epoch` into a `MaspEpoch` based on the provided conversion
     /// rate
-    pub fn from_epoch(epoch: Epoch, masp_epoch_multiplier: u64) -> Self {
-        Self(
+    pub fn try_from_epoch(
+        epoch: Epoch,
+        masp_epoch_multiplier: u64,
+    ) -> Result<Self, &'static str> {
+        Ok(Self(
             epoch
                 .checked_div(masp_epoch_multiplier)
-                // FIXME: error here
-                .expect("Masp epoch multiplier should not be 0"),
-        )
+                .ok_or("Masp epoch multiplier cannot be 0")?,
+        ))
     }
 
     /// Returns a 0 masp epoch
@@ -83,13 +85,16 @@ impl MaspEpoch {
 
     /// Check if the given epoch is also a new masp epoch based on the
     /// multiplier provided
-    pub fn is_masp_new_epoch(epoch: Epoch, masp_epoch_multiplier: u64) -> bool {
-        matches!(
-            Self::from_epoch(epoch, masp_epoch_multiplier)
+    pub fn is_masp_new_epoch(
+        epoch: Epoch,
+        masp_epoch_multiplier: u64,
+    ) -> Result<bool, &'static str> {
+        Ok(matches!(
+            Self::try_from_epoch(epoch, masp_epoch_multiplier)?
                 .0
                 .checked_rem(masp_epoch_multiplier),
             Some(Epoch(0))
-        )
+        ))
     }
 
     /// Initialize a new masp epoch from the provided one

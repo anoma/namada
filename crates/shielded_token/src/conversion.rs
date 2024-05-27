@@ -331,10 +331,11 @@ where
     let masp_epoch_multiplier = storage
         .read::<u64>(&parameters::storage::get_masp_epoch_multiplier_key())?
         .expect("masp epoch multiplier should properly decode");
-    let masp_epoch = MaspEpoch::from_epoch(
+    let masp_epoch = MaspEpoch::try_from_epoch(
         storage.get_block_epoch()?,
         masp_epoch_multiplier,
-    );
+    )
+    .map_err(namada_storage::Error::new_const)?;
     let prev_masp_epoch = match masp_epoch.prev() {
         Some(epoch) => epoch,
         None => return Ok(()),

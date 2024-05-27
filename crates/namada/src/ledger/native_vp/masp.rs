@@ -358,10 +358,13 @@ where
                     "Missing expected masp epoch multiplier parameter",
                 ))
             })?;
-        let masp_epoch = MaspEpoch::from_epoch(
+        let masp_epoch = MaspEpoch::try_from_epoch(
             self.ctx.get_block_epoch()?,
             masp_epoch_multiplier,
-        );
+        )
+        .map_err(|msg| {
+            Error::NativeVpError(native_vp::Error::new_const(msg))
+        })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
 
         // Get the Transaction object from the actions
