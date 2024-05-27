@@ -2989,6 +2989,7 @@ pub mod args {
     use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::hash::Hash;
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use namada::masp::MaspEpoch;
     use namada::tx::data::GasLimit;
     pub use namada_sdk::args::*;
     pub use namada_sdk::tx::{
@@ -3165,6 +3166,7 @@ pub mod args {
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
+    pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
@@ -5504,7 +5506,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let token = TOKEN_OPT.parse(matches);
-            let epoch = EPOCH.parse(matches);
+            let epoch = MASP_EPOCH.parse(matches);
             Self {
                 query,
                 epoch,
@@ -5514,11 +5516,9 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                .arg(
-                    EPOCH.def().help(wrap!(
-                        "The epoch for which to query conversions."
-                    )),
-                )
+                .arg(MASP_EPOCH.def().help(wrap!(
+                    "The masp epoch for which to query conversions."
+                )))
                 .arg(TOKEN_OPT.def().help(wrap!(
                     "The token address for which to query conversions."
                 )))

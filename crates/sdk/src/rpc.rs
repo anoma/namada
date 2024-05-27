@@ -15,6 +15,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
@@ -134,6 +135,13 @@ pub async fn query_epoch<C: crate::queries::Client + Sync>(
     client: &C,
 ) -> Result<Epoch, error::Error> {
     convert_response::<C, _>(RPC.shell().epoch(client).await)
+}
+
+/// Query the masp epoch of the last committed block
+pub async fn query_masp_epoch<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<MaspEpoch, error::Error> {
+    convert_response::<C, _>(RPC.shell().masp_epoch(client).await)
 }
 
 /// Query the address of the native token
@@ -311,7 +319,7 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
     Address,
     Denomination,
     MaspDigitPos,
-    Epoch,
+    MaspEpoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 )> {
@@ -330,7 +338,7 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
             Address,
             Denomination,
             MaspDigitPos,
-            Epoch,
+            MaspEpoch,
             masp_primitives::transaction::components::I128Sum,
         ),
     >,

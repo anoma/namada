@@ -17,11 +17,10 @@ use namada_core::address::InternalAddress::Masp;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
-use namada_core::masp::encode_asset_type;
+use namada_core::masp::{encode_asset_type, MaspEpoch};
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
-use namada_proof_of_stake::Epoch;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
@@ -348,7 +347,21 @@ where
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
-        let masp_epoch = self.ctx.get_block_masp_epoch()?;
+        let masp_epoch_multiplier = self
+            .ctx
+            .state
+            .read::<u64>(
+                &namada_parameters::storage::get_masp_epoch_multiplier_key(),
+            )?
+            .ok_or_else(|| {
+                Error::NativeVpError(native_vp::Error::SimpleMessage(
+                    "Could not deserialize masp epoch multiplier",
+                ))
+            })?;
+        let masp_epoch = MaspEpoch::from_epoch(
+            self.ctx.get_block_epoch()?,
+            masp_epoch_multiplier,
+        );
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
 
         // Get the Transaction object from the actions
@@ -567,7 +580,7 @@ fn validate_transparent_input<A: Authorization>(
     vin: &TxIn<A>,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
@@ -654,7 +667,7 @@ fn validate_transparent_output(
     out: &TxOut,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
 ) -> Result<()> {
     // Non-masp destinations subtract from transparent tx pool
@@ -720,7 +733,7 @@ fn validate_transparent_bundle(
     shielded_tx: &Transaction,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
@@ -779,7 +792,7 @@ fn verify_sapling_balancing_value(
     pre: &ValueSum<Address, Amount>,
     post: &ValueSum<Address, Amount>,
     sapling_value_balance: &I128Sum,
-    target_epoch: Epoch,
+    target_epoch: MaspEpoch,
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {

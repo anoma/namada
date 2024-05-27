@@ -18,6 +18,8 @@ tx_allowlist = []
 implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
 epochs_per_year = 31_536_000
+# The multiplier for masp epochs
+masp_epoch_multiplier = 1
 # Maximum number of signature per transaction
 max_signatures_per_transaction = 15
 # Max gas for block

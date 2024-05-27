@@ -38,7 +38,7 @@ use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
 use namada_core::key::{self, *};
 use namada_core::masp::{
-    AssetData, PaymentAddress, TransferSource, TransferTarget,
+    AssetData, MaspEpoch, PaymentAddress, TransferSource, TransferTarget,
 };
 use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
@@ -2438,7 +2438,7 @@ pub async fn build_pgf_stewards_proposal(
 pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<MaspEpoch>)> {
     let refund_target =
         get_refund_target(context, &args.source, &args.refund_target).await?;
 
@@ -2824,7 +2824,7 @@ pub fn build_batch(
 pub async fn build_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxTransfer,
-) -> Result<(Tx, SigningTxData, Option<Epoch>)> {
+) -> Result<(Tx, SigningTxData, Option<MaspEpoch>)> {
     let default_signer = Some(args.source.effective_address());
     let signing_data = signing::aux_signing_data(
         context,

@@ -10,7 +10,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
-use namada_core::masp::PaymentAddress;
+use namada_core::masp::{MaspEpoch, PaymentAddress};
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
@@ -290,7 +290,7 @@ impl TxTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<Epoch>)>
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<MaspEpoch>)>
     {
         tx::build_transfer(context, self).await
     }
@@ -414,7 +414,7 @@ impl TxIbcTransfer {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<Epoch>)>
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<MaspEpoch>)>
     {
         tx::build_ibc_transfer(context, self).await
     }
@@ -1312,7 +1312,7 @@ pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
     /// Address of a token
     pub token: Option<C::Address>,
     /// Epoch of the asset
-    pub epoch: Option<Epoch>,
+    pub epoch: Option<MaspEpoch>,
 }
 
 /// Query token balance(s)

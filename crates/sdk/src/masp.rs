@@ -52,12 +52,13 @@ use masp_proofs::sapling::BatchValidator;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
+use namada_core::masp::MaspEpoch;
 use namada_core::masp::MaspTxRefs;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
-use namada_core::storage::{BlockHeight, Epoch, TxIndex};
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_events::extend::{
@@ -118,7 +119,7 @@ pub struct ShieldedTransfer {
     /// Metadata
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
-    pub epoch: Epoch,
+    pub epoch: MaspEpoch,
 }
 
 /// Shielded pool data for a token
@@ -496,7 +497,7 @@ pub struct MaspChange {
 }
 
 /// a masp amount
-pub type MaspAmount = ValueSum<(Option<Epoch>, Address), token::Change>;
+pub type MaspAmount = ValueSum<(Option<MaspEpoch>, Address), token::Change>;
 
 /// An extension of Option's cloned method for pair types
 fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
@@ -1123,7 +1124,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &(impl Client + Sync),
         io: &impl Io,
         vk: &ViewingKey,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> Result<Option<I128Sum>, Error> {
         // First get the unexchanged balance
         if let Some(balance) = self.compute_shielded_balance(vk).await? {
@@ -1204,7 +1205,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &(impl Client + Sync),
         io: &impl Io,
         mut input: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
         mut conversions: Conversions,
     ) -> Result<(I128Sum, I128Sum, Conversions), Error> {
         // Where we will store our exchanged value
@@ -1330,7 +1331,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         vk: &ViewingKey,
         target: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> Result<
         (
             I128Sum,
@@ -1424,7 +1425,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> (ValueSum<Address, token::Change>, I128Sum) {
         let mut res = ValueSum::zero();
         let mut undecoded = ValueSum::zero();
@@ -1540,7 +1541,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let _ = shielded.load().await;
         }
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(context.client()).await?;
+        let epoch = rpc::query_masp_epoch(context.client()).await?;
         // Context required for storing which notes are in the source's
         // possession
         let memo = MemoBytes::empty();
@@ -1950,7 +1951,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     async fn convert_amount<C: Client + Sync>(
         &mut self,
         client: &C,
-        epoch: Epoch,
+        epoch: MaspEpoch,
         token: &Address,
         denom: Denomination,
         val: token::Amount,
@@ -2166,7 +2167,6 @@ pub mod testing {
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
-    use crate::storage::testing::arb_epoch;
     use crate::token::testing::arb_denomination;
 
     /// A context object for verifying the Sapling components of MASP
@@ -2733,12 +2733,19 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary masp epoch
+        pub fn arb_masp_epoch()(epoch: u64) -> MaspEpoch{
+            MaspEpoch::new(epoch)
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary pre-asset type
         pub fn arb_pre_asset_type()(
             token in arb_address(),
             denom in arb_denomination(),
             position in arb_masp_digit_pos(),
-            epoch in option::of(arb_epoch()),
+            epoch in option::of(arb_masp_epoch()),
         ) -> AssetData {
             AssetData {
                 token,
@@ -2848,7 +2855,7 @@ pub mod testing {
             asset_range: impl Into<SizeRange>,
         )(asset_range in Just(asset_range.into()))(
             (builder, asset_types) in arb_shielded_builder(asset_range),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
@@ -2879,7 +2886,7 @@ pub mod testing {
                 source,
                 asset_range,
             ),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
@@ -2910,7 +2917,7 @@ pub mod testing {
                 target,
                 asset_range,
             ),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),

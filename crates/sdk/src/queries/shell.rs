@@ -13,7 +13,7 @@ use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
-use namada_core::masp::TokenMap;
+use namada_core::masp::{MaspEpoch, TokenMap};
 use namada_core::storage::{
     self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
 };
@@ -41,7 +41,7 @@ type ConversionWithoutPath = (
     Address,
     Denomination,
     MaspDigitPos,
-    Epoch,
+    MaspEpoch,
     masp_primitives::transaction::components::I128Sum,
 );
 
@@ -49,7 +49,7 @@ type Conversion = (
     Address,
     Denomination,
     MaspDigitPos,
-    Epoch,
+    MaspEpoch,
     masp_primitives::transaction::components::I128Sum,
     MerklePath<Node>,
 );
@@ -62,6 +62,9 @@ router! {SHELL,
 
     // Epoch of the last committed block
     ( "epoch" ) -> Epoch = epoch,
+
+    // Masp epoch of the last committed block
+    ( "masp_epoch" ) -> MaspEpoch = masp_epoch,
 
     // The address of the native token
     ( "native_token" ) -> Address = native_token,
@@ -319,6 +322,27 @@ where
 {
     let data = ctx.state.in_mem().last_epoch;
     Ok(data)
+}
+
+fn masp_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<MaspEpoch>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = ctx.state.in_mem().last_epoch;
+    let masp_epoch_multiplier = ctx
+        .state
+        .read::<u64>(
+            &namada_parameters::storage::get_masp_epoch_multiplier_key(),
+        )?
+        .ok_or_else(|| {
+            namada_storage::Error::new_const(
+                "Could not deserialize masp epoch multiplier",
+            )
+        })?;
+    Ok(MaspEpoch::from_epoch(epoch, masp_epoch_multiplier))
 }
 
 fn native_token<D, H, V, T>(

@@ -82,18 +82,6 @@ where
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch, namada_storage::Error>;
 
-    /// Getting the block masp epoch. The epoch is that of the block to which
-    /// the current transaction is being applied.
-    // FIXME: better to have a sperate type for masp epochs?
-    fn get_block_masp_epoch(&self) -> Result<Epoch, namada_storage::Error> {
-        let epoch = self.get_block_epoch()?;
-
-        // FIXME: read param from storage
-        epoch.checked_div(4).ok_or_else(|| {
-            namada_storage::Error::new_const("Found 0 masp epoch multiplier")
-        })
-    }
-
     /// Get the shielded transaction index.
     fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error>;
 

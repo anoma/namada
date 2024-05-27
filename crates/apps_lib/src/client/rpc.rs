@@ -32,6 +32,7 @@ use namada::ledger::parameters::{storage as param_storage, EpochDuration};
 use namada::ledger::pos::types::{CommissionPair, Slash};
 use namada::ledger::pos::PosParams;
 use namada::ledger::queries::RPC;
+use namada::masp::MaspEpoch;
 use namada::proof_of_stake::types::{
     ValidatorState, ValidatorStateInfo, WeightedValidator,
 };
@@ -69,6 +70,13 @@ pub async fn query_tx_status(
 pub async fn query_and_print_epoch(context: &impl Namada) -> Epoch {
     let epoch = rpc::query_epoch(context.client()).await.unwrap();
     display_line!(context.io(), "Last committed epoch: {}", epoch);
+    epoch
+}
+
+/// Query and print the masp epoch of the last committed block
+pub async fn query_and_print_masp_epoch(context: &impl Namada) -> MaspEpoch {
+    let epoch = rpc::query_masp_epoch(context.client()).await.unwrap();
+    display_line!(context.io(), "Last committed masp epoch: {}", epoch);
     epoch
 }
 
@@ -372,7 +380,7 @@ async fn query_shielded_balance(
     }
 
     // The epoch is required to identify timestamped tokens
-    let epoch = query_and_print_epoch(context).await;
+    let masp_epoch = query_and_print_masp_epoch(context).await;
 
     // Query the token alias in the wallet for pretty printing token balances
     let token_alias = lookup_token_alias(context, &token, &MASP).await;
@@ -400,7 +408,7 @@ async fn query_shielded_balance(
                 context.client(),
                 context.io(),
                 &viewing_key,
-                epoch,
+                masp_epoch,
             )
             .await
             .unwrap()
@@ -412,7 +420,7 @@ async fn query_shielded_balance(
     };
 
     let total_balance = shielded
-        .decode_combine_sum_to_epoch(context.client(), balance, epoch)
+        .decode_combine_sum_to_epoch(context.client(), balance, masp_epoch)
         .await
         .0
         .get(&token);
@@ -1765,7 +1773,7 @@ pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
     Address,
     token::Denomination,
     MaspDigitPos,
-    Epoch,
+    MaspEpoch,
     I128Sum,
     MerklePath<Node>,
 )> {
