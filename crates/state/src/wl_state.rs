@@ -192,21 +192,13 @@ where
 
     /// Returns `true` if a new masp epoch has begun
     pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> StorageResult<bool> {
-        let masp_epoch_multiplier = self
-            .read::<u64>(
-                &namada_parameters::storage::get_masp_epoch_multiplier_key(),
-            )?
-            .ok_or_else(|| {
-                namada_storage::Error::new_const(
-                    "Missing expected masp epoch multiplier parameter",
-                )
-            })?;
+        let masp_epoch_multiplier =
+            namada_parameters::read_masp_epoch_multiplier_parameter(self)?;
         let masp_new_epoch = is_new_epoch
-            && MaspEpoch::is_masp_new_epoch(
-                self.in_mem.block.epoch,
-                masp_epoch_multiplier,
-            )
-            .map_err(namada_storage::Error::new_const)?;
+            && matches!(
+                self.in_mem.block.epoch.checked_rem(masp_epoch_multiplier),
+                Some(Epoch(0))
+            );
 
         if masp_new_epoch {
             let masp_epoch = MaspEpoch::try_from_epoch(

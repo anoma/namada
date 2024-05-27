@@ -332,16 +332,8 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = ctx.state.in_mem().last_epoch;
-    let masp_epoch_multiplier = ctx
-        .state
-        .read::<u64>(
-            &namada_parameters::storage::get_masp_epoch_multiplier_key(),
-        )?
-        .ok_or_else(|| {
-            namada_storage::Error::new_const(
-                "Missing expected masp epoch multiplier parameter",
-            )
-        })?;
+    let masp_epoch_multiplier =
+        namada_parameters::read_masp_epoch_multiplier_parameter(ctx.state)?;
     MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier)
         .map_err(namada_storage::Error::new_const)
 }

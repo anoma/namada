@@ -286,6 +286,21 @@ where
         .into_storage_result()
 }
 
+/// Read the the masp epoch multiplier parameter from store
+pub fn read_masp_epoch_multiplier_parameter<S>(
+    storage: &S,
+) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    // read multiplier
+    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
+    let epoch_multiplier = storage.read(&masp_epoch_multiplier_key)?;
+    epoch_multiplier
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
 /// Read the cost per unit of gas for the provided token
 pub fn read_gas_cost<S>(
     storage: &S,
@@ -372,11 +387,7 @@ where
         .into_storage_result()?;
 
     // read masp epoch multiplier
-    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
-    let value = storage.read(&masp_epoch_multiplier_key)?;
-    let masp_epoch_multiplier: u64 = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
+    let masp_epoch_multiplier = read_masp_epoch_multiplier_parameter(storage)?;
 
     // read the maximum signatures per transaction
     let max_signatures_per_transaction_key =

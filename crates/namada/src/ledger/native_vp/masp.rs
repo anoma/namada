@@ -347,17 +347,10 @@ where
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
-        let masp_epoch_multiplier = self
-            .ctx
-            .state
-            .read::<u64>(
-                &namada_parameters::storage::get_masp_epoch_multiplier_key(),
-            )?
-            .ok_or_else(|| {
-                Error::NativeVpError(native_vp::Error::SimpleMessage(
-                    "Missing expected masp epoch multiplier parameter",
-                ))
-            })?;
+        let masp_epoch_multiplier =
+            namada_parameters::read_masp_epoch_multiplier_parameter(
+                self.ctx.state,
+            )?;
         let masp_epoch = MaspEpoch::try_from_epoch(
             self.ctx.get_block_epoch()?,
             masp_epoch_multiplier,

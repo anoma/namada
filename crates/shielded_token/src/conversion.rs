@@ -328,9 +328,8 @@ where
         calculate_masp_rewards_precision(storage, &native_token)?.0;
 
     // Reward all tokens according to above reward rates
-    let masp_epoch_multiplier = storage
-        .read::<u64>(&parameters::storage::get_masp_epoch_multiplier_key())?
-        .expect("masp epoch multiplier should properly decode");
+    let masp_epoch_multiplier =
+        parameters::read_masp_epoch_multiplier_parameter(storage)?;
     let masp_epoch = MaspEpoch::try_from_epoch(
         storage.get_block_epoch()?,
         masp_epoch_multiplier,
