@@ -74,6 +74,7 @@ where
         tx_allowlist,
         implicit_vp_code_hash,
         epochs_per_year,
+        masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
@@ -134,6 +135,9 @@ where
 
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     storage.write(&epochs_per_year_key, epochs_per_year)?;
+
+    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
+    storage.write(&masp_epoch_multiplier_key, masp_epoch_multiplier)?;
 
     let max_signatures_per_transaction_key =
         storage::get_max_signatures_per_transaction_key();
@@ -367,6 +371,13 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read masp epoch multiplier
+    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
+    let value = storage.read(&masp_epoch_multiplier_key)?;
+    let masp_epoch_multiplier: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read the maximum signatures per transaction
     let max_signatures_per_transaction_key =
         storage::get_max_signatures_per_transaction_key();
@@ -407,6 +418,7 @@ where
         tx_allowlist,
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
+        masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
@@ -452,6 +464,7 @@ where
         tx_allowlist: vec![],
         implicit_vp_code_hash: Default::default(),
         epochs_per_year: 365,
+        masp_epoch_multiplier: 2,
         max_signatures_per_transaction: 10,
         fee_unshielding_gas_limit: 0,
         minimum_gas_price: Default::default(),
