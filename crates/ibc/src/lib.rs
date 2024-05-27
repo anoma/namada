@@ -53,12 +53,15 @@ use namada_core::ibc::apps::transfer::handler::{
 };
 use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
 use namada_core::ibc::apps::transfer::types::{
-    is_receiver_chain_source, TracePrefix,
+    ack_success_b64, is_receiver_chain_source, TracePrefix,
 };
 use namada_core::ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
-use namada_core::ibc::core::channel::types::msgs::PacketMsg;
+use namada_core::ibc::core::channel::types::commitment::compute_ack_commitment;
+use namada_core::ibc::core::channel::types::msgs::{
+    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+};
 use namada_core::ibc::core::entrypoint::{execute, validate};
 use namada_core::ibc::core::handler::types::error::ContextError;
 use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
@@ -169,7 +172,13 @@ where
                     MsgEnvelope::Packet(PacketMsg::Recv(msg.message.clone()));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                Ok(msg.transfer.clone())
+                let transfer = if self.is_receiving_success(&msg.message)? {
+                    // For receiving the token to a shielded address
+                    msg.transfer.clone()
+                } else {
+                    None
+                };
+                Ok(transfer)
             }
             IbcMessage::AckPacket(msg) => {
                 let envelope =
@@ -199,6 +208,28 @@ where
                 Ok(None)
             }
         }
+    }
+
+    /// Check the result of receiving the packet by checking the packet
+    /// acknowledgement
+    fn is_receiving_success(
+        &self,
+        msg: &IbcMsgRecvPacket,
+    ) -> Result<bool, Error> {
+        let packet_ack = self
+            .ctx
+            .inner
+            .borrow()
+            .packet_ack(
+                &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
+                msg.packet.seq_on_a,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))?;
+        let success_ack_commitment = compute_ack_commitment(
+            &AcknowledgementStatus::success(ack_success_b64()).into(),
+        );
+        Ok(packet_ack == success_ack_commitment)
     }
 
     /// Validate according to the message in IBC VP
