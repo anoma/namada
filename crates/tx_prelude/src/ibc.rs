@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use namada_core::address::Address;
 use namada_core::token::Amount;
-use namada_events::EventTypeBuilder;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
     burn_tokens, ibc_token, is_ibc_key, mint_tokens,
@@ -40,20 +39,6 @@ impl IbcStorageContext for Ctx {
         event: IbcEvent,
     ) -> std::result::Result<(), Error> {
         <Ctx as TxEnv>::emit_event(self, event)
-    }
-
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, Error> {
-        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
-            .with_segment(event_type.as_ref())
-            .build();
-
-        Ok(<Ctx as TxEnv>::get_events(self, &event_type)?
-            .into_iter()
-            .filter_map(|event| IbcEvent::try_from(event).ok())
-            .collect())
     }
 
     fn transfer_token(

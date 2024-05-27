@@ -141,6 +141,32 @@ where
             .store_withdraw(token, added_withdraw)
             .map_err(TokenTransferError::from)
     }
+
+    fn store_ibc_denom(
+        &self,
+        owner: &Address,
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        if coin.denom.trace_path.is_empty() {
+            // It isn't an IBC denom
+            return Ok(());
+        }
+        let ibc_denom = coin.denom.to_string();
+        let trace_hash = storage::calc_hash(&ibc_denom);
+
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(owner.to_string(), &trace_hash, &ibc_denom)
+            .map_err(TokenTransferError::from)?;
+
+        let base_token = Address::decode(coin.denom.base_denom.as_str())
+            .map(|a| a.to_string())
+            .unwrap_or(coin.denom.base_denom.to_string());
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(base_token, &trace_hash, &ibc_denom)
+            .map_err(TokenTransferError::from)
+    }
 }
 
 impl<C> TokenTransferValidationContext for TokenTransferContext<C>
@@ -276,6 +302,10 @@ where
         {
             self.insert_verifier(&ibc_token);
         }
+
+        // Store the IBC denom with the token hash to be able to retrieve it
+        // later
+        self.store_ibc_denom(account, coin)?;
 
         self.inner
             .borrow_mut()
