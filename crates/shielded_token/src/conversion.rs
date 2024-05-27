@@ -9,7 +9,6 @@ use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
 use namada_core::uint::Uint;
-use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::{
     get_effective_total_native_supply, read_balance, read_denom, Amount,
@@ -93,6 +92,7 @@ where
 pub fn calculate_masp_rewards<S>(
     storage: &mut S,
     token: &Address,
+    masp_epochs_per_year: u64,
 ) -> namada_storage::Result<((u128, u128), Denomination)>
 where
     S: StorageWrite + StorageRead,
@@ -109,16 +109,6 @@ where
 
     // total locked amount in the Shielded pool
     let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
-
-    let epochs_per_year = storage
-        .read::<u64>(&parameters::storage::get_epochs_per_year_key())?
-        .expect("epochs per year should properly decode");
-    // FIXME: can avoid reading this twice?
-    let masp_epoch_multiplier = storage
-        .read::<u64>(&parameters::storage::get_masp_epoch_multiplier_key())?
-        .expect("masp epoch multiplier should properly decode");
-    let masp_epochs_per_year =
-        checked!(epochs_per_year / masp_epoch_multiplier)?;
 
     //// Values from the last epoch
     let last_inflation: Amount = storage
@@ -261,6 +251,7 @@ where
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::masp::{encode_asset_type, MaspEpoch};
+    use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, ResultExt};
     use namada_trans_token::storage_key::balance_key;
@@ -348,8 +339,14 @@ where
         Some(epoch) => epoch,
         None => return Ok(()),
     };
+    let epochs_per_year = storage
+        .read::<u64>(&parameters::storage::get_epochs_per_year_key())?
+        .expect("epochs per year should properly decode");
+    let masp_epochs_per_year =
+        checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
-        let (reward, denom) = calculate_masp_rewards(storage, token)?;
+        let (reward, denom) =
+            calculate_masp_rewards(storage, token, masp_epochs_per_year)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal = read_balance(storage, token, &masp_addr)?;
