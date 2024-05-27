@@ -1711,6 +1711,27 @@ mod test_finalize_block {
         });
     }
 
+    /// Test the correct transition to a new masp epoch
+    #[test]
+    fn test_masp_epoch_progression() {
+        let (mut shell, _broadcaster, _, _eth_control) = setup();
+
+        let masp_epoch_multiplier =
+            namada::ledger::parameters::read_masp_epoch_multiplier_parameter(
+                &shell.state,
+            )
+            .unwrap();
+
+        assert_eq!(shell.state.get_block_epoch().unwrap(), Epoch::default());
+
+        for _ in 1..masp_epoch_multiplier {
+            shell.start_new_epoch(None);
+            assert!(!shell.state.is_masp_new_epoch(true).unwrap());
+        }
+        shell.start_new_epoch(None);
+        assert!(shell.state.is_masp_new_epoch(true).unwrap());
+    }
+
     /// Test that the finalize block handler never commits changes directly to
     /// the DB.
     #[test]
