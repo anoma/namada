@@ -1,3 +1,4 @@
+//! The public types for using the MASP tooling
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -23,12 +24,13 @@ use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
-use namada_core::storage::{BlockHeight, Epoch, IndexedTx};
+use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::uint::Uint;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_token as token;
+use namada_tx::{IndexedTx, TxCommitments};
 use thiserror::Error;
 
 use crate::error::Error;
@@ -87,6 +89,7 @@ pub struct ShieldedTransfer {
 }
 
 /// Shielded pool data for a token
+#[allow(missing_docs)]
 #[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspTokenRewardData {
     pub name: String,
@@ -98,13 +101,8 @@ pub struct MaspTokenRewardData {
 }
 
 /// The MASP transaction(s) found in a Namada tx.
-/// These transactions can appear in the fee payment
-/// and / or the main payload.
 #[derive(Debug, Clone)]
-pub(super) struct ExtractedMaspTx {
-    pub(crate) fee_unshielding: Option<Transaction>,
-    pub(crate) inner_tx: Option<Transaction>,
-}
+pub(crate) struct ExtractedMaspTxs(pub Vec<(TxCommitments, Transaction)>);
 
 /// MASP verifying keys
 pub struct PVKs {
@@ -218,7 +216,9 @@ impl ScannedData {
 /// re-scanned as part of nullifying spent notes (which
 /// is not parallelizable).
 pub struct DecryptedData {
+    /// The actual transaction
     pub tx: Transaction,
+    /// balance changes from the tx
     pub delta: TransactionDelta,
 }
 

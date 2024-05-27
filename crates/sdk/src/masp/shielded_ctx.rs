@@ -1,3 +1,5 @@
+//! The main implementation of the shielded context. This acts
+//! as wallet and client for the MASP
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryInto;
@@ -17,6 +19,7 @@ use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
 use masp_primitives::transaction::builder::Builder;
+use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::components::{
     I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
 };
@@ -24,17 +27,16 @@ use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{
     builder, Authorization, Authorized, Transaction, TransparentAddress,
 };
-use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::masp::{
-    encode_asset_type, AssetData,
-    TransferSource, TransferTarget,
+    encode_asset_type, AssetData, TransferSource, TransferTarget,
 };
-use namada_core::storage::{BlockHeight, Epoch, IndexedTx, TxIndex};
+use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_token::{self as token, Denomination, MaspDigitPos};
+use namada_tx::{IndexedTx, TxCommitments};
 use rand_core::OsRng;
 use rayon::prelude::*;
 use ripemd::Digest as RipemdDigest;
@@ -48,15 +50,13 @@ use crate::masp::types::{
     Unscanned, WalletMap,
 };
 use crate::masp::utils::{
-    cloned_pair, fetch_channel, is_amount_required,
-    to_viewing_key, FetchQueueSender,
-    MaspClient, ProgressTracker, RetryStrategy, ShieldedUtils, TaskManager,
+    cloned_pair, fetch_channel, is_amount_required, to_viewing_key,
+    FetchQueueSender, MaspClient, ProgressTracker, RetryStrategy,
+    ShieldedUtils, TaskManager,
 };
 use crate::masp::{Network, NETWORK};
 use crate::queries::Client;
-use crate::rpc::{
-    query_block, query_conversion, query_denom,
-};
+use crate::rpc::{query_block, query_conversion, query_denom};
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Represents the current state of the shielded pool from the perspective of
@@ -290,9 +290,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// * nullify notes that have been spent
     /// * update balances of each viewing key
     pub(super) fn nullify_spent_notes(&mut self) -> Result<(), Error> {
-        for ((_, _vk), decrypted_data) in
-            self.decrypted_note_cache.drain()
-        {
+        for ((_, _vk), decrypted_data) in self.decrypted_note_cache.drain() {
             let DecryptedData {
                 tx: shielded,
                 delta: mut transaction_delta,
@@ -536,11 +534,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let required = value / threshold;
         // Forget about the trace amount left over because we cannot
         // realize its value
-        let trace = I128Sum::from_pair(asset_type, value % threshold)
-            .expect("the trace should be a valid i128");
+        let trace = I128Sum::from_pair(asset_type, value % threshold);
         let normed_trace =
-            I128Sum::from_pair(normed_asset_type, value % threshold)
-                .expect("the trace should be a valid i128");
+            I128Sum::from_pair(normed_asset_type, value % threshold);
         // Record how much more of the given conversion has been used
         *usage += required;
         // Apply the conversions to input and move the trace amount to output
@@ -720,13 +716,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
                 // The amount contributed by this note before conversion
                 let pre_contr =
-                    I128Sum::from_pair(note.asset_type, note.value as i128)
-                        .map_err(|()| {
-                            Error::Other(
-                                "received note has invalid value or asset type"
-                                    .to_string(),
-                            )
-                        })?;
+                    I128Sum::from_pair(note.asset_type, note.value as i128);
                 let (contr, normed_contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         context.client(),
@@ -807,12 +797,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     res += ValueSum::from_pair(
                         pre_asset_type.token,
                         decoded_change,
-                    )
-                    .expect("expected this to fit");
+                    );
                 }
                 None => {
-                    undecoded += ValueSum::from_pair(*asset_type, *val)
-                        .expect("expected this to fit");
+                    undecoded += ValueSum::from_pair(*asset_type, *val);
                 }
                 _ => {}
             }
@@ -842,11 +830,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 res += MaspAmount::from_pair(
                     (decoded.epoch, decoded.token),
                     decoded_change,
-                )
-                .expect("unable to construct decoded amount");
+                );
             } else {
-                undecoded += ValueSum::from_pair(*asset_type, *val)
-                    .expect("expected this to fit");
+                undecoded += ValueSum::from_pair(*asset_type, *val);
             }
         }
         (res, undecoded)
@@ -865,8 +851,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
-                res += ValueSum::from_pair((*asset_type, decoded), *val)
-                    .expect("unable to construct decoded amount");
+                res += ValueSum::from_pair((*asset_type, decoded), *val);
             }
         }
         res
@@ -917,17 +902,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         #[allow(unused_mut)]
         let mut rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
-        let mut rng = if let Ok(seed) = std::env::var(super::ENV_VAR_MASP_TEST_SEED)
-            .map_err(|e| Error::Other(e.to_string()))
-            .and_then(|seed| {
-                let exp_str = format!(
-                    "Env var {} must be a u64.",
-                    super::ENV_VAR_MASP_TEST_SEED
-                );
-                let parsed_seed: u64 = std::str::FromStr::from_str(&seed)
-                    .map_err(|_| Error::Other(exp_str))?;
-                Ok(parsed_seed)
-            }) {
+        let mut rng = if let Ok(seed) =
+            std::env::var(super::ENV_VAR_MASP_TEST_SEED)
+                .map_err(|e| Error::Other(e.to_string()))
+                .and_then(|seed| {
+                    let exp_str = format!(
+                        "Env var {} must be a u64.",
+                        super::ENV_VAR_MASP_TEST_SEED
+                    );
+                    let parsed_seed: u64 =
+                        std::str::FromStr::from_str(&seed)
+                            .map_err(|_| Error::Other(exp_str))?;
+                    Ok(parsed_seed)
+                }) {
             tracing::warn!(
                 "UNSAFE: Using a seed from {} env var to build proofs.",
                 super::ENV_VAR_MASP_TEST_SEED,
@@ -1083,9 +1070,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
         // Annotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
-        let value_balance = builder.value_balance().map_err(|e| {
-            Error::Other(format!("unable to complete value balance: {}", e))
-        })?;
+        let value_balance = builder.value_balance();
         let value_balance = context
             .shielded_mut()
             .await
@@ -1175,8 +1160,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Convert the shortfall into a I128Sum
             let mut shortfall = I128Sum::zero();
             for (asset_type, val) in asset_types.iter().zip(rem_amount) {
-                shortfall += I128Sum::from_pair(*asset_type, val.into())
-                    .expect("unable to construct value sum");
+                shortfall += I128Sum::from_pair(*asset_type, val.into());
             }
             // Return an insufficient funds error
             return Result::Err(TransferErr::from(
@@ -1188,16 +1172,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         if let Some(sk) = spending_key {
             // Represents the amount of inputs we are short by
             let mut additional = I128Sum::zero();
-            for (asset_type, amt) in builder
-                .value_balance()
-                .map_err(|e| {
-                    Error::Other(format!(
-                        "unable to complete value balance: {}",
-                        e
-                    ))
-                })?
-                .components()
-            {
+            for (asset_type, amt) in builder.value_balance().components() {
                 match amt.cmp(&0) {
                     Ordering::Greater => {
                         // Send the change in this asset type back to the sender
@@ -1241,21 +1216,18 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let prover = context.shielded().await.utils.local_tx_prover();
         #[cfg(feature = "testing")]
         let prover = super::testing::MockTxProver(std::sync::Mutex::new(OsRng));
-        let (masp_tx, metadata) =
-            builder.build(
-                &prover,
-                &FeeRule::non_standard(U64Sum::zero()),
-                &mut rng,
-                &mut RngBuildParams::new(OsRng),
-            )?;
+        let (masp_tx, metadata) = builder.build(
+            &prover,
+            &FeeRule::non_standard(U64Sum::zero()),
+            &mut rng,
+            &mut RngBuildParams::new(OsRng),
+        )?;
 
         if update_ctx {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(
-                    context, &masp_tx,
-                )
+                .pre_cache_transaction(context, &masp_tx)
                 .await?;
         }
 
@@ -1286,18 +1258,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let last_witnessed_tx = self.tx_note_map.keys().max();
         // This data will be discarded at the next fetch so we don't need to
         // populate it accurately
-        let indexed_tx = last_witnessed_tx.map_or_else(
-            || IndexedTx {
-                height: BlockHeight::first(),
-                index: TxIndex(0),
-                is_wrapper: false,
-            },
-            |indexed| IndexedTx {
-                height: indexed.height,
-                index: TxIndex(indexed.index.0 + 1),
-                is_wrapper: false,
-            },
-        );
+        let indexed_tx =
+            last_witnessed_tx.map_or_else(IndexedTx::default, |indexed| {
+                IndexedTx {
+                    height: indexed.height,
+                    index: indexed
+                        .index
+                        .checked_add(1)
+                        .expect("Tx index shouldn't overflow"),
+                    inner_tx: TxCommitments::default(),
+                }
+            });
         self.sync_status = ContextSyncStatus::Speculative;
         let mut scanned_data = ScannedData::default();
         for vk in vks {
@@ -1591,6 +1562,7 @@ mod shielded_ctx_tests {
 
     use masp_primitives::zip32::ExtendedFullViewingKey;
     use namada_core::masp::ExtendedViewingKey;
+    use namada_core::storage::TxIndex;
     use tempfile::tempdir;
 
     use super::*;
@@ -1717,7 +1689,7 @@ mod shielded_ctx_tests {
         // we first test that with no retries, a fetching failure
         // stops process
         let result = shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1746,7 +1718,7 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
@@ -1756,7 +1728,7 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(2),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
@@ -1764,7 +1736,7 @@ mod shielded_ctx_tests {
 
         // This should complete successfully
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(2),
@@ -1787,12 +1759,12 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(1),
-                is_wrapper: false,
+                inner_tx: Default::default(),
             },
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(2),
-                is_wrapper: false,
+                inner_tx: Default::default(),
             },
         ]);
 
@@ -1802,7 +1774,7 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(2),
-                is_wrapper: false,
+                inner_tx: Default::default(),
             }
         );
         assert_eq!(shielded_ctx.note_map.len(), 2);
@@ -1828,7 +1800,7 @@ mod shielded_ctx_tests {
         // first fetch no blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1848,14 +1820,14 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: Default::default(),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
             .expect("Test failed");
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1872,7 +1844,7 @@ mod shielded_ctx_tests {
         // fetch no blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1891,7 +1863,7 @@ mod shielded_ctx_tests {
         let (client, masp_tx_sender) = test_client(3.into());
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1911,7 +1883,7 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 2.into(),
                     index: Default::default(),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
@@ -1921,7 +1893,7 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 3.into(),
                     index: Default::default(),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
@@ -1930,7 +1902,7 @@ mod shielded_ctx_tests {
         // all expected blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -1969,7 +1941,7 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
@@ -1979,14 +1951,14 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(2),
-                    is_wrapper: false,
+                    inner_tx: Default::default(),
                 },
                 masp_tx.clone(),
             )))
             .expect("Test failed");
 
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(2),
@@ -2011,7 +1983,7 @@ mod shielded_ctx_tests {
         let expected = vec![IndexedTx {
             height: 1.into(),
             index: TxIndex(2),
-            is_wrapper: false,
+            inner_tx: Default::default(),
         }];
         assert_eq!(keys, expected);
     }
@@ -2040,7 +2012,7 @@ mod shielded_ctx_tests {
                     IndexedTx {
                         height: h.into(),
                         index: TxIndex(1),
-                        is_wrapper: false,
+                        inner_tx: Default::default(),
                     },
                     masp_tx.clone(),
                 )))
@@ -2050,7 +2022,7 @@ mod shielded_ctx_tests {
 
         // we expect this to fail.
         let result = shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),
@@ -2079,7 +2051,7 @@ mod shielded_ctx_tests {
         shielded_ctx.tx_note_map.remove(&IndexedTx {
             height: 18.into(),
             index: TxIndex(1),
-            is_wrapper: false,
+            inner_tx: Default::default(),
         });
         shielded_ctx.save().await.expect("Test failed");
 
@@ -2090,7 +2062,7 @@ mod shielded_ctx_tests {
                     IndexedTx {
                         height: h.into(),
                         index: TxIndex(1),
-                        is_wrapper: false,
+                        inner_tx: Default::default(),
                     },
                     masp_tx.clone(),
                 )))
@@ -2100,7 +2072,7 @@ mod shielded_ctx_tests {
 
         // we expect this to fail.
         shielded_ctx
-            .fetch::<_, _, _, TestingMaspClient>(
+            .fetch::<_, _, _, TestingMaspClient<'_>>(
                 &client,
                 &progress,
                 RetryStrategy::Times(1),

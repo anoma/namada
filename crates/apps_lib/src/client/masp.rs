@@ -40,7 +40,7 @@ pub async fn syncing<
     let logger = CliProgressTracker::new(io);
     let sync = async move {
         shielded
-            .fetch::<_, _, _, LedgerMaspClient<C>>(
+            .fetch::<_, _, _, LedgerMaspClient<'_, C>>(
                 client,
                 &logger,
                 RetryStrategy::Forever,

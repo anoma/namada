@@ -1531,7 +1531,7 @@ fn parameters(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.first_commitments().unwrap().clone();
+                let cmt = *tx.first_commitments().unwrap();
                 let batched_tx = tx.batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }
@@ -1605,7 +1605,7 @@ fn pos(c: &mut Criterion) {
                 let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
                 tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
                 let verifiers_from_tx = BTreeSet::default();
-                let cmt = tx.first_commitments().unwrap().clone();
+                let cmt = *tx.first_commitments().unwrap();
                 let batched_tx = tx.batch_tx(cmt);
                 (verifiers_from_tx, batched_tx)
             }

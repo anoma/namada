@@ -892,6 +892,7 @@ impl Section {
 /// An inner transaction of the batch, represented by its commitments to the
 /// [`Code`], [`Data`] and [`Memo`] sections
 #[derive(
+    Copy,
     Clone,
     Debug,
     Default,
@@ -1733,6 +1734,7 @@ impl<'tx> Tx {
 /// Represents the pointers to a indexed tx, which are the block height and the
 /// index inside that block
 #[derive(
+    Copy,
     Debug,
     Clone,
     BorshSerialize,

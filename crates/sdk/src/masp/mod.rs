@@ -14,9 +14,9 @@ use std::path::PathBuf;
 use borsh::{BorshDeserialize, BorshSerialize};
 use lazy_static::lazy_static;
 #[cfg(feature = "mainnet")]
-use masp_primitives::consensus::MainNetwork;
+use masp_primitives::consensus::MainNetwork as Network;
 #[cfg(not(feature = "mainnet"))]
-use masp_primitives::consensus::TestNetwork;
+use masp_primitives::consensus::TestNetwork as Network;
 use masp_primitives::group::GroupEncoding;
 use masp_primitives::sapling::redjubjub::PublicKey;
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
@@ -57,10 +57,7 @@ pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
 pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
 
 /// The network to use for MASP
-#[cfg(feature = "mainnet")]
-const NETWORK: MainNetwork = MainNetwork;
-#[cfg(not(feature = "mainnet"))]
-const NETWORK: TestNetwork = TestNetwork;
+const NETWORK: Network = Network;
 
 // TODO these could be exported from masp_proof crate
 /// Spend circuit name
@@ -451,7 +448,6 @@ pub mod testing {
     use super::*;
     use crate::address::testing::arb_address;
     use crate::masp::types::{ShieldedTransfer, WalletMap};
-    use crate::masp::utils::find_valid_diversifier;
     use crate::masp_primitives::consensus::BranchId;
     use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -568,8 +564,13 @@ pub mod testing {
                 sighash_value,
                 binding_sig,
                 |bvk, msg, binding_sig| {
+                    // Compute the signature's message for bvk/binding_sig
+                    let mut data_to_be_signed = [0u8; 64];
+                    data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
+                    data_to_be_signed[32..64].copy_from_slice(msg);
+
                     bvk.verify_with_zip216(
-                        &msg,
+                        &data_to_be_signed,
                         &binding_sig,
                         VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
                         self.zip216_enabled,
@@ -579,8 +580,8 @@ pub mod testing {
         }
     }
 
-    // This function computes `value` in the exponent of the value commitment
-    // base
+    /// This function computes `value` in the exponent of the value commitment
+    /// base
     fn masp_compute_value_balance(
         asset_type: AssetType,
         value: i128,
@@ -610,8 +611,8 @@ pub mod testing {
         Some(value_balance.into())
     }
 
-    // A context object for creating the Sapling components of a Zcash
-    // transaction.
+    /// A context object for creating the Sapling components of a Zcash
+    /// transaction.
     pub struct SaplingProvingContext {
         bsk: jubjub::Fr,
         // (sum of the Spend value commitments) - (sum of the Output value
@@ -619,9 +620,9 @@ pub mod testing {
         cv_sum: jubjub::ExtendedPoint,
     }
 
-    // An implementation of TxProver that does everything except generating
-    // valid zero-knowledge proofs. Uses the supplied source of randomness to
-    // carry out its operations.
+    /// An implementation of TxProver that does everything except generating
+    /// valid zero-knowledge proofs. Uses the supplied source of randomness to
+    /// carry out its operations.
     pub struct MockTxProver<R: RngCore>(pub Mutex<R>);
 
     impl<R: RngCore> TxProver for MockTxProver<R> {
@@ -828,7 +829,7 @@ pub mod testing {
     }
 
     #[derive(Debug, Clone)]
-    // Adapts a CSPRNG from a PRNG for proptesting
+    /// Adapts a CSPRNG from a PRNG for proptesting
     pub struct TestCsprng<R: RngCore>(R);
 
     impl<R: RngCore> CryptoRng for TestCsprng<R> {}
@@ -855,14 +856,14 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Expose a random number generator
+        /// Expose a random number generator
         pub fn arb_rng()(rng in Just(()).prop_perturb(|(), rng| rng)) -> TestRng {
             rng
         }
     }
 
     prop_compose! {
-        // Generate an arbitrary output description with the given value
+        /// Generate an arbitrary output description with the given value
         pub fn arb_output_description(
             asset_type: AssetType,
             value: u64,
@@ -884,13 +885,13 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary spend description with the given value
+        /// Generate an arbitrary spend description with the given value
         pub fn arb_spend_description(
             asset_type: AssetType,
             value: u64,
         )(
             address in arb_transparent_address(),
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
@@ -905,7 +906,7 @@ pub mod testing {
                 .to_payment_address(div)
                 .expect("a PaymentAddress");
 
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -944,7 +945,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP denomination
+        /// Generate an arbitrary MASP denomination
         pub fn arb_masp_digit_pos()(denom in 0..4u8) -> MaspDigitPos {
             MaspDigitPos::from(denom)
         }
@@ -956,8 +957,8 @@ pub mod testing {
     const MAX_SPLITS: usize = 3;
 
     prop_compose! {
-        // Arbitrarily partition the given vector of integers into sets and sum
-        // them
+        /// Arbitrarily partition the given vector of integers into sets and sum
+        /// them
         pub fn arb_partition(values: Vec<u64>)(buckets in ((!values.is_empty()) as usize)..=values.len())(
             values in Just(values.clone()),
             assigns in collection::vec(0..buckets, values.len()),
@@ -972,8 +973,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary spend descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary spend descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_spend_descriptions(
             asset: AssetData,
             values: Vec<u64>,
@@ -995,8 +996,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary output descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary output descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_output_descriptions(
             asset: AssetData,
             values: Vec<u64>,
@@ -1018,8 +1019,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate arbitrary spend descriptions with the given asset type
-        // partitioning the given values
+        /// Generate arbitrary spend descriptions with the given asset type
+        /// partitioning the given values
         pub fn arb_txouts(
             asset: AssetData,
             values: Vec<u64>,
@@ -1043,7 +1044,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary shielded MASP transaction builder
+        /// Generate an arbitrary shielded MASP transaction builder
         pub fn arb_shielded_builder(asset_range: impl Into<SizeRange>)(
             assets in collection::hash_map(
                 arb_pre_asset_type(),
@@ -1051,7 +1052,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -1062,15 +1063,15 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
                 // use from the masp crate to specify the expiration better
-                expiration_height.unwrap()
+                expiration_height.unwrap(),
             );
             let mut leaves = Vec::new();
             // First construct a Merkle tree containing all notes to be used
@@ -1090,7 +1091,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary pre-asset type
+        /// Generate an arbitrary pre-asset type
         pub fn arb_pre_asset_type()(
             token in arb_address(),
             denom in arb_denomination(),
@@ -1107,7 +1108,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary shielding MASP transaction builder
+        /// Generate an arbitrary shielding MASP transaction builder
         pub fn arb_shielding_builder(
             source: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -1118,7 +1119,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             txins in assets
                 .iter()
                 .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
@@ -1129,10 +1130,10 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -1150,7 +1151,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary deshielding MASP transaction builder
+        /// Generate an arbitrary deshielding MASP transaction builder
         pub fn arb_deshielding_builder(
             target: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -1161,7 +1162,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &TestNetwork),
+            expiration_height in arb_height(BranchId::MASP, &Network),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
@@ -1172,10 +1173,10 @@ pub mod testing {
                 .collect::<Vec<_>>(),
             assets in Just(assets),
         ) -> (
-            Builder::<TestNetwork>,
+            Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
-            let mut builder = Builder::<TestNetwork, _>::new(
+            let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -1200,7 +1201,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_shielded_transfer(
             asset_range: impl Into<SizeRange>,
         )(asset_range in Just(asset_range.into()))(
@@ -1226,7 +1227,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_shielding_transfer(
             source: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -1256,7 +1257,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        // Generate an arbitrary MASP shielded transfer
+        /// Generate an arbitrary MASP shielded transfer
         pub fn arb_deshielding_transfer(
             target: TransparentAddress,
             asset_range: impl Into<SizeRange>,
@@ -1324,12 +1325,19 @@ pub mod fs {
                 && convert_path.exists()
                 && output_path.exists())
             {
-                println!("MASP parameters not present, downloading...");
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("MASP parameters not present, downloading...");
+                }
                 masp_proofs::download_masp_parameters(None)
                     .expect("MASP parameters not present or downloadable");
-                println!(
-                    "MASP parameter download complete, resuming execution..."
-                );
+                #[allow(clippy::print_stdout)]
+                {
+                    println!(
+                        "MASP parameter download complete, resuming \
+                         execution..."
+                    );
+                }
             }
             // Finally initialize a shielded context with the supplied directory
 

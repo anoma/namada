@@ -4,8 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
-use namada_core::storage::{BlockHeight, IndexedTx};
+use namada_core::storage::BlockHeight;
 use namada_state::LastBlock;
+use namada_tx::IndexedTx;
 use tendermint_rpc::SimpleRequest;
 
 use crate::error::Error;
@@ -110,7 +111,7 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         Self { client }
     }
 
-    async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
+    async fn fetch_witness_map_updates<U: ShieldedUtils, IO: Io>(
         &self,
         _: &ShieldedContext<U>,
         _: &IO,

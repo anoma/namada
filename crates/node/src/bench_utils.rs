@@ -90,9 +90,8 @@ use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
-use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
+use namada_sdk::masp::types::{ContextSyncStatus, ShieldedTransfer};
+use namada_sdk::masp::{self, ShieldedContext, ShieldedUtils};
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM as TX_CHANGE_VALIDATOR_COMMISSION_WASM,
@@ -337,7 +336,7 @@ impl BenchShell {
             )));
         }
 
-        let cmt = tx.first_commitments().unwrap().clone();
+        let cmt = *tx.first_commitments().unwrap();
         tx.batch_tx(cmt)
     }
 
@@ -358,7 +357,7 @@ impl BenchShell {
 
         tx.set_data(Data::new(data));
         // NOTE: the Ibc VP doesn't actually check the signature
-        let cmt = tx.first_commitments().unwrap().clone();
+        let cmt = *tx.first_commitments().unwrap();
         tx.batch_tx(cmt)
     }
 
@@ -641,7 +640,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
         None,
     )));
 
-    let cmt = tx.first_commitments().unwrap().clone();
+    let cmt = *tx.first_commitments().unwrap();
     tx.batch_tx(cmt)
 }
 

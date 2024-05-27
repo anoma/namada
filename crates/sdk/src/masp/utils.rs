@@ -1,3 +1,4 @@
+//! Helper functions
 use std::collections::BTreeMap;
 use std::env;
 use std::marker::PhantomData;
@@ -14,13 +15,13 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::collections::HashMap;
-use namada_core::storage::{BlockHeight, IndexedTx, TxIndex};
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::token::Transfer;
 use namada_events::extend::{
-    ReadFromEventAttributes, ValidMaspTx as ValidMaspTxAttr,
+    MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
 use namada_ibc::IbcMessage;
-use namada_tx::Tx;
+use namada_tx::{IndexedTx, Tx};
 use rand_core::{CryptoRng, RngCore};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -28,7 +29,7 @@ use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::shielded_ctx::ShieldedContext;
 use crate::masp::types::{
-    ContextSyncStatus, ExtractedMaspTx, IndexedNoteEntry, PVKs, ScannedData,
+    ContextSyncStatus, ExtractedMaspTxs, IndexedNoteEntry, PVKs, ScannedData,
     TransactionDelta, Unscanned,
 };
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
@@ -48,7 +49,10 @@ pub(super) fn load_pvks() -> &'static PVKs {
 /// use the default.
 pub fn get_params_dir() -> PathBuf {
     if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        println!("Using {} as masp parameter folder.", params_dir);
+        #[allow(clippy::print_stdout)]
+        {
+            println!("Using {} as masp parameter folder.", params_dir);
+        }
         PathBuf::from(params_dir)
     } else {
         masp_proofs::default_params_folder().unwrap()
@@ -121,7 +125,6 @@ pub(super) fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
     (a.clone(), b.clone())
 }
 
-
 /// Retrieves all the indexes and tx events at the specified height which refer
 /// to a valid MASP transaction. If an index is given, it filters only the
 /// transactions with an index equal or greater to the provided one.
@@ -141,10 +144,11 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let tx_index = ValidMaspTxAttr::read_from_event_attributes(
-                        &event.attributes,
-                    )
-                    .ok()?;
+                    let tx_index =
+                        MaspTxBlockIndexAttr::read_from_event_attributes(
+                            &event.attributes,
+                        )
+                        .ok()?;
 
                     if tx_index >= first_idx_to_query {
                         Some(tx_index)
@@ -159,75 +163,57 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
 /// Extract the relevant shielded portions of a [`Tx`], if any.
 pub(super) async fn extract_masp_tx(
     tx: &Tx,
-    check_header: bool,
-) -> Result<ExtractedMaspTx, Error> {
-    let tx_header = tx.header();
+) -> Result<ExtractedMaspTxs, Error> {
     // NOTE: simply looking for masp sections attached to the tx
     // is not safe. We don't validate the sections attached to a
     // transaction se we could end up with transactions carrying
     // an unnecessary masp section. We must instead look for the
     // required masp sections in the signed commitments (hashes)
-    // of the transactions' headers/data sections
-    let wrapper_header = tx_header
-        .wrapper()
-        .expect("All transactions must have a wrapper");
-    let maybe_fee_unshield = if let (Some(hash), true) =
-        (wrapper_header.unshield_section_hash, check_header)
-    {
-        let masp_transaction = tx
-            .get_section(&hash)
-            .ok_or_else(|| {
-                Error::Other("Missing expected masp section".to_string())
-            })?
-            .masp_tx()
-            .ok_or_else(|| {
-                Error::Other("Missing masp transaction".to_string())
-            })?;
-
-        Some(masp_transaction)
-    } else {
-        None
-    };
+    // of the transactions' data sections
+    let mut txs = vec![];
 
     // Expect transaction
-    let tx_data = tx
-        .data()
-        .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
-    let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-        Ok(transfer) => Some(transfer),
-        Err(_) => {
-            // This should be a MASP over IBC transaction, it
-            // could be a ShieldedTransfer or an Envelope
-            // message, need to try both
-            extract_payload_from_shielded_action(&tx_data).await.ok()
+    for cmt in tx.commitments() {
+        let tx_data = tx
+            .data(cmt)
+            .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
+        let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
+            Ok(transfer) => Some(transfer),
+            Err(_) => {
+                // This should be a MASP over IBC transaction, it
+                // could be a ShieldedTransfer or an Envelope
+                // message, need to try both
+                extract_payload_from_shielded_action(&tx_data).await.ok()
+            }
+        }
+        .map(|transfer| {
+            if let Some(hash) = transfer.shielded {
+                let masp_tx = tx
+                    .get_section(&hash)
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing masp section in transaction".to_string(),
+                        )
+                    })?
+                    .masp_tx()
+                    .ok_or_else(|| {
+                        Error::Other("Missing masp transaction".to_string())
+                    })?;
+
+                Ok::<_, Error>(Some(masp_tx))
+            } else {
+                Ok(None)
+            }
+        })
+        .transpose()?
+        .flatten();
+
+        if let Some(transaction) = maybe_masp_tx {
+            txs.push((cmt.to_owned(), transaction));
         }
     }
-    .map(|transfer| {
-        if let Some(hash) = transfer.shielded {
-            let masp_tx = tx
-                .get_section(&hash)
-                .ok_or_else(|| {
-                    Error::Other(
-                        "Missing masp section in transaction".to_string(),
-                    )
-                })?
-                .masp_tx()
-                .ok_or_else(|| {
-                    Error::Other("Missing masp transaction".to_string())
-                })?;
 
-            Ok::<_, Error>(Some(masp_tx))
-        } else {
-            Ok(None)
-        }
-    })
-    .transpose()?
-    .flatten();
-
-    Ok(ExtractedMaspTx {
-        fee_unshielding: maybe_fee_unshield,
-        inner_tx: maybe_masp_tx,
-    })
+    Ok(ExtractedMaspTxs(txs))
 }
 
 /// Extract the changed keys and Transaction hash from a MASP over ibc message
@@ -271,6 +257,7 @@ pub(super) async fn extract_payload_from_shielded_action(
 
 /// The updates to the commitment tree and witness maps
 /// fetched at the beginning of shielded-sync.
+#[allow(missing_docs)]
 pub struct CommitmentTreeUpdates {
     pub commitment_tree: CommitmentTree<Node>,
     pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
@@ -281,12 +268,14 @@ pub struct CommitmentTreeUpdates {
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 pub trait MaspClient<'a, C: Client> {
+    /// Create a new [`MaspClient`] given an rpc client.
     fn new(client: &'a C) -> Self
     where
         Self: 'a;
 
+    /// Fetch data relevant to the commitment tree
     #[allow(async_fn_in_trait)]
-    async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
+    async fn fetch_witness_map_updates<U: ShieldedUtils, IO: Io>(
         &self,
         ctx: &ShieldedContext<U>,
         io: &IO,
@@ -294,6 +283,7 @@ pub trait MaspClient<'a, C: Client> {
         last_query_height: BlockHeight,
     ) -> Result<CommitmentTreeUpdates, Error>;
 
+    /// Apply updates to the commitment tree
     #[allow(async_fn_in_trait)]
     async fn update_commitment_tree<U: ShieldedUtils, IO: Io>(
         &self,
@@ -307,7 +297,12 @@ pub trait MaspClient<'a, C: Client> {
             witness_map,
             mut note_map_delta,
         } = self
-            .witness_map_updates(ctx, io, last_witnessed_tx, last_query_height)
+            .fetch_witness_map_updates(
+                ctx,
+                io,
+                last_witnessed_tx,
+                last_query_height,
+            )
             .await?;
         ctx.tree = commitment_tree;
         ctx.witness_map = witness_map;
@@ -315,6 +310,7 @@ pub trait MaspClient<'a, C: Client> {
         Ok(())
     }
 
+    /// Fetches shielded transfers
     #[allow(async_fn_in_trait)]
     async fn fetch_shielded_transfer<IO: Io>(
         &self,
@@ -343,7 +339,7 @@ where
         Self { client }
     }
 
-    async fn witness_map_updates<U: ShieldedUtils, IO: Io>(
+    async fn fetch_witness_map_updates<U: ShieldedUtils, IO: Io>(
         &self,
         ctx: &ShieldedContext<U>,
         io: &IO,
@@ -368,7 +364,7 @@ where
                     note_map_delta: Default::default(),
                 };
                 let mut note_pos = updates.commitment_tree.size();
-                for (indexed_tx,  ref shielded) in tx_receiver {
+                for (indexed_tx, ref shielded) in tx_receiver {
                     updates.note_map_delta.insert(indexed_tx, note_pos);
                     for so in shielded
                         .sapling_bundle()
@@ -453,30 +449,16 @@ where
             for idx in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let ExtractedMaspTx {
-                    fee_unshielding,
-                    inner_tx,
-                } = extract_masp_tx(&tx, true).await?;
-                // Collect the current transaction(s)
-                if let Some(masp_transaction) = fee_unshielding {
+                let extracted_masp_txs = extract_masp_tx(&tx).await?;
+                for (inner_tx, transaction) in extracted_masp_txs.0 {
                     tx_sender.send((
                         IndexedTx {
                             height: height.into(),
                             index: idx,
-                            is_wrapper: true,
+                            inner_tx,
                         },
-                        masp_transaction,
-                    ));
-                }
-                if let Some(masp_transaction) = inner_tx {
-                    tx_sender.send((
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            is_wrapper: false,
-                        },
-                        masp_transaction,
-                    ));
+                        transaction,
+                    ))
                 }
             }
             fetch_iter.next();
@@ -708,7 +690,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskScheduler<U> {
 /// loop, this dictates the strategy for
 /// how many attempts should be made.
 pub enum RetryStrategy {
+    /// Always retry
     Forever,
+    /// Limit number of retries to a fixed number
     Times(u64),
 }
 
@@ -732,14 +716,19 @@ impl Iterator for RetryStrategy {
 
 /// An enum to indicate how to log sync progress depending on
 /// whether sync is currently fetch or scanning blocks.
+#[allow(missing_docs)]
 #[derive(Debug, Copy, Clone)]
 pub enum ProgressType {
     Fetch,
     Scan,
 }
 
+/// A peekable iterator interface
 pub trait PeekableIter<I> {
+    /// Peek at next element
     fn peek(&mut self) -> Option<&I>;
+
+    /// get next element
     fn next(&mut self) -> Option<I>;
 }
 
@@ -765,12 +754,15 @@ where
 /// Additionally, it has access to IO in case the struct implementing
 /// this trait wishes to log this progress.
 pub trait ProgressTracker<IO: Io> {
+    /// Get an IO handle
     fn io(&self) -> &IO;
 
+    /// Return an iterator to fetched shielded transfers
     fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
     where
         I: Iterator<Item = u64>;
 
+    /// Return an interator over MASP transactions to be scanned
     fn scan<I>(
         &self,
         items: I,
@@ -778,6 +770,7 @@ pub trait ProgressTracker<IO: Io> {
     where
         I: Iterator<Item = IndexedNoteEntry> + Send;
 
+    /// The number of blocks that need to be fetched
     fn left_to_fetch(&self) -> usize;
 }
 
@@ -789,6 +782,7 @@ pub struct DefaultTracker<'io, IO: Io> {
 }
 
 impl<'io, IO: Io> DefaultTracker<'io, IO> {
+    /// New [`DefaultTracker`]
     pub fn new(io: &'io IO) -> Self {
         Self {
             io,
