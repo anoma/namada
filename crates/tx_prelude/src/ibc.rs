@@ -9,7 +9,7 @@ use namada_core::token::Amount;
 use namada_events::EventTypeBuilder;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
-    burn_tokens, ibc_token, is_ibc_key, mint_tokens,
+    burn_tokens, ibc_token, is_ibc_key, mint_tokens, mint_limit_key, throughput_limit_key
 };
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
