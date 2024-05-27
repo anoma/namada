@@ -110,9 +110,13 @@ where
     // total locked amount in the Shielded pool
     let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
 
-    let epochs_per_year: u64 = storage
-        .read(&parameters::storage::get_epochs_per_year_key())?
+    // FIXME: read from param
+    let masp_epoch_multiplier = 4;
+    let epochs_per_year = storage
+        .read::<u64>(&parameters::storage::get_epochs_per_year_key())?
         .expect("epochs per year should properly decode");
+    let masp_epochs_per_year =
+        checked!(epochs_per_year / masp_epoch_multiplier)?;
 
     //// Values from the last epoch
     let last_inflation: Amount = storage
@@ -153,7 +157,7 @@ where
         last_inflation.raw_amount(),
         kp_gain_nom,
         kd_gain_nom,
-        epochs_per_year,
+        masp_epochs_per_year,
         target_locked_dec,
         last_locked_dec,
     );
@@ -205,7 +209,7 @@ where
         last_inflation,
         kp_gain_nom,
         kd_gain_nom,
-        epochs_per_year,
+        masp_epochs_per_year,
     );
     tracing::debug!("Token address: {:?}", token);
     tracing::debug!("inflation from the pd controller {:?}", inflation);
@@ -332,7 +336,7 @@ where
         calculate_masp_rewards_precision(storage, &native_token)?.0;
 
     // Reward all tokens according to above reward rates
-    let epoch = storage.get_block_epoch()?;
+    let epoch = storage.get_block_masp_epoch()?;
     let prev_epoch = match epoch.prev() {
         Some(epoch) => epoch,
         None => return Ok(()),

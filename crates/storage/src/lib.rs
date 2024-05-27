@@ -102,6 +102,20 @@ pub trait StorageRead {
     /// current transaction is being applied.
     fn get_block_epoch(&self) -> Result<Epoch>;
 
+    /// Getting the block masp epoch. The epoch is that of the block to which
+    /// the current transaction is being applied.
+    // FIXME: different type for masp epochs?
+    fn get_block_masp_epoch(&self) -> Result<Epoch> {
+        // FIXME: read param from storage
+        let masp_epoch_multiplier = 4;
+
+        // The masp epoch is the lower integer part of the current epoch divided
+        // by the masp epoch multiplier parameter
+        self.get_block_epoch()?
+            .checked_div(masp_epoch_multiplier)
+            .ok_or_else(|| Error::new_const("Found a 0 masp epoch multiplier"))
+    }
+
     /// Given the information about predecessor block epochs
     fn get_pred_epochs(&self) -> Result<Epochs>;
 

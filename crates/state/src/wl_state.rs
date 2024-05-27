@@ -191,16 +191,18 @@ where
 
     /// Returns `true` if a new masp epoch has begun
     pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> bool {
-        // FIXME: need a protocol param
-        // FIXME: checked operations or use Epoch operations?
-        let masp_new_epoch =
-            is_new_epoch && (u64::from(self.in_mem.block.epoch) % 4) == 0;
+        // FIXME: read from protocol param
+        // FIXME: need a function to convert from epoch to masp epoch?
+        let masp_new_epoch = is_new_epoch
+            && checked!(u64::from(self.in_mem.block.epoch) % 4)
+                .expect("Masp epoch multiplier cannot be 0")
+                == 0;
 
         if masp_new_epoch {
             tracing::info!(
                 "Began a new masp epoch {}",
-                // FIXME: checked operation
-                u64::from(self.in_mem.block.epoch) / 4
+                checked!(u64::from(self.in_mem.block.epoch) / 4)
+                    .expect("Masp epoch multiplier cannot be 0")
             );
         }
 

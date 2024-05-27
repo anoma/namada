@@ -348,7 +348,7 @@ where
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
-        let epoch = self.ctx.get_block_epoch()?;
+        let masp_epoch = self.ctx.get_block_masp_epoch()?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
 
         // Get the Transaction object from the actions
@@ -402,7 +402,7 @@ where
                 .get(&masp_address_hash)
                 .unwrap_or(&ValueSum::zero()),
             &shielded_tx.sapling_value_balance(),
-            epoch,
+            masp_epoch,
             &changed_balances.tokens,
             conversion_state,
         )?;
@@ -428,7 +428,7 @@ where
             &shielded_tx,
             &mut changed_balances,
             &mut transparent_tx_pool,
-            epoch,
+            masp_epoch,
             conversion_state,
             &mut signers,
         )?;
