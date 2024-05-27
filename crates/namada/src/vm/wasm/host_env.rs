@@ -105,8 +105,8 @@ where
     }
 }
 
-// TODO: Attempt to reduce the boilerplate of this module with macros, traits
-// or something of this sort...
+// TODO(namada#3313): Attempt to reduce the boilerplate of this module with
+// macros, traits or something of this sort...
 mod wrap_tx {
     //! Wrap tx host functions with any number of arguments in a callback
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.
@@ -258,8 +258,8 @@ mod wrap_tx {
     }
 }
 
-// TODO: Attempt to reduce the boilerplate of this module with macros, traits
-// or something of this sort...
+// TODO(namada#3313): Attempt to reduce the boilerplate of this module with
+// macros, traits or something of this sort...
 mod wrap_vp {
     //! Wrap vp host functions with any number of arguments in a callback
     //! that can be passed to [`wasmer`], to be used by the guest wasm code.

@@ -51,7 +51,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 // The bounds are set in number of pages, the actual size is multiplied by
 // `wasmer::WASM_PAGE_SIZE = 64kiB`.
-// TODO set bounds to accommodate for wasm env size
+//
+// TODO: set bounds to accommodate for wasm env size
+//
 /// Initial pages in tx memory
 pub const TX_MEMORY_INIT_PAGES: u32 = 100; // 6.4 MiB
 /// Mamixmum pages in tx memory
@@ -184,8 +186,8 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-// TODO: avoid growing memory if we're only performing reads; return an Err
-// instead
+// TODO(namada#3314): avoid growing memory if we're only performing reads;
+// return an Err instead
 fn check_bounds(
     store: &mut impl wasmer::AsStoreMut,
     memory: &Memory,
@@ -271,8 +273,8 @@ pub struct WasmMemory {
     memory: Rc<RefCell<Option<wasmer::Memory>>>,
 }
 
-// TODO: Wasm memory is neither `Send` nor `Sync`, but we must implement
-// it for now for the code to compile.
+// TODO(namada#3313): Wasm memory is neither `Send` nor `Sync`, but we must
+// implement it for now for the code to compile.
 unsafe impl Send for WasmMemory {}
 unsafe impl Sync for WasmMemory {}
 
