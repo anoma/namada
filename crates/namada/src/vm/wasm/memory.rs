@@ -26,6 +26,8 @@ use crate::vm::types::VpInput;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Attempted to modify read-only memory")]
+    ReadOnly,
     #[error("Offset {0}+{1} overflows 32 bits storage")]
     OverflowingOffset(u64, usize),
     #[error("Failed initializing the memory: {0}")]
@@ -186,14 +188,17 @@ pub fn write_vp_inputs(
 
 /// Check that the given offset and length fits into the memory bounds. If not,
 /// it will try to grow the memory.
-// TODO(namada#3314): avoid growing memory if we're only performing reads;
-// return an Err instead
-fn check_bounds(
-    store: &mut impl wasmer::AsStoreMut,
+fn check_bounds<F, S>(
+    store: &mut S,
     memory: &Memory,
     base_addr: u64,
     offset: usize,
-) -> Result<()> {
+    grow_callback: F,
+) -> Result<()>
+where
+    S: wasmer::AsStoreMut,
+    F: Fn(u64, &Memory, &mut S) -> Result<()>,
+{
     let store_mut = store.as_store_mut();
     let memview = memory.view(&store_mut);
 
@@ -216,26 +221,7 @@ fn check_bounds(
         })
         .ok_or(Error::OverflowingOffset(base_addr, offset))?;
     if memview.data_size() < desired_offset {
-        let cur_pages = memview.size().0 as usize;
-        let capacity = checked!(cur_pages * WASM_PAGE_SIZE)?;
-        // usizes should be at least 32 bits wide on most architectures,
-        // so this cast shouldn't cause panics, given the invariant that
-        // `desired_offset` is at most a 32 bit wide value. moreover,
-        // `capacity` should not be larger than `memory.data_size()`,
-        // so this subtraction should never fail
-        let desired_offset = usize::try_from(desired_offset)?;
-        let missing = checked!(desired_offset - capacity)?;
-        // extrapolate the number of pages missing to allow addressing
-        // the desired memory offset
-        let req_pages =
-            checked!((missing + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE)?;
-        let req_pages: u32 = u32::try_from(req_pages)?;
-        tracing::debug!(req_pages, "Attempting to grow wasm memory");
-        memory.grow(store, req_pages).map_err(Error::Grow)?;
-        tracing::debug!(
-            mem_size = memory.view(&store.as_store_mut()).data_size(),
-            "Wasm memory size has been successfully extended"
-        );
+        grow_callback(desired_offset, memory, store)?;
     }
     Ok(())
 }
@@ -247,7 +233,13 @@ fn read_memory_bytes(
     offset: u64,
     len: usize,
 ) -> Result<Vec<u8>> {
-    check_bounds(store, memory, offset, len)?;
+    check_bounds(
+        store,
+        memory,
+        offset,
+        len,
+        |_desired_offset, _memory, _store| Err(Error::ReadOnly),
+    )?;
     let mut buf = vec![0; len];
     memory.view(&store.as_store_mut()).read(offset, &mut buf)?;
     Ok(buf)
@@ -261,7 +253,43 @@ fn write_memory_bytes(
     bytes: impl AsRef<[u8]>,
 ) -> Result<()> {
     let buf = bytes.as_ref();
-    check_bounds(store, memory, offset, buf.len() as _)?;
+    check_bounds(
+        store,
+        memory,
+        offset,
+        buf.len() as _,
+        |desired_offset, memory, store| {
+            let store_mut = store.as_store_mut();
+            let memview = memory.view(&store_mut);
+
+            let cur_pages = memview.size().0 as usize;
+            let capacity = checked!(cur_pages * WASM_PAGE_SIZE)?;
+
+            // usizes should be at least 32 bits wide on most architectures,
+            // so this cast shouldn't cause panics, given the invariant that
+            // `desired_offset` is at most a 32 bit wide value. moreover,
+            // `capacity` should not be larger than `memory.data_size()`,
+            // so this subtraction should never fail
+            let desired_offset = usize::try_from(desired_offset)?;
+            let missing = checked!(desired_offset - capacity)?;
+
+            // extrapolate the number of pages missing to allow addressing
+            // the desired memory offset
+            let req_pages =
+                checked!((missing + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE)?;
+            let req_pages: u32 = u32::try_from(req_pages)?;
+
+            tracing::debug!(req_pages, "Attempting to grow wasm memory");
+
+            memory.grow(store, req_pages).map_err(Error::Grow)?;
+            tracing::debug!(
+                mem_size = memory.view(&store.as_store_mut()).data_size(),
+                "Wasm memory size has been successfully extended"
+            );
+
+            Ok(())
+        },
+    )?;
     memory.view(&store.as_store_mut()).write(offset, buf)?;
     Ok(())
 }
