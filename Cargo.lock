@@ -376,7 +376,11 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "rustversion",
+<<<<<<< HEAD
  "serde",
+=======
+ "serde 1.0.193",
+>>>>>>> 7229d4d13 (Update Cargo.lock)
  "sync_wrapper 0.1.2",
  "tower",
  "tower-layer",
@@ -5584,6 +5588,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom 0.2.15",
+]
+
+[[package]]
+name = "nanorand"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
+dependencies = [
+ "getrandom 0.2.11",
 ]
 
 [[package]]
