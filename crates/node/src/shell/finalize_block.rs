@@ -67,7 +67,7 @@ where
 
         // Begin the new block and check if a new epoch has begun
         let (height, new_epoch) = self.update_state(req.header);
-        let is_masp_new_epoch = self.state.is_masp_new_epoch(new_epoch);
+        let is_masp_new_epoch = self.state.is_masp_new_epoch(new_epoch)?;
 
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let update_for_tendermint = matches!(

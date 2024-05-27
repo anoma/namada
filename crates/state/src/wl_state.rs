@@ -5,6 +5,7 @@ use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
+use namada_core::masp::MaspEpoch;
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::{EmitEvents, EventToEmit};
@@ -190,23 +191,31 @@ where
     }
 
     /// Returns `true` if a new masp epoch has begun
-    pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> bool {
-        // FIXME: read from protocol param
-        // FIXME: need a function to convert from epoch to masp epoch?
+    pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> StorageResult<bool> {
+        let masp_epoch_multiplier = self
+            .read::<u64>(
+                &namada_parameters::storage::get_masp_epoch_multiplier_key(),
+            )?
+            .ok_or_else(|| {
+                namada_storage::Error::new_const(
+                    "Missing expected masp epoch multiplier parameter",
+                )
+            })?;
         let masp_new_epoch = is_new_epoch
-            && checked!(u64::from(self.in_mem.block.epoch) % 4)
-                .expect("Masp epoch multiplier cannot be 0")
-                == 0;
+            && MaspEpoch::is_masp_new_epoch(
+                self.in_mem.block.epoch,
+                masp_epoch_multiplier,
+            );
 
         if masp_new_epoch {
-            tracing::info!(
-                "Began a new masp epoch {}",
-                checked!(u64::from(self.in_mem.block.epoch) / 4)
-                    .expect("Masp epoch multiplier cannot be 0")
+            let masp_epoch = MaspEpoch::from_epoch(
+                self.in_mem.block.epoch,
+                masp_epoch_multiplier,
             );
+            tracing::info!("Began a new masp epoch {masp_epoch}");
         }
 
-        masp_new_epoch
+        Ok(masp_new_epoch)
     }
 
     /// Commit the current block's write log to the storage and commit the block

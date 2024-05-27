@@ -355,7 +355,7 @@ where
             )?
             .ok_or_else(|| {
                 Error::NativeVpError(native_vp::Error::SimpleMessage(
-                    "Could not deserialize masp epoch multiplier",
+                    "Missing expected masp epoch multiplier parameter",
                 ))
             })?;
         let masp_epoch = MaspEpoch::from_epoch(

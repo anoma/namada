@@ -81,6 +81,17 @@ impl MaspEpoch {
         Some(Self(self.0.checked_sub(1)?))
     }
 
+    /// Check if the given epoch is also a new masp epoch based on the
+    /// multiplier provided
+    pub fn is_masp_new_epoch(epoch: Epoch, masp_epoch_multiplier: u64) -> bool {
+        matches!(
+            Self::from_epoch(epoch, masp_epoch_multiplier)
+                .0
+                .checked_rem(masp_epoch_multiplier),
+            Some(Epoch(0))
+        )
+    }
+
     /// Initialize a new masp epoch from the provided one
     #[cfg(any(test, feature = "testing"))]
     pub fn new(epoch: u64) -> Self {

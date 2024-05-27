@@ -339,7 +339,7 @@ where
         )?
         .ok_or_else(|| {
             namada_storage::Error::new_const(
-                "Could not deserialize masp epoch multiplier",
+                "Missing expected masp epoch multiplier parameter",
             )
         })?;
     Ok(MaspEpoch::from_epoch(epoch, masp_epoch_multiplier))
