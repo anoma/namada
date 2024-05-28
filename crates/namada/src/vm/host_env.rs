@@ -824,29 +824,25 @@ where
 {
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
-    // NB: an env clone is required to avoid an immutable
-    // borrow while a mutable borrow is taking place
-    let env2 = env.clone();
-    let state = env2.state();
-
     let iterators = unsafe { env.ctx.iterators.get_mut() };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-        let (log_val, log_gas) = state
-            .write_log()
-            .read(
-                &Key::parse(key.clone())
-                    .map_err(TxRuntimeError::StorageDataError)?,
-            )
-            .into_storage_result()?;
+        let (log_val, log_gas) = {
+            let state = env.state();
+            let (log_val, log_gas) = state
+                .write_log()
+                .read(
+                    &Key::parse(key.clone())
+                        .map_err(TxRuntimeError::StorageDataError)?,
+                )
+                .into_storage_result()?;
+            (log_val.cloned(), log_gas)
+        };
         tx_charge_gas::<MEM, D, H, CA>(env, checked!(iter_gas + log_gas)?)?;
         match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                let key_val = borsh::to_vec(&KeyVal {
-                    key,
-                    val: value.clone(),
-                })
-                .map_err(TxRuntimeError::EncodingError)?;
+            Some(write_log::StorageModification::Write { value }) => {
+                let key_val = borsh::to_vec(&KeyVal { key, val: value })
+                    .map_err(TxRuntimeError::EncodingError)?;
                 let len: i64 = key_val
                     .len()
                     .try_into()
@@ -2074,15 +2070,11 @@ where
     let code_hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
 
-    // NB: an env clone is required to avoid an immutable
-    // borrow while a mutable borrow is taking place
-    let env2 = env.clone();
-    let state = env2.state();
-
     // First check that code hash corresponds to the code tag if it is present
     if let Some(tag) = code_tag {
         let hash_key = Key::wasm_hash(tag);
-        let (result, gas) = state
+        let (result, gas) = env
+            .state()
             .db_read(&hash_key)
             .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
@@ -2113,7 +2105,7 @@ where
 
     // Then check that the corresponding VP code does indeed exist
     let code_key = Key::wasm_code(&code_hash);
-    let is_present = state.has_key(&code_key)?;
+    let is_present = env.state().has_key(&code_key)?;
     if !is_present {
         return Err(TxRuntimeError::InvalidVpCodeHash(
             "The corresponding VP code doesn't exist".to_string(),
