@@ -2512,7 +2512,7 @@ pub async fn build_ibc_transfer(
         context,
         &args.source,
         // The token will be escrowed to IBC address
-        &TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+        &TransferTarget::Ibc(args.receiver.clone()),
         &args.token,
         validated_amount,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),

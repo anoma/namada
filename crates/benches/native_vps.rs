@@ -400,7 +400,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
                 TransferSource::ExtendedSpendingKey(albert_spending_key),
-                TransferTarget::Address(defaults::bertha_address()),
+                defaults::bertha_address().to_string(),
             )
         }
         _ => panic!("Unexpected bench test"),
