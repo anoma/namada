@@ -6,7 +6,6 @@ use core::fmt::Formatter;
 use core::fmt::{Display, Formatter};
 #[cfg(feature = "migrations")]
 use core::str::FromStr;
-use std::io::Read;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
@@ -401,9 +400,13 @@ where
     }
 
     fn validate(&self) -> eyre::Result<String> {
-        let update_json = std::fs::read_to_string(&self.path).map_err(|_| {
-            eyre!("Could not find or read updates file at the specified path.")
-        })?;
+        let update_json =
+            std::fs::read_to_string(&self.path).map_err(|_| {
+                eyre!(
+                    "Could not find or read updates file at the specified \
+                     path."
+                )
+            })?;
         // validate contents against provided hash
         if Hash::sha256(update_json.as_bytes()) != self.hash {
             Err(eyre!(
