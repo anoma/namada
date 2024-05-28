@@ -353,7 +353,8 @@ where
     storage_read_past_height_limit: Option<u64>,
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
-    scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+    /// A migration that can be scheduled at a given block height
+    pub scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for

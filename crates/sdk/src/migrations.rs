@@ -583,3 +583,35 @@ static BTREEMAP_STRING_ADDRESS: fn() = || {
         },
     );
 };
+
+#[cfg(test)]
+mod test_migrations {
+    use namada_core::token::Amount;
+
+    use super::*;
+
+    /// Check that if the hash of the file is wrong, the scheduled
+    /// migration will not load.
+    #[test]
+    fn test_scheduled_migration_validate() {
+        let file = tempfile::Builder::new().tempfile().expect("Test failed");
+        let updates = [DbUpdateType::Add {
+            key: Key::parse("bing/fucking/bong").expect("Test failed"),
+            cf: DbColFam::SUBSPACE,
+            value: Amount::native_whole(1337).into(),
+            force: false,
+        }];
+        let changes = DbChanges {
+            changes: updates.into_iter().collect(),
+        };
+        let json = serde_json::to_string(&changes).expect("Test failed");
+        let hash = Hash::sha256("derpy derp".as_bytes());
+        std::fs::write(file.path(), json).expect("Test failed");
+        let migration = ScheduledMigration::<DbUpdateType>::from_path(
+            file.path(),
+            hash,
+            Default::default(),
+        );
+        assert!(migration.is_err());
+    }
+}
