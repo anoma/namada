@@ -401,13 +401,9 @@ where
     }
 
     fn validate(&self) -> eyre::Result<String> {
-        let mut update_json = String::new();
-        let mut file = std::fs::File::open(&self.path).map_err(|_| {
-            eyre!("Could not fine updates file at the specified path.")
+        let update_json = std::fs::read_to_string(&self.path).map_err(|_| {
+            eyre!("Could not find or read updates file at the specified path.")
         })?;
-        _ = file
-            .read_to_string(&mut update_json)
-            .map_err(|e| eyre!("{}", e))?;
         // validate contents against provided hash
         if Hash::sha256(update_json.as_bytes()) != self.hash {
             Err(eyre!(
