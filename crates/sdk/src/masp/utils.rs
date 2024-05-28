@@ -617,6 +617,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                 Action::Complete { with_error } => {
                     if !with_error {
                         let mut locked = self.ctx.lock().await;
+                        // possibly remove unneeded elements from the cache.
+                        locked.unscanned.scanned(&self.latest_idx);
                         // update each key to be synced to the latest scanned
                         // height.
                         for (_, h) in locked.vk_heights.iter_mut() {
@@ -639,8 +641,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                     // apply state changes from the scanning process
                     let mut locked = self.ctx.lock().await;
                     scanned.apply_to(&mut locked);
-                    // possibly remove unneeded elements from the cache.
-                    locked.unscanned.scanned(&idx);
                     // persist the changes
                     _ = locked.save().await;
                 }
