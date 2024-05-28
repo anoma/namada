@@ -1,5 +1,5 @@
 [package]
-name = "tx_transfer"
+name = "tx_transparent_transfer"
 description = "WASM transaction to transfer tokens"
 authors.workspace = true
 edition.workspace = true
