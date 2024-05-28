@@ -441,8 +441,12 @@ impl BenchShell {
         )
         .unwrap();
 
-        namada::token::conversion::update_allowed_conversions(&mut self.state)
+        if self.state.is_masp_new_epoch(true).unwrap() {
+            namada::token::conversion::update_allowed_conversions(
+                &mut self.state,
+            )
             .unwrap();
+        }
     }
 
     pub fn init_ibc_client_state(&mut self, addr_key: Key) -> ClientId {
