@@ -1,5 +1,5 @@
-//! A tx for token transfer.
-//! This tx uses `token::Transfer` wrapped inside `SignedTxData`
+//! A tx for transparent token transfer.
+//! This tx uses `token::TransparentTransfer` wrapped inside `SignedTxData`
 //! as its input as declared in `namada` crate.
 
 use namada_tx_prelude::action::{Action, MaspAction, Write};
@@ -8,7 +8,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let transfer = token::Transfer::try_from_slice(&data[..])
+    let transfer = token::TransparentTransfer::try_from_slice(&data[..])
         .wrap_err("Failed to decode token::Transfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfer);
 
