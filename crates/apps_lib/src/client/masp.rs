@@ -158,7 +158,7 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
                 );
                 display!(
                     self.io,
-                    "[{}{}] ~~ {} \n\n%",
+                    "[{}{}] ~~ {} %\n\n",
                     fetch_completed.unwrap(),
                     fetch_incomplete.unwrap(),
                     fp
@@ -176,7 +176,7 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
                 );
                 display!(
                     self.io,
-                    "[{}{}] ~~ {} \n\n%",
+                    "[{}{}] ~~ {} %\n\n",
                     scan_completed.unwrap(),
                     scan_incomplete.unwrap(),
                     sp
