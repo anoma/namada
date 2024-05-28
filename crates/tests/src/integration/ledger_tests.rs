@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
@@ -10,11 +11,14 @@ use namada::core::collections::HashMap;
 use namada::token::{self, Amount, DenominatedAmount};
 use namada_apps_lib::wallet::defaults::{self, albert_keypair};
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
-use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_core::hash::Hash;
+use namada_core::storage::{DbColFam, Epoch, Key};
+use namada_core::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
+use namada_sdk::migrations;
+use namada_sdk::queries::RPC;
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
@@ -1794,4 +1798,81 @@ fn enforce_fee_payment() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 2000050"));
     Ok(())
+}
+
+/// Test that a scheduled migration actually makes changes
+/// to storage at the scheduled height.
+#[test]
+fn scheduled_migration() -> Result<()> {
+    let (node, _services) = setup::setup()?;
+
+    // schedule a migration
+    let (hash, migrations_file) = make_migration_json();
+    let scheduled_migration = migrations::ScheduledMigration::from_path(
+        migrations_file.path(),
+        hash,
+        5.into(),
+    )
+    .expect("Test failed");
+    {
+        let mut locked = node.shell.lock().unwrap();
+        locked.scheduled_migration = Some(scheduled_migration);
+    }
+
+    while node.block_height().0 != 4 {
+        node.finalize_and_commit()
+    }
+    // check that the key doesn't exist before the scheduled block
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let bytes = rt
+        .block_on(RPC.shell().storage_value(
+            &&node,
+            None,
+            None,
+            false,
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+        ))
+        .expect("Test failed")
+        .data;
+    assert!(bytes.is_empty());
+
+    // check that the key now exists and has the expected value
+    node.finalize_and_commit();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let bytes = rt
+        .block_on(RPC.shell().storage_value(
+            &&node,
+            None,
+            None,
+            false,
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+        ))
+        .expect("Test failed")
+        .data;
+    let amount = Amount::try_from_slice(&bytes).expect("Test failed");
+    assert_eq!(amount, Amount::native_whole(1337));
+
+    // check that no migration is scheduled
+    {
+        let locked = node.shell.lock().unwrap();
+        assert!(locked.scheduled_migration.is_none());
+    }
+    Ok(())
+}
+
+fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
+    let file = tempfile::Builder::new().tempfile().expect("Test failed");
+    let updates = [migrations::DbUpdateType::Add {
+        key: Key::parse("bing/fucking/bong").expect("Test failed"),
+        cf: DbColFam::SUBSPACE,
+        value: Amount::native_whole(1337).into(),
+        force: false,
+    }];
+    let changes = migrations::DbChanges {
+        changes: updates.into_iter().collect(),
+    };
+    let json = serde_json::to_string(&changes).expect("Test failed");
+    let hash = Hash::sha256(json.as_bytes());
+    std::fs::write(file.path(), json).expect("Test failed");
+    (hash, file)
 }

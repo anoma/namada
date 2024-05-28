@@ -91,6 +91,7 @@ impl MockDB {
 impl DB for MockDB {
     /// There is no cache for MockDB
     type Cache = ();
+    type Migrator = ();
     type WriteBatch = MockDBWriteBatch;
 
     fn open(_db_path: impl AsRef<Path>, _cache: Option<&Self::Cache>) -> Self {

@@ -333,6 +333,15 @@ impl MockNode {
         self.genesis_dir().join("wallet.toml")
     }
 
+    pub fn block_height(&self) -> BlockHeight {
+        self.shell
+            .lock()
+            .unwrap()
+            .state
+            .get_block_height()
+            .unwrap_or_default()
+    }
+
     pub fn current_epoch(&self) -> Epoch {
         self.shell.lock().unwrap().state.in_mem().last_epoch
     }

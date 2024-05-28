@@ -2,6 +2,7 @@
 
 use eyre::{Context, Result};
 use namada::core::time::{DateTimeUtc, Utc};
+use namada::sdk::migrations::ScheduledMigration;
 use namada_apps_lib::cli::cmds::TestGenesis;
 use namada_apps_lib::cli::{self, cmds};
 use namada_apps_lib::config::{Action, ActionAtHeight, ValidatorLocalConfig};
@@ -17,7 +18,21 @@ pub fn main() -> Result<()> {
                 let chain_ctx = ctx.take_chain_or_exit();
                 let wasm_dir = chain_ctx.wasm_dir();
                 sleep_until(args.start_time);
-                node::run(chain_ctx.config.ledger, wasm_dir);
+                let scheduled_migration = args.migration_path.map(|p| {
+                    let hash = args.migration_hash.expect(
+                        "Expected a hash to be provided along with the \
+                         migrations file.",
+                    );
+                    let height = args.migration_height.expect(
+                        "Expected a block height for the scheduled migration.",
+                    );
+                    ScheduledMigration::from_path(p, hash, height).unwrap()
+                });
+                node::run(
+                    chain_ctx.config.ledger,
+                    wasm_dir,
+                    scheduled_migration,
+                );
             }
             cmds::Ledger::RunUntil(cmds::LedgerRunUntil(args)) => {
                 let mut chain_ctx = ctx.take_chain_or_exit();
@@ -25,7 +40,7 @@ pub fn main() -> Result<()> {
                 sleep_until(args.time);
                 chain_ctx.config.ledger.shell.action_at_height =
                     Some(args.action_at_height);
-                node::run(chain_ctx.config.ledger, wasm_dir);
+                node::run(chain_ctx.config.ledger, wasm_dir, None);
             }
             cmds::Ledger::Reset(_) => {
                 let chain_ctx = ctx.take_chain_or_exit();
@@ -69,7 +84,7 @@ pub fn main() -> Result<()> {
                     );
                     // don't stop on panics
                     let handle = std::thread::spawn(|| {
-                        node::run(chain_ctx.config.ledger, wasm_dir)
+                        node::run(chain_ctx.config.ledger, wasm_dir, None)
                     });
                     _ = handle.join();
                     std::env::remove_var("NAMADA_INITIAL_HEIGHT");
