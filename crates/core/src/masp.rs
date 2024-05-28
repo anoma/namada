@@ -13,7 +13,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::address::{Address, DecodeError, HASH_HEX_LEN, MASP};
+use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::impl_display_and_from_str_via_format;
 use crate::storage::Epoch;
 use crate::string_encoding::{
@@ -411,12 +411,14 @@ impl Display for TransferSource {
 }
 
 /// Represents a target for the funds of a transfer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
     PaymentAddress(PaymentAddress),
+    /// A transfer going to an IBC address
+    Ibc(String),
 }
 
 impl TransferTarget {
@@ -424,9 +426,12 @@ impl TransferTarget {
     pub fn effective_address(&self) -> Address {
         match self {
             Self::Address(x) => x.clone(),
-            // An ExtendedSpendingKey for a source effectively means that
-            // assets will be drawn from the MASP
+            // A PaymentAddress for a target effectively means that assets will
+            // be sent to the MASP
             Self::PaymentAddress(_) => MASP,
+            // An IBC signer address for a target effectively means that assets
+            // will be sent to the IBC internal address
+            Self::Ibc(_) => IBC,
         }
     }
 
@@ -452,6 +457,7 @@ impl Display for TransferTarget {
         match self {
             Self::Address(x) => x.fmt(f),
             Self::PaymentAddress(address) => address.fmt(f),
+            Self::Ibc(x) => x.fmt(f),
         }
     }
 }

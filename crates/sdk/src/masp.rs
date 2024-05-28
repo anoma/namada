@@ -1762,14 +1762,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // the transparent target address into the shielded transaction so that
         // it can be signed
         let transparent_target_hash = if payment_address.is_none() {
-            let target_enc = target
-                .address()
-                .ok_or_else(|| {
-                    Error::Other(
-                        "target address should be transparent".to_string(),
-                    )
-                })?
-                .serialize_to_vec();
+            let target_enc = target.serialize_to_vec();
             Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
                 target_enc.as_ref(),
             )))
