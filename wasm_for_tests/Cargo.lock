@@ -3925,6 +3925,7 @@ dependencies = [
  "namada_merkle_tree",
  "namada_replay_protection",
  "regex",
+ "serde",
  "smooth-operator",
  "thiserror",
  "tracing",

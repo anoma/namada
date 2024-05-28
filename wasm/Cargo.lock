@@ -3976,6 +3976,7 @@ dependencies = [
  "namada_migrations",
  "namada_replay_protection",
  "regex",
+ "serde",
  "smooth-operator",
  "thiserror",
  "tracing",

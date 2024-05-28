@@ -13,7 +13,7 @@ use namada_apps_lib::wallet::defaults::{self, albert_keypair};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Epoch, Key};
-use namada_core::token::{Amount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
