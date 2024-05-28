@@ -88,8 +88,10 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
     fn draw(&self) {
         let (fetch_percent, fetch_completed) = (self.fetch.length > 0)
             .then(|| {
-                let fetch_percent =
-                    (100 * self.fetch.index) / self.fetch.length;
+                let fetch_percent = std::cmp::min(
+                    100,
+                    (100 * self.fetch.index) / self.fetch.length,
+                );
                 let fetch_completed: String =
                     vec!['#'; fetch_percent].iter().collect();
                 (fetch_percent, fetch_completed)
@@ -101,7 +103,10 @@ impl<'io, IO: Io> StdoutDrawer<'io, IO> {
 
         let (scan_percent, scan_completed) = (self.scan.length > 0)
             .then(|| {
-                let scan_percent = (100 * self.scan.index) / self.scan.length;
+                let scan_percent = std::cmp::min(
+                    100,
+                    (100 * self.scan.index) / self.scan.length,
+                );
                 let scan_completed: String =
                     vec!['#'; scan_percent].iter().collect();
                 (scan_percent, scan_completed)
