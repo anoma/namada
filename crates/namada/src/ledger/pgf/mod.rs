@@ -59,8 +59,20 @@ where
         // Find the actions applied in the tx
         let actions = self.ctx.read_actions()?;
 
+        // Is VP triggered by a governance proposal?
+        let is_governance_proposal = is_proposal_accepted(
+            &self.ctx.pre(),
+            batched_tx
+                .tx
+                .data(batched_tx.cmt)
+                .unwrap_or_default()
+                .as_ref(),
+        )
+        .unwrap_or_default();
+
         // There must be at least one action if any of the keys belong to PGF
-        if actions.is_empty()
+        if !is_governance_proposal
+            && actions.is_empty()
             && keys_changed.iter().any(pgf_storage::is_pgf_key)
         {
             tracing::info!(
