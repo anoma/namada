@@ -579,10 +579,13 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn proposal_ibc_token_inflation() -> Result<()> {
+    const MASP_EPOCH_MULTIPLIER: u64 = 1;
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
+            genesis.parameters.parameters.masp_epoch_multiplier =
+                MASP_EPOCH_MULTIPLIER;
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
@@ -647,8 +650,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
 
-    // wait the next epoch to dispense the rewrad
-    wait_epochs(&test_b, 1)?;
+    // wait the next masp epoch to dispense the reward
+    wait_epochs(&test_b, MASP_EPOCH_MULTIPLIER)?;
 
     // Check balances
     check_inflated_balance(&test_b)?;
