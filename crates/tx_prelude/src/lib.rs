@@ -37,7 +37,7 @@ use namada_core::storage::TxIndex;
 pub use namada_core::storage::{
     self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
 };
-pub use namada_core::{encode, eth_bridge_pool, *};
+pub use namada_core::{address, encode, eth_bridge_pool, *};
 use namada_events::{EmitEvents, Event, EventToEmit, EventType};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;

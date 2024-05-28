@@ -4090,11 +4090,15 @@ dependencies = [
 name = "namada_token"
 version = "0.37.0"
 dependencies = [
+ "borsh 1.4.0",
  "namada_core",
  "namada_events",
+ "namada_macros",
  "namada_shielded_token",
  "namada_storage",
  "namada_trans_token",
+ "proptest",
+ "serde",
 ]
 
 [[package]]
@@ -6750,7 +6754,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_transfer"
+name = "tx_shielded_transfer"
+version = "0.37.0"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_shielding_transfer"
+version = "0.37.0"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_transparent_transfer"
 version = "0.37.0"
 dependencies = [
  "getrandom 0.2.11",
@@ -6777,6 +6799,15 @@ dependencies = [
 
 [[package]]
 name = "tx_unjail_validator"
+version = "0.37.0"
+dependencies = [
+ "getrandom 0.2.11",
+ "namada_tx_prelude",
+ "wee_alloc",
+]
+
+[[package]]
+name = "tx_unshielding_transfer"
 version = "0.37.0"
 dependencies = [
  "getrandom 0.2.11",
