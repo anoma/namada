@@ -43,7 +43,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -259,7 +259,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -397,7 +397,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "unshield",
             "--source",
             B_SPENDING_KEY,
             "--target",
@@ -507,7 +507,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "unshield",
             "--source",
             A_SPENDING_KEY,
             "--target",
@@ -677,7 +677,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "unshield",
             "--source",
             B_SPENDING_KEY,
             "--target",
@@ -708,7 +708,7 @@ fn masp_incentives() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "unshield",
             "--source",
             A_SPENDING_KEY,
             "--target",
@@ -824,7 +824,7 @@ fn spend_unconverted_asset_type() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -845,7 +845,7 @@ fn spend_unconverted_asset_type() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -993,7 +993,7 @@ fn masp_txs_and_queries() -> Result<()> {
         // 1. Attempt to spend 15 BTC at SK(A) to Bertha
         (
             vec![
-                "transfer",
+                "unshield",
                 "--source",
                 A_SPENDING_KEY,
                 "--target",
@@ -1012,7 +1012,7 @@ fn masp_txs_and_queries() -> Result<()> {
         // 2. Send 20 BTC from Albert to PA(A)
         (
             vec![
-                "transfer",
+                "shield",
                 "--source",
                 ALBERT,
                 "--target",
@@ -1163,7 +1163,7 @@ fn masp_txs_and_queries() -> Result<()> {
         // 11. Send 20 BTC from SK(B) to Bertha
         (
             vec![
-                "transfer",
+                "unshield",
                 "--source",
                 B_SPENDING_KEY,
                 "--target",
@@ -1184,7 +1184,10 @@ fn masp_txs_and_queries() -> Result<()> {
     for (tx_args, tx_result) in &txs_args {
         node.assert_success();
         // there is no need to dry run balance queries
-        let dry_run_args = if tx_args[0] == "transfer" {
+        let dry_run_args = if tx_args[0] == "transfer"
+            || tx_args[0] == "shield"
+            || tx_args[0] == "unshield"
+        {
             // We ensure transfers don't cross epoch boundaries.
             node.next_epoch();
             vec![true, false]
@@ -1198,7 +1201,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 Bin::Client,
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
-            let tx_args = if dry_run && tx_args[0] == "transfer" {
+            let tx_args = if dry_run {
                 [tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
@@ -1314,7 +1317,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT_KEY,
             "--target",
@@ -1333,7 +1336,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT_KEY,
             "--target",
@@ -1352,7 +1355,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT_KEY,
             "--target",
@@ -1548,7 +1551,7 @@ fn cross_epoch_unshield() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -1583,7 +1586,7 @@ fn cross_epoch_unshield() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "unshield",
             "--source",
             A_SPENDING_KEY,
             "--target",
@@ -1689,7 +1692,7 @@ fn dynamic_assets() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
@@ -1823,7 +1826,7 @@ fn dynamic_assets() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "shield",
             "--source",
             ALBERT,
             "--target",
