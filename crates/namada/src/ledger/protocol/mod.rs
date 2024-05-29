@@ -7,13 +7,11 @@ use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
-use namada_core::storage::Key;
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
-use namada_sdk::tx::TX_TRANSFER_WASM;
 use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::ProtocolTxType;
@@ -361,22 +359,6 @@ where
     }
 
     Ok(extended_tx_result)
-}
-
-/// Load the wasm hash for a transfer from storage.
-///
-/// # Panics
-/// If the transaction hash is not found in storage
-pub fn get_transfer_hash_from_storage<S>(storage: &S) -> Hash
-where
-    S: StorageRead,
-{
-    let transfer_code_name_key =
-        Key::wasm_code_name(TX_TRANSFER_WASM.to_string());
-    storage
-        .read(&transfer_code_name_key)
-        .expect("Could not read the storage")
-        .expect("Expected tx transfer hash in storage")
 }
 
 /// Performs the required operation on a wrapper transaction:
