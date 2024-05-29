@@ -19,7 +19,7 @@ use namada_core::ibc::core::host::types::identifiers::{
 use namada_core::ibc::primitives::Timestamp;
 use namada_core::tendermint::abci::Event as AbciEvent;
 use namada_events::extend::{
-    event_domain_of, AttributesMap, EventAttributeEntry, ExtendAttributesMap,
+    event_domain_of, AttributesMap, EventAttributeEntry,
     ReadFromEventAttributes as _,
 };
 use namada_events::{
@@ -138,63 +138,6 @@ pub struct IbcEvent {
     pub event_type: IbcEventType,
     /// The attributes of the IBC event
     pub attributes: HashMap<String, String>,
-}
-
-fn validate_ibc_event_type(
-    namada_event: &Event,
-) -> Result<IbcEventType, EventError> {
-    if namada_event.kind().domain() != IbcEvent::DOMAIN {
-        return Err(EventError::InvalidEventType);
-    }
-
-    let event_type = namada_event.kind().sub_domain();
-
-    // TODO(namada#3229): validate IBC event types. eg:
-    //
-    // ```ignore
-    // if !matches!(
-    //    event_type,
-    //    "update_client" | "send_packet" | "write_acknowledgement"
-    // ) {
-    //     return Err(EventError::InvalidEventType);
-    // }
-    // ```
-
-    Ok(IbcEventType(event_type.to_owned()))
-}
-
-impl TryFrom<&Event> for IbcEvent {
-    type Error = EventError;
-
-    fn try_from(
-        namada_event: &Event,
-    ) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            event_type: validate_ibc_event_type(namada_event)?,
-            #[allow(deprecated)]
-            attributes: namada_event
-                .attributes()
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        })
-    }
-}
-
-impl TryFrom<Event> for IbcEvent {
-    type Error = EventError;
-
-    fn try_from(namada_event: Event) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
-            event_type: validate_ibc_event_type(&namada_event)?,
-            attributes: {
-                let mut attrs: HashMap<_, _> =
-                    namada_event.into_attributes().into_iter().collect();
-                attrs.with_attribute(event_domain_of::<Self>());
-                attrs
-            },
-        })
-    }
 }
 
 impl std::cmp::PartialOrd for IbcEvent {

@@ -12,12 +12,6 @@ pub trait IbcStorageContext: StorageRead + StorageWrite {
     /// Emit an IBC event
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Error>;
 
-    /// Get IBC events
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, Error>;
-
     /// Transfer token
     fn transfer_token(
         &mut self,
