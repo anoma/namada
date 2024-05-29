@@ -542,6 +542,28 @@ pub fn is_ibc_trace_key(key: &Key) -> Option<(String, String)> {
     }
 }
 
+/// Check if a key is an IBC parameter Key
+pub fn is_params_key(key: &Key) -> bool {
+    match &key.segments[..] {
+        [
+            DbKeySeg::AddressSeg(addr),
+            DbKeySeg::StringSeg(prefix),
+            DbKeySeg::StringSeg(_),
+        ] => {
+            if addr == &Address::Internal(InternalAddress::Ibc)
+                && (prefix == MINT_LIMIT
+                    || prefix == THROUGHPUT_LIMIT
+                    || prefix == PARAMS)
+            {
+                true
+            } else {
+                false
+            }
+        }
+        _ => false,
+    }
+}
+
 /// Returns true if the given key is for an IBC counter for clients,
 /// connections, or channelEnds
 pub fn is_ibc_counter_key(key: &Key) -> bool {
