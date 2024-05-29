@@ -3,29 +3,29 @@ use namada::core::account::AccountPublicKeysMap;
 use namada::core::address;
 use namada::core::collections::{HashMap, HashSet};
 use namada::ledger::storage::DB;
-use namada::token::{Amount, Transfer};
+use namada::token::{Amount, TransparentTransfer};
 use namada::tx::Authorization;
 use namada::vm::wasm::TxCache;
 use namada_apps_lib::wallet::defaults;
 use namada_apps_lib::wasm_loader;
 use namada_node::bench_utils::{
-    BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM, WASM_DIR,
+    BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM,
+    TX_TRANSPARENT_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM,
+    WASM_DIR,
 };
 
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
     let shell = BenchShell::default();
-    let transfer_data = Transfer {
+    let transfer_data = TransparentTransfer {
         source: defaults::albert_address(),
         target: defaults::bertha_address(),
         token: address::testing::nam(),
         amount: Amount::native_whole(500).native_denominated(),
-        shielded: None,
     };
     let tx = shell.generate_tx(
-        TX_TRANSFER_WASM,
+        TX_TRANSPARENT_TRANSFER_WASM,
         transfer_data,
         None,
         None,
@@ -62,7 +62,7 @@ fn compile_wasm(c: &mut Criterion) {
     let mut txs: HashMap<&str, Vec<u8>> = HashMap::default();
 
     for tx in [
-        TX_TRANSFER_WASM,
+        TX_TRANSPARENT_TRANSFER_WASM,
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
@@ -111,7 +111,7 @@ fn untrusted_wasm_validation(c: &mut Criterion) {
     let mut txs: HashMap<&str, Vec<u8>> = HashMap::default();
 
     for tx in [
-        TX_TRANSFER_WASM,
+        TX_TRANSPARENT_TRANSFER_WASM,
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
