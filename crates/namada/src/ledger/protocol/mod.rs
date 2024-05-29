@@ -437,8 +437,25 @@ where
         .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
 
-    // Charge fee before performing any fallible operations
-    charge_fee(shell_params, tx, wrapper, tx_index, block_proposer)?;
+    // Charge or check fees before propagating any possible error
+    let payment_result = match block_proposer {
+        Some(block_proposer) => {
+            transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)
+        }
+        None => {
+            check_fees(shell_params.state, wrapper)?;
+            Ok(())
+        }
+    };
+
+    // FIXME: make sure that both transfer and check fees commit or drop before
+    // returning, here we call a commit for safety Commit tx write log even
+    // in case of subsequent errors (if the fee payment failed instead, than the
+    // previous two functions must have already dropped the write log leading
+    // this function call to be essentially a no-op)
+    shell_params.state.write_log_mut().commit_tx();
+    payment_result?;
+
     // FIXME: if fees were paid with first inner tx signal it to the caller ->
     // use the ExtendedResult from the other branch
 
@@ -454,50 +471,9 @@ where
     })
 }
 
-/// Charge fee for the provided wrapper transaction. Returns error if:
-/// - Fee amount overflows
-/// - Not enough funds are available to pay the entire amount of the fee
-/// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<S, D, H, CA>(
-    shell_params: &mut ShellParams<'_, S, D, H, CA>,
-    tx: &Tx,
-    wrapper: &WrapperTx,
-    tx_index: &TxIndex,
-    block_proposer: Option<&Address>,
-) -> Result<()>
-where
-    S: State<D = D, H = H> + Sync,
-    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-    H: 'static + StorageHasher + Sync,
-    CA: 'static + WasmCacheAccess + Sync,
-{
-    // Charge or check fees before propagating any possible error
-    let payment_result = match block_proposer {
-        Some(block_proposer) => {
-            transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)
-        }
-        None => {
-            check_fees(shell_params.state, wrapper)?;
-            Ok(())
-        }
-    };
-
-    // FIXME: where should we commit? To block or batch?
-    match payment_result {
-        // Commit tx write log even in case of subsequent errors
-        Ok(()) | Err(Error::FeeError(_)) => {
-            shell_params.state.write_log_mut().commit_tx()
-        }
-        // FIXME: correct to drop here? I can probably avoid cause I drop later
-        // anyway
-        _ => shell_params.state.write_log_mut().drop_tx(),
-    }
-
-    payment_result
-}
-
 /// Perform the actual transfer of fees from the fee payer to the block
-/// proposer.
+/// proposer. Drops the modifications if errors occur but does not commit since
+/// we might want to drop things later.
 pub fn transfer_fee<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: &Address,
@@ -516,10 +492,7 @@ where
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
-    .unwrap();
-
-    const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
-        std::borrow::Cow::Borrowed("wrapper-fee-payment");
+    .map_err(Error::StorageError)?;
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
@@ -528,53 +501,51 @@ where
                 &wrapper.fee.token,
                 shell_params.state,
             )
-            .map_err(|e| Error::FeeError(e.to_string()))?;
+            .map_err(Error::StorageError)?;
 
-            let current_block_height = shell_params
-                .state
-                .in_mem()
-                .get_last_block_height()
-                .next_height();
-
-            // FIXME: refactor
             let post_bal = if let Some(post_bal) = balance.checked_sub(fees) {
-                token_transfer(
+                fee_token_transfer(
                     shell_params.state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
                     fees,
-                )
-                .map_err(|e| Error::FeeError(e.to_string()))?;
+                )?;
 
                 Some(post_bal)
             } else {
                 // See if the first inner transaction of the batch pays the fees
                 // with a masp unshield
-                let is_valid_masp_transaction =
-                    try_masp_fee_payment(shell_params, tx, tx_index);
-                if let Ok(true) = is_valid_masp_transaction {
+                if let Ok(true) =
+                    try_masp_fee_payment(shell_params, tx, tx_index)
+                {
+                    // NOTE: Even if the unshielding was succesfull we could
+                    // still fail in the transfer (e.g. cause the unshielded
+                    // amount is not enough to cover the fees). In this case we
+                    // want do drop the changes applied by the masp transaction
+                    // and try to drain the fees from the transparent balance.
+                    // Because of this we must NOT propagate errors from within
+                    // this branch
                     let balance = crate::token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
-                    )
-                    .unwrap();
+                    );
 
-                    if let Some(post_bal) = balance.checked_sub(fees) {
-                        token_transfer(
+                    // Ok to unwrap_or_default. In the default case, the only
+                    // way the checked op can return Some is if fees are 0, but
+                    // if that's the case then we would have never reached this
+                    // branch of execution
+                    balance.unwrap_or_default().checked_sub(fees).filter(|_| {
+                        fee_token_transfer(
                             shell_params.state,
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
                             block_proposer,
                             fees,
                         )
-                        .map_err(|e| Error::FeeError(e.to_string()))?;
-
-                        Some(post_bal)
-                    } else {
-                        None
-                    }
+                        .is_ok()
+                    })
                 } else {
                     None
                 }
@@ -590,14 +561,13 @@ where
                      available balance which is less than the fee. This \
                      shouldn't happen."
                 );
-                token_transfer(
+                fee_token_transfer(
                     shell_params.state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
                     balance,
-                )
-                .map_err(|e| Error::FeeError(e.to_string()))?;
+                )?;
             }
 
             let target_post_balance = Some(
@@ -610,6 +580,13 @@ where
                 .into(),
             );
 
+            const FEE_PAYMENT_DESCRIPTOR: std::borrow::Cow<'static, str> =
+                std::borrow::Cow::Borrowed("wrapper-fee-payment");
+            let current_block_height = shell_params
+                .state
+                .in_mem()
+                .get_last_block_height()
+                .next_height();
             shell_params.state.write_log_mut().emit_event(
                 TokenEvent {
                     descriptor: FEE_PAYMENT_DESCRIPTOR,
@@ -630,6 +607,8 @@ where
             );
 
             post_bal.map(|_| ()).ok_or_else(|| {
+                // In this case don't drop the state changes because we still
+                // want to drain the fee payer's balance
                 Error::FeeError(
                     "Transparent balance of wrapper's signer was insufficient \
                      to pay fee. All the available transparent funds have \
@@ -645,6 +624,7 @@ where
                 "Transfer of tx fee cannot be applied to due to fee overflow. \
                  This shouldn't happen."
             );
+            shell_params.state.write_log_mut().drop_tx();
 
             Err(Error::FeeError(format!("{}", e)))
         }
@@ -709,10 +689,12 @@ where
             },
         ) {
             Ok(result) => {
-                // NOTE: do not commit yet cause this could be
-                // exploited to get free masp operations. We can commit only
-                // after the entire wrapper has been deemed valid
-                // FIXME: could I precommit here instead?
+                // NOTE: do not commit yet cause this could be exploited to get
+                // free masp operations. We can commit only after the entire fee
+                // payment has been deemed valid. Also, do not precommit cause
+                // we might need to discard the effects of this valid unshield
+                // (e.g. if it unshield an amount which is not enough to pay the
+                // fees)
                 if !result.is_accepted() {
                     state.write_log_mut().drop_tx_keep_precommit();
                     tracing::error!(
@@ -721,6 +703,8 @@ where
                         result.vps_result.rejected_vps
                     );
                 }
+                // FIXME: make sure to propagate the bathced tx result to the
+                // WrapperCache!
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
@@ -750,12 +734,10 @@ where
     Ok(is_valid_masp_transaction)
 }
 
-/// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
-/// insufficient balance or if the transfer the `dest` would overflow (This can
-/// only happen if the total supply doesn't fit in `token::Amount`). Contrary to
-/// `crate::token::transfer` this function updates the tx write log and
-/// not the block write log.
-fn token_transfer<WLS>(
+// Manage the token transfer for the fee payment. If an error is detected the
+// write log is dropped to prevent committing an inconsistent state. Propagates
+// the result to the caller
+fn fee_token_transfer<WLS>(
     state: &mut WLS,
     token: &Address,
     src: &Address,
@@ -765,39 +747,68 @@ fn token_transfer<WLS>(
 where
     WLS: State + StorageRead,
 {
-    let src_key = crate::token::storage_key::balance_key(token, src);
-    let src_balance = crate::token::read_balance(state, token, src)
-        .expect("Token balance read in protocol must not fail");
-    match src_balance.checked_sub(amount) {
-        Some(new_src_balance) => {
-            if src == dest {
-                return Ok(());
-            }
-            let dest_key = crate::token::storage_key::balance_key(token, dest);
-            let dest_balance = crate::token::read_balance(state, token, dest)
-                .expect("Token balance read in protocol must not fail");
-            match dest_balance.checked_add(amount) {
-                Some(new_dest_balance) => {
-                    state
-                        .write_log_mut()
-                        .write(&src_key, new_src_balance.serialize_to_vec())
-                        .map_err(|e| Error::FeeError(e.to_string()))?;
-                    match state
-                        .write_log_mut()
-                        .write(&dest_key, new_dest_balance.serialize_to_vec())
-                    {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(Error::FeeError(e.to_string())),
+    // Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
+    // insufficient balance or if the transfer the `dest` would overflow (This
+    // can only happen if the total supply doesn't fit in `token::Amount`).
+    // Contrary to `crate::token::transfer` this function updates the tx
+    // write log and not the block write log.
+    fn inner_fee_token_transfer<WLS>(
+        state: &mut WLS,
+        token: &Address,
+        src: &Address,
+        dest: &Address,
+        amount: Amount,
+    ) -> Result<()>
+    where
+        WLS: State + StorageRead,
+    {
+        if amount.is_zero() {
+            return Ok(());
+        }
+        let src_key = crate::token::storage_key::balance_key(token, src);
+        let src_balance = crate::token::read_balance(state, token, src)
+            .map_err(Error::StorageError)?;
+        match src_balance.checked_sub(amount) {
+            Some(new_src_balance) => {
+                let dest_key =
+                    crate::token::storage_key::balance_key(token, dest);
+                let dest_balance =
+                    crate::token::read_balance(state, token, dest)
+                        .map_err(Error::StorageError)?;
+                match dest_balance.checked_add(amount) {
+                    Some(new_dest_balance) => {
+                        state
+                            .write_log_mut()
+                            .write(&src_key, new_src_balance.serialize_to_vec())
+                            .map_err(|e| Error::FeeError(e.to_string()))?;
+                        match state.write_log_mut().write(
+                            &dest_key,
+                            new_dest_balance.serialize_to_vec(),
+                        ) {
+                            Ok(_) => Ok(()),
+                            Err(e) => Err(Error::FeeError(e.to_string())),
+                        }
                     }
+                    None => Err(Error::StorageError(
+                        namada_state::StorageError::new_alloc(format!(
+                            "The transfer would overflow balance of {dest}"
+                        )),
+                    )),
                 }
-                None => Err(Error::FeeError(
-                    "The transfer would overflow destination balance"
-                        .to_string(),
-                )),
+            }
+            None => {
+                Err(Error::StorageError(namada_state::StorageError::new_alloc(
+                    format!("{src} has insufficient balance"),
+                )))
             }
         }
-        None => Err(Error::FeeError("Insufficient source balance".to_string())),
     }
+
+    inner_fee_token_transfer(state, token, src, dest, amount).map_err(|err| {
+        state.write_log_mut().drop_tx();
+
+        err
+    })
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
@@ -811,6 +822,7 @@ where
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
+    // FIXME: remove unwraps
     .unwrap();
 
     let fees = wrapper
