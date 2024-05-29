@@ -13,7 +13,7 @@ use namada_core::storage::Epoch;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
-use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::tx::{TX_TRANSPARENT_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -53,7 +53,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer = token::Transfer {
+    let transfer = token::TransparentTransfer {
         source: defaults::bertha_address(),
         target: defaults::albert_address(),
         token: node.native_token(),
@@ -61,7 +61,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             token::Amount::native_whole(10),
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         ),
-        shielded: None,
     }
     .serialize_to_vec();
     let tx_data_path = node.test_dir.path().join("tx.data");
@@ -74,7 +73,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let txs_args = vec![
         // 2. Submit a token transfer tx (from an established account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             BERTHA,
             "--target",
@@ -90,7 +89,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         ],
         // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             DAEWON,
             "--target",
@@ -106,7 +105,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         ],
         // Submit a token transfer tx (from a secp256k1 implicit account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             ESTER,
             "--target",
@@ -135,7 +134,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "tx",
             "--code-path",
-            TX_TRANSFER_WASM,
+            TX_TRANSPARENT_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
             "--owner",
@@ -352,7 +351,7 @@ fn invalid_transactions() -> Result<()> {
     // 2. Submit an invalid transaction (trying to transfer tokens should fail
     // in the user's VP due to the wrong signer)
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -381,7 +380,7 @@ fn invalid_transactions() -> Result<()> {
 
     let daewon_lower = DAEWON.to_lowercase();
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         DAEWON,
         "--signing-keys",
@@ -970,7 +969,7 @@ fn proposal_submission() -> Result<()> {
     //     vp and verify that the transaction succeeds, i.e. the non allowlisted
     //     vp can still run
     let transfer = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -1381,7 +1380,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         // A token transfer tx
         Box::new(|source| {
             [
-                "transfer",
+                "transparent-transfer",
                 "--source",
                 source,
                 "--target",
@@ -1438,7 +1437,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         let tx_args = tx_args(&key_alias);
         // 2b. Send some funds to the implicit account.
         let credit_args = vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             BERTHA,
             "--target",

@@ -1665,7 +1665,7 @@ fn transfer_on_chain(
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = [
-        "transfer",
+        "transparent-transfer",
         "--source",
         sender.as_ref(),
         "--target",
