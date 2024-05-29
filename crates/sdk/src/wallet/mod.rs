@@ -16,11 +16,11 @@ use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::ibc::is_ibc_denom;
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+use namada_ibc::is_ibc_denom;
 pub use pre_genesis::gen_key_to_store;
 use rand::CryptoRng;
 use rand_core::RngCore;
