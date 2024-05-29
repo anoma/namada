@@ -739,18 +739,60 @@ pub async fn submit_init_validator(
     .await
 }
 
-pub async fn submit_transfer(
+pub async fn submit_transparent_transfer(
     namada: &impl Namada,
-    args: args::TxTransfer,
+    args: args::TxTransparentTransfer,
 ) -> Result<(), error::Error> {
-    for _ in 0..2 {
-        submit_reveal_aux(
-            namada,
-            args.tx.clone(),
-            &args.source.effective_address(),
-        )
-        .await?;
+    submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
 
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn submit_shielded_transfer(
+    namada: &impl Namada,
+    args: args::TxShieldedTransfer,
+) -> Result<(), error::Error> {
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
+    }
+    Ok(())
+}
+
+pub async fn submit_shielding_transfer(
+    namada: &impl Namada,
+    args: args::TxShieldingTransfer,
+) -> Result<(), error::Error> {
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
+    }
+    Ok(())
+}
+
+pub async fn submit_unshielding_transfer(
+    namada: &impl Namada,
+    args: args::TxUnshieldingTransfer,
+) -> Result<(), error::Error> {
+    // Repeat once if the tx fails on a crossover of an epoch
+    for _ in 0..2 {
         let (mut tx, signing_data, tx_epoch) =
             args.clone().build(namada).await?;
 
@@ -760,22 +802,18 @@ pub async fn submit_transfer(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
             let cmt_hash = tx.first_commitments().unwrap().get_hash();
-
             let result = namada.submit(tx, &args.tx).await?;
-
             match result {
                 ProcessTxResponse::Applied(resp) if
-                    // If a transaction is shielded
-                    tx_epoch.is_some() &&
-                    // And it is rejected by a VP
+                    // If a transaction is rejected by a VP
                     matches!(resp.batch_result().get(&cmt_hash), Some(InnerTxResult::VpsRejected(_))) =>
                 {
                     let submission_epoch = rpc::query_and_print_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
-                    if tx_epoch.unwrap() != submission_epoch {
+                    if tx_epoch != submission_epoch {
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
-                            "MASP transaction rejected and this may be due to the \
+                            "Unshielding transaction rejected and this may be due to the \
                             epoch changing. Attempting to resubmit transaction.",
                         );
                         continue;
@@ -787,7 +825,6 @@ pub async fn submit_transfer(
             }
         }
     }
-
     Ok(())
 }
 
