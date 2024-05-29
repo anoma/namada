@@ -5,7 +5,6 @@ use std::str::FromStr;
 
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -13,6 +12,10 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+};
 
 /// The length of the transaction hash string
 pub const HASH_LENGTH: usize = 32;
@@ -128,6 +131,12 @@ impl Hash {
     pub fn sha256(data: impl AsRef<[u8]>) -> Self {
         let digest = Sha256::digest(data.as_ref());
         Self(*digest.as_ref())
+    }
+
+    /// Compute sha256 of some borsh encodable data
+    #[inline]
+    pub fn sha256_borsh<T: BorshSerialize>(value: &T) -> Self {
+        Self::sha256(value.serialize_to_vec())
     }
 
     /// Return zeros

@@ -323,7 +323,7 @@ impl CliApi {
                             .map(|sk| sk.into())
                             .collect::<Vec<_>>();
                         crate::client::masp::syncing(
-                            chain_ctx.shielded,
+                            &chain_ctx.shielded.utils,
                             &client,
                             &io,
                             args.batch_size,

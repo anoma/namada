@@ -5,12 +5,13 @@ use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
+use namada_sdk::masp::shielded_ctx::fetch_shielded_ctx;
 use namada_sdk::masp::types::IndexedNoteEntry;
 use namada_sdk::masp::utils::{
     LedgerMaspClient, PeekableIter, ProgressTracker, ProgressType,
     RetryStrategy,
 };
-use namada_sdk::masp::{ShieldedContext, ShieldedUtils};
+use namada_sdk::masp::ShieldedUtils;
 use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line};
@@ -21,7 +22,7 @@ pub async fn syncing<
     C: Client + Sync,
     IO: Io + Sync + Send,
 >(
-    mut shielded: ShieldedContext<U>,
+    shielded_utils: &U,
     client: &C,
     io: &IO,
     batch_size: u64,
@@ -29,7 +30,7 @@ pub async fn syncing<
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
-) -> Result<ShieldedContext<U>, Error> {
+) -> Result<(), Error> {
     let shutdown_signal = async {
         let (tx, rx) = tokio::sync::oneshot::channel();
         namada_sdk::control_flow::shutdown_send(tx).await;
@@ -38,31 +39,30 @@ pub async fn syncing<
 
     display_line!(io, "\n\n");
     let logger = CliProgressTracker::new(io);
-    let sync = async move {
-        shielded
-            .fetch::<_, _, _, LedgerMaspClient<'_, C>>(
-                client,
-                &logger,
-                RetryStrategy::Forever,
-                start_query_height,
-                last_query_height,
-                batch_size,
-                sks,
-                fvks,
-            )
-            .await
-            .map(|_| shielded)
+    let sync_result_fut = async move {
+        fetch_shielded_ctx::<_, _, _, LedgerMaspClient<'_, C>, _>(
+            shielded_utils,
+            client,
+            &logger,
+            RetryStrategy::Forever,
+            start_query_height,
+            last_query_height,
+            batch_size,
+            sks,
+            fvks,
+        )
+        .await
     };
     tokio::select! {
-        sync = sync => {
-            let shielded = sync?;
+        sync_result = sync_result_fut => {
+            sync_result?;
             display!(io, "\nSyncing finished\n");
-            Ok(shielded)
+            Ok(())
         },
         sig = shutdown_signal => {
             sig.map_err(|e| Error::Other(e.to_string()))?;
             display!(io, "\n");
-            Ok(ShieldedContext::default())
+            Ok(())
         },
     }
 }

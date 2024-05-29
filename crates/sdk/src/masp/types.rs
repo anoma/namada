@@ -1,7 +1,7 @@
 //! The public types for using the MASP tooling
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
@@ -24,6 +24,7 @@ use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
+use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::uint::Uint;
 use namada_macros::BorshDeserializer;
@@ -176,7 +177,13 @@ impl ScannedData {
         for (k, v) in self.memo_map.drain(..) {
             ctx.memo_map.insert(k, v);
         }
-        ctx.decrypted_note_cache.merge(self.decrypted_note_cache);
+        // NB: the `decrypted_note_cache` is not carried over
+        // from `self` because it is assumed they are pointing
+        // to the same underlying `Arc`
+        debug_assert_eq!(
+            Arc::as_ptr(&ctx.decrypted_note_cache.inner),
+            Arc::as_ptr(&self.decrypted_note_cache.inner),
+        );
     }
 
     /// Merge to different instances of `Self`.
@@ -202,9 +209,13 @@ impl ScannedData {
         for (k, v) in other.memo_map.drain(..) {
             self.memo_map.insert(k, v);
         }
-        for (k, v) in other.decrypted_note_cache.inner {
-            self.decrypted_note_cache.insert(k, v);
-        }
+        // NB: the `decrypted_note_cache` is not carried over
+        // from `other` because it is assumed they are pointing
+        // to the same underlying `Arc`
+        debug_assert_eq!(
+            Arc::as_ptr(&other.decrypted_note_cache.inner),
+            Arc::as_ptr(&self.decrypted_note_cache.inner),
+        );
     }
 }
 
@@ -225,43 +236,60 @@ pub struct DecryptedData {
 /// A cache of decrypted txs that have not yet been
 /// updated to the shielded ctx. Necessary in case
 /// scanning gets interrupted.
-#[derive(Debug, Clone, Default, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Default)]
+#[allow(clippy::type_complexity)]
 pub struct DecryptedDataCache {
-    inner: HashMap<(IndexedTx, ViewingKey), DecryptedData>,
+    inner: Arc<RwLock<HashMap<Hash, (IndexedTx, ViewingKey, DecryptedData)>>>,
+}
+
+impl BorshSerialize for DecryptedDataCache {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let locked = self.inner.read().unwrap();
+        locked.serialize(writer)
+    }
+}
+
+impl BorshDeserialize for DecryptedDataCache {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let inner = BorshDeserialize::deserialize_reader(reader)?;
+        Ok(Self {
+            inner: Arc::new(RwLock::new(inner)),
+        })
+    }
 }
 
 impl DecryptedDataCache {
     /// Add an entry to the cache
     pub fn insert(
-        &mut self,
-        key: (IndexedTx, ViewingKey),
-        value: DecryptedData,
+        &self,
+        indexed_tx: IndexedTx,
+        viewing_key: ViewingKey,
+        decrypted_data: DecryptedData,
     ) {
-        self.inner.insert(key, value);
-    }
-
-    /// Merge another cache into `self`.
-    pub fn merge(&mut self, mut other: Self) {
-        for (k, v) in other.inner.drain(..) {
-            self.insert(k, v);
-        }
+        let mut locked = self.inner.write().unwrap();
+        let key = Hash::sha256_borsh(&(&indexed_tx, &viewing_key));
+        let value = (indexed_tx, viewing_key, decrypted_data);
+        locked.insert(key, value);
     }
 
     /// Check if the cache already contains an entry for a given IndexedTx and
     /// viewing key.
-    pub fn contains(&self, ix: &IndexedTx, vk: &ViewingKey) -> bool {
-        self.inner
-            .keys()
-            .find_map(|(i, v)| (i == ix && v == vk).then_some(()))
-            .is_some()
+    pub fn contains(
+        &self,
+        indexed_tx: &IndexedTx,
+        viewing_key: &ViewingKey,
+    ) -> bool {
+        let key = Hash::sha256_borsh(&(&indexed_tx, &viewing_key));
+        let locked = self.inner.read().unwrap();
+        locked.contains_key(&key)
     }
 
     /// Return an iterator over the cache that consumes it.
     pub fn drain(
-        &mut self,
-    ) -> impl Iterator<Item = ((IndexedTx, ViewingKey), DecryptedData)> + '_
-    {
-        self.inner.drain(..)
+        &self,
+    ) -> impl Iterator<Item = (IndexedTx, ViewingKey, DecryptedData)> {
+        let mut locked = self.inner.write().unwrap();
+        std::mem::take(&mut *locked).into_values()
     }
 }
 

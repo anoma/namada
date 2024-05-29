@@ -1041,18 +1041,27 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        self.shielded = async_runtime
-            .block_on(namada_apps_lib::client::masp::syncing(
-                self.shielded,
-                &self.shell,
+        let shielded_utils_ref = &self.shielded.utils;
+        let shell_ref = &self.shell;
+        self.shielded = async_runtime.block_on(async move {
+            namada_apps_lib::client::masp::syncing(
+                shielded_utils_ref,
+                shell_ref,
                 &StdIo,
                 1,
                 None,
                 None,
                 &[spending_key.into()],
                 &[],
-            ))
+            )
+            .await
             .unwrap();
+
+            shielded_utils_ref
+                .load(ContextSyncStatus::Confirmed, true)
+                .await
+                .unwrap()
+        });
         let native_token = self.shell.state.in_mem().native_token.clone();
         let namada = NamadaImpl::native_new(
             self.shell,
