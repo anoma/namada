@@ -142,7 +142,7 @@ where
             .map_err(TokenTransferError::from)
     }
 
-    fn store_ibc_denom(
+    fn maybe_store_ibc_denom(
         &self,
         owner: &Address,
         coin: &PrefixedCoin,
@@ -305,7 +305,7 @@ where
 
         // Store the IBC denom with the token hash to be able to retrieve it
         // later
-        self.store_ibc_denom(account, coin)?;
+        self.maybe_store_ibc_denom(account, coin)?;
 
         self.inner
             .borrow_mut()
