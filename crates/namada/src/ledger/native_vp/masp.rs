@@ -839,6 +839,7 @@ where
         let non_allowed_changes = masp_keys_changed.iter().any(|key| {
             !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
         });
+
         let masp_token_map_changed = masp_keys_changed
             .iter()
             .any(|key| is_masp_token_map_key(key));
