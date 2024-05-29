@@ -19,14 +19,11 @@ default = ["wasm-runtime"]
 mainnet = ["namada_core/mainnet"]
 std = ["namada_sdk/std"]
 wasm-runtime = [
-  "loupe",
   "parity-wasm",
   "rayon",
   "wasm-instrument",
   "wasmer-cache",
   "wasmer-compiler-singlepass",
-  "wasmer-engine-dylib",
-  "wasmer-engine-universal",
   "wasmer-vm",
   "wasmer",
 ]
@@ -112,7 +109,6 @@ ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
-loupe = { version = "0.1.3", optional = true }
 masp_primitives.workspace = true
 masp_proofs.workspace = true
 parity-wasm = { version = "0.45.0", features = ["sign_ext"], optional = true }
@@ -132,11 +128,9 @@ tracing.workspace = true
 uint = "0.9.5"
 wasm-instrument = { workspace = true, optional = true }
 wasmer = { workspace = true, optional = true }
-wasmer-cache = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasmer-cache = { workspace = true, optional = true }
 wasmer-compiler-singlepass = { workspace = true, optional = true }
-wasmer-engine-dylib = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
-wasmer-engine-universal = { workspace = true, optional = true }
-wasmer-vm = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
+wasmer-vm = { workspace = true, optional = true }
 wasmparser.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
