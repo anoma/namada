@@ -26,7 +26,6 @@ use namada::core::masp::{
 };
 use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada::core::time::DateTimeUtc;
-use namada::core::token::{Amount, DenominatedAmount, Transfer};
 use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
 use namada::events::Event;
 use namada::governance::storage::proposal::ProposalType;
@@ -76,6 +75,10 @@ use namada::ledger::queries::{
 };
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
+use namada::token::{
+    Amount, DenominatedAmount, ShieldedTransfer, ShieldingTransfer,
+    UnshieldingTransfer,
+};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
     BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
@@ -91,7 +94,7 @@ use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
+    self, ContextSyncStatus, ShieldedContext, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -101,10 +104,11 @@ pub use namada_sdk::tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
     TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
-    TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_SHIELDED_TRANSFER_WASM,
+    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
+    TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
@@ -1084,43 +1088,61 @@ impl BenchShieldedCtx {
             )
             .unwrap()
             .map(
-                |ShieldedTransfer {
+                |masp::ShieldedTransfer {
                      builder: _,
                      masp_tx,
                      metadata: _,
                      epoch: _,
                  }| masp_tx,
-            );
+            )
+            .expect("MASP must have shielded part");
 
         let mut hasher = Sha256::new();
-        let shielded_section_hash = shielded.clone().map(|transaction| {
-            namada::core::hash::Hash(
-                Section::MaspTx(transaction)
-                    .hash(&mut hasher)
-                    .finalize_reset()
-                    .into(),
-            )
-        });
-
-        let tx = namada.client().generate_tx(
-            TX_TRANSFER_WASM,
-            Transfer {
-                source: source.effective_address(),
-                target: target.effective_address(),
-                token: address::testing::nam(),
-                amount: if source.effective_address().eq(&MASP)
-                    && target.effective_address().eq(&MASP)
-                {
-                    DenominatedAmount::native(0.into())
-                } else {
-                    DenominatedAmount::native(amount)
-                },
-                shielded: shielded_section_hash,
-            },
-            shielded,
-            None,
-            vec![&defaults::albert_keypair()],
+        let shielded_section_hash = namada::core::hash::Hash(
+            Section::MaspTx(shielded.clone())
+                .hash(&mut hasher)
+                .finalize_reset()
+                .into(),
         );
+        let tx = if source.effective_address() == MASP
+            && target.effective_address() == MASP
+        {
+            namada.client().generate_tx(
+                TX_SHIELDED_TRANSFER_WASM,
+                ShieldedTransfer {
+                    section_hash: shielded_section_hash,
+                },
+                Some(shielded),
+                None,
+                vec![&defaults::albert_keypair()],
+            )
+        } else if target.effective_address() == MASP {
+            namada.client().generate_tx(
+                TX_SHIELDING_TRANSFER_WASM,
+                ShieldingTransfer {
+                    source: source.effective_address(),
+                    token: address::testing::nam(),
+                    amount: DenominatedAmount::native(amount),
+                    shielded_section_hash,
+                },
+                Some(shielded),
+                None,
+                vec![&defaults::albert_keypair()],
+            )
+        } else {
+            namada.client().generate_tx(
+                TX_UNSHIELDING_TRANSFER_WASM,
+                UnshieldingTransfer {
+                    target: target.effective_address(),
+                    token: address::testing::nam(),
+                    amount: DenominatedAmount::native(amount),
+                    shielded_section_hash,
+                },
+                Some(shielded),
+                None,
+                vec![&defaults::albert_keypair()],
+            )
+        };
         let NamadaImpl {
             client,
             wallet,
@@ -1179,12 +1201,13 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer =
-            Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
-                .unwrap();
+        let transfer = UnshieldingTransfer::deserialize(
+            &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
+        )
+        .unwrap();
         let masp_tx = tx
             .tx
-            .get_section(&transfer.shielded.unwrap())
+            .get_section(&transfer.shielded_section_hash)
             .unwrap()
             .masp_tx()
             .unwrap();
