@@ -7,7 +7,7 @@ use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::{Gas, TxGasMeter};
 use namada::ledger::protocol::{self, ShellParams};
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::state::{DBIter, StorageHasher, TempWlState, DB};
+use namada::state::{DBIter, StorageHasher, TempWlState, TxIndex, DB};
 use namada::token::{Amount, DenominatedAmount};
 use namada::tx::data::{TxType, WrapperTx};
 use namada::tx::Tx;
@@ -122,8 +122,9 @@ where
 
         let txs = txs
             .iter()
-            .filter_map(|tx_bytes| {
-                match validate_wrapper_bytes(tx_bytes, block_time, block_proposer, proposer_local_config, &mut temp_state, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
+            .enumerate()
+            .filter_map(|(tx_index, tx_bytes)| {
+                match validate_wrapper_bytes(tx_bytes, &TxIndex::must_from_usize(tx_index),block_time, block_proposer, proposer_local_config, &mut temp_state, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
                     Ok(gas) => {
                         temp_state.write_log_mut().commit_tx();
                         Some((tx_bytes.to_owned(), gas))
@@ -259,6 +260,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn validate_wrapper_bytes<D, H, CA>(
     tx_bytes: &[u8],
+    tx_index: &TxIndex,
     block_time: Option<DateTimeUtc>,
     block_proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
@@ -299,6 +301,7 @@ where
         match prepare_proposal_fee_check(
             &wrapper,
             &tx,
+            tx_index,
             block_proposer,
             proposer_local_config,
             &mut ShellParams::new(
@@ -320,6 +323,7 @@ where
 fn prepare_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     tx: &Tx,
+    tx_index: &TxIndex,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
@@ -337,7 +341,7 @@ where
 
     super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(shell_params, proposer, tx, wrapper)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
         .map_err(Error::TxApply)
 }
 

@@ -197,6 +197,8 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         wrapper: &'a WrapperTx,
         /// The transaction bytes for gas accounting
         tx_bytes: &'a [u8],
+        /// The tx index
+        tx_index: TxIndex,
         /// The block proposer
         block_proposer: &'a Address,
         /// Vp cache
@@ -295,6 +297,7 @@ where
         DispatchArgs::Wrapper {
             wrapper,
             tx_bytes,
+            tx_index,
             block_proposer,
             vp_wasm_cache,
             tx_wasm_cache,
@@ -310,6 +313,7 @@ where
                 tx,
                 wrapper,
                 tx_bytes,
+                &tx_index,
                 tx_gas_meter,
                 &mut shell_params,
                 Some(block_proposer),
@@ -411,12 +415,11 @@ where
 ///  - replay protection
 ///  - fee payment
 ///  - gas accounting
-// TODO(namada#2597): this must signal to the caller if we need masp fee payment
-// in the first inner tx of the batch
 pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
+    tx_index: &TxIndex,
     tx_gas_meter: &RefCell<TxGasMeter>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
@@ -435,8 +438,9 @@ where
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
-    charge_fee(shell_params, tx, wrapper, block_proposer)?;
-    // FIXME: if fees were paid with first inner tx signal it to the caller
+    charge_fee(shell_params, tx, wrapper, tx_index, block_proposer)?;
+    // FIXME: if fees were paid with first inner tx signal it to the caller ->
+    // use the ExtendedResult from the other branch
 
     // Account for gas
     tx_gas_meter
@@ -458,6 +462,7 @@ fn charge_fee<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
+    tx_index: &TxIndex,
     block_proposer: Option<&Address>,
 ) -> Result<()>
 where
@@ -469,7 +474,7 @@ where
     // Charge or check fees before propagating any possible error
     let payment_result = match block_proposer {
         Some(block_proposer) => {
-            transfer_fee(shell_params, block_proposer, tx, wrapper)
+            transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)
         }
         None => {
             check_fees(shell_params.state, wrapper)?;
@@ -498,6 +503,7 @@ pub fn transfer_fee<S, D, H, CA>(
     block_proposer: &Address,
     tx: &Tx,
     wrapper: &WrapperTx,
+    tx_index: &TxIndex,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + StorageRead + Sync,
@@ -546,7 +552,7 @@ where
                 // See if the first inner transaction of the batch pays the fees
                 // with a masp unshield
                 let is_valid_masp_transaction =
-                    try_masp_fee_payment(shell_params, tx);
+                    try_masp_fee_payment(shell_params, tx, tx_index);
                 if let Ok(true) = is_valid_masp_transaction {
                     let balance = crate::token::read_balance(
                         shell_params.state,
@@ -654,6 +660,7 @@ fn try_masp_fee_payment<S, D, H, CA>(
         tx_wasm_cache,
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
+    tx_index: &TxIndex,
 ) -> Result<bool>
 where
     S: State<D = D, H = H> + StorageRead + Sync,
@@ -682,8 +689,7 @@ where
 
     // FIXME: call dispatch_tx after merge
     let is_valid_masp_transaction = {
-        // FIXME: review if using the batch write log instead of the precommit
-        // here NOTE: A clean tx write log must be provided to this call
+        // NOTE: A clean tx write log must be provided to this call
         // for a correct vp validation. Block write log, instead,
         // should contain any prior changes (if any). This is to simulate
         // the unshielding tx (to prevent the already written
@@ -694,9 +700,7 @@ where
         match apply_wasm_tx(
             tx.batch_ref_first_tx()
                 .ok_or_else(|| Error::MissingInnerTxs)?,
-            // FIXME: pass the correct index here? Probably there's no need but
-            // it would be better
-            &TxIndex::default(),
+            tx_index,
             ShellParams {
                 tx_gas_meter: &ref_unshield_gas_meter,
                 state: *state,

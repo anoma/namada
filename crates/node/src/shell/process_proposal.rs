@@ -136,9 +136,11 @@ where
 
         let tx_results: Vec<_> = txs
             .iter()
-            .map(|tx_bytes| {
+            .enumerate()
+            .map(|(tx_index, tx_bytes)| {
                 let result = self.check_proposal_tx(
                     tx_bytes,
+                    &TxIndex::must_from_usize(tx_index),
                     &mut metadata,
                     &mut temp_state,
                     block_time,
@@ -190,6 +192,7 @@ where
     pub fn check_proposal_tx<CA>(
         &self,
         tx_bytes: &[u8],
+        tx_index: &TxIndex,
         metadata: &mut ValidationMeta,
         temp_state: &mut TempWlState<'_, D, H>,
         block_time: DateTimeUtc,
@@ -469,6 +472,7 @@ where
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
                     &tx,
+                    tx_index,
                     block_proposer,
                     &mut ShellParams::new(
                         &RefCell::new(tx_gas_meter),
@@ -514,11 +518,10 @@ where
     }
 }
 
-// TODO(namada#2597): check masp fee payment if required
-// FIXME: check this todo
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     tx: &Tx,
+    tx_index: &TxIndex,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
@@ -539,7 +542,7 @@ where
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(shell_params, proposer, tx, wrapper)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
         .map_err(Error::TxApply)
 }
 

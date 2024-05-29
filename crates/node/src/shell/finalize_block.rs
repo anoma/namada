@@ -700,6 +700,7 @@ where
                         DispatchArgs::Wrapper {
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
+                            tx_index: TxIndex::must_from_usize(tx_index),
                             block_proposer: native_block_proposer_address,
                             vp_wasm_cache: &mut self.vp_wasm_cache,
                             tx_wasm_cache: &mut self.tx_wasm_cache,

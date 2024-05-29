@@ -70,6 +70,7 @@ mod dry_run_tx {
                     &tx,
                     &wrapper,
                     &request.data,
+                    &TxIndex::default(),
                     &tx_gas_meter,
                     &mut shell_params,
                     None,
