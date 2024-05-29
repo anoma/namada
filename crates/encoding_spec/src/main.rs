@@ -23,14 +23,13 @@ use borsh::{schema, schema_container_of};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
-use namada::account;
 use namada::core::address::Address;
 use namada::core::collections::HashSet;
 use namada::core::key::ed25519::{PublicKey, Signature};
 use namada::core::storage::{self, Epoch};
-use namada::core::token;
 use namada::ledger::parameters::Parameters;
 use namada::tx::data::{pos, TxType, WrapperTx};
+use namada::{account, token};
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =
@@ -82,7 +81,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signature_schema = schema_container_of::<Signature>();
     let init_account_schema = schema_container_of::<account::InitAccount>();
     let init_validator_schema = schema_container_of::<pos::BecomeValidator>();
-    let token_transfer_schema = schema_container_of::<token::Transfer>();
+    let transparent_transfer_schema =
+        schema_container_of::<token::TransparentTransfer>();
+    let shielded_transfer_schema =
+        schema_container_of::<token::ShieldedTransfer>();
+    let shielding_transfer_schema =
+        schema_container_of::<token::ShieldingTransfer>();
+    let unshielding_transfer_schema =
+        schema_container_of::<token::UnshieldingTransfer>();
     let update_account = schema_container_of::<account::UpdateAccount>();
     let pos_bond_schema = schema_container_of::<pos::Bond>();
     let pos_withdraw_schema = schema_container_of::<pos::Withdraw>();
@@ -109,7 +115,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     definitions.extend(btree(&signature_schema));
     definitions.extend(btree(&init_account_schema));
     definitions.extend(btree(&init_validator_schema));
-    definitions.extend(btree(&token_transfer_schema));
+    definitions.extend(btree(&transparent_transfer_schema));
+    definitions.extend(btree(&shielded_transfer_schema));
+    definitions.extend(btree(&shielding_transfer_schema));
+    definitions.extend(btree(&unshielding_transfer_schema));
     definitions.extend(btree(&update_account));
     definitions.extend(btree(&pos_bond_schema));
     definitions.extend(btree(&pos_withdraw_schema));
@@ -183,10 +192,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tables.push(init_validator_table);
 
     let token_transfer_definition = definitions
-        .remove(token_transfer_schema.declaration())
+        .remove(transparent_transfer_schema.declaration())
         .unwrap();
     let token_transfer_table = definition_to_table(
-        token_transfer_schema.declaration(),
+        transparent_transfer_schema.declaration(),
         token_transfer_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Transfer.html");
     tables.push(token_transfer_table);
