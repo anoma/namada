@@ -1334,7 +1334,7 @@ mod test {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
 
         let ctx = Ctx::new(
             &ADDRESS,
@@ -1589,7 +1589,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1685,7 +1685,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1784,7 +1784,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1882,7 +1882,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1960,7 +1960,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2038,7 +2038,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2134,7 +2134,7 @@ mod test {
             true,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2230,7 +2230,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2308,7 +2308,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2359,7 +2359,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2437,7 +2437,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2488,7 +2488,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2566,7 +2566,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2617,7 +2617,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2695,7 +2695,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2763,7 +2763,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2841,7 +2841,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2909,7 +2909,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(delegator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2987,7 +2987,7 @@ mod test {
             false,
         );
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3055,7 +3055,7 @@ mod test {
         verifiers.clear();
         verifiers.insert(validator_address);
 
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,

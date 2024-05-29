@@ -2,7 +2,6 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::hash::Hash;
 use namada::ledger::pos::PosQueries;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::tx::data::protocol::ProtocolTxType;
@@ -469,7 +468,7 @@ where
                 // Check that the fee payer has sufficient balance.
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
-                    tx.header_hash(),
+                    &tx,
                     block_proposer,
                     &mut ShellParams::new(
                         &RefCell::new(tx_gas_meter),
@@ -516,9 +515,10 @@ where
 }
 
 // TODO(namada#2597): check masp fee payment if required
+// FIXME: check this todo
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
+    tx: &Tx,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
@@ -539,13 +539,8 @@ where
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(
-        shell_params.state,
-        proposer,
-        wrapper,
-        wrapper_tx_hash,
-    )
-    .map_err(Error::TxApply)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper)
+        .map_err(Error::TxApply)
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows

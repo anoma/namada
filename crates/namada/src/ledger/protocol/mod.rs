@@ -12,8 +12,8 @@ use namada_events::extend::{
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
-use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada_token::utils::is_masp_transfer;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
@@ -199,6 +199,10 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         tx_bytes: &'a [u8],
         /// The block proposer
         block_proposer: &'a Address,
+        /// Vp cache
+        vp_wasm_cache: &'a mut VpCache<CA>,
+        /// Tx cache
+        tx_wasm_cache: &'a mut TxCache<CA>,
     },
 }
 
@@ -292,13 +296,22 @@ where
             wrapper,
             tx_bytes,
             block_proposer,
+            vp_wasm_cache,
+            tx_wasm_cache,
         } => {
+            let mut shell_params = ShellParams::new(
+                tx_gas_meter,
+                state,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            );
+
             let tx_result = apply_wrapper_tx(
                 tx,
                 wrapper,
                 tx_bytes,
                 tx_gas_meter,
-                state,
+                &mut shell_params,
                 Some(block_proposer),
             )
             .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
@@ -400,29 +413,30 @@ where
 ///  - gas accounting
 // TODO(namada#2597): this must signal to the caller if we need masp fee payment
 // in the first inner tx of the batch
-pub(crate) fn apply_wrapper_tx<S, D, H>(
+pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_bytes: &[u8],
     tx_gas_meter: &RefCell<TxGasMeter>,
-    state: &mut S,
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
 ) -> Result<TxResult<Error>>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
 {
-    let wrapper_tx_hash = tx.header_hash();
-
     // Write wrapper tx hash to storage
-    state
+    shell_params
+        .state
         .write_log_mut()
-        .write_tx_hash(wrapper_tx_hash)
+        .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
 
     // Charge fee before performing any fallible operations
-    charge_fee(wrapper, wrapper_tx_hash, state, block_proposer)?;
+    charge_fee(shell_params, tx, wrapper, block_proposer)?;
+    // FIXME: if fees were paid with first inner tx signal it to the caller
 
     // Account for gas
     tx_gas_meter
@@ -440,47 +454,59 @@ where
 /// - Fee amount overflows
 /// - Not enough funds are available to pay the entire amount of the fee
 /// - The accumulated fee amount to be credited to the block proposer overflows
-fn charge_fee<S, D, H>(
+fn charge_fee<S, D, H, CA>(
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
+    tx: &Tx,
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
-    state: &mut S,
     block_proposer: Option<&Address>,
 ) -> Result<()>
 where
     S: State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
 {
     // Charge or check fees before propagating any possible error
     let payment_result = match block_proposer {
         Some(block_proposer) => {
-            transfer_fee(state, block_proposer, wrapper, wrapper_tx_hash)
+            transfer_fee(shell_params, block_proposer, tx, wrapper)
         }
         None => {
-            check_fees(state, wrapper)?;
+            check_fees(shell_params.state, wrapper)?;
             Ok(())
         }
     };
 
-    // Commit tx write log even in case of subsequent errors
-    state.write_log_mut().commit_tx();
+    // FIXME: where should we commit? To block or batch?
+    match payment_result {
+        // Commit tx write log even in case of subsequent errors
+        Ok(()) | Err(Error::FeeError(_)) => {
+            shell_params.state.write_log_mut().commit_tx()
+        }
+        // FIXME: correct to drop here? I can probably avoid cause I drop later
+        // anyway
+        _ => shell_params.state.write_log_mut().drop_tx(),
+    }
 
     payment_result
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
 /// proposer.
-pub fn transfer_fee<S>(
-    state: &mut S,
+pub fn transfer_fee<S, D, H, CA>(
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: &Address,
+    tx: &Tx,
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
 ) -> Result<()>
 where
-    S: State + StorageRead + StorageWrite,
+    S: State<D = D, H = H> + StorageRead + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
 {
     let balance = crate::token::read_balance(
-        state,
+        shell_params.state,
         &wrapper.fee.token,
         &wrapper.fee_payer(),
     )
@@ -491,16 +517,23 @@ where
 
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees =
-                crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
-                    .map_err(|e| Error::FeeError(e.to_string()))?;
+            let fees = crate::token::denom_to_amount(
+                fees,
+                &wrapper.fee.token,
+                shell_params.state,
+            )
+            .map_err(|e| Error::FeeError(e.to_string()))?;
 
-            let current_block_height =
-                state.in_mem().get_last_block_height().next_height();
+            let current_block_height = shell_params
+                .state
+                .in_mem()
+                .get_last_block_height()
+                .next_height();
 
-            if let Some(post_bal) = balance.checked_sub(fees) {
+            // FIXME: refactor
+            let post_bal = if let Some(post_bal) = balance.checked_sub(fees) {
                 token_transfer(
-                    state,
+                    shell_params.state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
@@ -508,90 +541,96 @@ where
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
 
-                let target_post_balance = Some(
-                    namada_token::read_balance(
-                        state,
-                        &wrapper.fee.token,
-                        block_proposer,
-                    )
-                    .map_err(Error::StorageError)?
-                    .into(),
-                );
-
-                state.write_log_mut().emit_event(
-                    TokenEvent {
-                        descriptor: FEE_PAYMENT_DESCRIPTOR,
-                        level: EventLevel::Tx,
-                        token: wrapper.fee.token.clone(),
-                        operation: TokenOperation::Transfer {
-                            amount: fees.into(),
-                            source: UserAccount::Internal(wrapper.fee_payer()),
-                            target: UserAccount::Internal(
-                                block_proposer.clone(),
-                            ),
-                            source_post_balance: post_bal.into(),
-                            target_post_balance,
-                        },
-                    }
-                    .with(HeightAttr(current_block_height))
-                    .with(TxHashAttr(wrapper_tx_hash)),
-                );
-
-                Ok(())
+                Some(post_bal)
             } else {
+                // See if the first inner transaction of the batch pays the fees
+                // with a masp unshield
+                let is_valid_masp_transaction =
+                    try_masp_fee_payment(shell_params, tx);
+                if let Ok(true) = is_valid_masp_transaction {
+                    let balance = crate::token::read_balance(
+                        shell_params.state,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                    )
+                    .unwrap();
+
+                    if let Some(post_bal) = balance.checked_sub(fees) {
+                        token_transfer(
+                            shell_params.state,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                            block_proposer,
+                            fees,
+                        )
+                        .map_err(|e| Error::FeeError(e.to_string()))?;
+
+                        Some(post_bal)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if post_bal.is_none() {
                 // Balance was insufficient for fee payment, move all the
                 // available funds in the transparent balance of
                 // the fee payer.
                 tracing::error!(
                     "Transfer of tx fee cannot be applied to due to \
                      insufficient funds. Falling back to transferring the \
-                     available balance which is less than the fee."
+                     available balance which is less than the fee. This \
+                     shouldn't happen."
                 );
                 token_transfer(
-                    state,
+                    shell_params.state,
                     &wrapper.fee.token,
                     &wrapper.fee_payer(),
                     block_proposer,
                     balance,
                 )
                 .map_err(|e| Error::FeeError(e.to_string()))?;
+            }
 
-                let target_post_balance = Some(
-                    namada_token::read_balance(
-                        state,
-                        &wrapper.fee.token,
-                        block_proposer,
-                    )
-                    .map_err(Error::StorageError)?
-                    .into(),
-                );
+            let target_post_balance = Some(
+                namada_token::read_balance(
+                    shell_params.state,
+                    &wrapper.fee.token,
+                    block_proposer,
+                )
+                .map_err(Error::StorageError)?
+                .into(),
+            );
 
-                state.write_log_mut().emit_event(
-                    TokenEvent {
-                        descriptor: FEE_PAYMENT_DESCRIPTOR,
-                        level: EventLevel::Tx,
-                        token: wrapper.fee.token.clone(),
-                        operation: TokenOperation::Transfer {
-                            amount: balance.into(),
-                            source: UserAccount::Internal(wrapper.fee_payer()),
-                            target: UserAccount::Internal(
-                                block_proposer.clone(),
-                            ),
-                            source_post_balance: namada_core::uint::ZERO,
-                            target_post_balance,
-                        },
-                    }
-                    .with(HeightAttr(current_block_height))
-                    .with(TxHashAttr(wrapper_tx_hash)),
-                );
+            shell_params.state.write_log_mut().emit_event(
+                TokenEvent {
+                    descriptor: FEE_PAYMENT_DESCRIPTOR,
+                    level: EventLevel::Tx,
+                    token: wrapper.fee.token.clone(),
+                    operation: TokenOperation::Transfer {
+                        amount: fees.into(),
+                        source: UserAccount::Internal(wrapper.fee_payer()),
+                        target: UserAccount::Internal(block_proposer.clone()),
+                        source_post_balance: post_bal
+                            .map(namada_core::uint::Uint::from)
+                            .unwrap_or(namada_core::uint::ZERO),
+                        target_post_balance,
+                    },
+                }
+                .with(HeightAttr(current_block_height))
+                .with(TxHashAttr(tx.header_hash())),
+            );
 
-                Err(Error::FeeError(
+            post_bal.map(|_| ()).ok_or_else(|| {
+                Error::FeeError(
                     "Transparent balance of wrapper's signer was insufficient \
                      to pay fee. All the available transparent funds have \
-                     been moved to the block proposer"
+                     been moved to the block proposer. This shouldn't happen."
                         .to_string(),
-                ))
-            }
+                )
+            })
         }
         Err(e) => {
             // Fee overflow. This shouldn't happen as it should be prevented
@@ -604,6 +643,107 @@ where
             Err(Error::FeeError(format!("{}", e)))
         }
     }
+}
+
+// FIXME: add tests
+fn try_masp_fee_payment<S, D, H, CA>(
+    ShellParams {
+        tx_gas_meter,
+        state,
+        vp_wasm_cache,
+        tx_wasm_cache,
+    }: &mut ShellParams<'_, S, D, H, CA>,
+    tx: &Tx,
+) -> Result<bool>
+where
+    S: State<D = D, H = H> + StorageRead + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    // The fee payment is subject to a gas limit imposed by a protocol
+    // parameter. Here we instantiate a custom gas meter for this step and
+    // initialize it with the already consumed gas. The gas limit should
+    // actually be the lowest between the protocol parameter and the actual gas
+    // limit of the transaction
+    let min_gas_limit = state
+        .read::<u64>(
+            &namada_parameters::storage::get_fee_unshielding_gas_limit_key(),
+        )
+        .expect("Error reading the storage")
+        .expect("Missing masp fee payment gas limit in storage")
+        .min(tx_gas_meter.borrow().tx_gas_limit.into());
+
+    let mut gas_meter = TxGasMeter::new(min_gas_limit);
+    gas_meter
+        .copy_consumed_gas_from(&tx_gas_meter.borrow())
+        .map_err(|e| Error::GasError(e.to_string()))?;
+    let ref_unshield_gas_meter = RefCell::new(gas_meter);
+
+    // FIXME: call dispatch_tx after merge
+    let is_valid_masp_transaction = {
+        // FIXME: review if using the batch write log instead of the precommit
+        // here NOTE: A clean tx write log must be provided to this call
+        // for a correct vp validation. Block write log, instead,
+        // should contain any prior changes (if any). This is to simulate
+        // the unshielding tx (to prevent the already written
+        // keys from being passed/triggering VPs) but we cannot
+        // commit the tx write log yet cause the tx could still
+        // be invalid.
+        state.write_log_mut().precommit_tx();
+        match apply_wasm_tx(
+            tx.batch_ref_first_tx()
+                .ok_or_else(|| Error::MissingInnerTxs)?,
+            // FIXME: pass the correct index here? Probably there's no need but
+            // it would be better
+            &TxIndex::default(),
+            ShellParams {
+                tx_gas_meter: &ref_unshield_gas_meter,
+                state: *state,
+                vp_wasm_cache,
+                tx_wasm_cache,
+            },
+        ) {
+            Ok(result) => {
+                // NOTE: do not commit yet cause this could be
+                // exploited to get free masp operations. We can commit only
+                // after the entire wrapper has been deemed valid
+                // FIXME: could I precommit here instead?
+                if !result.is_accepted() {
+                    state.write_log_mut().drop_tx_keep_precommit();
+                    tracing::error!(
+                        "The fee unshielding tx is invalid, some VPs rejected \
+                         it: {:#?}",
+                        result.vps_result.rejected_vps
+                    );
+                }
+
+                // Ensure that the transaction is actually a masp one, otherwise
+                // reject
+                is_masp_transfer(&result.changed_keys) && result.is_accepted()
+            }
+            Err(e) => {
+                state.write_log_mut().drop_tx_keep_precommit();
+                tracing::error!(
+                    "The fee unshielding tx is invalid, wasm run failed: {}",
+                    e
+                );
+                if let Error::GasError(_) = e {
+                    // Popagate only if it is a gas error
+                    return Err(e);
+                }
+
+                false
+            }
+        }
+    };
+
+    tx_gas_meter
+        .borrow_mut()
+        .copy_consumed_gas_from(&ref_unshield_gas_meter.borrow())
+        .map_err(|e| Error::GasError(e.to_string()))?;
+
+    Ok(is_valid_masp_transaction)
 }
 
 /// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
@@ -657,6 +797,7 @@ where
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
+// FIXME: here I should check fee unshielding
 pub fn check_fees<S>(state: &S, wrapper: &WrapperTx) -> Result<()>
 where
     S: State + StorageRead,
@@ -1364,7 +1505,7 @@ mod tests {
         // gas meter with no gas left
         let gas_meter = TxGasMeter::new(0);
 
-        let batched_tx = dummy_tx.batch_ref_first_tx();
+        let batched_tx = dummy_tx.batch_ref_first_tx().unwrap();
         let result = execute_vps(
             verifiers,
             changed_keys,

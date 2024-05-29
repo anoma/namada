@@ -60,15 +60,23 @@ mod dry_run_tx {
                 let gas_limit =
                     Gas::try_from(wrapper.gas_limit).into_storage_result()?;
                 let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
+                let mut shell_params = ShellParams::new(
+                    &tx_gas_meter,
+                    &mut temp_state,
+                    &mut ctx.vp_wasm_cache,
+                    &mut ctx.tx_wasm_cache,
+                );
                 let tx_result = protocol::apply_wrapper_tx(
                     &tx,
                     &wrapper,
                     &request.data,
                     &tx_gas_meter,
-                    &mut temp_state,
+                    &mut shell_params,
                     None,
                 )
                 .into_storage_result()?;
+                // FIXME: if fees were paid with first inner tx skip it when
+                // executing the batch
 
                 temp_state.write_log_mut().commit_tx();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();

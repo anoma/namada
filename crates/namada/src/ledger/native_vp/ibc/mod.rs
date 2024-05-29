@@ -952,7 +952,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1028,7 +1028,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1153,7 +1153,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1262,7 +1262,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1356,7 +1356,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1476,7 +1476,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1586,7 +1586,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1681,7 +1681,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1804,7 +1804,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1926,7 +1926,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2033,7 +2033,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2135,7 +2135,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2296,7 +2296,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2507,7 +2507,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2662,7 +2662,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2824,7 +2824,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2987,7 +2987,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3165,7 +3165,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3399,7 +3399,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
