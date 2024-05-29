@@ -5,8 +5,8 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -688,40 +688,30 @@ impl ShieldedUtils for BenchShieldedUtils {
         }
     }
 
-    /// Try to load the last saved shielded context from the given context
-    /// directory. If this fails, then leave the current context unchanged.
-    async fn load<U: ShieldedUtils>(
+    async fn load(
         &self,
-        ctx: &mut ShieldedContext<U>,
+        sync_status: ContextSyncStatus,
         force_confirmed: bool,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<ShieldedContext<Self>> {
         // Try to load shielded context from file
         let file_name = if force_confirmed {
             FILE_NAME
         } else {
-            match ctx.sync_status {
+            match sync_status {
                 ContextSyncStatus::Confirmed => FILE_NAME,
                 ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
             }
         };
-        let mut ctx_file = File::open(
+        let bytes = std::fs::read(
             self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
-        let mut bytes = Vec::new();
-        ctx_file.read_to_end(&mut bytes)?;
-        // Fill the supplied context with the deserialized object
-        *ctx = ShieldedContext {
-            utils: ctx.utils.clone(),
+        Ok(ShieldedContext {
+            utils: self.clone(),
             ..ShieldedContext::deserialize(&mut &bytes[..])?
-        };
-        Ok(())
+        })
     }
 
-    /// Save this shielded context into its associated context directory
-    async fn save<U: ShieldedUtils>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()> {
+    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
         let (tmp_file_name, file_name) = match ctx.sync_status {
             ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
             ContextSyncStatus::Speculative => {

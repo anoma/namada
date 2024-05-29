@@ -46,7 +46,6 @@ pub use utils::{
 
 use crate::masp::types::PartialAuthorized;
 use crate::masp::utils::{get_params_dir, load_pvks};
-use crate::{MaybeSend, MaybeSync};
 
 /// Env var to point to a dir with MASP parameters. When not specified,
 /// the default OS specific path is used.
@@ -1290,8 +1289,8 @@ pub mod testing {
 #[cfg(feature = "std")]
 /// Implementation of MASP functionality depending on a standard filesystem
 pub mod fs {
-    use std::fs::{File, OpenOptions};
-    use std::io::{Read, Write};
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
 
     use super::*;
     use crate::masp::shielded_ctx::ShieldedContext;
@@ -1342,9 +1341,7 @@ pub mod fs {
             // Finally initialize a shielded context with the supplied directory
 
             let sync_status =
-                if std::fs::read(context_dir.join(SPECULATIVE_FILE_NAME))
-                    .is_ok()
-                {
+                if fs::read(context_dir.join(SPECULATIVE_FILE_NAME)).is_ok() {
                     // Load speculative state
                     ContextSyncStatus::Speculative
                 } else {
@@ -1384,38 +1381,30 @@ pub mod fs {
             }
         }
 
-        /// Try to load the last saved shielded context from the given context
-        /// directory. If this fails, then leave the current context unchanged.
-        async fn load<U: ShieldedUtils + MaybeSend>(
+        async fn load(
             &self,
-            ctx: &mut ShieldedContext<U>,
+            sync_status: ContextSyncStatus,
             force_confirmed: bool,
-        ) -> std::io::Result<()> {
+        ) -> std::io::Result<ShieldedContext<Self>> {
             // Try to load shielded context from file
             let file_name = if force_confirmed {
                 FILE_NAME
             } else {
-                match ctx.sync_status {
+                match sync_status {
                     ContextSyncStatus::Confirmed => FILE_NAME,
                     ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
                 }
             };
-            let mut ctx_file = File::open(self.context_dir.join(file_name))?;
-            let mut bytes = Vec::new();
-            ctx_file.read_to_end(&mut bytes)?;
-            // Fill the supplied context with the deserialized object
-            *ctx = ShieldedContext {
-                utils: ctx.utils.clone(),
-                ..ShieldedContext::<U>::deserialize(&mut &bytes[..])?
-            };
-            Ok(())
+            let bytes = fs::read(self.context_dir.join(file_name))?;
+            Ok(ShieldedContext {
+                utils: self.clone(),
+                ..ShieldedContext::<Self>::deserialize(&mut &bytes[..])?
+            })
         }
 
-        /// Save this confirmed shielded context into its associated context
-        /// directory. At the same time, delete the speculative file if present
-        async fn save<U: ShieldedUtils + MaybeSync>(
+        async fn save(
             &self,
-            ctx: &ShieldedContext<U>,
+            ctx: &ShieldedContext<Self>,
         ) -> std::io::Result<()> {
             // TODO: use mktemp crate?
             let (tmp_file_name, file_name) = match ctx.sync_status {

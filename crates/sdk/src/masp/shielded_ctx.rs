@@ -130,14 +130,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self, false).await
+        self.utils.clone().load_and_update(self, false).await
     }
 
     /// Try to load the last saved confirmed shielded context from the given
     /// context directory. If this fails, then leave the current context
     /// unchanged.
     pub async fn load_confirmed(&mut self) -> std::io::Result<()> {
-        self.utils.clone().load(self, true).await?;
+        self.utils.clone().load_and_update(self, true).await?;
 
         Ok(())
     }

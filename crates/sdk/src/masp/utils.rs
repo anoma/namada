@@ -64,23 +64,31 @@ pub fn get_params_dir() -> PathBuf {
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait ShieldedUtils:
-    Sized + BorshDeserialize + BorshSerialize + Default + Clone
+    Sized + BorshDeserialize + BorshSerialize + Default + Clone + MaybeSend
 {
     /// Get a MASP transaction prover
     fn local_tx_prover(&self) -> LocalTxProver;
 
-    /// Load up the currently saved ShieldedContext
-    async fn load<U: ShieldedUtils + MaybeSend>(
+    /// Load up the currently saved ShieldedContext and
+    /// update `ctx` with the loaded contents
+    async fn load_and_update(
         &self,
-        ctx: &mut ShieldedContext<U>,
+        ctx: &mut ShieldedContext<Self>,
         force_confirmed: bool,
-    ) -> std::io::Result<()>;
+    ) -> std::io::Result<()> {
+        *ctx = self.load(ctx.sync_status, force_confirmed).await?;
+        Ok(())
+    }
+
+    /// Load up the currently saved ShieldedContext
+    async fn load(
+        &self,
+        sync_status: ContextSyncStatus,
+        force_confirmed: bool,
+    ) -> std::io::Result<ShieldedContext<Self>>;
 
     /// Save the given ShieldedContext for future loads
-    async fn save<U: ShieldedUtils + MaybeSync>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()>;
+    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
