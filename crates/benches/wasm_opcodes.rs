@@ -406,13 +406,13 @@ impl Display for WatBuilder {
     }
 }
 
-// Use singlepass compiler (the same one used in protocol) to prevent
+// Use Cranelift compiler (the same one used in protocol) to prevent
 // optimizations that would compile out the benchmarks since most of them are
 // trivial operations
 fn get_wasm_store() -> Store {
     wasmer::Store::new(
         &wasmer_engine_universal::Universal::new(
-            wasmer_compiler_singlepass::Singlepass::default(),
+            wasmer_compiler_cranelift::Cranelift::default(),
         )
         .engine(),
     )

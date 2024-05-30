@@ -56,6 +56,6 @@ rand.workspace = true
 tempfile.workspace = true
 sha2.workspace = true
 wasm-instrument.workspace = true
-wasmer-compiler-singlepass.workspace = true
+wasmer-compiler-cranelift.workspace = true
 wasmer-engine-universal.workspace = true
 wasmer.workspace = true

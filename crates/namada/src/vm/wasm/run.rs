@@ -549,8 +549,8 @@ where
 
 /// Prepare a wasm store for untrusted code.
 pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
-    // Use Singlepass compiler with the default settings
-    let compiler = wasmer_compiler_singlepass::Singlepass::default();
+    // Use Cranelift compiler with the default settings
+    let compiler = wasmer_compiler_cranelift::Cranelift::default();
     wasmer::Store::new_with_tunables(
         &wasmer_engine_universal::Universal::new(compiler).engine(),
         limit,

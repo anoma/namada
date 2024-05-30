@@ -608,7 +608,7 @@ mod dylib {
     /// Dylib WASM store
     #[allow(dead_code)]
     pub fn store() -> Store {
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
+        let compiler = wasmer_compiler_cranelift::Cranelift::default();
         let engine = wasmer_engine_dylib::Dylib::new(compiler).engine();
         Store::new_with_tunables(&engine, memory::vp_limit())
     }

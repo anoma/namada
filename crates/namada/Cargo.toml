@@ -24,7 +24,7 @@ wasm-runtime = [
   "rayon",
   "wasm-instrument",
   "wasmer-cache",
-  "wasmer-compiler-singlepass",
+  "wasmer-compiler-cranelift",
   "wasmer-engine-dylib",
   "wasmer-engine-universal",
   "wasmer-vm",
@@ -153,7 +153,7 @@ uint = "0.9.5"
 wasm-instrument = { workspace = true, optional = true }
 wasmer = { workspace = true, optional = true }
 wasmer-cache = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
-wasmer-compiler-singlepass = { workspace = true, optional = true }
+wasmer-compiler-cranelift = { workspace = true, optional = true }
 wasmer-engine-dylib = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
 wasmer-engine-universal = { workspace = true, optional = true }
 wasmer-vm = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b", optional = true }
