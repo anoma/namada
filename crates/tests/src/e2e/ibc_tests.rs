@@ -579,7 +579,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn proposal_ibc_token_inflation() -> Result<()> {
-    const MASP_EPOCH_MULTIPLIER: u64 = 1;
+    const MASP_EPOCH_MULTIPLIER: u64 = 2;
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
