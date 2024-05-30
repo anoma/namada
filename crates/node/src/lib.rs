@@ -43,6 +43,7 @@ use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::state::StateRead;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
@@ -196,7 +197,11 @@ fn emit_warning_on_non_64bit_cpu() {
 }
 
 /// Run the ledger with an async runtime
-pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
+pub fn run(
+    config: config::Ledger,
+    wasm_dir: PathBuf,
+    scheduled_migration: Option<ScheduledMigration>,
+) {
     emit_warning_on_non_64bit_cpu();
 
     let logical_cores = num_cpus::get();
@@ -232,7 +237,7 @@ pub fn run(config: config::Ledger, wasm_dir: PathBuf) {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run_aux(config, wasm_dir));
+        .block_on(run_aux(config, wasm_dir, scheduled_migration));
 }
 
 /// Resets the tendermint_node state and removes database files
@@ -311,25 +316,9 @@ pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    let mut db_visitor = storage::RocksDBUpdateVisitor::new(&db);
-
-    for change in &updates.changes {
-        match change.update(&mut db_visitor) {
-            Ok(status) => {
-                tracing::info!("{}", status);
-            }
-            e => {
-                tracing::error!(
-                    "Attempt to write to key/pattern <{}> failed.",
-                    change.pattern()
-                );
-                e.unwrap();
-            }
-        }
-    }
+    let batch = db.apply_migration_to_batch(updates.changes).unwrap();
     if !dry_run {
         tracing::info!("Persisting DB changes...");
-        let batch = db_visitor.take_batch();
         db.exec_batch(batch).expect("Failed to execute write batch");
         db.flush(true).expect("Failed to flush data to disk");
 
@@ -357,8 +346,13 @@ pub fn rollback(config: config::Ledger) -> Result<(), shell::Error> {
 ///     them to the ledger.
 ///
 /// All must be alive for correct functioning.
-async fn run_aux(config: config::Ledger, wasm_dir: PathBuf) {
-    let setup_data = run_aux_setup(&config, &wasm_dir).await;
+async fn run_aux(
+    config: config::Ledger,
+    wasm_dir: PathBuf,
+    scheduled_migration: Option<ScheduledMigration>,
+) {
+    let setup_data =
+        run_aux_setup(&config, &wasm_dir, scheduled_migration).await;
 
     // Create an `AbortableSpawner` for signalling shut down from the shell or
     // from Tendermint
@@ -431,12 +425,14 @@ struct RunAuxSetup {
     vp_wasm_compilation_cache: u64,
     tx_wasm_compilation_cache: u64,
     db_block_cache_size_bytes: u64,
+    scheduled_migration: Option<ScheduledMigration>,
 }
 
 /// Return some variables used to start child processes of the ledger.
 async fn run_aux_setup(
     config: &config::Ledger,
     wasm_dir: &PathBuf,
+    scheduled_migration: Option<ScheduledMigration>,
 ) -> RunAuxSetup {
     // Prefetch needed wasm artifacts
     wasm_loader::pre_fetch_wasm(wasm_dir).await;
@@ -523,6 +519,7 @@ async fn run_aux_setup(
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
         db_block_cache_size_bytes,
+        scheduled_migration,
     }
 }
 
@@ -546,6 +543,7 @@ fn start_abci_broadcaster_shell(
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
         db_block_cache_size_bytes,
+        scheduled_migration,
     } = setup_data;
 
     // Channels for validators to send protocol txs to be broadcast to the
@@ -596,6 +594,7 @@ fn start_abci_broadcaster_shell(
         broadcaster_sender,
         eth_oracle,
         &db_cache,
+        scheduled_migration,
         vp_wasm_compilation_cache,
         tx_wasm_compilation_cache,
     );
@@ -886,6 +885,7 @@ pub fn test_genesis_files(
         config,
         wasm_dir,
         broadcast_sender,
+        None,
         None,
         None,
         50 * 1024 * 1024,

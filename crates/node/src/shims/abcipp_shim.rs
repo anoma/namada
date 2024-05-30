@@ -10,6 +10,7 @@ use namada::core::storage::BlockHeight;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
+use namada_sdk::migrations::ScheduledMigration;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
@@ -48,6 +49,7 @@ impl AbcippShim {
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
         db_cache: &rocksdb::Cache,
+        scheduled_migration: Option<ScheduledMigration>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
     ) -> (Self, AbciService, broadcast::Sender<()>) {
@@ -65,6 +67,7 @@ impl AbcippShim {
                     broadcast_sender,
                     eth_oracle,
                     Some(db_cache),
+                    scheduled_migration,
                     vp_wasm_compilation_cache,
                     tx_wasm_compilation_cache,
                 ),

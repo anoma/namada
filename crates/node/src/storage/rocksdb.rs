@@ -72,7 +72,7 @@ use namada::storage::{
     SUBSPACE_CF,
 };
 use namada_sdk::arith::checked;
-use namada_sdk::migrations::DBUpdateVisitor;
+use namada_sdk::migrations::{DBUpdateVisitor, DbUpdateType};
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -82,6 +82,7 @@ use rocksdb::{
 };
 
 use crate::config::utils::num_of_threads;
+use crate::storage;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -695,6 +696,7 @@ impl RocksDB {
 
 impl DB for RocksDB {
     type Cache = rocksdb::Cache;
+    type Migrator = DbUpdateType;
     type WriteBatch = RocksDBWriteBatch;
 
     fn open(
@@ -1401,6 +1403,31 @@ impl DB for RocksDB {
         }
 
         Ok(())
+    }
+
+    #[inline]
+    fn apply_migration_to_batch(
+        &self,
+        updates: impl IntoIterator<Item = DbUpdateType>,
+    ) -> Result<RocksDBWriteBatch> {
+        let mut db_visitor = storage::RocksDBUpdateVisitor::new(self);
+        for change in updates.into_iter() {
+            match change.update(&mut db_visitor) {
+                Ok(status) => {
+                    tracing::info!("{}", status);
+                }
+                Err(e) => {
+                    let error = format!(
+                        "Attempt to write to key/pattern <{}> failed:\n{}.",
+                        change.pattern(),
+                        e
+                    );
+                    tracing::error!(error);
+                    return Err(Error::DBError(error));
+                }
+            }
+        }
+        Ok(db_visitor.take_batch())
     }
 }
 
