@@ -1,8 +1,7 @@
 //! WASM compilation cache.
+//!
 //! The cache is backed by in-memory LRU cache with configurable size
-//! limit and a file system cache of compiled modules (either to dynamic libs
-//! compiled via the `dylib` module, or serialized modules compiled via the
-//! `universal` module).
+//! limit and a file system cache of serialized modules.
 
 use std::collections::hash_map::RandomState;
 use std::fs;
@@ -496,9 +495,6 @@ fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {
 fn compile(
     code: impl AsRef<[u8]>,
 ) -> Result<(Module, Store), wasm::run::Error> {
-    // There's an issue with dylib compiler on mac in linker and on linux
-    // with the dylib's store loading the dylib from a file, so we're caching a
-    // module serialized to bytes instead for now.
     universal::compile(code).map_err(wasm::run::Error::CompileError)
 }
 
@@ -578,39 +574,6 @@ mod universal {
     #[allow(dead_code)]
     pub fn store() -> Store {
         untrusted_wasm_store(memory::vp_limit())
-    }
-}
-
-/// A dynamic library engine compilation.
-mod dylib {
-    use super::*;
-
-    #[allow(dead_code)]
-    #[cfg(windows)]
-    pub const FILE_EXT: &str = "dll";
-    #[allow(dead_code)]
-    #[cfg(all(not(unix), target_os = "macos"))]
-    pub const FILE_EXT: &str = "dylib";
-    #[allow(dead_code)]
-    #[cfg(all(unix, not(target_os = "macos")))]
-    pub const FILE_EXT: &str = "so";
-
-    /// Compile wasm to a dynamic library
-    #[allow(dead_code)]
-    pub fn compile(
-        code: impl AsRef<[u8]>,
-    ) -> Result<(Module, Store), wasmer::CompileError> {
-        let store = store();
-        let module = Module::new(&store, code.as_ref())?;
-        Ok((module, store))
-    }
-
-    /// Dylib WASM store
-    #[allow(dead_code)]
-    pub fn store() -> Store {
-        let compiler = wasmer_compiler_singlepass::Singlepass::default();
-        let engine = wasmer_engine_dylib::Dylib::new(compiler).engine();
-        Store::new_with_tunables(&engine, memory::vp_limit())
     }
 }
 
@@ -1063,10 +1026,6 @@ mod test {
 
     /// Get the WASM code bytes, its hash and find the compiled module's size
     fn load_wasm(file: impl AsRef<Path>) -> WasmWithMeta {
-        // When `WeightScale` calls `loupe::size_of_val` in the cache, for some
-        // reason it returns 8 bytes more than the same call in here.
-        let _extra_bytes = 8;
-
         let file = file.as_ref();
         let code = fs::read(file).unwrap();
         let hash = hash_of_code(&code);

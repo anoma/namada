@@ -9,28 +9,28 @@ pub trait VmMemory: Clone + Send + Sync {
 
     /// Returns bytes read from memory together with the associated gas cost.
     fn read_bytes(
-        &self,
+        &mut self,
         offset: u64,
         len: usize,
     ) -> Result<(Vec<u8>, u64), Self::Error>;
 
     /// Write bytes to memory. Returns the gas cost.
     fn write_bytes(
-        &self,
+        &mut self,
         offset: u64,
         bytes: impl AsRef<[u8]>,
     ) -> Result<u64, Self::Error>;
 
     /// Returns string read from memory together with the associated gas cost.
     fn read_string(
-        &self,
+        &mut self,
         offset: u64,
         len: usize,
     ) -> Result<(String, u64), Self::Error>;
 
     /// Write string to memory. Returns the gas cost.
     fn write_string(
-        &self,
+        &mut self,
         offset: u64,
         string: String,
     ) -> Result<u64, Self::Error>;
@@ -55,7 +55,7 @@ pub mod testing {
         type Error = Infallible;
 
         fn read_bytes(
-            &self,
+            &mut self,
             offset: u64,
             len: usize,
         ) -> Result<(Vec<u8>, u64)> {
@@ -64,7 +64,7 @@ pub mod testing {
         }
 
         fn write_bytes(
-            &self,
+            &mut self,
             offset: u64,
             bytes: impl AsRef<[u8]>,
         ) -> Result<u64> {
@@ -77,7 +77,7 @@ pub mod testing {
         }
 
         fn read_string(
-            &self,
+            &mut self,
             offset: u64,
             len: usize,
         ) -> Result<(String, u64)> {
@@ -88,7 +88,7 @@ pub mod testing {
             Ok((string, 0))
         }
 
-        fn write_string(&self, offset: u64, string: String) -> Result<u64> {
+        fn write_string(&mut self, offset: u64, string: String) -> Result<u64> {
             let bytes = string.as_bytes();
             let len = bytes.len();
             let target =

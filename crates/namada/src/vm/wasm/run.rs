@@ -6,6 +6,7 @@ use std::error::Error as _;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::num::NonZeroU32;
+use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use namada_core::validity_predicate::VpError;
@@ -16,7 +17,8 @@ use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
-use wasmer::{BaseTunables, Module, Store};
+use wasmer::sys::{BaseTunables, Features};
+use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
@@ -191,6 +193,7 @@ where
 
     let (module, store) =
         fetch_or_compile(tx_wasm_cache, &tx_code.code, state, gas_meter)?;
+    let store = Rc::new(RefCell::new(store));
 
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
@@ -200,8 +203,8 @@ where
 
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
-    let env = TxVmEnv::new(
-        WasmMemory::default(),
+    let mut env = TxVmEnv::new(
+        WasmMemory::new(Rc::clone(&store)),
         write_log,
         in_mem,
         db,
@@ -218,51 +221,69 @@ where
         tx_wasm_cache,
     );
 
-    let imports = tx_imports(&store, env);
-
     // Instantiate the wasm module
-    let instance = wasmer::Instance::new(&module, &imports)
-        .map_err(|e| Error::InstantiationError(Box::new(e)))?;
+    let instance = {
+        let mut store = store.borrow_mut();
+        let imports = tx_imports(&mut *store, env.clone());
+        wasmer::Instance::new(&mut *store, &module, &imports)
+            .map_err(|e| Error::InstantiationError(Box::new(e)))?
+    };
 
-    // We need to write the inputs in the memory exported from the wasm
-    // module
-    let memory = instance
+    // Fetch guest's main memory
+    let guest_memory = instance
         .exports
         .get_memory("memory")
         .map_err(Error::MissingModuleMemory)?;
+
+    env.memory.init_from(guest_memory);
+
+    // Write the inputs in the memory exported from the wasm
+    // module
     let memory::TxCallInput {
         tx_data_ptr,
         tx_data_len,
-    } = memory::write_tx_inputs(memory, &batched_tx)
-        .map_err(Error::MemoryError)?;
+    } = {
+        let mut store = store.borrow_mut();
+        memory::write_tx_inputs(&mut *store, guest_memory, &batched_tx)
+            .map_err(Error::MemoryError)?
+    };
+
     // Get the module's entrypoint to be called
-    let apply_tx = instance
-        .exports
-        .get_function(TX_ENTRYPOINT)
-        .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64), u64>()
-        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-            entrypoint: TX_ENTRYPOINT,
-            error,
-        })?;
-    let ok = apply_tx.call(tx_data_ptr, tx_data_len).map_err(|err| {
-        tracing::debug!("Tx WASM failed with {}", err);
-        match *sentinel.borrow() {
-            TxSentinel::None => Error::RuntimeError(err),
-            TxSentinel::OutOfGas => Error::GasError(err.to_string()),
-            TxSentinel::InvalidCommitment => {
-                Error::MissingSection(err.to_string())
+    let apply_tx = {
+        let store = store.borrow();
+        instance
+            .exports
+            .get_function(TX_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .typed::<(u64, u64), u64>(&*store)
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: TX_ENTRYPOINT,
+                error,
+            })?
+    };
+    let ok = apply_tx
+        .call(
+            unsafe { &mut *RefCell::as_ptr(&*store) },
+            tx_data_ptr,
+            tx_data_len,
+        )
+        .map_err(|err| {
+            tracing::debug!("Tx WASM failed with {}", err);
+            match *sentinel.borrow() {
+                TxSentinel::None => Error::RuntimeError(err),
+                TxSentinel::OutOfGas => Error::GasError(err.to_string()),
+                TxSentinel::InvalidCommitment => {
+                    Error::MissingSection(err.to_string())
+                }
             }
-        }
-    })?;
+        })?;
+
+    // NB: early drop this data to avoid memory errors
+    _ = (instance, env);
 
     if ok == 1 {
         Ok(verifiers)
     } else {
-        // NB: drop imports so we can safely access the
-        // `&mut` ptrs we shared with the guest
-        _ = (instance, imports);
-
         let err = yielded_value.take().map_or_else(
             || Ok("Execution ended abruptly with an unknown error".to_owned()),
             |borsh_encoded_err| {
@@ -306,6 +327,7 @@ where
         state,
         gas_meter,
     )?;
+    let store = Rc::new(RefCell::new(store));
 
     let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
         PrefixIterators::default();
@@ -318,8 +340,8 @@ where
             cache_access: PhantomData,
         };
     let BatchedTxRef { tx, cmt } = batched_tx;
-    let env = VpVmEnv::new(
-        WasmMemory::default(),
+    let mut env = VpVmEnv::new(
+        WasmMemory::new(Rc::clone(&store)),
         address,
         state.write_log(),
         state.in_mem(),
@@ -338,9 +360,14 @@ where
     );
 
     let yielded_value_borrow = env.ctx.yielded_value;
-    let imports = vp_imports(&store, env);
+
+    let imports = {
+        let mut store = store.borrow_mut();
+        vp_imports(&mut *store, env.clone())
+    };
 
     run_vp(
+        store,
         module,
         imports,
         &vp_code_hash,
@@ -349,20 +376,26 @@ where
         keys_changed,
         verifiers,
         yielded_value_borrow,
+        |guest_memory| env.memory.init_from(guest_memory),
     )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_vp(
+fn run_vp<F>(
+    store: Rc<RefCell<wasmer::Store>>,
     module: wasmer::Module,
-    vp_imports: wasmer::ImportObject,
+    vp_imports: wasmer::Imports,
     vp_code_hash: &Hash,
     input_data: &BatchedTxRef<'_>,
     address: &Address,
     keys_changed: &BTreeSet<Key>,
     verifiers: &BTreeSet<Address>,
     yielded_value: HostRef<RwAccess, Option<Vec<u8>>>,
-) -> Result<()> {
+    mut init_memory_callback: F,
+) -> Result<()>
+where
+    F: FnMut(&wasmer::Memory),
+{
     let input: VpInput<'_> = VpInput {
         addr: address,
         data: input_data,
@@ -371,15 +404,22 @@ fn run_vp(
     };
 
     // Instantiate the wasm module
-    let instance = wasmer::Instance::new(&module, &vp_imports)
-        .map_err(|e| Error::InstantiationError(Box::new(e)))?;
+    let instance = {
+        let mut store = store.borrow_mut();
+        wasmer::Instance::new(&mut *store, &module, &vp_imports)
+            .map_err(|e| Error::InstantiationError(Box::new(e)))?
+    };
 
-    // We need to write the inputs in the memory exported from the wasm
-    // module
-    let memory = instance
+    // Fetch guest's main memory
+    let guest_memory = instance
         .exports
         .get_memory("memory")
         .map_err(Error::MissingModuleMemory)?;
+
+    init_memory_callback(guest_memory);
+
+    // Write the inputs in the memory exported from the wasm
+    // module
     let memory::VpCallInput {
         addr_ptr,
         addr_len,
@@ -389,20 +429,28 @@ fn run_vp(
         keys_changed_len,
         verifiers_ptr,
         verifiers_len,
-    } = memory::write_vp_inputs(memory, input).map_err(Error::MemoryError)?;
+    } = {
+        let mut store = store.borrow_mut();
+        memory::write_vp_inputs(&mut *store, guest_memory, input)
+            .map_err(Error::MemoryError)?
+    };
 
     // Get the module's entrypoint to be called
-    let validate_tx = instance
-        .exports
-        .get_function(VP_ENTRYPOINT)
-        .map_err(Error::MissingModuleEntrypoint)?
-        .native::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>()
-        .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
-            entrypoint: VP_ENTRYPOINT,
-            error,
-        })?;
+    let validate_tx = {
+        let store = store.borrow();
+        instance
+            .exports
+            .get_function(VP_ENTRYPOINT)
+            .map_err(Error::MissingModuleEntrypoint)?
+            .typed::<(u64, u64, u64, u64, u64, u64, u64, u64), u64>(&*store)
+            .map_err(|error| Error::UnexpectedModuleEntrypointInterface {
+                entrypoint: VP_ENTRYPOINT,
+                error,
+            })?
+    };
     let is_valid = validate_tx
         .call(
+            unsafe { &mut *RefCell::as_ptr(&*store) },
             addr_ptr,
             addr_len,
             data_ptr,
@@ -438,13 +486,12 @@ fn run_vp(
         "wasm vp"
     );
 
+    // NB: early drop this data to avoid memory errors
+    _ = (instance, vp_imports);
+
     if is_valid == 1 {
         Ok(())
     } else {
-        // NB: drop imports so we can safely access the
-        // `&mut` ptrs we shared with the guest
-        _ = (instance, vp_imports);
-
         unsafe { yielded_value.get_mut() }.take().map_or_else(
             || Err(Error::VpError(VpError::Unspecified)),
             |borsh_encoded_err| {
@@ -526,15 +573,20 @@ where
             &ctx.state(),
             gas_meter,
         )?;
+        let store = Rc::new(RefCell::new(store));
 
-        let env = VpVmEnv {
-            memory: WasmMemory::default(),
+        let mut env = VpVmEnv {
+            memory: WasmMemory::new(Rc::clone(&store)),
             ctx,
         };
         let yielded_value_borrow = env.ctx.yielded_value;
-        let imports = vp_imports(&store, env);
+        let imports = {
+            let mut store = store.borrow_mut();
+            vp_imports(&mut *store, env.clone())
+        };
 
         run_vp(
+            store,
             module,
             imports,
             &vp_code_hash,
@@ -543,6 +595,7 @@ where
             keys_changed,
             verifiers,
             yielded_value_borrow,
+            |guest_memory| env.memory.init_from(guest_memory),
         )
     }
 }
@@ -551,10 +604,16 @@ where
 pub fn untrusted_wasm_store(limit: Limit<BaseTunables>) -> wasmer::Store {
     // Use Singlepass compiler with the default settings
     let compiler = wasmer_compiler_singlepass::Singlepass::default();
-    wasmer::Store::new_with_tunables(
-        &wasmer_engine_universal::Universal::new(compiler).engine(),
-        limit,
-    )
+    let mut engine = <Engine as NativeEngineExt>::new(
+        Box::new(compiler),
+        // NB: The default target corresponds to the host's triplet
+        Target::default(),
+        // NB: WASM features are validated via `validate_untrusted_wasm`,
+        // so we can use the default features here
+        Features::default(),
+    );
+    engine.set_tunables(limit);
+    wasmer::Store::new(engine)
 }
 
 /// Inject gas counter and stack-height limiter into the given wasm code
@@ -1288,7 +1347,7 @@ mod tests {
         // of memory
         match result {
             // Dylib engine error (used anywhere except mac)
-            Err(Error::MemoryError(memory::Error::MemoryOutOfBounds(
+            Err(Error::MemoryError(memory::Error::Grow(
                 wasmer::MemoryError::CouldNotGrow { .. },
             ))) => {}
             Err(error) => {
@@ -1352,7 +1411,7 @@ mod tests {
         // of memory
         match result {
             // Dylib engine error (used anywhere except mac)
-            Err(Error::MemoryError(memory::Error::MemoryOutOfBounds(
+            Err(Error::MemoryError(memory::Error::Grow(
                 wasmer::MemoryError::CouldNotGrow { .. },
             ))) => {
                 // as expected

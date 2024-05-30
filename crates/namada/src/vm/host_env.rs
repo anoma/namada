@@ -1,5 +1,6 @@
 //! Virtual machine's host environment exposes functions that may be called from
 //! within a virtual machine.
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -92,7 +93,6 @@ pub type TxResult<T> = std::result::Result<T, TxRuntimeError>;
 /// A transaction's host environment
 pub struct TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -150,7 +150,6 @@ where
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -228,7 +227,7 @@ where
 
 impl<MEM, D, H, CA> Clone for TxVmEnv<MEM, D, H, CA>
 where
-    MEM: VmMemory,
+    MEM: Clone,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     CA: WasmCacheAccess,
@@ -306,7 +305,6 @@ where
 /// A validity predicate's host environment
 pub struct VpVmEnv<MEM, D, H, EVAL, CA>
 where
-    MEM: VmMemory,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -392,7 +390,6 @@ impl<MEM, D, H, EVAL, CA> VpVmEnv<MEM, D, H, EVAL, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    MEM: VmMemory,
     EVAL: VpEvaluator,
     CA: WasmCacheAccess,
 {
@@ -452,7 +449,7 @@ where
 
 impl<MEM, D, H, EVAL, CA> Clone for VpVmEnv<MEM, D, H, EVAL, CA>
 where
-    MEM: VmMemory,
+    MEM: Clone,
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
     EVAL: VpEvaluator,
@@ -590,7 +587,7 @@ where
 
 /// Add a gas cost incured in a transaction
 pub fn tx_charge_gas<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     used_gas: u64,
 ) -> TxResult<()>
 where
@@ -614,7 +611,7 @@ where
 
 /// Called from VP wasm to request to use the given gas amount
 pub fn vp_charge_gas<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     used_gas: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -631,7 +628,7 @@ where
 /// Storage `has_key` function exposed to the wasm VM Tx environment. It will
 /// try to check the write log first and if no entry found then the storage.
 pub fn tx_has_key<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -663,7 +660,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_read<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -706,7 +703,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_read_temp<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<i64>
@@ -752,7 +749,7 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn tx_result_buffer<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -776,7 +773,7 @@ where
 /// It will try to get an iterator from the storage and return the corresponding
 /// ID of the iterator, ordered by storage keys.
 pub fn tx_iter_prefix<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> TxResult<u64>
@@ -816,7 +813,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn tx_iter_next<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     iter_id: u64,
 ) -> TxResult<i64>
 where
@@ -827,25 +824,25 @@ where
 {
     tracing::debug!("tx_iter_next iter_id {}", iter_id,);
 
-    let state = env.state();
     let iterators = unsafe { env.ctx.iterators.get_mut() };
     let iter_id = PrefixIteratorId::new(iter_id);
     while let Some((key, val, iter_gas)) = iterators.next(iter_id) {
-        let (log_val, log_gas) = state
-            .write_log()
-            .read(
-                &Key::parse(key.clone())
-                    .map_err(TxRuntimeError::StorageDataError)?,
-            )
-            .into_storage_result()?;
+        let (log_val, log_gas) = {
+            let state = env.state();
+            let (log_val, log_gas) = state
+                .write_log()
+                .read(
+                    &Key::parse(key.clone())
+                        .map_err(TxRuntimeError::StorageDataError)?,
+                )
+                .into_storage_result()?;
+            (log_val.cloned(), log_gas)
+        };
         tx_charge_gas::<MEM, D, H, CA>(env, checked!(iter_gas + log_gas)?)?;
         match log_val {
-            Some(write_log::StorageModification::Write { ref value }) => {
-                let key_val = borsh::to_vec(&KeyVal {
-                    key,
-                    val: value.clone(),
-                })
-                .map_err(TxRuntimeError::EncodingError)?;
+            Some(write_log::StorageModification::Write { value }) => {
+                let key_val = borsh::to_vec(&KeyVal { key, val: value })
+                    .map_err(TxRuntimeError::EncodingError)?;
                 let len: i64 = key_val
                     .len()
                     .try_into()
@@ -881,7 +878,7 @@ where
 /// Storage write function exposed to the wasm VM Tx environment. The given
 /// key/value will be written to the write log.
 pub fn tx_write<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
@@ -923,7 +920,7 @@ where
 /// given key/value will be written only to the write log. It will be never
 /// written to the storage.
 pub fn tx_write_temp<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
     val_ptr: u64,
@@ -961,7 +958,7 @@ where
 }
 
 fn check_address_existence<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key: &Key,
 ) -> TxResult<()>
 where
@@ -1008,7 +1005,7 @@ where
 /// Storage delete function exposed to the wasm VM Tx environment. The given
 /// key/value will be written as deleted to the write log.
 pub fn tx_delete<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> TxResult<()>
@@ -1038,7 +1035,7 @@ where
 /// Expose the functionality to emit events to the wasm VM's Tx environment.
 /// An emitted event will land in the write log.
 pub fn tx_emit_event<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     event_ptr: u64,
     event_len: u64,
 ) -> TxResult<()>
@@ -1065,7 +1062,7 @@ where
 
 /// Expose the functionality to query events from the wasm VM's Tx environment.
 pub fn tx_get_events<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
 ) -> TxResult<i64>
@@ -1106,7 +1103,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1156,7 +1153,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1201,7 +1198,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_read_temp<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1249,7 +1246,7 @@ where
 /// any) back to the guest, the second step reads the value from cache into a
 /// pre-allocated buffer with the obtained size.
 pub fn vp_result_buffer<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1274,7 +1271,7 @@ where
 /// Storage `has_key` in prior state (before tx execution) function exposed to
 /// the wasm VM VP environment. It will try to read from the storage.
 pub fn vp_has_key_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1305,7 +1302,7 @@ where
 /// to the wasm VM VP environment. It will try to check the write log first and
 /// if no entry found then the storage.
 pub fn vp_has_key_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     key_ptr: u64,
     key_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1337,7 +1334,7 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_pre<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
@@ -1376,7 +1373,7 @@ where
 /// the storage and return the corresponding ID of the iterator, ordered by
 /// storage keys.
 pub fn vp_iter_prefix_post<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,
     prefix_len: u64,
 ) -> vp_host_fns::EnvResult<u64>
@@ -1417,7 +1414,7 @@ where
 /// Returns `-1` when the key is not present, or the length of the data when
 /// the key is present (the length may be `0`).
 pub fn vp_iter_next<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     iter_id: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
@@ -1450,7 +1447,7 @@ where
 
 /// Verifier insertion function exposed to the wasm VM Tx environment.
 pub fn tx_insert_verifier<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
 ) -> TxResult<()>
@@ -1484,7 +1481,7 @@ where
 
 /// Update a validity predicate function exposed to the wasm VM Tx environment
 pub fn tx_update_validity_predicate<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     addr_ptr: u64,
     addr_len: u64,
     code_hash_ptr: u64,
@@ -1535,7 +1532,7 @@ where
 /// Initialize a new account established address.
 #[allow(clippy::too_many_arguments)]
 pub fn tx_init_account<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     code_hash_ptr: u64,
     code_hash_len: u64,
     code_tag_ptr: u64,
@@ -1591,7 +1588,7 @@ where
 
 /// Getting the chain ID function exposed to the wasm VM Tx environment.
 pub fn tx_get_chain_id<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1614,7 +1611,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_height<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
@@ -1632,7 +1629,7 @@ where
 /// environment. The index is that of the transaction being applied
 /// in the current block.
 pub fn tx_get_tx_index<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
 ) -> TxResult<u32>
 where
     MEM: VmMemory,
@@ -1654,7 +1651,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_tx_index<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u32>
 where
     MEM: VmMemory,
@@ -1673,7 +1670,7 @@ where
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn tx_get_block_epoch<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
 ) -> TxResult<u64>
 where
     MEM: VmMemory,
@@ -1689,7 +1686,7 @@ where
 
 /// Get predecessor epochs function exposed to the wasm VM Tx environment.
 pub fn tx_get_pred_epochs<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
@@ -1716,7 +1713,7 @@ where
 
 /// Get the native token's address
 pub fn tx_get_native_token<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     result_ptr: u64,
 ) -> TxResult<()>
 where
@@ -1744,7 +1741,7 @@ where
 
 /// Getting the block header function exposed to the wasm VM Tx environment.
 pub fn tx_get_block_header<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     height: u64,
 ) -> TxResult<i64>
 where
@@ -1776,7 +1773,7 @@ where
 
 /// Getting the chain ID function exposed to the wasm VM VP environment.
 pub fn vp_get_chain_id<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1800,7 +1797,7 @@ where
 /// environment. The height is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_height<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
@@ -1817,7 +1814,7 @@ where
 
 /// Getting the block header function exposed to the wasm VM VP environment.
 pub fn vp_get_block_header<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     height: u64,
 ) -> vp_host_fns::EnvResult<i64>
 where
@@ -1850,7 +1847,7 @@ where
 
 /// Getting the transaction hash function exposed to the wasm VM VP environment.
 pub fn vp_get_tx_code_hash<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -1883,7 +1880,7 @@ where
 /// environment. The epoch is that of the block to which the current
 /// transaction is being applied.
 pub fn vp_get_block_epoch<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<u64>
 where
     MEM: VmMemory,
@@ -1900,7 +1897,7 @@ where
 
 /// Get predecessor epochs function exposed to the wasm VM VP environment.
 pub fn vp_get_pred_epochs<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
 ) -> vp_host_fns::EnvResult<i64>
 where
     MEM: VmMemory,
@@ -1924,7 +1921,7 @@ where
 
 /// Expose the functionality to query events from the wasm VM's VP environment.
 pub fn vp_get_events<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     event_type_ptr: u64,
     event_type_len: u64,
 ) -> vp_host_fns::EnvResult<i64>
@@ -1958,7 +1955,7 @@ where
 /// performance
 #[allow(clippy::too_many_arguments)]
 pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     hash_list_ptr: u64,
     hash_list_len: u64,
     public_keys_map_ptr: u64,
@@ -2040,7 +2037,7 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn tx_log_string<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     str_ptr: u64,
     str_len: u64,
 ) -> TxResult<()>
@@ -2060,7 +2057,7 @@ where
 
 /// Validate a VP WASM code hash in a tx environment.
 fn tx_validate_vp_code_hash<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     code_hash: &[u8],
     code_tag: &Option<String>,
 ) -> TxResult<()>
@@ -2072,12 +2069,12 @@ where
 {
     let code_hash = Hash::try_from(code_hash)
         .map_err(|e| TxRuntimeError::InvalidVpCodeHash(e.to_string()))?;
-    let state = env.state();
 
     // First check that code hash corresponds to the code tag if it is present
     if let Some(tag) = code_tag {
         let hash_key = Key::wasm_hash(tag);
-        let (result, gas) = state
+        let (result, gas) = env
+            .state()
             .db_read(&hash_key)
             .map_err(TxRuntimeError::StateError)?;
         tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
@@ -2108,7 +2105,7 @@ where
 
     // Then check that the corresponding VP code does indeed exist
     let code_key = Key::wasm_code(&code_hash);
-    let is_present = state.has_key(&code_key)?;
+    let is_present = env.state().has_key(&code_key)?;
     if !is_present {
         return Err(TxRuntimeError::InvalidVpCodeHash(
             "The corresponding VP code doesn't exist".to_string(),
@@ -2118,8 +2115,9 @@ where
 }
 
 /// Set the sentinel for an invalid tx section commitment
-pub fn tx_set_commitment_sentinel<MEM, D, H, CA>(env: &TxVmEnv<MEM, D, H, CA>)
-where
+pub fn tx_set_commitment_sentinel<MEM, D, H, CA>(
+    env: &mut TxVmEnv<MEM, D, H, CA>,
+) where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
     MEM: VmMemory,
@@ -2132,7 +2130,7 @@ where
 /// Verify a transaction signature
 #[allow(clippy::too_many_arguments)]
 pub fn tx_verify_tx_section_signature<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     hash_list_ptr: u64,
     hash_list_len: u64,
     public_keys_map_ptr: u64,
@@ -2204,7 +2202,7 @@ where
 
 /// Appends the new note commitments to the tree in storage
 pub fn tx_update_masp_note_commitment_tree<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     transaction_ptr: u64,
     transaction_len: u64,
 ) -> TxResult<i64>
@@ -2241,7 +2239,7 @@ where
 
 /// Yield a byte array value from the guest.
 pub fn tx_yield_value<MEM, D, H, CA>(
-    env: &TxVmEnv<MEM, D, H, CA>,
+    env: &mut TxVmEnv<MEM, D, H, CA>,
     buf_ptr: u64,
     buf_len: u64,
 ) -> TxResult<()>
@@ -2263,7 +2261,7 @@ where
 
 /// Evaluate a validity predicate with the given input data.
 pub fn vp_eval<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     vp_code_hash_ptr: u64,
     vp_code_hash_len: u64,
     input_data_ptr: u64,
@@ -2315,7 +2313,7 @@ where
 
 /// Get the native token's address
 pub fn vp_get_native_token<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     result_ptr: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
@@ -2340,7 +2338,7 @@ where
 /// printed at the [`tracing::Level::INFO`]. This function is for development
 /// only.
 pub fn vp_log_string<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     str_ptr: u64,
     str_len: u64,
 ) -> vp_host_fns::EnvResult<()>
@@ -2361,7 +2359,7 @@ where
 
 /// Yield a byte array value from the guest.
 pub fn vp_yield_value<MEM, D, H, EVAL, CA>(
-    env: &VpVmEnv<MEM, D, H, EVAL, CA>,
+    env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     buf_ptr: u64,
     buf_len: u64,
 ) -> vp_host_fns::EnvResult<()>
@@ -2385,6 +2383,8 @@ where
 /// A helper module for testing
 #[cfg(feature = "testing")]
 pub mod testing {
+    use std::rc::Rc;
+
     use super::*;
     use crate::vm::memory::testing::NativeMemory;
     use crate::vm::wasm::memory::WasmMemory;
@@ -2451,15 +2451,14 @@ pub mod testing {
         S: State,
         CA: WasmCacheAccess,
     {
-        let store = crate::vm::wasm::compilation_cache::common::store();
-        let initial_memory =
-            crate::vm::wasm::memory::prepare_tx_memory(&store).unwrap();
-        let mut wasm_memory = WasmMemory::default();
-        wasm_memory.inner.initialize(initial_memory);
+        let mut store = crate::vm::wasm::compilation_cache::common::store();
+
+        let wasm_memory =
+            crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
 
         let (write_log, in_mem, db) = state.split_borrow();
-        TxVmEnv::new(
-            wasm_memory,
+        let mut env = TxVmEnv::new(
+            WasmMemory::new(Rc::new(RefCell::new(store))),
             write_log,
             in_mem,
             db,
@@ -2476,7 +2475,10 @@ pub mod testing {
             vp_wasm_cache,
             #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
-        )
+        );
+
+        env.memory.init_from(&wasm_memory);
+        env
     }
 
     /// Setup a validity predicate environment

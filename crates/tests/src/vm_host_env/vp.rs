@@ -267,7 +267,7 @@ mod native_vp_host_env {
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
 
-                            let env = vm::host_env::testing::vp_env(
+                            let mut env = vm::host_env::testing::vp_env(
                                 addr,
                                 state,
                                 iterators,
@@ -285,7 +285,7 @@ mod native_vp_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            $fn( &mut env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -312,7 +312,7 @@ mod native_vp_host_env {
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
 
-                            let env = vm::host_env::testing::vp_env(
+                            let mut env = vm::host_env::testing::vp_env(
                                 addr,
                                 state,
                                 iterators,
@@ -330,7 +330,7 @@ mod native_vp_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &env, $($arg),* ).unwrap()
+                            $fn( &mut env, $($arg),* ).unwrap()
                         })
                     }
                 });

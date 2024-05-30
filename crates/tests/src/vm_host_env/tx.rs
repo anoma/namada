@@ -354,7 +354,7 @@ mod native_tx_host_env {
                                 batched_tx,
                             }: &mut TestTxEnv| {
 
-                            let tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -371,7 +371,7 @@ mod native_tx_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &tx_env, $($arg),* ).unwrap()
+                            $fn( &mut tx_env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -398,7 +398,7 @@ mod native_tx_host_env {
                                 batched_tx
                             }: &mut TestTxEnv| {
 
-                            let tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -415,7 +415,7 @@ mod native_tx_host_env {
 
                             // Call the `host_env` function and unwrap any
                             // runtime errors
-                            $fn( &tx_env, $($arg),* ).unwrap()
+                            $fn( &mut tx_env, $($arg),* ).unwrap()
                         })
                     }
                 });
@@ -442,7 +442,7 @@ mod native_tx_host_env {
                                 batched_tx,
                             }: &mut TestTxEnv| {
 
-                            let tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -458,7 +458,7 @@ mod native_tx_host_env {
                             );
 
                             // Call the `host_env` function
-                            $fn( &tx_env, $($arg),* )
+                            $fn( &mut tx_env, $($arg),* )
                         })
                     }
                 });
@@ -582,13 +582,18 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
-        let _res =
-            host_env::tx_read(&tx_env, setup.key_memory_ptr, setup.key_len());
-        let _res =
-            host_env::tx_result_buffer(&tx_env, setup.read_buffer_memory_ptr);
+        let _res = host_env::tx_read(
+            &mut tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+        );
+        let _res = host_env::tx_result_buffer(
+            &mut tx_env,
+            setup.read_buffer_memory_ptr,
+        );
     }
 
     proptest! {
@@ -603,10 +608,10 @@ mod tests {
 
     fn test_tx_charge_gas_cannot_panic_aux(setup: TestSetup, gas: u64) {
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
-        let _res = host_env::tx_charge_gas(&tx_env, gas);
+        let _res = host_env::tx_charge_gas(&mut tx_env, gas);
     }
 
     proptest! {
@@ -622,11 +627,11 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_has_key(
-            &tx_env,
+            &mut tx_env,
             setup.key_memory_ptr,
             setup.key_len(),
         );
@@ -645,18 +650,18 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_write(
-            &tx_env,
+            &mut tx_env,
             setup.key_memory_ptr,
             setup.key_len(),
             setup.val_memory_ptr,
             setup.val_len(),
         );
         let _res = host_env::tx_write_temp(
-            &tx_env,
+            &mut tx_env,
             setup.key_memory_ptr,
             setup.key_len(),
             setup.val_memory_ptr,
@@ -677,11 +682,14 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
-        let _res =
-            host_env::tx_delete(&tx_env, setup.key_memory_ptr, setup.key_len());
+        let _res = host_env::tx_delete(
+            &mut tx_env,
+            setup.key_memory_ptr,
+            setup.key_len(),
+        );
     }
 
     proptest! {
@@ -697,16 +705,16 @@ mod tests {
         // dbg!(&setup);
 
         let mut test_env = TestTxEnv::default();
-        let tx_env = setup_host_env(&setup, &mut test_env);
+        let mut tx_env = setup_host_env(&setup, &mut test_env);
 
         // Can fail, but must not panic
         let _res = host_env::tx_iter_prefix(
-            &tx_env,
+            &mut tx_env,
             setup.key_memory_ptr,
             setup.key_len(),
         );
         let _res = host_env::tx_iter_next(
-            &tx_env,
+            &mut tx_env,
             // This field is not used for anything else in this test
             setup.val_memory_ptr,
         );
@@ -751,7 +759,7 @@ mod tests {
             batched_tx,
         } = test_env;
 
-        let tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+        let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
             state,
             iterators,
             verifiers,
