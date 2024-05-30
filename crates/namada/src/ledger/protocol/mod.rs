@@ -670,7 +670,7 @@ where
     // limit of the transaction
     let min_gas_limit = state
         .read::<u64>(
-            &namada_parameters::storage::get_fee_unshielding_gas_limit_key(),
+            &namada_parameters::storage::get_masp_fee_payment_gas_limit_key(),
         )
         .expect("Error reading the storage")
         .expect("Missing masp fee payment gas limit in storage")

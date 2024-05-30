@@ -77,7 +77,7 @@ where
         masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
-        fee_unshielding_gas_limit,
+        masp_fee_payment_gas_limit,
         is_native_token_transferable,
     } = parameters;
 
@@ -97,10 +97,11 @@ where
     let epoch_key = storage::get_epoch_duration_storage_key();
     storage.write(&epoch_key, epoch_duration)?;
 
-    // write fee unshielding gas limit
-    let fee_unshielding_gas_limit_key =
-        storage::get_fee_unshielding_gas_limit_key();
-    storage.write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
+    // write masp fee payment gas limit
+    let masp_fee_payment_gas_limit_key =
+        storage::get_masp_fee_payment_gas_limit_key();
+    storage
+        .write(&masp_fee_payment_gas_limit_key, masp_fee_payment_gas_limit)?;
 
     // write vp allowlist parameter
     let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
@@ -371,11 +372,11 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read fee unshielding gas limit
-    let fee_unshielding_gas_limit_key =
-        storage::get_fee_unshielding_gas_limit_key();
-    let value = storage.read(&fee_unshielding_gas_limit_key)?;
-    let fee_unshielding_gas_limit: u64 = value
+    // read masp fee payment gas limit
+    let masp_fee_payment_gas_limit_key =
+        storage::get_masp_fee_payment_gas_limit_key();
+    let value = storage.read(&masp_fee_payment_gas_limit_key)?;
+    let masp_fee_payment_gas_limit: u64 = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
@@ -432,7 +433,7 @@ where
         masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
-        fee_unshielding_gas_limit,
+        masp_fee_payment_gas_limit,
         is_native_token_transferable,
     })
 }
@@ -477,7 +478,7 @@ where
         epochs_per_year: 365,
         masp_epoch_multiplier: 2,
         max_signatures_per_transaction: 10,
-        fee_unshielding_gas_limit: 0,
+        masp_fee_payment_gas_limit: 0,
         minimum_gas_price: Default::default(),
         is_native_token_transferable: true,
     };

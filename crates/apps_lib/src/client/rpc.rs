@@ -660,16 +660,16 @@ pub async fn query_protocol_parameters(
         .expect("Parameter should be defined.");
     display_line!(context.io(), "{:4}Max block gas: {:?}", "", max_block_gas);
 
-    let key = param_storage::get_fee_unshielding_gas_limit_key();
-    let fee_unshielding_gas_limit: u64 =
+    let key = param_storage::get_masp_fee_payment_gas_limit_key();
+    let masp_fee_payment_gas_limit: u64 =
         query_storage_value(context.client(), &key)
             .await
             .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Fee unshielding gas limit: {:?}",
+        "{:4}Masp fee payment gas limit: {:?}",
         "",
-        fee_unshielding_gas_limit
+        masp_fee_payment_gas_limit
     );
 
     let key = param_storage::get_gas_cost_key();

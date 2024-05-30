@@ -51,8 +51,8 @@ pub struct Parameters {
     pub masp_epoch_multiplier: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// The gas limit for a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
     /// Enable the native token transfer if it is true
