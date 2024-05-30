@@ -1201,7 +1201,7 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = UnshieldingTransfer::deserialize(
+        let transfer = ShieldingTransfer::deserialize(
             &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
         )
         .unwrap();

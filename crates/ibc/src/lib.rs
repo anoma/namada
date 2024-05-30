@@ -78,7 +78,7 @@ pub use msg::*;
 use namada_core::address::{self, Address, MASP};
 use namada_core::masp::PaymentAddress;
 use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
-use namada_token::UnshieldingTransfer;
+use namada_token::ShieldingTransfer;
 pub use nft::*;
 use prost::Message;
 use thiserror::Error;
@@ -154,7 +154,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<Option<UnshieldingTransfer>, Error> {
+    ) -> Result<Option<ShieldingTransfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {

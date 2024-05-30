@@ -2567,9 +2567,9 @@ pub async fn build_ibc_transfer(
     let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
         let masp_tx_hash =
             tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-        let transfer = token::UnshieldingTransfer {
+        let transfer = token::ShieldingTransfer {
             // The token will be escrowed to IBC address
-            target: Address::Internal(InternalAddress::Ibc),
+            source: source.clone(),
             token: args.token.clone(),
             amount: validated_amount,
             // Link the Transfer to the MASP Transaction by hash code
