@@ -16,13 +16,13 @@ use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::{DispatchArgs, DispatchError};
+use namada::masp::MaspTxRefs;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
 use namada::state::write_log::StorageModification;
 use namada::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
-use namada::token::utils::is_masp_tx;
 use namada::tx::data::protocol::ProtocolTxType;
 use namada::tx::data::VpStatusFlags;
 use namada::tx::event::{Batch, Code};
@@ -346,15 +346,15 @@ where
     fn evaluate_tx_result(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        dispatch_result: std::result::Result<
-            namada::tx::data::TxResult<protocol::Error>,
+        extended_dispatch_result: std::result::Result<
+            namada::tx::data::ExtendedTxResult<protocol::Error>,
             DispatchError,
         >,
         tx_data: TxData<'_>,
         mut tx_logs: TxLogs<'_>,
     ) -> Option<WrapperCache> {
-        match dispatch_result {
-            Ok(tx_result) => match tx_data.tx.header.tx_type {
+        match extended_dispatch_result {
+            Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
                     // Return withouth emitting any events
                     return Some(WrapperCache {
@@ -362,12 +362,12 @@ where
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        tx_result,
+                        tx_result: extended_tx_result.tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
                     response,
-                    tx_result,
+                    extended_tx_result,
                     tx_data,
                     &mut tx_logs,
                 ),
@@ -434,7 +434,7 @@ where
     fn handle_inner_tx_results(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
-        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -444,7 +444,8 @@ where
             commit_batch_hash,
             is_any_tx_invalid,
         } = temp_log.check_inner_results(
-            &tx_result,
+            &extended_tx_result.tx_result,
+            extended_tx_result.masp_tx_refs,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -455,8 +456,10 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(tx_result.batch_results.0.len())
-                        .expect("Should be able to convert to u64"),
+                    u64::try_from(
+                        extended_tx_result.tx_result.batch_results.0.len(),
+                    )
+                    .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
@@ -485,16 +488,16 @@ where
 
         tx_logs
             .tx_event
-            .extend(GasUsed(tx_result.gas_used))
+            .extend(GasUsed(extended_tx_result.tx_result.gas_used))
             .extend(Info("Check batch for result.".to_string()))
-            .extend(Batch(&tx_result.to_result_string()));
+            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
 
     fn handle_batch_error(
         &mut self,
         response: &mut shim::response::FinalizeBlock,
         msg: &Error,
-        tx_result: namada::tx::data::TxResult<protocol::Error>,
+        extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
         tx_data: TxData<'_>,
         tx_logs: &mut TxLogs<'_>,
     ) {
@@ -504,7 +507,8 @@ where
             commit_batch_hash,
             is_any_tx_invalid: _,
         } = temp_log.check_inner_results(
-            &tx_result,
+            &extended_tx_result.tx_result,
+            extended_tx_result.masp_tx_refs,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -512,8 +516,10 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(tx_result.batch_results.0.len())
-                    .expect("Should be able to convert to u64"),
+                u64::try_from(
+                    extended_tx_result.tx_result.batch_results.0.len(),
+                )
+                .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
@@ -544,7 +550,7 @@ where
 
         tx_logs
             .tx_event
-            .extend(Batch(&tx_result.to_result_string()));
+            .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
 
     fn handle_batch_error_reprot(&mut self, err: &Error, tx_data: TxData<'_>) {
@@ -958,19 +964,16 @@ impl<'finalize> TempTxLogs {
     fn check_inner_results(
         &mut self,
         tx_result: &namada::tx::data::TxResult<protocol::Error>,
+        masp_tx_refs: MaspTxRefs,
         tx_index: usize,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
-        let mut masp_cmts = vec![];
 
         for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
-                        if is_masp_tx(&result.changed_keys) {
-                            masp_cmts.push(*cmt_hash);
-                        }
                         tracing::trace!(
                             "all VPs accepted inner tx {} storage \
                              modification {:#?}",
@@ -1030,10 +1033,10 @@ impl<'finalize> TempTxLogs {
 
         // If at least one of the inner transactions is a valid masp tx, update
         // the events
-        if !masp_cmts.is_empty() {
+        if !masp_tx_refs.0.is_empty() {
             self.tx_event
                 .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
-            self.tx_event.extend(MaspTxBatchRefs(masp_cmts.into()));
+            self.tx_event.extend(MaspTxBatchRefs(masp_tx_refs));
         }
 
         flags

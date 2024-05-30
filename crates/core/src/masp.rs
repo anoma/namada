@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, MASP};
+use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::storage::Epoch;
 use crate::string_encoding::{
@@ -530,5 +531,23 @@ impl FromStr for MaspValue {
             .or_else(|_err| {
                 ExtendedViewingKey::from_str(s).map(Self::FullViewingKey)
             })
+    }
+}
+
+/// The masp transactions' references of a given batch
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct MaspTxRefs(pub Vec<Hash>);
+
+impl Display for MaspTxRefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for MaspTxRefs {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }

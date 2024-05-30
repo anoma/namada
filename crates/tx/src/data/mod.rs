@@ -21,6 +21,7 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::hash::Hash;
+use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
 use namada_gas::{Gas, VpsGas};
@@ -238,6 +239,24 @@ impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for BatchResults<T> {
     }
 }
 
+/// The extended transaction result, containing the references to masp
+/// sections (if any)
+pub struct ExtendedTxResult<T> {
+    /// The transaction result
+    pub tx_result: TxResult<T>,
+    /// The optional references to masp sections
+    pub masp_tx_refs: MaspTxRefs,
+}
+
+impl<T> Default for ExtendedTxResult<T> {
+    fn default() -> Self {
+        Self {
+            tx_result: Default::default(),
+            masp_tx_refs: Default::default(),
+        }
+    }
+}
+
 /// Transaction application result
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
@@ -277,6 +296,17 @@ impl<T: Display> TxResult<T> {
         TxResult {
             gas_used: self.gas_used,
             batch_results: BatchResults(batch_results),
+        }
+    }
+
+    /// Converts this result to [`ExtendedTxResult`]
+    pub fn to_extended_result(
+        self,
+        masp_tx_refs: Option<MaspTxRefs>,
+    ) -> ExtendedTxResult<T> {
+        ExtendedTxResult {
+            tx_result: self,
+            masp_tx_refs: masp_tx_refs.unwrap_or_default(),
         }
     }
 }
