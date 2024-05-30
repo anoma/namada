@@ -20,6 +20,8 @@
 pub mod extend;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
+#[cfg(any(test, feature = "debug"))]
+pub mod tracer;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;

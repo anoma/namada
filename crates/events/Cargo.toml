@@ -14,12 +14,13 @@ version.workspace = true
 
 [features]
 default = []
+debug = []
 mainnet = []
 migrations = [
   "namada_migrations",
   "linkme",
 ]
-testing = []
+testing = ["debug"]
 
 [dependencies]
 namada_core = {path = "../core"}
