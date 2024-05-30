@@ -56,7 +56,7 @@ fn process_tx(c: &mut Criterion) {
     let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || {
                 (
                     // Prevent block out of gas and replay protection
@@ -68,10 +68,10 @@ fn process_tx(c: &mut Criterion) {
                 )
             },
             |(
-                mut temp_state,
-                mut validation_meta,
-                mut vp_wasm_cache,
-                mut tx_wasm_cache,
+                temp_state,
+                validation_meta,
+                vp_wasm_cache,
+                tx_wasm_cache,
                 block_proposer,
             )| {
                 assert_eq!(
@@ -79,12 +79,12 @@ fn process_tx(c: &mut Criterion) {
                     shell
                         .check_proposal_tx(
                             &wrapper,
-                            &mut validation_meta,
-                            &mut temp_state,
+                            validation_meta,
+                            temp_state,
                             datetime,
-                            &mut vp_wasm_cache,
-                            &mut tx_wasm_cache,
-                            &block_proposer
+                            vp_wasm_cache,
+                            tx_wasm_cache,
+                            block_proposer
                         )
                         .code,
                     0

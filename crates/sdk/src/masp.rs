@@ -17,14 +17,12 @@ use masp_primitives::consensus::MainNetwork as Network;
 use masp_primitives::consensus::TestNetwork as Network;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::ff::PrimeField;
-use masp_primitives::group::GroupEncoding;
 use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
 use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::note_encryption::*;
-use masp_primitives::sapling::redjubjub::PublicKey;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
@@ -32,10 +30,12 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
     RngBuildParams, SaplingMetadata,
 };
+use masp_primitives::transaction::components::sapling::{
+    Authorized as SaplingAuthorized, Bundle as SaplingBundle,
+};
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
-    ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
-    U64Sum, ValueSum,
+    I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
@@ -45,11 +45,10 @@ use masp_primitives::transaction::{
     TransparentAddress, Unauthorized,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::PreparedVerifyingKey;
+use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
-#[cfg(not(feature = "testing"))]
-use masp_proofs::sapling::SaplingVerificationContext;
+use masp_proofs::sapling::BatchValidator;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
@@ -71,9 +70,11 @@ use namada_migrations::*;
 use namada_state::StorageError;
 use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::{IndexedTx, Tx};
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand::rngs::StdRng;
+use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest;
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
@@ -146,11 +147,11 @@ pub enum TransferErr {
 /// MASP verifying keys
 pub struct PVKs {
     /// spend verifying key
-    pub spend_vk: PreparedVerifyingKey<Bls12>,
+    pub spend_vk: VerifyingKey<Bls12>,
     /// convert verifying key
-    pub convert_vk: PreparedVerifyingKey<Bls12>,
+    pub convert_vk: VerifyingKey<Bls12>,
     /// output verifying key
-    pub output_vk: PreparedVerifyingKey<Bls12>,
+    pub output_vk: VerifyingKey<Bls12>,
 }
 
 lazy_static! {
@@ -184,9 +185,9 @@ lazy_static! {
             convert_path.as_path(),
         );
         PVKs {
-            spend_vk: params.spend_vk,
-            convert_vk: params.convert_vk,
-            output_vk: params.output_vk
+            spend_vk: params.spend_params.vk,
+            convert_vk: params.convert_params.vk,
+            output_vk: params.output_params.vk
         }
     };
 }
@@ -198,76 +199,6 @@ pub fn preload_verifying_keys() -> &'static PVKs {
 
 fn load_pvks() -> &'static PVKs {
     &VERIFIYING_KEYS
-}
-
-/// check_spend wrapper
-pub fn check_spend(
-    spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
-    sighash: &[u8; 32],
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(spend.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_spend(
-        spend.cv,
-        spend.anchor,
-        &spend.nullifier.0,
-        PublicKey(spend.rk.0),
-        sighash,
-        spend.spend_auth_sig,
-        zkproof,
-        parameters,
-    )
-}
-
-/// check_output wrapper
-pub fn check_output(
-    output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(output.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-    let epk =
-        masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
-    let epk = match epk.into() {
-        Some(p) => p,
-        None => return false,
-    };
-
-    ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
-}
-
-/// check convert wrapper
-pub fn check_convert(
-    convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(convert.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
 }
 
 /// Represents an authorization where the Sapling bundle is authorized and the
@@ -315,12 +246,12 @@ pub fn partial_deauthorize(
 /// Verify a shielded transaction.
 pub fn verify_shielded_tx<F>(
     transaction: &Transaction,
-    mut consume_verify_gas: F,
+    consume_verify_gas: F,
 ) -> Result<(), StorageError>
 where
-    F: FnMut(u64) -> std::result::Result<(), StorageError>,
+    F: Fn(u64) -> std::result::Result<(), StorageError>,
 {
-    tracing::info!("entered verify_shielded_tx()");
+    tracing::debug!("entered verify_shielded_tx()");
 
     let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
         bundle
@@ -345,8 +276,7 @@ where
     // for now we need to continue to compute it here.
     let sighash =
         signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
-
-    tracing::info!("sighash computed");
+    tracing::debug!("sighash computed");
 
     let PVKs {
         spend_vk,
@@ -355,49 +285,103 @@ where
     } = load_pvks();
 
     #[cfg(not(feature = "testing"))]
-    let mut ctx = SaplingVerificationContext::new(true);
+    let mut ctx = BatchValidator::new();
     #[cfg(feature = "testing")]
-    let mut ctx = testing::MockSaplingVerificationContext::new(true);
-    for spend in &sapling_bundle.shielded_spends {
-        consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
-        if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded spend"));
-        }
+    let mut ctx = testing::MockBatchValidator::default();
+
+    // Charge gas before check bundle
+    charge_masp_check_bundle_gas(sapling_bundle, &consume_verify_gas)?;
+
+    if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
+    {
+        tracing::debug!("failed check bundle");
+        return Err(StorageError::SimpleMessage("Invalid sapling bundle"));
     }
-    for convert in &sapling_bundle.shielded_converts {
-        consume_verify_gas(namada_gas::MASP_VERIFY_CONVERT_GAS)?;
-        if !check_convert(convert, &mut ctx, convert_vk) {
-            return Err(StorageError::SimpleMessage(
-                "Invalid shielded conversion",
-            ));
-        }
+    tracing::debug!("passed check bundle");
+
+    // Charge gas before final validation
+    charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
+    if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
+        return Err(StorageError::SimpleMessage(
+            "Invalid proofs or signatures",
+        ));
     }
-    for output in &sapling_bundle.shielded_outputs {
-        consume_verify_gas(namada_gas::MASP_VERIFY_OUTPUT_GAS)?;
-        if !check_output(output, &mut ctx, output_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded output"));
-        }
+    Ok(())
+}
+
+// Charge gas for the check_bundle operation which does not leverage concurrency
+fn charge_masp_check_bundle_gas<F>(
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
+    consume_verify_gas: F,
+) -> Result<(), namada_state::StorageError>
+where
+    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
+{
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_spends.len() as u64)
+            * namada_gas::MASP_SPEND_CHECK_GAS
+    )?)?;
+
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_converts.len() as u64)
+            * namada_gas::MASP_CONVERT_CHECK_GAS
+    )?)?;
+
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_outputs.len() as u64)
+            * namada_gas::MASP_OUTPUT_CHECK_GAS
+    )?)
+}
+
+// Charge gas for the final validation, taking advtange of concurrency for
+// proofs verification but not for signatures
+fn charge_masp_validate_gas<F>(
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
+    consume_verify_gas: F,
+) -> Result<(), namada_state::StorageError>
+where
+    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
+{
+    // Signatures gas
+    consume_verify_gas(checked!(
+        // Add one for the binding signature
+        ((sapling_bundle.shielded_spends.len() as u64) + 1)
+            * namada_gas::MASP_VERIFY_SIG_GAS
+    )?)?;
+
+    // If at least one note is present charge the fixed costs. Then charge the
+    // variable cost for every other note, amortized on the fixed expected
+    // number of cores
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_spends.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
 
-    tracing::info!("passed spend/output verification");
-
-    let assets_and_values: I128Sum = sapling_bundle.value_balance.clone();
-
-    tracing::info!(
-        "accumulated {} assets/values",
-        assets_and_values.components().len()
-    );
-
-    consume_verify_gas(namada_gas::MASP_VERIFY_FINAL_GAS)?;
-    let result = ctx.final_check(
-        assets_and_values,
-        sighash.as_ref(),
-        sapling_bundle.authorization.binding_sig,
-    );
-    tracing::info!("final check result {result}");
-    if !result {
-        return Err(StorageError::SimpleMessage("MASP final check failed"));
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_converts.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
+
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_outputs.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
+    }
+
     Ok(())
 }
 
@@ -1540,9 +1524,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // No shielded components are needed when neither source nor destination
         // are shielded
 
-        use rand::rngs::StdRng;
-        use rand_core::SeedableRng;
-
         let spending_key = source.spending_key();
         let payment_address = target.payment_address();
         // No shielded components are needed when neither source nor
@@ -2164,12 +2145,14 @@ pub mod testing {
     use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
+    use masp_primitives::group::GroupEncoding;
     use masp_primitives::sapling::prover::TxProver;
-    use masp_primitives::sapling::redjubjub::Signature;
+    use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
+    use masp_primitives::transaction::components::sapling::Bundle;
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
-    use masp_proofs::bellman::groth16::Proof;
+    use masp_proofs::bellman::groth16::{self, Proof};
     use proptest::prelude::*;
     use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
@@ -2183,129 +2166,59 @@ pub mod testing {
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
-    use crate::masp_proofs::sapling::SaplingVerificationContextInner;
     use crate::storage::testing::arb_epoch;
     use crate::token::testing::arb_denomination;
 
-    /// A context object for verifying the Sapling components of a single Zcash
-    /// transaction. Same as SaplingVerificationContext, but always assumes the
-    /// proofs to be valid.
-    pub struct MockSaplingVerificationContext {
-        inner: SaplingVerificationContextInner,
-        zip216_enabled: bool,
+    /// A context object for verifying the Sapling components of MASP
+    /// transactions. Same as BatchValidator, but always assumes the
+    /// proofs and signatures to be valid.
+    pub struct MockBatchValidator {
+        inner: BatchValidator,
     }
 
-    impl MockSaplingVerificationContext {
-        /// Construct a new context to be used with a single transaction.
-        pub fn new(zip216_enabled: bool) -> Self {
-            MockSaplingVerificationContext {
-                inner: SaplingVerificationContextInner::new(),
-                zip216_enabled,
+    impl Default for MockBatchValidator {
+        fn default() -> Self {
+            MockBatchValidator {
+                inner: BatchValidator::new(),
             }
         }
+    }
 
-        /// Perform consensus checks on a Sapling SpendDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        #[allow(clippy::too_many_arguments)]
-        pub fn check_spend(
+    impl MockBatchValidator {
+        /// Checks the bundle against Sapling-specific consensus rules, and adds
+        /// its proof and signatures to the validator.
+        ///
+        /// Returns `false` if the bundle doesn't satisfy all of the consensus
+        /// rules. This `BatchValidator` can continue to be used
+        /// regardless, but some or all of the proofs and signatures
+        /// from this bundle may have already been added to the batch even if
+        /// it fails other consensus rules.
+        pub fn check_bundle(
             &mut self,
-            cv: jubjub::ExtendedPoint,
-            anchor: bls12_381::Scalar,
-            nullifier: &[u8; 32],
-            rk: PublicKey,
-            sighash_value: &[u8; 32],
-            spend_auth_sig: Signature,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
+            bundle: Bundle<
+                masp_primitives::transaction::components::sapling::Authorized,
+            >,
+            sighash: [u8; 32],
         ) -> bool {
-            let zip216_enabled = true;
-            self.inner.check_spend(
-                cv,
-                anchor,
-                nullifier,
-                rk,
-                sighash_value,
-                spend_auth_sig,
-                zkproof,
-                &mut (),
-                |_, rk, msg, spend_auth_sig| {
-                    rk.verify_with_zip216(
-                        &msg,
-                        &spend_auth_sig,
-                        SPENDING_KEY_GENERATOR,
-                        zip216_enabled,
-                    )
-                },
-                |_, _proof, _public_inputs| true,
-            )
+            self.inner.check_bundle(bundle, sighash)
         }
 
-        /// Perform consensus checks on a Sapling SpendDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        #[allow(clippy::too_many_arguments)]
-        pub fn check_convert(
-            &mut self,
-            cv: jubjub::ExtendedPoint,
-            anchor: bls12_381::Scalar,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        /// Batch-validates the accumulated bundles.
+        ///
+        /// Returns `true` if every proof and signature in every bundle added to
+        /// the batch validator is valid, or `false` if one or more are
+        /// invalid. No attempt is made to figure out which of the
+        /// accumulated bundles might be invalid; if that information is
+        /// desired, construct separate [`BatchValidator`]s for sub-batches of
+        /// the bundles.
+        pub fn validate<R: RngCore + CryptoRng>(
+            self,
+            _spend_vk: &groth16::VerifyingKey<Bls12>,
+            _convert_vk: &groth16::VerifyingKey<Bls12>,
+            _output_vk: &groth16::VerifyingKey<Bls12>,
+            mut _rng: R,
         ) -> bool {
-            self.inner.check_convert(
-                cv,
-                anchor,
-                zkproof,
-                &mut (),
-                |_, _proof, _public_inputs| true,
-            )
-        }
-
-        /// Perform consensus checks on a Sapling OutputDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        pub fn check_output(
-            &mut self,
-            cv: jubjub::ExtendedPoint,
-            cmu: bls12_381::Scalar,
-            epk: jubjub::ExtendedPoint,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
-        ) -> bool {
-            self.inner.check_output(
-                cv,
-                cmu,
-                epk,
-                zkproof,
-                |_proof, _public_inputs| true,
-            )
-        }
-
-        /// Perform consensus checks on the valueBalance and bindingSig parts of
-        /// a Sapling transaction. All SpendDescriptions and
-        /// OutputDescriptions must have been checked before calling
-        /// this function.
-        pub fn final_check(
-            &self,
-            value_balance: I128Sum,
-            sighash_value: &[u8; 32],
-            binding_sig: Signature,
-        ) -> bool {
-            self.inner.final_check(
-                value_balance,
-                sighash_value,
-                binding_sig,
-                |bvk, msg, binding_sig| {
-                    // Compute the signature's message for bvk/binding_sig
-                    let mut data_to_be_signed = [0u8; 64];
-                    data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
-                    data_to_be_signed[32..64].copy_from_slice(msg);
-
-                    bvk.verify_with_zip216(
-                        &data_to_be_signed,
-                        &binding_sig,
-                        VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
-                        self.zip216_enabled,
-                    )
-                },
-            )
+            true
         }
     }
 

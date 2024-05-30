@@ -196,6 +196,10 @@ winapi = "0.3.9"
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }
 
+[patch.crates-io]
+# Patch to the fork containing the correct personalization and basepoints for masp
+reddsa = { git = "https://github.com/heliaxdev/reddsa", rev = "46d363b929e1b940688fa0c53d637e304a755185" }
+
 [profile.release]
 lto = true
 opt-level = 3

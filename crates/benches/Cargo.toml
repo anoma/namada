@@ -17,20 +17,20 @@ name = "native_vps"
 harness = false
 path = "native_vps.rs"
 
-[[bench]]
-name = "process_wrapper"
-harness = false
-path = "process_wrapper.rs"
+# [[bench]]
+# name = "process_wrapper"
+# harness = false
+# path = "process_wrapper.rs"
 
-[[bench]]
-name = "host_env"
-harness = false
-path = "host_env.rs"
+# [[bench]]
+# name = "host_env"
+# harness = false
+# path = "host_env.rs"
 
-[[bench]]
-name = "wasm_opcodes"
-harness = false
-path = "wasm_opcodes.rs"
+# [[bench]]
+# name = "wasm_opcodes"
+# harness = false
+# path = "wasm_opcodes.rs"
 
 [features]
 namada-eth-bridge = [
@@ -46,6 +46,7 @@ namada = { path = "../namada", features = ["rand", "benches"] }
 namada_apps_lib = { path = "../apps_lib" }
 namada_node = { path = "../node", features = ["benches"] }
 masp_primitives.workspace = true
+masp_proofs = { workspace = true, features = ["benchmarks"] }
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
