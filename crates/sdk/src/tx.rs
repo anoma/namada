@@ -3211,7 +3211,7 @@ async fn construct_shielded_parts<N: Namada>(
         Err(Build(builder::Error::InsufficientFunds(_))) => {
             return Err(TxSubmitError::NegativeBalanceAfterTransfer(
                 Box::new(source.effective_address()),
-                amount.amount().to_string_native(),
+                amount.to_string(),
                 Box::new(token.clone()),
             )
             .into());
