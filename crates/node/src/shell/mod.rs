@@ -666,10 +666,10 @@ where
             .commit_block()
             .expect("Encountered a storage error while committing a block");
         let committed_height = self.state.in_mem().get_last_block_height();
-        self.scheduled_migration = migrations::commit(
+        migrations::commit(
             self.state.db(),
             committed_height,
-            self.scheduled_migration.take(),
+            &mut self.scheduled_migration,
         );
         let merkle_root = self.state.in_mem().merkle_root();
 

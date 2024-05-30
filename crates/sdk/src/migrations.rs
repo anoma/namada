@@ -511,24 +511,22 @@ impl Display for UpdateStatus {
 pub fn commit<D: DB>(
     db: &D,
     height: BlockHeight,
-    migration: Option<ScheduledMigration<D::Migrator>>,
-) -> Option<ScheduledMigration<D::Migrator>>
-where
+    migration: &mut Option<ScheduledMigration<D::Migrator>>,
+) where
     D::Migrator: DeserializeOwned,
 {
     let maybe_migration = migration;
-    if let Some(migration) = maybe_migration.as_ref() {
-        if height != migration.height {
-            return maybe_migration;
+    let migration = match maybe_migration.as_ref() {
+        Some(migration) if height == migration.height => {
+            maybe_migration.take().unwrap().load().unwrap()
         }
-    } else {
-        return None;
-    }
+        _ => return,
+    };
+
     tracing::info!(
         "A migration is scheduled to take place at this block height. \
          Starting..."
     );
-    let migration = maybe_migration.unwrap().load().unwrap();
 
     match db.apply_migration_to_batch(migration) {
         Ok(batch) => {
@@ -543,7 +541,6 @@ where
             );
         }
     }
-    None
 }
 
 #[cfg(feature = "migrations")]
