@@ -317,7 +317,6 @@ where
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn prepare_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
     tx: &Tx,
@@ -340,7 +339,7 @@ where
     super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
     protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
-        .map_err(Error::TxApply)
+        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 fn compute_min_gas_price<D, H>(

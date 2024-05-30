@@ -1302,12 +1302,12 @@ where
     ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-    protocol::check_fees(shell_params, tx, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params, tx, wrapper)
+        .map_err(Error::TxApply)
+        .map(|_| ())
 }
 
 /// Check the validity of the fee data
-// FIXME: review the usage of this and if we a re doing this check also when
-// paying checking fees
 pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,

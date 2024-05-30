@@ -543,7 +543,7 @@ where
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
     protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
-        .map_err(Error::TxApply)
+        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows
