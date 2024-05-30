@@ -534,7 +534,8 @@ impl Position {
     }
 }
 
-/// Validator's state.
+/// Validator's state. May correspond to the validator set within which the
+/// validator belongs.
 #[derive(
     Debug,
     Clone,
@@ -547,19 +548,22 @@ impl Position {
     Eq,
 )]
 pub enum ValidatorState {
-    /// A validator who may participate in the consensus
+    /// A validator who may participate in the consensus and is one of the top
+    /// `max_validator_slots` validators with stake above
+    /// `validator_stake_threshold`
     Consensus,
-    /// A validator who does not have enough stake to be considered in the
-    /// `Consensus` validator set but still may have active bonds and unbonds
+    /// A validator who has stake greater than the `validator_stake_threshold`
+    /// but is not one of the top `max_validator_slots` validators who have
+    /// such stake
     BelowCapacity,
     /// A validator who has stake less than the `validator_stake_threshold`
     /// parameter
     BelowThreshold,
     /// A validator who is deactivated via a tx when a validator no longer
-    /// wants to be one (not implemented yet)
+    /// wants to be considered for consensus
     Inactive,
-    /// A `Jailed` validator has been prohibited from participating in
-    /// consensus due to a misbehavior
+    /// A validator who is prohibited from participating in
+    /// consensus due to a misbehavior or downtime
     Jailed,
 }
 

@@ -40,17 +40,12 @@ namada_tx = {path = "../tx"}
 namada_vote_ext = {path = "../vote_ext"}
 
 borsh.workspace = true
-ethabi.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 serde.workspace = true
-serde_json.workspace = true
-rand.workspace = true
-tendermint = {workspace = true}
-tendermint-proto = {workspace = true}
 thiserror.workspace = true
 tracing = "0.1.30"
 

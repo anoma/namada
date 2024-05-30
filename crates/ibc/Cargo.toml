@@ -23,7 +23,6 @@ testing = ["namada_core/testing", "ibc-testkit", "proptest"]
 [dependencies]
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
-namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
@@ -31,7 +30,6 @@ namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
-namada_tx = { path = "../tx"}
 
 borsh.workspace = true
 konst.workspace = true

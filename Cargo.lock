@@ -4365,23 +4365,15 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "base58",
- "bimap",
  "borsh 1.2.1",
  "borsh-ext",
  "byte-unit",
- "circular-queue",
  "clru",
- "data-encoding",
- "derivation-path",
- "derivative",
- "ethbridge-bridge-contract",
  "ethers",
  "eyre",
- "futures",
  "ibc-testkit",
  "itertools 0.12.1",
  "k256",
- "konst",
  "linkme",
  "loupe",
  "masp_primitives",
@@ -4393,7 +4385,6 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
- "namada_macros",
  "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
@@ -4406,33 +4397,22 @@ dependencies = [
  "namada_tx_env",
  "namada_vote_ext",
  "namada_vp_env",
- "num-traits 0.2.17",
- "num256",
- "orion",
- "owo-colors",
  "parity-wasm",
- "paste",
  "pretty_assertions",
  "proptest",
  "prost 0.12.3",
  "rand 0.8.5",
- "rand_core 0.6.4",
  "rayon",
- "regex",
  "ripemd",
- "serde 1.0.193",
  "serde_json",
  "sha2 0.9.9",
- "slip10_ed25519",
  "smooth-operator",
  "tempfile",
  "tendermint-rpc",
  "test-log",
  "thiserror",
  "tiny-bip39",
- "tiny-hderive",
  "tokio",
- "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
  "uint",
@@ -4445,8 +4425,6 @@ dependencies = [
  "wasmer-vm",
  "wasmparser 0.107.0",
  "wasmtimer",
- "wat",
- "zeroize",
 ]
 
 [[package]]
@@ -4469,7 +4447,6 @@ version = "0.37.0"
 dependencies = [
  "assert_matches",
  "bit-set",
- "bytes",
  "color-eyre",
  "eyre",
  "git2",
@@ -4484,9 +4461,7 @@ dependencies = [
  "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
- "warp",
  "winapi",
- "zeroize",
 ]
 
 [[package]]
@@ -4668,11 +4643,7 @@ dependencies = [
  "namada_trans_token",
  "namada_tx",
  "namada_vote_ext",
- "rand 0.8.5",
  "serde 1.0.193",
- "serde_json",
- "tendermint 0.36.0",
- "tendermint-proto 0.36.0",
  "thiserror",
  "toml 0.5.11",
  "tracing",
@@ -4708,7 +4679,6 @@ dependencies = [
  "namada_shielded_token",
  "namada_trans_token",
  "proptest",
- "regex",
  "serde_json",
  "tokio",
 ]
@@ -4766,7 +4736,6 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
- "namada_gas",
  "namada_governance",
  "namada_macros",
  "namada_migrations",
@@ -4774,7 +4743,6 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_token",
- "namada_tx",
  "primitive-types",
  "proptest",
  "prost 0.12.3",
@@ -4904,7 +4872,6 @@ dependencies = [
 name = "namada_parameters"
 version = "0.37.0"
 dependencies = [
- "borsh 1.2.1",
  "namada_core",
  "namada_macros",
  "namada_storage",
@@ -4917,7 +4884,6 @@ version = "0.37.0"
 dependencies = [
  "assert_matches",
  "borsh 1.2.1",
- "data-encoding",
  "derivative",
  "itertools 0.12.1",
  "konst",
@@ -4933,7 +4899,6 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_trans_token",
- "num-traits 0.2.17",
  "once_cell",
  "pretty_assertions",
  "proptest",
@@ -5015,7 +4980,6 @@ dependencies = [
  "slip10_ed25519",
  "smooth-operator",
  "tempfile",
- "tendermint-config",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
@@ -5038,7 +5002,6 @@ dependencies = [
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
- "namada_tx",
  "proptest",
  "rayon",
  "serde 1.0.193",
@@ -5054,7 +5017,6 @@ dependencies = [
  "assert_matches",
  "borsh 1.2.1",
  "chrono",
- "ics23",
  "itertools 0.12.1",
  "linkme",
  "namada_core",
@@ -5070,12 +5032,9 @@ dependencies = [
  "patricia_tree",
  "pretty_assertions",
  "proptest",
- "sha2 0.9.9",
  "smooth-operator",
- "sparse-merkle-tree",
  "test-log",
  "thiserror",
- "tiny-keccak",
  "tracing",
 ]
 
@@ -5092,7 +5051,6 @@ dependencies = [
  "namada_migrations",
  "namada_replay_protection",
  "regex",
- "serde 1.0.193",
  "smooth-operator",
  "thiserror",
  "tracing",
@@ -5113,10 +5071,8 @@ version = "0.37.0"
 dependencies = [
  "assert_cmd",
  "assert_matches",
- "async-trait",
  "borsh 1.2.1",
  "borsh-ext",
- "chrono",
  "color-eyre",
  "concat-idents",
  "data-encoding",
@@ -5130,7 +5086,6 @@ dependencies = [
  "ibc-testkit",
  "ics23",
  "itertools 0.12.1",
- "lazy_static",
  "namada",
  "namada_apps_lib",
  "namada_core",
@@ -5140,7 +5095,6 @@ dependencies = [
  "namada_tx_prelude",
  "namada_vm_env",
  "namada_vp_prelude",
- "num-traits 0.2.17",
  "once_cell",
  "pretty_assertions",
  "proptest",
@@ -5157,8 +5111,6 @@ dependencies = [
  "test-log",
  "tokio",
  "toml 0.5.11",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -5241,8 +5193,6 @@ dependencies = [
  "namada_tx",
  "namada_tx_env",
  "namada_vm_env",
- "sha2 0.9.9",
- "thiserror",
 ]
 
 [[package]]
@@ -5280,7 +5230,6 @@ dependencies = [
  "namada_storage",
  "namada_tx",
  "smooth-operator",
- "thiserror",
 ]
 
 [[package]]
@@ -5302,7 +5251,6 @@ dependencies = [
  "namada_vm_env",
  "namada_vp_env",
  "sha2 0.9.9",
- "thiserror",
 ]
 
 [[package]]
