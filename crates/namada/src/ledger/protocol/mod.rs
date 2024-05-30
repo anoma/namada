@@ -22,6 +22,7 @@ use namada_tx::data::{
 use namada_tx::{BatchedTxRef, Tx};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};
@@ -443,16 +444,19 @@ where
             transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)
         }
         None => {
-            check_fees(shell_params.state, wrapper)?;
+            check_fees(shell_params, tx, wrapper)?;
             Ok(())
         }
     };
 
     // FIXME: make sure that both transfer and check fees commit or drop before
-    // returning, here we call a commit for safety Commit tx write log even
-    // in case of subsequent errors (if the fee payment failed instead, than the
-    // previous two functions must have already dropped the write log leading
-    // this function call to be essentially a no-op)
+    // returning, here we call a commit for safety. Actually do I need to drop
+    // in check?
+
+    // Commit tx write log even in case of subsequent errors (if the fee payment
+    // failed instead, than the previous two functions must have already
+    // dropped the write log leading this function call to be essentially a
+    // no-op)
     shell_params.state.write_log_mut().commit_tx();
     payment_result?;
 
@@ -487,19 +491,19 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let balance = crate::token::read_balance(
-        shell_params.state,
-        &wrapper.fee.token,
-        &wrapper.fee_payer(),
-    )
-    .map_err(Error::StorageError)?;
-
     match wrapper.get_tx_fee() {
         Ok(fees) => {
             let fees = crate::token::denom_to_amount(
                 fees,
                 &wrapper.fee.token,
                 shell_params.state,
+            )
+            .map_err(Error::StorageError)?;
+
+            let balance = crate::token::read_balance(
+                shell_params.state,
+                &wrapper.fee.token,
+                &wrapper.fee_payer(),
             )
             .map_err(Error::StorageError)?;
 
@@ -812,31 +816,71 @@ where
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
-// FIXME: here I should check fee unshielding
-pub fn check_fees<S>(state: &S, wrapper: &WrapperTx) -> Result<()>
+pub fn check_fees<S, D, H, CA>(
+    shell_params: &mut ShellParams<'_, S, D, H, CA>,
+    tx: &Tx,
+    wrapper: &WrapperTx,
+) -> Result<()>
 where
-    S: State + StorageRead,
+    // FIXME: can remove sync?
+    // FIXME: review these traits
+    S: State<D = D, H = H> + StorageRead + Sync,
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
 {
-    let balance = crate::token::read_balance(
-        state,
-        &wrapper.fee.token,
-        &wrapper.fee_payer(),
-    )
-    // FIXME: remove unwraps
-    .unwrap();
+    match wrapper.get_tx_fee() {
+        Ok(fees) => {
+            let fees = crate::token::denom_to_amount(
+                fees,
+                &wrapper.fee.token,
+                shell_params.state,
+            )
+            .map_err(Error::StorageError)?;
 
-    let fees = wrapper
-        .get_tx_fee()
-        .map_err(|e| Error::FeeError(e.to_string()))?;
+            let balance = crate::token::read_balance(
+                shell_params.state,
+                &wrapper.fee.token,
+                &wrapper.fee_payer(),
+            )
+            .map_err(Error::StorageError)?;
 
-    let fees = crate::token::denom_to_amount(fees, &wrapper.fee.token, state)
-        .map_err(|e| Error::FeeError(e.to_string()))?;
-    if balance.checked_sub(fees).is_some() {
-        Ok(())
-    } else {
-        Err(Error::FeeError(
-            "Insufficient transparent balance to pay fees".to_string(),
-        ))
+            checked!(balance - fees).map_or_else(
+                |_| {
+                    // See if the first inner transaction of the batch pays the
+                    // fees with a masp unshield
+                    if let Ok(true) = try_masp_fee_payment(
+                        shell_params,
+                        tx,
+                        &TxIndex::default(),
+                    ) {
+                        let balance = crate::token::read_balance(
+                            shell_params.state,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        )
+                        .map_err(Error::StorageError)?;
+
+                        checked!(balance - fees).map_or_else(
+                            |_| {
+                                Err(Error::FeeError(
+                                    "Masp fee payment unshielded an \
+                                     insufficient amount"
+                                        .to_string(),
+                                ))
+                            },
+                            |_| Ok(()),
+                        )
+                    } else {
+                        Err(Error::FeeError(
+                            "Failed masp fee payment".to_string(),
+                        ))
+                    }
+                },
+                |_| Ok(()),
+            )
+        }
+        Err(e) => Err(Error::FeeError(e.to_string())),
     }
 }
 
