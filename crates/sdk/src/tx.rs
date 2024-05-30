@@ -3035,8 +3035,6 @@ pub async fn build_shielding_transfer<N: Namada>(
         .await?;
     }
 
-    // TODO(namada#2597): this function should also take another arg as the fees
-    // token and amount
     let shielded_parts = construct_shielded_parts(
         context,
         &TransferSource::Address(source.clone()),
