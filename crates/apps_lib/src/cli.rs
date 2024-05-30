@@ -6078,7 +6078,7 @@ pub mod args {
 
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let ledger_address = LEDGER_ADDRESS.parse(matches);
+            let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let batch_size = BATCH_SIZE_OPT.parse(matches);
             let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
@@ -6095,7 +6095,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
+            app.arg(CONFIG_RPC_LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
                 .arg(BATCH_SIZE_OPT.def().help(wrap!(
                     "Optional batch size which determines how many txs to \
                      fetch before caching locally. Default is 1."
@@ -6129,7 +6129,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
-                ledger_address: self.ledger_address,
+                ledger_address: chain_ctx.get(&self.ledger_address),
                 batch_size: self.batch_size,
                 start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
