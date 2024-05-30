@@ -511,12 +511,12 @@ impl Display for UpdateStatus {
 pub fn commit<D: DB>(
     db: &D,
     height: BlockHeight,
-    mut migration: Option<ScheduledMigration<D::Migrator>>,
+    migration: Option<ScheduledMigration<D::Migrator>>,
 ) -> Option<ScheduledMigration<D::Migrator>>
 where
     D::Migrator: DeserializeOwned,
 {
-    let maybe_migration = migration.take();
+    let maybe_migration = migration;
     if let Some(migration) = maybe_migration.as_ref() {
         if height != migration.height {
             return maybe_migration;
