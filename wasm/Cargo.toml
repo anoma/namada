@@ -39,7 +39,7 @@ namada_tx_prelude = { path = "../crates/tx_prelude" }
 namada_vp_prelude = { path = "../crates/vp_prelude" }
 
 once_cell = { version = "1.8.0" }
-wee_alloc = "0.4.5"
+rlsf = "0.2.1"
 getrandom = { version = "0.2.15", features = ["custom"] }
 
 [profile.release]

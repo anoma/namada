@@ -11,7 +11,7 @@ version.workspace = true
 [dependencies]
 namada_test_utils.workspace = true
 namada_tx_prelude.workspace = true
-wee_alloc.workspace = true
+rlsf.workspace = true
 getrandom.workspace = true
 
 [dev-dependencies]

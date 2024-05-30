@@ -10,7 +10,7 @@ version.workspace = true
 
 [dependencies]
 namada_vp_prelude.workspace = true
-wee_alloc.workspace = true
+rlsf.workspace = true
 getrandom.workspace = true
 
 [dev-dependencies]
