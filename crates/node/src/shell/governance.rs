@@ -403,16 +403,16 @@ where
     let cmt = tx.first_commitments().unwrap().to_owned();
 
     let dispatch_result = protocol::dispatch_tx(
-        tx,
-        &[], /*  this is used to compute the fee
-              * based on the code size. We dont
-              * need it here. */
-        TxIndex::default(),
-        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
+        &tx,
+        protocol::DispatchArgs::Raw {
+            tx_index: TxIndex::default(),
+            wrapper_tx_result: None,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        },
+        // No gas limit for governance proposal
+        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())),
         &mut shell.state,
-        &mut shell.vp_wasm_cache,
-        &mut shell.tx_wasm_cache,
-        None,
     );
     shell
         .state
