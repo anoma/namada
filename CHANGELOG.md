@@ -1,5 +1,40 @@
 # CHANGELOG
 
+## v0.38.0
+
+Namada 0.38.0 is a minor release that upgrades the MASP and events and also cleans up dependencies.
+
+### BUG FIXES
+
+- Fixed the fee collection logic in `finalize_block` to match that of
+  `process_proposal`. ([\#3075](https://github.com/anoma/namada/issues/3075))
+
+### IMPROVEMENTS
+
+- Improved masp vp verification to run in parallel.
+  ([\#2972](https://github.com/anoma/namada/pull/2972))
+- Removed any dependency on the specific transaction data from the masp vp.
+  ([\#3232](https://github.com/anoma/namada/pull/3232))
+- Add a new event attribute facility to track events to their origin
+  in Namada's source code. This is useful for debugging purposes.
+  ([\#3268](https://github.com/anoma/namada/pull/3268))
+- Include the used MASP randomness parameters in the test vectors.
+  ([\#3296](https://github.com/anoma/namada/pull/3296))
+- Replaced unmaintained config-rs to an unreleased version
+  that replaces its also unmaintained yaml dependency.
+  ([\#3305](https://github.com/anoma/namada/pull/3305))
+- Upgrade `wasmer` vm to upstream version `4.3.1`,
+  moving away from the [forked code based on version
+  `2.3.0`](https://github.com/heliaxdev/wasmer/tree/255054f7f58b7b4a525f2fee6b9b86422d1ca15b).
+  ([\#3308](https://github.com/anoma/namada/pull/3308))
+- Allow nodes to schedule a migrations json to be read and run to facilitate hard-forking. This is done by 
+  taking a migrations json and passing the path, a hash of the contents, and a block height to the node when 
+  starting the ledger. ([\#3310](https://github.com/anoma/namada/pull/3310))
+- Store IBC denom when minting the IBC token
+  ([\#3317](https://github.com/anoma/namada/issues/3317))
+- Switched from wee allocator to rlsf for WASM.
+  ([\#3331](https://github.com/anoma/namada/pull/3331))
+
 ## v0.37.0
 
 Namada 0.37.0 is a minor release that adds replay protection entries to consensus and enables merklizing data without diffs.
