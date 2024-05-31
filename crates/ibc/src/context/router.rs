@@ -2,11 +2,11 @@
 
 use std::rc::Rc;
 
+use ibc::core::host::types::identifiers::PortId;
+use ibc::core::router::module::Module;
+use ibc::core::router::router::Router;
+use ibc::core::router::types::module::ModuleId;
 use namada_core::collections::HashMap;
-use namada_core::ibc::core::host::types::identifiers::PortId;
-use namada_core::ibc::core::router::module::Module;
-use namada_core::ibc::core::router::router::Router;
-use namada_core::ibc::core::router::types::module::ModuleId;
 
 use super::super::ModuleWrapper;
 

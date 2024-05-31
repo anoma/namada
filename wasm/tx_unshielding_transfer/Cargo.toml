@@ -1,5 +1,5 @@
 [package]
-name = "tx_transfer"
+name = "tx_unshielding_transfer"
 description = "WASM transaction to transfer tokens"
 authors.workspace = true
 edition.workspace = true
@@ -10,8 +10,7 @@ version.workspace = true
 
 [dependencies]
 namada_tx_prelude.workspace = true
-
-rlsf.workspace = true
+wee_alloc.workspace = true
 getrandom.workspace = true
 
 [lib]

@@ -57,7 +57,10 @@ pub mod cmds {
 
         // Inlined commands from the client.
         TxCustom(TxCustom),
-        TxTransfer(TxTransfer),
+        TxTransparentTransfer(TxTransparentTransfer),
+        TxShieldedTransfer(TxShieldedTransfer),
+        TxShieldingTransfer(TxShieldingTransfer),
+        TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
         TxUpdateAccount(TxUpdateAccount),
         TxInitProposal(TxInitProposal),
@@ -74,7 +77,10 @@ pub mod cmds {
                 .subcommand(EthBridgePool::def())
                 .subcommand(Ledger::def())
                 .subcommand(TxCustom::def())
-                .subcommand(TxTransfer::def())
+                .subcommand(TxTransparentTransfer::def())
+                .subcommand(TxShieldedTransfer::def())
+                .subcommand(TxShieldingTransfer::def())
+                .subcommand(TxUnshieldingTransfer::def())
                 .subcommand(TxIbcTransfer::def())
                 .subcommand(TxUpdateAccount::def())
                 .subcommand(TxInitProposal::def())
@@ -91,7 +97,14 @@ pub mod cmds {
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
-            let tx_transfer = SubCmd::parse(matches).map(Self::TxTransfer);
+            let tx_transparent_transfer =
+                SubCmd::parse(matches).map(Self::TxTransparentTransfer);
+            let tx_shielded_transfer =
+                SubCmd::parse(matches).map(Self::TxShieldedTransfer);
+            let tx_shielding_transfer =
+                SubCmd::parse(matches).map(Self::TxShieldingTransfer);
+            let tx_unshielding_transfer =
+                SubCmd::parse(matches).map(Self::TxUnshieldingTransfer);
             let tx_ibc_transfer =
                 SubCmd::parse(matches).map(Self::TxIbcTransfer);
             let tx_update_account =
@@ -107,7 +120,10 @@ pub mod cmds {
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
-                .or(tx_transfer)
+                .or(tx_transparent_transfer)
+                .or(tx_shielded_transfer)
+                .or(tx_shielding_transfer)
+                .or(tx_unshielding_transfer)
                 .or(tx_ibc_transfer)
                 .or(tx_update_account)
                 .or(tx_init_proposal)
@@ -218,7 +234,10 @@ pub mod cmds {
             app
                 // Simple transactions
                 .subcommand(TxCustom::def().display_order(1))
-                .subcommand(TxTransfer::def().display_order(1))
+                .subcommand(TxTransparentTransfer::def().display_order(1))
+                .subcommand(TxShieldedTransfer::def().display_order(1))
+                .subcommand(TxShieldingTransfer::def().display_order(1))
+                .subcommand(TxUnshieldingTransfer::def().display_order(1))
                 .subcommand(TxIbcTransfer::def().display_order(1))
                 .subcommand(TxUpdateAccount::def().display_order(1))
                 .subcommand(TxInitAccount::def().display_order(1))
@@ -280,7 +299,14 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             use NamadaClientWithContext::*;
             let tx_custom = Self::parse_with_ctx(matches, TxCustom);
-            let tx_transfer = Self::parse_with_ctx(matches, TxTransfer);
+            let tx_transparent_transfer =
+                Self::parse_with_ctx(matches, TxTransparentTransfer);
+            let tx_shielded_transfer =
+                Self::parse_with_ctx(matches, TxShieldedTransfer);
+            let tx_shielding_transfer =
+                Self::parse_with_ctx(matches, TxShieldingTransfer);
+            let tx_unshielding_transfer =
+                Self::parse_with_ctx(matches, TxUnshieldingTransfer);
             let tx_ibc_transfer = Self::parse_with_ctx(matches, TxIbcTransfer);
             let tx_update_account =
                 Self::parse_with_ctx(matches, TxUpdateAccount);
@@ -356,7 +382,10 @@ pub mod cmds {
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
-                .or(tx_transfer)
+                .or(tx_transparent_transfer)
+                .or(tx_shielded_transfer)
+                .or(tx_shielding_transfer)
+                .or(tx_unshielding_transfer)
                 .or(tx_ibc_transfer)
                 .or(tx_update_account)
                 .or(tx_init_account)
@@ -443,7 +472,10 @@ pub mod cmds {
     pub enum NamadaClientWithContext {
         // Ledger cmds
         TxCustom(TxCustom),
-        TxTransfer(TxTransfer),
+        TxTransparentTransfer(TxTransparentTransfer),
+        TxShieldedTransfer(TxShieldedTransfer),
+        TxShieldingTransfer(TxShieldingTransfer),
+        TxUnshieldingTransfer(TxUnshieldingTransfer),
         TxIbcTransfer(TxIbcTransfer),
         QueryResult(QueryResult),
         TxUpdateAccount(TxUpdateAccount),
@@ -1249,21 +1281,90 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct TxTransfer(pub args::TxTransfer<crate::cli::args::CliTypes>);
+    pub struct TxTransparentTransfer(
+        pub args::TxTransparentTransfer<crate::cli::args::CliTypes>,
+    );
 
-    impl SubCmd for TxTransfer {
-        const CMD: &'static str = "transfer";
+    impl SubCmd for TxTransparentTransfer {
+        const CMD: &'static str = "transparent-transfer";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| TxTransfer(args::TxTransfer::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxTransparentTransfer(args::TxTransparentTransfer::parse(
+                    matches,
+                ))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Send a signed transfer transaction."))
-                .add_args::<args::TxTransfer<crate::cli::args::CliTypes>>()
+                .about(wrap!("Send a transparent transfer transaction."))
+                .add_args::<args::TxTransparentTransfer<crate::cli::args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxShieldedTransfer(
+        pub args::TxShieldedTransfer<crate::cli::args::CliTypes>,
+    );
+
+    impl SubCmd for TxShieldedTransfer {
+        const CMD: &'static str = "transfer";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxShieldedTransfer(args::TxShieldedTransfer::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Send a shielded transfer transaction (from a shielded address to a shielded address)."))
+                .add_args::<args::TxShieldedTransfer<crate::cli::args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxShieldingTransfer(
+        pub args::TxShieldingTransfer<crate::cli::args::CliTypes>,
+    );
+
+    impl SubCmd for TxShieldingTransfer {
+        const CMD: &'static str = "shield";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxShieldingTransfer(args::TxShieldingTransfer::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Send a shielding transfer transaction (from a transparent address to a shielded address)."))
+                .add_args::<args::TxShieldingTransfer<crate::cli::args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct TxUnshieldingTransfer(
+        pub args::TxUnshieldingTransfer<crate::cli::args::CliTypes>,
+    );
+
+    impl SubCmd for TxUnshieldingTransfer {
+        const CMD: &'static str = "unshield";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                TxUnshieldingTransfer(args::TxUnshieldingTransfer::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Send an unshielding transfer transaction (from a shielded address to a transparent address)."))
+                .add_args::<args::TxUnshieldingTransfer<crate::cli::args::CliTypes>>()
         }
     }
 
@@ -2997,10 +3098,11 @@ pub mod args {
         TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
         TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
         TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
-        TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
-        TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-        VP_USER_WASM,
+        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_SHIELDED_TRANSFER_WASM,
+        TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM,
+        TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
+        TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
+        TX_WITHDRAW_WASM, VP_USER_WASM,
     };
     use namada_sdk::DEFAULT_GAS_LIMIT;
 
@@ -3184,6 +3286,7 @@ pub mod args {
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
     pub const PATH_OPT: ArgOpt<PathBuf> = arg_opt("path");
+    pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3234,12 +3337,14 @@ pub mod args {
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
     pub const SOURCE: Arg<WalletAddress> = arg("source");
     pub const SOURCE_OPT: ArgOpt<WalletAddress> = SOURCE.opt();
+    pub const SOURCE_VALIDATOR: Arg<WalletAddress> = arg("source-validator");
+    pub const SPENDING_KEY_SOURCE: Arg<WalletSpendingKey> = arg("source");
     pub const SPENDING_KEYS: ArgMulti<WalletSpendingKey, GlobStar> =
         arg_multi("spending-keys");
     pub const STEWARD: Arg<WalletAddress> = arg("steward");
-    pub const SOURCE_VALIDATOR: Arg<WalletAddress> = arg("source-validator");
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
+    pub const TARGET: Arg<WalletAddress> = arg("target");
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
@@ -4221,19 +4326,21 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<TxTransfer<SdkTypes>> for TxTransfer<CliTypes> {
+    impl CliToSdk<TxTransparentTransfer<SdkTypes>>
+        for TxTransparentTransfer<CliTypes>
+    {
         type Error = std::io::Error;
 
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> Result<TxTransfer<SdkTypes>, Self::Error> {
+        ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            Ok(TxTransfer::<SdkTypes> {
+            Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get_cached(&self.source),
+                source: chain_ctx.get(&self.source),
                 target: chain_ctx.get(&self.target),
                 token: chain_ctx.get(&self.token),
                 amount: self.amount,
@@ -4242,14 +4349,14 @@ pub mod args {
         }
     }
 
-    impl Args for TxTransfer<CliTypes> {
+    impl Args for TxTransparentTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx = Tx::parse(matches);
-            let source = TRANSFER_SOURCE.parse(matches);
-            let target = TRANSFER_TARGET.parse(matches);
+            let source = SOURCE.parse(matches);
+            let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            let tx_code_path = PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM);
             Self {
                 tx,
                 source,
@@ -4262,15 +4369,193 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(TRANSFER_SOURCE.def().help(wrap!(
+                .arg(SOURCE.def().help(wrap!(
                     "The source account address. The source's key may be used \
                      to produce the signature."
                 )))
-                .arg(TRANSFER_TARGET.def().help(wrap!(
-                    "The target account address. The target's key may be used \
-                     to produce the signature."
+                .arg(TARGET.def().help(wrap!("The target account address.")))
+                .arg(TOKEN.def().help(wrap!("The token address.")))
+                .arg(
+                    AMOUNT
+                        .def()
+                        .help(wrap!("The amount to transfer in decimal.")),
+                )
+        }
+    }
+
+    impl CliToSdk<TxShieldedTransfer<SdkTypes>> for TxShieldedTransfer<CliTypes> {
+        type Error = std::io::Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
+            let tx = self.tx.to_sdk(ctx)?;
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            Ok(TxShieldedTransfer::<SdkTypes> {
+                tx,
+                source: chain_ctx.get_cached(&self.source),
+                target: chain_ctx.get(&self.target),
+                token: chain_ctx.get(&self.token),
+                amount: self.amount,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            })
+        }
+    }
+
+    impl Args for TxShieldedTransfer<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SPENDING_KEY_SOURCE.parse(matches);
+            let target = PAYMENT_ADDRESS_TARGET.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let tx_code_path = PathBuf::from(TX_SHIELDED_TRANSFER_WASM);
+            Self {
+                tx,
+                source,
+                target,
+                token,
+                amount,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(
+                    SPENDING_KEY_SOURCE
+                        .def()
+                        .help(wrap!("The source shielded spending key.")),
+                )
+                .arg(
+                    PAYMENT_ADDRESS_TARGET
+                        .def()
+                        .help(wrap!("The shielded target account address.")),
+                )
+                .arg(TOKEN.def().help(wrap!("The token address.")))
+                .arg(
+                    AMOUNT
+                        .def()
+                        .help(wrap!("The amount to transfer in decimal.")),
+                )
+        }
+    }
+
+    impl CliToSdk<TxShieldingTransfer<SdkTypes>> for TxShieldingTransfer<CliTypes> {
+        type Error = std::io::Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxShieldingTransfer<SdkTypes>, Self::Error> {
+            let tx = self.tx.to_sdk(ctx)?;
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            Ok(TxShieldingTransfer::<SdkTypes> {
+                tx,
+                source: chain_ctx.get(&self.source),
+                target: chain_ctx.get(&self.target),
+                token: chain_ctx.get(&self.token),
+                amount: self.amount,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            })
+        }
+    }
+
+    impl Args for TxShieldingTransfer<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SOURCE.parse(matches);
+            let target = PAYMENT_ADDRESS_TARGET.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let tx_code_path = PathBuf::from(TX_SHIELDING_TRANSFER_WASM);
+            Self {
+                tx,
+                source,
+                target,
+                token,
+                amount,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(SOURCE.def().help(wrap!(
+                    "The transparent source account address. The source's key \
+                     will be used to produce the signature."
                 )))
-                .arg(TOKEN.def().help(wrap!("The transfer token.")))
+                .arg(
+                    PAYMENT_ADDRESS_TARGET
+                        .def()
+                        .help(wrap!("The target shielded account address.")),
+                )
+                .arg(TOKEN.def().help(wrap!("The token address.")))
+                .arg(
+                    AMOUNT
+                        .def()
+                        .help(wrap!("The amount to transfer in decimal.")),
+                )
+        }
+    }
+
+    impl CliToSdk<TxUnshieldingTransfer<SdkTypes>>
+        for TxUnshieldingTransfer<CliTypes>
+    {
+        type Error = std::io::Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<TxUnshieldingTransfer<SdkTypes>, Self::Error> {
+            let tx = self.tx.to_sdk(ctx)?;
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            Ok(TxUnshieldingTransfer::<SdkTypes> {
+                tx,
+                source: chain_ctx.get_cached(&self.source),
+                target: chain_ctx.get(&self.target),
+                token: chain_ctx.get(&self.token),
+                amount: self.amount,
+                tx_code_path: self.tx_code_path.to_path_buf(),
+            })
+        }
+    }
+
+    impl Args for TxUnshieldingTransfer<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx = Tx::parse(matches);
+            let source = SPENDING_KEY_SOURCE.parse(matches);
+            let target = TARGET.parse(matches);
+            let token = TOKEN.parse(matches);
+            let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let tx_code_path = PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM);
+            Self {
+                tx,
+                source,
+                target,
+                token,
+                amount,
+                tx_code_path,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Tx<CliTypes>>()
+                .arg(
+                    SPENDING_KEY_SOURCE
+                        .def()
+                        .help(wrap!("The source shielded spending key.")),
+                )
+                .arg(
+                    TARGET
+                        .def()
+                        .help(wrap!("The transparent target account address.")),
+                )
+                .arg(TOKEN.def().help(wrap!("The token address.")))
                 .arg(
                     AMOUNT
                         .def()
@@ -6472,6 +6757,7 @@ pub mod args {
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
+        type PaymentAddress = WalletPaymentAddr;
         type PublicKey = WalletPublicKey;
         type SpendingKey = WalletSpendingKey;
         type TendermintAddress = tendermint_rpc::Url;

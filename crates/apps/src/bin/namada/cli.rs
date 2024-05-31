@@ -45,7 +45,10 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
         }
         cli::cmds::Namada::Client(_)
         | cli::cmds::Namada::TxCustom(_)
-        | cli::cmds::Namada::TxTransfer(_)
+        | cli::cmds::Namada::TxTransparentTransfer(_)
+        | cli::cmds::Namada::TxShieldedTransfer(_)
+        | cli::cmds::Namada::TxShieldingTransfer(_)
+        | cli::cmds::Namada::TxUnshieldingTransfer(_)
         | cli::cmds::Namada::TxIbcTransfer(_)
         | cli::cmds::Namada::TxUpdateAccount(_)
         | cli::cmds::Namada::TxRevealPk(_)

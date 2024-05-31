@@ -2,17 +2,17 @@
 
 use std::str::FromStr;
 
-use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
-use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
-use namada_core::ibc::core::client::types::Height;
-use namada_core::ibc::core::host::types::identifiers::{
+use ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
+use ibc::core::client::types::Height;
+use ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use namada_core::ibc::core::host::types::path::{
+use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
+use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;

@@ -3,20 +3,20 @@
 use std::cmp::Ordering;
 use std::str::FromStr;
 
-use namada_core::borsh::*;
-use namada_core::collections::HashMap;
-use namada_core::ibc::core::channel::types::packet::Packet;
-use namada_core::ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
-use namada_core::ibc::core::client::types::events::{
+use ibc::core::channel::types::packet::Packet;
+use ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
+use ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
-use namada_core::ibc::core::client::types::{Height as IbcHeight, HeightError};
-use namada_core::ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
-use namada_core::ibc::core::host::types::identifiers::{
+use ibc::core::client::types::{Height as IbcHeight, HeightError};
+use ibc::core::handler::types::events::IbcEvent as RawIbcEvent;
+use ibc::core::host::types::identifiers::{
     ChannelId as IbcChannelId, ClientId as IbcClientId,
     ConnectionId as IbcConnectionId, PortId, Sequence,
 };
-use namada_core::ibc::primitives::Timestamp;
+use ibc::primitives::Timestamp;
+use namada_core::borsh::*;
+use namada_core::collections::HashMap;
 use namada_core::tendermint::abci::Event as AbciEvent;
 use namada_events::extend::{
     event_domain_of, AttributesMap, EventAttributeEntry,
@@ -36,7 +36,7 @@ pub const TOKEN_EVENT_DESCRIPTOR: &str = IbcEvent::DOMAIN;
 pub mod types {
     //! IBC event types.
 
-    use namada_core::ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
+    use ibc::core::client::types::events::UPDATE_CLIENT_EVENT;
     use namada_events::{event_type, EventType};
 
     use super::IbcEvent;
@@ -331,7 +331,7 @@ impl FromStr for TimeoutHeight {
     type Err = HeightError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        namada_core::ibc::core::client::types::Height::from_str(s).map_or_else(
+        ibc::core::client::types::Height::from_str(s).map_or_else(
             |err| match err {
                 HeightError::ZeroHeight => {
                     Ok(TimeoutHeight(IbcTimeoutHeight::Never))

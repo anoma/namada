@@ -419,7 +419,6 @@ mod tests {
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
-    use crate::core::ibc::{MsgNftTransfer, MsgTransfer};
     use crate::core::storage::Epoch;
     use crate::ibc::apps::nft_transfer::types::events::{
         RecvEvent as NftRecvEvent, TokenTraceEvent,
@@ -499,7 +498,7 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{NftClass, NftMetadata};
+    use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{
