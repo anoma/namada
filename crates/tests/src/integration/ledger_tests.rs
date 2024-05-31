@@ -1619,7 +1619,7 @@ fn enforce_fee_payment() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             ALBERT_KEY,
             "--target",
@@ -1655,7 +1655,7 @@ fn enforce_fee_payment() -> Result<()> {
         &node,
         Bin::Client,
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             ALBERT_KEY,
             "--target",
