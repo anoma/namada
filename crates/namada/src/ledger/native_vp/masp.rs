@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
@@ -17,12 +18,15 @@ use namada_core::address::InternalAddress::Masp;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
+use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
+use namada_ibc::event as ibc_events;
+use namada_ibc::event::IbcEvent;
 use namada_proof_of_stake::Epoch;
-use namada_sdk::masp::verify_shielded_tx;
+use namada_sdk::masp::{verify_shielded_tx, TransferTarget};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_tx::BatchedTxRef;
@@ -31,18 +35,22 @@ use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
-    is_any_shielded_action_balance_key, is_masp_key, is_masp_nullifier_key,
+    balance_key, is_any_token_balance_key, is_masp_key, is_masp_nullifier_key,
     is_masp_token_map_key, is_masp_transfer_key, masp_commitment_anchor_key,
     masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
-    ShieldedActionOwner,
 };
 use token::Amount;
 
+use crate::address::InternalAddress;
+use crate::ledger::ibc::storage::{
+    ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
+};
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::{Ctx, NativeVp};
+use crate::sdk::ibc::apps::transfer::types::is_sender_chain_source;
 use crate::token;
 use crate::token::MaspDigitPos;
-use crate::uint::I320;
+use crate::uint::{Uint, I320};
 use crate::vm::WasmCacheAccess;
 
 #[allow(missing_docs)]
@@ -73,7 +81,8 @@ where
 #[derive(Default)]
 struct ChangedBalances {
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
-    decoder: BTreeMap<TransparentAddress, Address>,
+    decoder: BTreeMap<TransparentAddress, TransferTarget>,
+    ibc_denoms: BTreeMap<String, Address>,
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
@@ -280,66 +289,183 @@ where
         Ok(())
     }
 
+    /// Look up the IBC denomination from a IbcToken.
+    pub fn query_ibc_denom(
+        &self,
+        token: impl AsRef<str>,
+        owner: Option<&Address>,
+    ) -> Result<String> {
+        let hash = match Address::decode(token.as_ref()) {
+            Ok(Address::Internal(InternalAddress::IbcToken(hash))) => {
+                hash.to_string()
+            }
+            _ => return Ok(token.as_ref().to_string()),
+        };
+
+        if let Some(owner) = owner {
+            let ibc_trace_key = ibc_trace_key(owner.to_string(), &hash);
+            if let Some(ibc_denom) = self.ctx.read_pre(&ibc_trace_key)? {
+                return Ok(ibc_denom);
+            }
+        }
+
+        // No owner is specified or the owner doesn't have the token
+        let ibc_denom_prefix = ibc_trace_key_prefix(None);
+        let ibc_denoms = self.ctx.iter_prefix(&ibc_denom_prefix)?;
+        for (key, ibc_denom, _gas) in ibc_denoms {
+            if let Some((_, token_hash)) =
+                is_ibc_trace_key(&Key::parse(key).into_storage_result()?)
+            {
+                if token_hash == hash {
+                    return String::try_from_slice(&ibc_denom[..])
+                        .into_storage_result()
+                        .map_err(Error::NativeVpError);
+                }
+            }
+        }
+
+        Ok(token.as_ref().to_string())
+    }
+
     // Check that transfer is pinned correctly and record the balance changes
     fn validate_state_and_get_transfer_data(
         &self,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
         // Get the changed balance keys
-        let mut counterparts_balances = keys_changed
-            .iter()
-            .filter_map(is_any_shielded_action_balance_key);
+        let mut counterparts_balances =
+            keys_changed.iter().filter_map(is_any_token_balance_key);
 
-        counterparts_balances.try_fold(
-            ChangedBalances::default(),
-            |mut result, (token, counterpart)| {
-                let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
-                    "No denomination found in storage for the given token",
-                )?;
-                unepoched_tokens(token, denom, &mut result.tokens)?;
-                let counterpart_balance_key = counterpart.to_balance_key(token);
-                let mut pre_balance: Amount = self
-                    .ctx
-                    .read_pre(&counterpart_balance_key)?
-                    .unwrap_or_default();
-                let mut post_balance: Amount = self
-                    .ctx
-                    .read_post(&counterpart_balance_key)?
-                    .unwrap_or_default();
-                if let ShieldedActionOwner::Minted = counterpart {
-                    // When receiving ibc transfers we mint and also shield so
-                    // we have two credits/debits, we need
-                    // to mock the mint balance as
-                    // the opposite change
-                    std::mem::swap(&mut pre_balance, &mut post_balance);
-                }
+        let mut changed_balances = counterparts_balances
+            .try_fold(
+                ChangedBalances::default(),
+                |mut result, [token, counterpart]| {
+                    let denom = read_denom(&self.ctx.pre(), token)?
+                        .ok_or_err_msg(
+                            "No denomination found in storage for the given \
+                             token",
+                        )?;
+                    unepoched_tokens(token, denom, &mut result.tokens)?;
+                    let counterpart_balance_key =
+                        balance_key(token, counterpart);
+                    let pre_balance: Amount = self
+                        .ctx
+                        .read_pre(&counterpart_balance_key)?
+                        .unwrap_or_default();
+                    let post_balance: Amount = self
+                        .ctx
+                        .read_post(&counterpart_balance_key)?
+                        .unwrap_or_default();
+                    // Make it possible to decode IBC tokens
+                    result.ibc_denoms.insert(
+                        self.query_ibc_denom(
+                            token.to_string(),
+                            Some(counterpart),
+                        )
+                        .map_err(native_vp::Error::new)?,
+                        token.clone(),
+                    );
+                    // Public keys must be the hash of the sources/targets
+                    let address_hash = TransparentAddress(<[u8; 20]>::from(
+                        ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                            &TransferTarget::Address(counterpart.clone()).serialize_to_vec(),
+                        )),
+                    ));
+                    // Enable the decoding of these counterpart addresses
+                    result.decoder.insert(
+                        address_hash,
+                        TransferTarget::Address(counterpart.clone()),
+                    );
+                    let pre_entry = result
+                        .pre
+                        .entry(address_hash)
+                        .or_insert(ValueSum::zero());
+                    let post_entry = result
+                        .post
+                        .entry(address_hash)
+                        .or_insert(ValueSum::zero());
+                    *pre_entry = checked!(
+                        pre_entry
+                            + &ValueSum::from_pair(
+                                (*token).clone(),
+                                pre_balance
+                            )
+                    )
+                    .map_err(native_vp::Error::new)?;
+                    *post_entry = checked!(
+                        post_entry
+                            + &ValueSum::from_pair(
+                                (*token).clone(),
+                                post_balance
+                            )
+                    )
+                    .map_err(native_vp::Error::new)?;
+                    Result::<_>::Ok(result)
+                },
+            )
+            .unwrap();
+
+        // Extract the IBC events
+        let ibc_events: BTreeSet<_> = self
+            .ctx
+            .state
+            .write_log()
+            .get_events_of::<IbcEvent>()
+            .collect();
+
+        // Go through the IBC events and note the balance chages they imply
+        for ibc_event in ibc_events {
+            // Try to extract an IBC packet from this event
+            let Ok(msg) = ibc_events::packet_from_event_attributes(
+                &ibc_event.clone().into_attributes(),
+            ) else {
+                continue;
+            };
+            // Check if this is a Transfer packet
+            if let Ok(packet_data) =
+                serde_json::from_slice::<PacketData>(&msg.data)
+            {
+                let address =
+                    TransferTarget::Ibc(packet_data.receiver.to_string());
                 // Public keys must be the hash of the sources/targets
                 let address_hash = TransparentAddress(<[u8; 20]>::from(
                     ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                        &counterpart.to_address_ref().serialize_to_vec(),
+                        &address.serialize_to_vec(),
                     )),
                 ));
+                changed_balances.decoder.insert(address_hash, address);
+                let pre_entry = changed_balances
+                    .pre
+                    .entry(address_hash)
+                    .or_insert(ValueSum::zero());
+                let post_entry = changed_balances
+                    .post
+                    .entry(address_hash)
+                    .or_insert(ValueSum::zero());
+                let token = changed_balances
+                    .ibc_denoms
+                    .get(&packet_data.token.denom.to_string())
+                    .ok_or_err_msg("Unable to decode IBC token")?;
+                let delta = ValueSum::from_pair(
+                    token.clone(),
+                    Amount::from_uint(Uint(*packet_data.token.amount), 0)
+                        .unwrap(),
+                );
+                if is_sender_chain_source(
+                    msg.port_id_on_a.clone(),
+                    msg.chan_id_on_a.clone(),
+                    &packet_data.token.denom,
+                ) {
+                    *post_entry = checked!(post_entry + &delta)
+                        .map_err(native_vp::Error::new)?;
+                } else {
+                    *pre_entry = checked!(pre_entry + &delta)
+                        .map_err(native_vp::Error::new)?;
+                }
+            }
+        }
 
-                result
-                    .decoder
-                    .insert(address_hash, counterpart.to_address_ref().clone());
-                let pre_entry =
-                    result.pre.entry(address_hash).or_insert(ValueSum::zero());
-                let post_entry =
-                    result.post.entry(address_hash).or_insert(ValueSum::zero());
-                *pre_entry = checked!(
-                    pre_entry
-                        + &ValueSum::from_pair((*token).clone(), pre_balance)
-                )
-                .map_err(native_vp::Error::new)?;
-                *post_entry = checked!(
-                    post_entry
-                        + &ValueSum::from_pair((*token).clone(), post_balance)
-                )
-                .map_err(native_vp::Error::new)?;
-                Ok(result)
-            },
-        )
+        Ok(changed_balances)
     }
 
     // Check that MASP Transaction and state changes are valid
@@ -371,7 +497,7 @@ where
 
         let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
             ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &Address::Internal(Masp).serialize_to_vec(),
+                &TransferTarget::Address(Address::Internal(Masp)).serialize_to_vec(),
             )),
         ));
         verify_sapling_balancing_value(
@@ -423,16 +549,11 @@ where
             }
         }
 
-        let ibc_address_hash = TransparentAddress(<[u8; 20]>::from(
-            ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &Address::Internal(namada_core::address::InternalAddress::Ibc)
-                    .serialize_to_vec(),
-            )),
-        ));
-
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
-            if signer == ibc_address_hash {
+            if let Some(TransferTarget::Ibc(_)) =
+                changed_balances.decoder.get(&signer)
+            {
                 // If the IBC address is a signatory, then it means that either
                 // Tx - Transaction(s) causes a decrease in the IBC balance or
                 // one of the Transactions' transparent inputs is the IBC. We
@@ -447,7 +568,9 @@ where
                 // Transaction(s).
                 if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                     for vout in transp_bundle.vout.iter() {
-                        if vout.address == ibc_address_hash {
+                        if let Some(TransferTarget::Ibc(_)) =
+                            changed_balances.decoder.get(&vout.address)
+                        {
                             let error = native_vp::Error::new_const(
                                 "Simultaneous credit and debit of IBC account \
                                  in a MASP transaction not allowed",
@@ -458,7 +581,9 @@ where
                         }
                     }
                 }
-            } else if let Some(signer) = changed_balances.decoder.get(&signer) {
+            } else if let Some(TransferTarget::Address(signer)) =
+                changed_balances.decoder.get(&signer)
+            {
                 // Otherwise the signer must be decodable so that we can
                 // manually check the signatures
                 let public_keys_index_map =

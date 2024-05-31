@@ -1719,13 +1719,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
-            let source_enc = source
+            let source_enc = TransferTarget::Address(source
                 .address()
                 .ok_or_else(|| {
                     Error::Other(
                         "source address should be transparent".to_string(),
                     )
-                })?
+                })?)
                 .serialize_to_vec();
 
             let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(

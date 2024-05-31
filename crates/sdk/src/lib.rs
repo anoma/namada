@@ -1042,7 +1042,7 @@ pub mod testing {
     // Encode the given Address into TransparentAddress
     fn encode_address(source: &Address) -> TransparentAddress {
         let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-            source.serialize_to_vec().as_ref(),
+            TransferTarget::Address(source.clone()).serialize_to_vec().as_ref(),
         ));
         TransparentAddress(hash.into())
     }
