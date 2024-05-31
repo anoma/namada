@@ -3981,6 +3981,7 @@ dependencies = [
  "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
+ "clap",
  "data-encoding",
  "derivation-path",
  "duration-str",
