@@ -26,7 +26,7 @@ mod dry_run_tx {
     use namada_gas::Gas;
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
-    use namada_tx::data::{GasLimit, TxResult};
+    use namada_tx::data::{ExtendedTxResult, GasLimit, TxResult};
 
     use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
@@ -54,8 +54,9 @@ mod dry_run_tx {
         let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
+        // FIXME: can't just call dispatch_tx?
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let (mut tx_result, tx_gas_meter) = match tx.header().tx_type {
+        let (extended_tx_result, tx_gas_meter) = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let gas_limit =
                     Gas::try_from(wrapper.gas_limit).into_storage_result()?;
@@ -76,8 +77,6 @@ mod dry_run_tx {
                     None,
                 )
                 .into_storage_result()?;
-                // FIXME: if fees were paid with first inner tx skip it when
-                // executing the batch
 
                 temp_state.write_log_mut().commit_tx();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
@@ -90,12 +89,27 @@ mod dry_run_tx {
                     namada_parameters::get_max_block_gas(ctx.state)?;
                 let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
                     .into_storage_result()?;
-                (TxResult::default(), TxGasMeter::new(gas_limit))
+                (
+                    TxResult::default().to_extended_result(None),
+                    TxGasMeter::new(gas_limit),
+                )
             }
         };
 
+        // FIXME: can't just call dispatch_tx?
+        let ExtendedTxResult {
+            mut tx_result,
+            masp_tx_refs,
+        } = extended_tx_result;
         let tx_gas_meter = RefCell::new(tx_gas_meter);
-        for cmt in tx.commitments() {
+        // FIXME: improve this
+        let mut batch_iter = tx.commitments().iter();
+        if !masp_tx_refs.0.is_empty() {
+            // If fees were paid via masp skip the first transaction of the
+            // batch which has already been executed
+            batch_iter.next();
+        }
+        for cmt in batch_iter {
             let batched_tx = tx.batch_ref_tx(cmt);
             let batched_tx_result = protocol::apply_wasm_tx(
                 batched_tx,

@@ -7,6 +7,7 @@ use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
+use namada_core::masp::MaspTxRefs;
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
@@ -14,6 +15,7 @@ use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_token::utils::is_masp_transfer;
+use namada_tx::action::Read;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
@@ -186,7 +188,7 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
         tx_index: TxIndex,
         /// The result of the corresponding wrapper tx (missing if governance
         /// transaction)
-        wrapper_tx_result: Option<TxResult<Error>>,
+        wrapper_tx_result: Option<ExtendedTxResult<Error>>,
         /// Vp cache
         vp_wasm_cache: &'a mut VpCache<CA>,
         /// Tx cache
@@ -310,7 +312,7 @@ where
                 tx_wasm_cache,
             );
 
-            let tx_result = apply_wrapper_tx(
+            apply_wrapper_tx(
                 tx,
                 wrapper,
                 tx_bytes,
@@ -319,16 +321,14 @@ where
                 &mut shell_params,
                 Some(block_proposer),
             )
-            .map_err(|e| Error::WrapperRunnerError(e.to_string()))?;
-
-            Ok(tx_result.to_extended_result(None))
+            .map_err(|e| Error::WrapperRunnerError(e.to_string()).into())
         }
     }
 }
 
 fn dispatch_inner_txs<'a, D, H, CA>(
     tx: &Tx,
-    tx_result: TxResult<Error>,
+    mut extended_tx_result: ExtendedTxResult<Error>,
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
     state: &'a mut WlState<D, H>,
@@ -340,11 +340,15 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let mut extended_tx_result = tx_result.to_extended_result(None);
+    // FIXME: improve this
+    let mut batch_iter = tx.commitments().iter();
+    if !extended_tx_result.masp_tx_refs.0.is_empty() {
+        // If fees were paid via masp skip the first transaction of the batch
+        // which has already been executed
+        batch_iter.next();
+    }
 
-    // TODO(namada#2597): handle masp fee payment in the first inner tx
-    // if necessary
-    for cmt in tx.commitments() {
+    for cmt in batch_iter {
         match apply_wasm_tx(
             tx.batch_ref_tx(cmt),
             &tx_index,
@@ -424,9 +428,9 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     tx_gas_meter: &RefCell<TxGasMeter>,
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: Option<&Address>,
-) -> Result<TxResult<Error>>
+) -> Result<ExtendedTxResult<Error>>
 where
-    S: State<D = D, H = H> + Sync,
+    S: State<D = D, H = H> + Read + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -451,8 +455,9 @@ where
     // dropped the write log leading this function call to be essentially a
     // no-op)
     shell_params.state.write_log_mut().commit_tx();
-    let batch_results =
-        payment_result?.map_or_else(BatchResults::default, |batched_result| {
+    let (batch_results, masp_tx_refs) = payment_result?.map_or_else(
+        || (BatchResults::default(), None),
+        |(batched_result, masp_section_ref)| {
             let mut batch = BatchResults::default();
             batch.0.insert(
                 // Ok to unwrap cause if we have a batched result it means
@@ -460,11 +465,15 @@ where
                 tx.first_commitments().unwrap().get_hash(),
                 Ok(batched_result),
             );
-            batch
-        });
+            (batch, Some(MaspTxRefs(vec![masp_section_ref])))
+        },
+    );
 
-    // FIXME: if fees were paid with first inner tx signal it to the caller ->
-    // use the ExtendedResult from the other branch
+    // FIXME: shoudld we maybe return a DispatchError and apply the same logic
+    // we apply for raw transactions? In this case probably I would not need to
+    // commit inside these functions but only in finalize block
+    // FIXME: At that point maybe I could share functions between finalize block
+    // and prepare/process proposal
 
     // Account for gas
     tx_gas_meter
@@ -475,7 +484,8 @@ where
     Ok(TxResult {
         gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
         batch_results,
-    })
+    }
+    .to_extended_result(masp_tx_refs))
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
@@ -487,9 +497,9 @@ pub fn transfer_fee<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_index: &TxIndex,
-) -> Result<Option<BatchedTxResult>>
+) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Sync,
+    S: State<D = D, H = H> + StorageRead + Read + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -646,7 +656,7 @@ where
     }
 }
 
-// FIXME: add tests
+// FIXME: search for all the TODOS for 2596 and 2597 and remove them
 fn try_masp_fee_payment<S, D, H, CA>(
     ShellParams {
         tx_gas_meter,
@@ -656,9 +666,9 @@ fn try_masp_fee_payment<S, D, H, CA>(
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     tx_index: &TxIndex,
-) -> Result<Option<BatchedTxResult>>
+) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Sync,
+    S: State<D = D, H = H> + StorageRead + Read + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -682,7 +692,6 @@ where
         .map_err(|e| Error::GasError(e.to_string()))?;
     let ref_unshield_gas_meter = RefCell::new(gas_meter);
 
-    // FIXME: call dispatch_tx after merge?
     let valid_batched_tx_result = {
         // NOTE: A clean tx write log must be provided to this call
         // for a correct vp validation. Block write log, instead,
@@ -719,10 +728,17 @@ where
                     );
                 }
 
+                // FIXME: maybe I don't need the is_masp_trasnfer function
+                // anymore if I get the masp sectio nhash since this is validate
+                // by the masp vp? Not sure double checkt this
+                // FIXME: handle the unwraps
+                let masp_ref = namada_tx::action::get_masp_section_ref(*state)
+                    .unwrap()
+                    .unwrap();
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
                 (is_masp_transfer(&result.changed_keys) && result.is_accepted())
-                    .then_some(result)
+                    .then_some((result, masp_ref))
             }
             Err(e) => {
                 state.write_log_mut().drop_tx_keep_precommit();
@@ -830,9 +846,9 @@ pub fn check_fees<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<Option<BatchedTxResult>>
+) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Sync,
+    S: State<D = D, H = H> + StorageRead + Read + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -841,9 +857,9 @@ where
         shell_params: &mut ShellParams<'_, S, D, H, CA>,
         tx: &Tx,
         wrapper: &WrapperTx,
-    ) -> Result<Option<BatchedTxResult>>
+    ) -> Result<Option<(BatchedTxResult, Hash)>>
     where
-        S: State<D = D, H = H> + StorageRead + Sync,
+        S: State<D = D, H = H> + StorageRead + Read + Sync,
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
         CA: 'static + WasmCacheAccess + Sync,
