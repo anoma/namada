@@ -6841,6 +6841,7 @@ name = "tx_proposal_code"
 version = "0.38.1"
 dependencies = [
  "getrandom 0.2.15",
+ "namada_proof_of_stake",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
