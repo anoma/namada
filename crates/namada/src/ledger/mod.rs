@@ -96,20 +96,14 @@ mod dry_run_tx {
             }
         };
 
-        // FIXME: can't just call dispatch_tx?
         let ExtendedTxResult {
             mut tx_result,
-            masp_tx_refs,
+            ref masp_tx_refs,
         } = extended_tx_result;
         let tx_gas_meter = RefCell::new(tx_gas_meter);
-        // FIXME: improve this
-        let mut batch_iter = tx.commitments().iter();
-        if !masp_tx_refs.0.is_empty() {
-            // If fees were paid via masp skip the first transaction of the
-            // batch which has already been executed
-            batch_iter.next();
-        }
-        for cmt in batch_iter {
+        for cmt in
+            crate::ledger::protocol::get_batch_txs_to_execute(&tx, masp_tx_refs)
+        {
             let batched_tx = tx.batch_ref_tx(cmt);
             let batched_tx_result = protocol::apply_wasm_tx(
                 batched_tx,

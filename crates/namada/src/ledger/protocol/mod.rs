@@ -21,7 +21,7 @@ use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
     VpsResult, WrapperTx,
 };
-use namada_tx::{BatchedTxRef, Tx};
+use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 use namada_vote_ext::EthereumTxData;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use smooth_operator::checked;
@@ -326,6 +326,20 @@ where
     }
 }
 
+pub(crate) fn get_batch_txs_to_execute<'a>(
+    tx: &'a Tx,
+    masp_tx_refs: &MaspTxRefs,
+) -> impl Iterator<Item = &'a TxCommitments> {
+    let mut batch_iter = tx.commitments().iter();
+    if !masp_tx_refs.0.is_empty() {
+        // If fees were paid via masp skip the first transaction of the batch
+        // which has already been executed
+        batch_iter.next();
+    }
+
+    batch_iter
+}
+
 fn dispatch_inner_txs<'a, D, H, CA>(
     tx: &Tx,
     mut extended_tx_result: ExtendedTxResult<Error>,
@@ -340,15 +354,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    // FIXME: improve this
-    let mut batch_iter = tx.commitments().iter();
-    if !extended_tx_result.masp_tx_refs.0.is_empty() {
-        // If fees were paid via masp skip the first transaction of the batch
-        // which has already been executed
-        batch_iter.next();
-    }
-
-    for cmt in batch_iter {
+    for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
         match apply_wasm_tx(
             tx.batch_ref_tx(cmt),
             &tx_index,
@@ -430,7 +436,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     block_proposer: Option<&Address>,
 ) -> Result<ExtendedTxResult<Error>>
 where
-    S: State<D = D, H = H> + Read + Sync,
+    S: State<D = D, H = H> + Read<Err = namada_state::Error> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -499,7 +505,10 @@ pub fn transfer_fee<S, D, H, CA>(
     tx_index: &TxIndex,
 ) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Read + Sync,
+    S: State<D = D, H = H>
+        + StorageRead
+        + Read<Err = namada_state::Error>
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -668,7 +677,10 @@ fn try_masp_fee_payment<S, D, H, CA>(
     tx_index: &TxIndex,
 ) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Read + Sync,
+    S: State<D = D, H = H>
+        + StorageRead
+        + Read<Err = namada_state::Error>
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -728,17 +740,16 @@ where
                     );
                 }
 
-                // FIXME: maybe I don't need the is_masp_trasnfer function
-                // anymore if I get the masp sectio nhash since this is validate
-                // by the masp vp? Not sure double checkt this
-                // FIXME: handle the unwraps
                 let masp_ref = namada_tx::action::get_masp_section_ref(*state)
-                    .unwrap()
-                    .unwrap();
+                    .map_err(Error::StateError)?;
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
                 (is_masp_transfer(&result.changed_keys) && result.is_accepted())
-                    .then_some((result, masp_ref))
+                    .then(|| {
+                        masp_ref
+                            .map(|masp_section_ref| (result, masp_section_ref))
+                    })
+                    .flatten()
             }
             Err(e) => {
                 state.write_log_mut().drop_tx_keep_precommit();
@@ -848,7 +859,10 @@ pub fn check_fees<S, D, H, CA>(
     wrapper: &WrapperTx,
 ) -> Result<Option<(BatchedTxResult, Hash)>>
 where
-    S: State<D = D, H = H> + StorageRead + Read + Sync,
+    S: State<D = D, H = H>
+        + StorageRead
+        + Read<Err = namada_state::Error>
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -859,7 +873,10 @@ where
         wrapper: &WrapperTx,
     ) -> Result<Option<(BatchedTxResult, Hash)>>
     where
-        S: State<D = D, H = H> + StorageRead + Read + Sync,
+        S: State<D = D, H = H>
+            + StorageRead
+            + Read<Err = namada_state::Error>
+            + Sync,
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
         CA: 'static + WasmCacheAccess + Sync,
