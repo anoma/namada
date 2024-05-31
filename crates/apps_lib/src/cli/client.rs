@@ -301,12 +301,12 @@ impl CliApi {
                             .await?;
                     }
                     Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let args = args.to_sdk(&mut ctx)?;
+                        let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx)?;
-                        let chain_ctx = ctx.take_chain_or_exit();
                         let vks = chain_ctx
                             .wallet
                             .get_viewing_keys()
