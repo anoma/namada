@@ -52,12 +52,11 @@ use masp_proofs::sapling::BatchValidator;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
-use namada_core::masp::MaspEpoch;
-use namada_core::masp::MaspTxRefs;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TransferSource, TransferTarget,
 };
+use namada_core::masp::{MaspEpoch, MaspTxRefs};
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
