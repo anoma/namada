@@ -84,11 +84,14 @@ where
         };
 
         // Is VP triggered by a governance proposal?
-        let is_governance_proposal = is_proposal_accepted(
+        if is_proposal_accepted(
             &self.ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        {
+            return Ok(());
+        }
 
         let native_token = self.ctx.pre().get_native_token()?;
 
@@ -96,8 +99,7 @@ where
         let actions = self.ctx.read_actions()?;
 
         // There must be at least one action if any of the keys belong to gov
-        if !is_governance_proposal
-            && actions.is_empty()
+        if actions.is_empty()
             && keys_changed.iter().any(gov_storage::is_governance_key)
         {
             tracing::info!(

@@ -15,7 +15,6 @@ use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_governance::is_proposal_accepted;
 use namada_ibc::event::IbcEvent;
-use namada_ibc::storage::{is_params_key, params_key};
 use namada_ibc::{
     Error as ActionError, IbcActions, NftTransferModule, TransferModule,
     ValidationParams,
@@ -88,7 +87,7 @@ where
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<()> {
         // Is VP triggered by a governance proposal?
-        let is_governance_proposal = is_proposal_accepted(
+        if is_proposal_accepted(
             &self.ctx.pre(),
             batched_tx
                 .tx
@@ -96,16 +95,9 @@ where
                 .unwrap_or_default()
                 .as_ref(),
         )
-        .unwrap_or_default();
-
-        if is_governance_proposal {
-            let changed_keys_are_params =
-                keys_changed.iter().any(|key| is_ibc_key(key));
-            if changed_keys_are_params {
-                return Ok(());
-            } else {
-                return Err(Error::InvalidGovernanceChange);
-            }
+        .unwrap_or_default()
+        {
+            return Ok(());
         }
 
         let tx_data =

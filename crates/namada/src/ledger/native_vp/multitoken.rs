@@ -7,9 +7,7 @@ use namada_core::collections::HashMap;
 use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
 use namada_state::StateRead;
-use namada_token::storage_key::{
-    is_any_token_parameter_key, is_multitoken_key,
-};
+use namada_token::storage_key::is_any_token_parameter_key;
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -60,20 +58,13 @@ where
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         // Is VP triggered by a governance proposal?
-        let is_governance_proposal = is_proposal_accepted(
+        if is_proposal_accepted(
             &self.ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )
-        .unwrap_or_default();
-
-        if is_governance_proposal {
-            let changed_keys_are_params =
-                keys_changed.iter().any(|key| is_multitoken_key(key));
-            if changed_keys_are_params {
-                return Ok(());
-            } else {
-                return Err(Error::InvalidGovernanceChange);
-            }
+        .unwrap_or_default()
+        {
+            return Ok(());
         }
 
         let native_token = self.ctx.pre().ctx.get_native_token()?;
@@ -434,9 +425,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -474,9 +466,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -537,9 +530,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_ok());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -596,9 +590,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -648,9 +643,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -709,9 +705,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -750,9 +747,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]
@@ -792,9 +790,10 @@ mod tests {
         );
 
         let vp = MultitokenVp { ctx };
-        assert!(vp
-            .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-            .is_err());
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .is_err()
+        );
     }
 
     #[test]

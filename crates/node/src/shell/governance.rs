@@ -430,7 +430,10 @@ where
                 Ok(true)
             }
             Some(Err(e)) => {
-                tracing::warn!("Error executing governance proposal {}", e.to_string());
+                tracing::warn!(
+                    "Error executing governance proposal {}",
+                    e.to_string()
+                );
                 shell.state.drop_tx();
                 Ok(false)
             }
@@ -441,7 +444,10 @@ where
             }
         },
         Err(e) => {
-            tracing::warn!("Error executing governance proposal {}", e.error.to_string());
+            tracing::warn!(
+                "Error executing governance proposal {}",
+                e.error.to_string()
+            );
             shell.state.drop_tx();
             Ok(false)
         }
