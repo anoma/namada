@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
+use lazy_static::lazy_static;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada_core::storage::BlockHeight;
@@ -13,12 +14,17 @@ use crate::error::Error;
 use crate::io::Io;
 use crate::masp::types::IndexedNoteEntry;
 use crate::masp::utils::{
-    CommitmentTreeUpdates, FetchQueueSender, IterProgress, MaspClient,
+    Action, CommitmentTreeUpdates, FetchQueueSender, IterProgress, MaspClient,
     PeekableIter, ProgressTracker,
 };
 use crate::masp::{ShieldedContext, ShieldedUtils};
 use crate::queries::testing::TestClient;
 use crate::queries::{Client, EncodedResponseQuery, Rpc, RPC};
+
+lazy_static! {
+    /// N.B. Don't share me among tests running in parallel
+    pub(super) static ref RECEIVED: Arc<Mutex<Vec<Action>>> = Arc::new(Mutex::new(vec![]));
+}
 
 /// A client for testing the shielded-sync functionality
 pub struct TestingClient {
@@ -169,6 +175,11 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         }
         Ok(())
     }
+}
+
+/// Publish a message to the task manager into a globally readable buffer
+pub(super) fn publish_message(action: &Action) {
+    RECEIVED.lock().unwrap().push(action.clone());
 }
 
 /// An iterator that yields its first element only

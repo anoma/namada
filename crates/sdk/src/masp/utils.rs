@@ -568,7 +568,8 @@ pub mod fetch_channel {
 /// The actions that the scanning process can
 /// schedule to be run on the main thread.
 #[allow(clippy::large_enum_variant)]
-enum Action {
+#[derive(Debug, Clone)]
+pub(super) enum Action {
     /// Signal that the scanning process has ended and if it did so with
     /// an error
     Complete { with_error: bool },
@@ -583,8 +584,10 @@ enum Action {
 /// schedules.
 pub struct TaskManager<U: ShieldedUtils> {
     action: Receiver<Action>,
-    pub(super) latest_idx: IndexedTx,
+    latest_idx: IndexedTx,
     ctx: Arc<futures_locks::Mutex<ShieldedContext<U>>>,
+    // for testing purposes
+    callback: Option<fn(&Action)>,
 }
 
 #[derive(Clone)]
@@ -600,7 +603,10 @@ pub(super) struct TaskScheduler<U> {
 impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
     /// Create a new [`TaskManage`] and a [`TaskScheduler`] which can be used
     /// to schedule tasks to be run by the manager.
-    pub(super) fn new(ctx: ShieldedContext<U>) -> (TaskScheduler<U>, Self) {
+    pub(super) fn new(
+        ctx: ShieldedContext<U>,
+        callback: Option<fn(&Action)>,
+    ) -> (TaskScheduler<U>, Self) {
         let (action_send, action_recv) = tokio::sync::mpsc::channel(100);
         (
             TaskScheduler {
@@ -611,6 +617,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                 action: action_recv,
                 latest_idx: Default::default(),
                 ctx: Arc::new(futures_locks::Mutex::new(ctx)),
+                callback,
             },
         )
     }
@@ -619,42 +626,56 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
     /// that process indicates it has finished.
     pub async fn run(&mut self) -> Result<(), Error> {
         while let Some(action) = self.action.recv().await {
-            match action {
-                // On completion, update the height to which all keys have been
-                // synced and then save.
-                Action::Complete { with_error } => {
-                    if !with_error {
-                        let mut locked = self.ctx.lock().await;
-                        // possibly remove unneeded elements from the cache.
-                        locked.unscanned.scanned(&self.latest_idx);
-                        // update each key to be synced to the latest scanned
-                        // height.
-                        for (_, h) in locked.vk_heights.iter_mut() {
-                            // Due to a failure to fetch new blocks, we
-                            // may not have made scanning progress. Hence
-                            // the max computation.
-                            *h = std::cmp::max(*h, Some(self.latest_idx));
-                        }
-                        // updated the spent notes and balances
-                        locked.nullify_spent_notes()?;
-                        _ = locked.save().await;
-                    }
-                    return Ok(());
-                }
-                Action::Data(scanned, idx) => {
-                    // track the latest scanned height. Due to parallelism,
-                    // these won't come in ascending order, thus we should
-                    // track the maximum seen.
-                    self.latest_idx = std::cmp::max(self.latest_idx, idx);
-                    // apply state changes from the scanning process
-                    let mut locked = self.ctx.lock().await;
-                    scanned.apply_to(&mut locked);
-                    // persist the changes
-                    _ = locked.save().await;
-                }
+            if let Some(f) = self.callback {
+                f(&action)
+            }
+            let finished = self.dispatch_action(action).await?;
+            if finished {
+                return Ok(());
             }
         }
         Ok(())
+    }
+
+    pub(super) async fn dispatch_action(
+        &mut self,
+        action: Action,
+    ) -> Result<bool, Error> {
+        match action {
+            // On completion, update the height to which all keys have been
+            // synced and then save.
+            Action::Complete { with_error } => {
+                if !with_error {
+                    let mut locked = self.ctx.lock().await;
+                    // possibly remove unneeded elements from the cache.
+                    locked.unscanned.scanned(&self.latest_idx);
+                    // update each key to be synced to the latest scanned
+                    // height.
+                    for (_, h) in locked.vk_heights.iter_mut() {
+                        // Due to a failure to fetch new blocks, we
+                        // may not have made scanning progress. Hence
+                        // the max computation.
+                        *h = std::cmp::max(*h, Some(self.latest_idx));
+                    }
+                    // updated the spent notes and balances
+                    locked.nullify_spent_notes()?;
+                    _ = locked.save().await;
+                }
+                Ok(true)
+            }
+            Action::Data(scanned, idx) => {
+                // track the latest scanned height. Due to parallelism,
+                // these won't come in ascending order, thus we should
+                // track the maximum seen.
+                self.latest_idx = std::cmp::max(self.latest_idx, idx);
+                // apply state changes from the scanning process
+                let mut locked = self.ctx.lock().await;
+                scanned.apply_to(&mut locked);
+                // persist the changes
+                _ = locked.save().await;
+                Ok(false)
+            }
+        }
     }
 }
 

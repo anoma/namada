@@ -134,12 +134,12 @@ pub struct MaspChange {
     pub change: token::Change,
 }
 
-#[derive(Debug, Default)]
 /// Data returned by successfully scanning a tx
 ///
 /// This is append-only data that will be sent
 /// to a [`TaskManager`] to be applied to the
 /// shielded context.
+#[derive(Debug, Clone, Default)]
 pub(super) struct ScannedData {
     pub div_map: HashMap<usize, Diversifier>,
     pub memo_map: HashMap<usize, MemoBytes>,
@@ -147,7 +147,6 @@ pub(super) struct ScannedData {
     pub nf_map: HashMap<Nullifier, usize>,
     pub pos_map: HashMap<ViewingKey, BTreeSet<usize>>,
     pub vk_map: HashMap<usize, ViewingKey>,
-    pub decrypted_note_cache: DecryptedDataCache,
 }
 
 impl ScannedData {
@@ -177,16 +176,10 @@ impl ScannedData {
         for (k, v) in self.memo_map.drain(..) {
             ctx.memo_map.insert(k, v);
         }
-        // NB: the `decrypted_note_cache` is not carried over
-        // from `self` because it is assumed they are pointing
-        // to the same underlying `Arc`
-        debug_assert_eq!(
-            Arc::as_ptr(&ctx.decrypted_note_cache.inner),
-            Arc::as_ptr(&self.decrypted_note_cache.inner),
-        );
     }
 
     /// Merge to different instances of `Self`.
+    /// This keeps the pointer
     pub(super) fn merge(&mut self, mut other: Self) {
         for (k, v) in other.note_map.drain(..) {
             self.note_map.insert(k, v);
@@ -209,13 +202,6 @@ impl ScannedData {
         for (k, v) in other.memo_map.drain(..) {
             self.memo_map.insert(k, v);
         }
-        // NB: the `decrypted_note_cache` is not carried over
-        // from `other` because it is assumed they are pointing
-        // to the same underlying `Arc`
-        debug_assert_eq!(
-            Arc::as_ptr(&other.decrypted_note_cache.inner),
-            Arc::as_ptr(&self.decrypted_note_cache.inner),
-        );
     }
 }
 
@@ -290,6 +276,16 @@ impl DecryptedDataCache {
     ) -> impl Iterator<Item = (IndexedTx, ViewingKey, DecryptedData)> {
         let mut locked = self.inner.write().unwrap();
         std::mem::take(&mut *locked).into_values()
+    }
+
+    /// Get the size of the current cache
+    pub fn len(&self) -> usize {
+        self.inner.read().unwrap().len()
+    }
+
+    /// Check if cache is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
