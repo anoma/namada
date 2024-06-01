@@ -74,7 +74,7 @@ impl MaspEpoch {
     }
 
     /// Returns a 0 masp epoch
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Self(Epoch(0))
     }
 
@@ -85,7 +85,7 @@ impl MaspEpoch {
 
     /// Initialize a new masp epoch from the provided one
     #[cfg(any(test, feature = "testing"))]
-    pub fn new(epoch: u64) -> Self {
+    pub const fn new(epoch: u64) -> Self {
         Self(Epoch(epoch))
     }
 }
