@@ -946,7 +946,7 @@ impl From<Amount> for IbcAmount {
 
 impl From<DenominatedAmount> for IbcAmount {
     fn from(amount: DenominatedAmount) -> Self {
-        amount.canonical().amount.into()
+        amount.amount.into()
     }
 }
 

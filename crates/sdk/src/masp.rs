@@ -55,7 +55,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
-    PaymentAddress, TransferSource, TransferTarget,
+    MaybeIbcAddress, PaymentAddress, TransferSource, TransferTarget,
 };
 use namada_core::storage::{BlockHeight, Epoch, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
@@ -1719,13 +1719,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // We add a dummy UTXO to our transaction, but only the source of
             // the parent Transfer object is used to validate fund
             // availability
-            let source_enc = TransferTarget::Address(source
-                .address()
+            let source_enc = source
+                .maybe_ibc_address()
                 .ok_or_else(|| {
                     Error::Other(
                         "source address should be transparent".to_string(),
                     )
-                })?)
+                })?
                 .serialize_to_vec();
 
             let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
@@ -1761,14 +1761,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // If we are sending to a transparent output, then we will need to embed
         // the transparent target address into the shielded transaction so that
         // it can be signed
-        let transparent_target_hash = if payment_address.is_none() {
-            let target_enc = target.serialize_to_vec();
-            Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                target_enc.as_ref(),
-            )))
-        } else {
-            None
-        };
+        let transparent_target_hash =
+            if let Some(target) = target.maybe_ibc_address() {
+                let target_enc = target.serialize_to_vec();
+                Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                    target_enc.as_ref(),
+                )))
+            } else {
+                None
+            };
         // This indicates how many more assets need to be sent to the receiver
         // in order to satisfy the requested transfer amount.
         let mut rem_amount = amount.amount().raw_amount().0;

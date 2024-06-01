@@ -26,7 +26,7 @@ use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::event as ibc_events;
 use namada_ibc::event::IbcEvent;
 use namada_proof_of_stake::Epoch;
-use namada_sdk::masp::{verify_shielded_tx, TransferTarget};
+use namada_sdk::masp::{verify_shielded_tx, MaybeIbcAddress};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_tx::BatchedTxRef;
@@ -41,7 +41,7 @@ use token::storage_key::{
 };
 use token::Amount;
 
-use crate::address::InternalAddress;
+use crate::address::{IBC, InternalAddress};
 use crate::ledger::ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
@@ -52,6 +52,16 @@ use crate::token;
 use crate::token::MaspDigitPos;
 use crate::uint::{Uint, I320};
 use crate::vm::WasmCacheAccess;
+use crate::ledger::ibc::storage::ibc_token;
+use crate::sdk::ibc::is_ibc_denom;
+use crate::sdk::ibc::IbcTokenHash;
+use crate::ledger::events::extend::PacketAck;
+use crate::sdk::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+
+/// Packet event types
+const SEND_PACKET_EVENT: &str = "send_packet";
+const RECEIVE_PACKET_EVENT: &str = "recv_packet";
+const WRITE_ACK_EVENT: &str = "write_acknowledgement";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -78,10 +88,10 @@ where
 // the other balances maps the token address to the addresses of the
 // senders/receivers, their balance diff and whether this is positive or
 // negative diff
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 struct ChangedBalances {
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
-    decoder: BTreeMap<TransparentAddress, TransferTarget>,
+    decoder: BTreeMap<TransparentAddress, MaybeIbcAddress>,
     ibc_denoms: BTreeMap<String, Address>,
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
@@ -336,74 +346,67 @@ where
         let mut counterparts_balances =
             keys_changed.iter().filter_map(is_any_token_balance_key);
 
-        let mut changed_balances = counterparts_balances
-            .try_fold(
-                ChangedBalances::default(),
-                |mut result, [token, counterpart]| {
-                    let denom = read_denom(&self.ctx.pre(), token)?
-                        .ok_or_err_msg(
-                            "No denomination found in storage for the given \
-                             token",
-                        )?;
-                    unepoched_tokens(token, denom, &mut result.tokens)?;
-                    let counterpart_balance_key =
-                        balance_key(token, counterpart);
-                    let pre_balance: Amount = self
-                        .ctx
-                        .read_pre(&counterpart_balance_key)?
-                        .unwrap_or_default();
-                    let post_balance: Amount = self
-                        .ctx
-                        .read_post(&counterpart_balance_key)?
-                        .unwrap_or_default();
-                    // Make it possible to decode IBC tokens
-                    result.ibc_denoms.insert(
-                        self.query_ibc_denom(
-                            token.to_string(),
-                            Some(counterpart),
-                        )
+        let mut changed_balances = counterparts_balances.try_fold(
+            ChangedBalances::default(),
+            |mut result, [token, counterpart]| {
+                let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
+                    "No denomination found in storage for the given token",
+                )?;
+                unepoched_tokens(token, denom, &mut result.tokens)?;
+                let counterpart_balance_key = balance_key(token, counterpart);
+                let pre_balance: Amount = self
+                    .ctx
+                    .read_pre(&counterpart_balance_key)?
+                    .unwrap_or_default();
+                let post_balance: Amount = self
+                    .ctx
+                    .read_post(&counterpart_balance_key)?
+                    .unwrap_or_default();
+                // Make it possible to decode IBC tokens
+                result.ibc_denoms.insert(
+                    self.query_ibc_denom(token.to_string(), Some(counterpart))
                         .map_err(native_vp::Error::new)?,
-                        token.clone(),
-                    );
-                    // Public keys must be the hash of the sources/targets
-                    let address_hash = TransparentAddress(<[u8; 20]>::from(
-                        ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                            &TransferTarget::Address(counterpart.clone()).serialize_to_vec(),
-                        )),
-                    ));
-                    // Enable the decoding of these counterpart addresses
-                    result.decoder.insert(
-                        address_hash,
-                        TransferTarget::Address(counterpart.clone()),
-                    );
-                    let pre_entry = result
-                        .pre
-                        .entry(address_hash)
-                        .or_insert(ValueSum::zero());
-                    let post_entry = result
-                        .post
-                        .entry(address_hash)
-                        .or_insert(ValueSum::zero());
-                    *pre_entry = checked!(
-                        pre_entry
-                            + &ValueSum::from_pair(
-                                (*token).clone(),
-                                pre_balance
-                            )
-                    )
-                    .map_err(native_vp::Error::new)?;
-                    *post_entry = checked!(
-                        post_entry
-                            + &ValueSum::from_pair(
-                                (*token).clone(),
-                                post_balance
-                            )
-                    )
-                    .map_err(native_vp::Error::new)?;
-                    Result::<_>::Ok(result)
-                },
-            )
-            .unwrap();
+                    token.clone(),
+                );
+                // Public keys must be the hash of the sources/targets
+                let address_hash = TransparentAddress(<[u8; 20]>::from(
+                    ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                        &MaybeIbcAddress::Address(counterpart.clone())
+                            .serialize_to_vec(),
+                    )),
+                ));
+                // Enable the decoding of these counterpart addresses
+                result.decoder.insert(
+                    address_hash,
+                    MaybeIbcAddress::Address(counterpart.clone()),
+                );
+                let pre_entry =
+                    result.pre.entry(address_hash).or_insert(ValueSum::zero());
+                let post_entry =
+                    result.post.entry(address_hash).or_insert(ValueSum::zero());
+                *pre_entry = checked!(
+                    pre_entry
+                        + &ValueSum::from_pair((*token).clone(), pre_balance)
+                )
+                .map_err(native_vp::Error::new)?;
+                *post_entry = checked!(
+                    post_entry
+                        + &ValueSum::from_pair((*token).clone(), post_balance)
+                )
+                .map_err(native_vp::Error::new)?;
+                Result::<_>::Ok(result)
+            },
+        )?;
+
+        let ibc_address = MaybeIbcAddress::Address(IBC);
+        // Public keys must be the hash of the sources/targets
+        let ibc_address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &ibc_address.serialize_to_vec(),
+            )),
+        ));
+        // Enable decoding the IBC address hash
+        changed_balances.decoder.insert(ibc_address_hash, ibc_address);
 
         // Extract the IBC events
         let ibc_events: BTreeSet<_> = self
@@ -426,7 +429,7 @@ where
                 serde_json::from_slice::<PacketData>(&msg.data)
             {
                 let address =
-                    TransferTarget::Ibc(packet_data.receiver.to_string());
+                    MaybeIbcAddress::Ibc(packet_data.receiver.to_string());
                 // Public keys must be the hash of the sources/targets
                 let address_hash = TransparentAddress(<[u8; 20]>::from(
                     ripemd::Ripemd160::digest(sha2::Sha256::digest(
@@ -434,33 +437,115 @@ where
                     )),
                 ));
                 changed_balances.decoder.insert(address_hash, address);
-                let pre_entry = changed_balances
+                changed_balances
                     .pre
                     .entry(address_hash)
+                    .or_insert(ValueSum::zero());
+                changed_balances
+                    .post
+                    .entry(ibc_address_hash)
+                    .or_insert(ValueSum::zero());
+                // Also enable the tracking of received IBC
+                let pre_entry = changed_balances
+                    .pre
+                    .entry(ibc_address_hash)
                     .or_insert(ValueSum::zero());
                 let post_entry = changed_balances
                     .post
                     .entry(address_hash)
                     .or_insert(ValueSum::zero());
-                let token = changed_balances
-                    .ibc_denoms
-                    .get(&packet_data.token.denom.to_string())
-                    .ok_or_err_msg("Unable to decode IBC token")?;
-                let delta = ValueSum::from_pair(
-                    token.clone(),
-                    Amount::from_uint(Uint(*packet_data.token.amount), 0)
-                        .unwrap(),
-                );
-                if is_sender_chain_source(
-                    msg.port_id_on_a.clone(),
-                    msg.chan_id_on_a.clone(),
-                    &packet_data.token.denom,
-                ) {
-                    *post_entry = checked!(post_entry + &delta)
-                        .map_err(native_vp::Error::new)?;
-                } else {
-                    *pre_entry = checked!(pre_entry + &delta)
-                        .map_err(native_vp::Error::new)?;
+                
+                match ibc_event.kind().sub_domain() {
+                    // This event is emitted on the sender
+                    SEND_PACKET_EVENT => {
+                        // Since IBC denominations are derived from Addresses
+                        // when sending, we have to do a reverse look-up of the
+                        // relevant token Address
+                        let token = changed_balances
+                            .ibc_denoms
+                            .get(&packet_data.token.denom.to_string())
+                            .cloned()
+                        // If the reverse lookup failed, then guess the Address
+                        // that might have yielded the IBC denom. However,
+                        // guessing an IBC token address cannot possibly be
+                        // correct due to the structure of query_ibc_denom
+                            .or_else(|| Address::decode(&packet_data.token.denom.to_string())
+                                     .ok()
+                                     .filter(|x| !matches!(x, Address::Internal(InternalAddress::IbcToken(_)))))
+                            .ok_or_err_msg("Unable to decode IBC token")?;
+                        let delta = ValueSum::from_pair(
+                            token.clone(),
+                            Amount::from_uint(Uint(*packet_data.token.amount), 0)
+                                .unwrap(),
+                        );
+                        // Enable funds to be received by the receiver in the
+                        // IBC packet
+                        *post_entry = checked!(post_entry + &delta)
+                            .map_err(native_vp::Error::new)?
+                    },
+                    // This event is emitted on the receiver
+                    RECEIVE_PACKET_EVENT => {
+                        // Mirror how the IBC token is derived in
+                        // gen_ibc_shielded_transfer in the non-refund case
+                        let ibc_denom = self.query_ibc_denom(
+                            &packet_data.token.denom.to_string(),
+                            Some(&Address::Internal(InternalAddress::Ibc)),
+                        )?;
+                        let token = namada_ibc::received_ibc_token(
+                            ibc_denom,
+                            &msg.port_id_on_a,
+                            &msg.chan_id_on_a,
+                            &msg.port_id_on_b,
+                            &msg.chan_id_on_b,
+                        ).into_storage_result()
+                            .map_err(Error::NativeVpError)?;
+                        let delta = ValueSum::from_pair(
+                            token.clone(),
+                            Amount::from_uint(Uint(*packet_data.token.amount), 0)
+                                .unwrap(),
+                        );
+                        // Enable funds to be taken from the IBC internal
+                        // address and be deposited elsewhere
+                        *pre_entry = checked!(pre_entry + &delta)
+                            .map_err(native_vp::Error::new)?
+                    },
+                    // This event is emitted on the sender
+                    WRITE_ACK_EVENT => {
+                        let acknowledgement = ibc_event
+                            .raw_read_attribute::<PacketAck>()
+                            .ok_or_err_msg("packet_ack attribute missing from write_acknowledgement")?;
+                        let acknowledgement: AcknowledgementStatus =
+                            serde_json::from_slice(acknowledgement.as_ref())
+                            .wrap_err("Decoding acknowledment failed")?;
+                        // If the transfer was a failure, then enable funds to
+                        // be withdrawn from the IBC internal address
+                        if !acknowledgement.is_successful() {
+                            // Mirror how the IBC token is derived in
+                            // gen_ibc_shielded_transfer in the refund case
+                            let ibc_denom = self.query_ibc_denom(
+                                &packet_data.token.denom.to_string(),
+                                Some(&Address::Internal(InternalAddress::Ibc)),
+                            )?;
+                            let token = if ibc_denom.contains('/') {
+                                ibc_token(ibc_denom)
+                            } else {
+                                // the token is a base token
+                                Address::decode(&ibc_denom)
+                                    .wrap_err("Invalid token")?
+                            };
+                            let delta = ValueSum::from_pair(
+                                token.clone(),
+                                Amount::from_uint(Uint(*packet_data.token.amount), 0)
+                                    .unwrap(),
+                            );
+                            // Enable funds to be withdrawn from the IBC
+                            // internal address
+                            *pre_entry = checked!(pre_entry + &delta)
+                                .map_err(native_vp::Error::new)?
+                        }
+                    },
+                    // Ignore all other IBC events
+                    _ => {},
                 }
             }
         }
@@ -490,14 +575,14 @@ where
 
         // The Sapling value balance adds to the transparent tx pool
         let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
-
         // Check the validity of the keys and get the transfer data
         let mut changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed)?;
 
         let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
             ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &TransferTarget::Address(Address::Internal(Masp)).serialize_to_vec(),
+                &MaybeIbcAddress::Address(Address::Internal(Masp))
+                    .serialize_to_vec(),
             )),
         ));
         verify_sapling_balancing_value(
@@ -551,7 +636,7 @@ where
 
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
-            if let Some(TransferTarget::Ibc(_)) =
+            if let Some(MaybeIbcAddress::Address(Address::Internal(InternalAddress::Ibc))) =
                 changed_balances.decoder.get(&signer)
             {
                 // If the IBC address is a signatory, then it means that either
@@ -568,20 +653,23 @@ where
                 // Transaction(s).
                 if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                     for vout in transp_bundle.vout.iter() {
-                        if let Some(TransferTarget::Ibc(_)) =
+                        if let Some(MaybeIbcAddress::Ibc(_)) =
                             changed_balances.decoder.get(&vout.address)
                         {
                             let error = native_vp::Error::new_const(
                                 "Simultaneous credit and debit of IBC account \
                                  in a MASP transaction not allowed",
                             )
-                            .into();
+                                .into();
                             tracing::debug!("{error}");
                             return Err(error);
                         }
                     }
                 }
-            } else if let Some(TransferTarget::Address(signer)) =
+            } else if let Some(MaybeIbcAddress::Ibc(_)) =
+                changed_balances.decoder.get(&signer)
+            {
+            } else if let Some(MaybeIbcAddress::Address(signer)) =
                 changed_balances.decoder.get(&signer)
             {
                 // Otherwise the signer must be decodable so that we can

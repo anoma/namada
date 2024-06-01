@@ -399,6 +399,14 @@ impl TransferSource {
             _ => None,
         }
     }
+
+    /// Get the contained MaybeIbcAddress, if any
+    pub fn maybe_ibc_address(&self) -> Option<MaybeIbcAddress> {
+        match self {
+            Self::Address(x) => Some(MaybeIbcAddress::Address(x.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl Display for TransferSource {
@@ -406,6 +414,43 @@ impl Display for TransferSource {
         match self {
             Self::Address(x) => x.fmt(f),
             Self::ExtendedSpendingKey(x) => x.fmt(f),
+        }
+    }
+}
+
+/// Represents either a Namada address or some IBC address
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
+pub enum MaybeIbcAddress {
+    /// A transparent address
+    Address(Address),
+    /// An IBC address
+    Ibc(String),
+}
+
+impl MaybeIbcAddress {
+    /// Get the transparent address that this target would effectively go to
+    pub fn effective_address(&self) -> Address {
+        match self {
+            Self::Address(x) => x.clone(),
+            // An IBC signer address effectively means that assets are
+            // associated with the IBC internal address
+            Self::Ibc(_) => IBC,
+        }
+    }
+
+    /// Get the contained IBC receiver, if any
+    pub fn payment_address(&self) -> Option<String> {
+        match self {
+            Self::Ibc(address) => Some(address.clone()),
+            _ => None,
+        }
+    }
+
+    /// Get the contained Address, if any
+    pub fn address(&self) -> Option<Address> {
+        match self {
+            Self::Address(x) => Some(x.clone()),
+            _ => None,
         }
     }
 }
@@ -447,6 +492,15 @@ impl TransferTarget {
     pub fn address(&self) -> Option<Address> {
         match self {
             Self::Address(x) => Some(x.clone()),
+            _ => None,
+        }
+    }
+
+    /// Get the contained MaybeIbcAddress, if any
+    pub fn maybe_ibc_address(&self) -> Option<MaybeIbcAddress> {
+        match self {
+            Self::Address(x) => Some(MaybeIbcAddress::Address(x.clone())),
+            Self::Ibc(x) => Some(MaybeIbcAddress::Ibc(x.clone())),
             _ => None,
         }
     }

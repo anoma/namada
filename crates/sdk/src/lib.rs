@@ -810,6 +810,7 @@ pub mod testing {
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
+    use namada_core::masp::MaybeIbcAddress;
     use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
     use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
@@ -1042,7 +1043,9 @@ pub mod testing {
     // Encode the given Address into TransparentAddress
     fn encode_address(source: &Address) -> TransparentAddress {
         let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-            TransferTarget::Address(source.clone()).serialize_to_vec().as_ref(),
+            MaybeIbcAddress::Address(source.clone())
+                .serialize_to_vec()
+                .as_ref(),
         ));
         TransparentAddress(hash.into())
     }
