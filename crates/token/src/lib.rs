@@ -67,6 +67,23 @@ where
     Ok(())
 }
 
+/// Arguments for a multi-party transparent token transfer
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct TransparentTransfer(pub Vec<TransparentTransferData>);
+
 /// Arguments for a transparent token transfer
 #[derive(
     Debug,
@@ -82,7 +99,7 @@ where
     Serialize,
     Deserialize,
 )]
-pub struct TransparentTransfer {
+pub struct TransparentTransferData {
     /// Source address will spend the tokens
     pub source: Address,
     /// Target address will receive the tokens
@@ -178,7 +195,7 @@ pub mod testing {
     pub use namada_trans_token::testing::*;
     use proptest::prelude::*;
 
-    use super::TransparentTransfer;
+    use super::{TransparentTransfer, TransparentTransferData};
 
     prop_compose! {
         /// Generate a transparent transfer
@@ -187,13 +204,21 @@ pub mod testing {
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
-        ) -> TransparentTransfer {
-            TransparentTransfer {
+        ) -> TransparentTransferData{
+            TransparentTransferData {
                 source,
                 target,
                 token,
                 amount,
             }
         }
+    }
+
+    /// Generate a vectorized transparent transfer
+    pub fn arb_vectorized_transparent_transfer(
+        number_of_txs: usize,
+    ) -> impl Strategy<Value = TransparentTransfer> {
+        proptest::collection::vec(arb_transparent_transfer(), 0..number_of_txs)
+            .prop_map(TransparentTransfer)
     }
 }

@@ -25,7 +25,7 @@ impl Transfer {
         amount: DenominatedAmount,
         args: GlobalArgs,
     ) -> Self {
-        let data = namada_sdk::token::TransparentTransfer {
+        let data = namada_sdk::token::TransparentTransferData {
             source,
             target,
             token,

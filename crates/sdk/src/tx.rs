@@ -66,6 +66,7 @@ pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
+use crate::args::TxTransparentTransferData;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
@@ -2831,64 +2832,86 @@ pub async fn build_transparent_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxTransparentTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let source = &args.source;
-    let target = &args.target;
+    let mut transfers = vec![];
 
-    let default_signer = Some(source.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(source.clone()),
-        default_signer,
-    )
-    .await?;
-
-    // Transparent fee payment
-    let (fee_amount, updated_balance) =
-        validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
-            .await
-            .map(|(fee_amount, updated_balance)| {
-                (fee_amount, Some(updated_balance))
-            })?;
-
-    // Check that the source address exists on chain
-    source_exists_or_err(source.clone(), args.tx.force, context).await?;
-    // Check that the target address exists on chain
-    target_exists_or_err(target.clone(), args.tx.force, context).await?;
-
-    // Validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &args.token, args.tx.force)
-            .await?;
-
-    // Check the balance of the source
-    if let Some(updated_balance) = updated_balance {
-        let check_balance = if &updated_balance.source == source
-            && updated_balance.token == args.token
-        {
-            CheckBalance::Balance(updated_balance.post_balance)
-        } else {
-            CheckBalance::Query(balance_key(&args.token, source))
-        };
-
-        check_balance_too_low_err(
-            &args.token,
-            source,
-            validated_amount.amount(),
-            check_balance,
-            args.tx.force,
+    // Evaluate signer and fees
+    let (signing_data, fee_amount, updated_balance) = {
+        let signing_data = signing::aux_signing_data(
             context,
+            &args.tx,
+            None,
+            // If signing keys arg is not provided assume a single transfer and
+            // take the source
+            args.data
+                .first()
+                .map(|transfer_data| transfer_data.source.clone()),
         )
         .await?;
-    }
 
-    // Construct the corresponding transparent Transfer object
-    let transfer = token::TransparentTransfer {
-        source: source.clone(),
-        target: target.clone(),
-        token: args.token.clone(),
-        amount: validated_amount,
+        // Transparent fee payment
+        let (fee_amount, updated_balance) = validate_transparent_fee(
+            context,
+            &args.tx,
+            &signing_data.fee_payer,
+        )
+        .await
+        .map(|(fee_amount, updated_balance)| {
+            (fee_amount, Some(updated_balance))
+        })?;
+
+        (signing_data, fee_amount, updated_balance)
     };
+
+    for TxTransparentTransferData {
+        source,
+        target,
+        token,
+        amount,
+    } in &args.data
+    {
+        // Check that the source address exists on chain
+        source_exists_or_err(source.clone(), args.tx.force, context).await?;
+        // Check that the target address exists on chain
+        target_exists_or_err(target.clone(), args.tx.force, context).await?;
+
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        // Check the balance of the source
+        if let Some(updated_balance) = &updated_balance {
+            let check_balance = if &updated_balance.source == source
+                && &updated_balance.token == token
+            {
+                CheckBalance::Balance(updated_balance.post_balance)
+            } else {
+                CheckBalance::Query(balance_key(token, source))
+            };
+
+            check_balance_too_low_err(
+                token,
+                source,
+                validated_amount.amount(),
+                check_balance,
+                args.tx.force,
+                context,
+            )
+            .await?;
+        }
+
+        // Construct the corresponding transparent Transfer object
+        let transfer_data = token::TransparentTransferData {
+            source: source.to_owned(),
+            target: target.to_owned(),
+            token: token.to_owned(),
+            amount: validated_amount,
+        };
+
+        transfers.push(transfer_data);
+    }
+    // Construct the corresponding transparent Transfer object
+    let transfer = token::TransparentTransfer(transfers);
 
     let tx = build_pow_flag(
         context,

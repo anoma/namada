@@ -229,11 +229,9 @@ impl From<token::DenominatedAmount> for InputAmount {
     }
 }
 
-/// Transparent transfer transaction arguments
+/// Transparent transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
+pub struct TxTransparentTransferData<C: NamadaTypes = SdkTypes> {
     /// Transfer source address
     pub source: C::Address,
     /// Transfer target address
@@ -242,6 +240,15 @@ pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
+}
+
+/// Transparent transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// The transfer specific data
+    pub data: Vec<TxTransparentTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -258,7 +265,7 @@ impl<C: NamadaTypes> TxBuilder<C> for TxTransparentTransfer<C> {
     }
 }
 
-impl<C: NamadaTypes> TxTransparentTransfer<C> {
+impl<C: NamadaTypes> TxTransparentTransferData<C> {
     /// Transfer source address
     pub fn source(self, source: C::Address) -> Self {
         Self { source, ..self }
@@ -278,7 +285,9 @@ impl<C: NamadaTypes> TxTransparentTransfer<C> {
     pub fn amount(self, amount: InputAmount) -> Self {
         Self { amount, ..self }
     }
+}
 
+impl<C: NamadaTypes> TxTransparentTransfer<C> {
     /// Path to the TX WASM code file
     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
         Self {

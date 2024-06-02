@@ -175,16 +175,10 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_transparent_transfer(
         &self,
-        source: Address,
-        target: Address,
-        token: Address,
-        amount: InputAmount,
+        data: Vec<args::TxTransparentTransferData>,
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
-            source,
-            target,
-            token,
-            amount,
+            data,
             tx_code_path: PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -872,9 +866,7 @@ pub mod testing {
     };
     use namada_governance::{InitProposalData, VoteProposalData};
     use namada_ibc::testing::arb_ibc_any;
-    use namada_token::testing::{
-        arb_denominated_amount, arb_transparent_transfer,
-    };
+    use namada_token::testing::arb_denominated_amount;
     use namada_token::{
         ShieldedTransfer, ShieldingTransfer, TransparentTransfer,
         UnshieldingTransfer,
@@ -890,6 +882,9 @@ pub mod testing {
     use prost::Message;
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
+    use token::testing::{
+        arb_transparent_transfer, arb_vectorized_transparent_transfer,
+    };
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
@@ -1093,7 +1088,7 @@ pub mod testing {
         pub fn arb_transparent_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            transfer in arb_transparent_transfer(),
+            transfer in arb_vectorized_transparent_transfer(10),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
