@@ -2171,3 +2171,322 @@ fn dynamic_assets() -> Result<()> {
 
     Ok(())
 }
+
+// Test fee payment in masp:
+//
+// 1. Masp fee payment runs out of gas
+// 3. Valid fee payment (also check that the first tx in the batch is executed
+//    only once)
+#[test]
+fn masp_fee_payment() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        genesis.parameters.parameters.masp_fee_payment_gas_limit = 20_000;
+        genesis
+    })?;
+    _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 50000"));
+
+    _ = node.next_masp_epoch();
+
+    // 1. Out of gas for masp fee payment
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-limit",
+            "5000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 50000"));
+
+    _ = node.next_masp_epoch();
+
+    // 2. Valid masp fee payment
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "10000",
+            "--gas-limit",
+            "20000",
+            "--gas-price",
+            "1",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+    // Check the exact balance of the tx source to ensure that the masp fee
+    // payement transaction was executed only once
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 20000"));
+
+    Ok(())
+}
+
+// Test that when paying gas via masp we select the gas limit as the minimum
+// between the transaction's gas limit and the protocol parameter.
+#[test]
+fn masp_fee_payment_gas_limit() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        // Set an insufficient gas limit for masp fee payment to force all
+        // transactions to fail
+        genesis.parameters.parameters.masp_fee_payment_gas_limit = 5_000;
+        genesis
+    })?;
+    _ = node.next_masp_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_b",
+            "--value",
+            AB_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // Shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AB_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1000000",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    _ = node.next_epoch();
+
+    // Masp fee payment with huge gas, check that the tx still fails because of
+    // the protocol param
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                ALBERT_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-limit",
+                "100000",
+                "--gas-price",
+                "1",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_err());
+    node.assert_success();
+
+    _ = node.next_epoch();
+
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    node.assert_success();
+
+    // Check that the balance hasn't changed
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1000000"));
+
+    Ok(())
+}

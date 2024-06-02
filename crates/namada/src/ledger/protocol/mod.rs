@@ -458,7 +458,7 @@ where
 
     // Commit tx write log even in case of subsequent errors (if the fee payment
     // failed instead, than the previous two functions must have already
-    // dropped the write log leading this function call to be essentially a
+    // dropped the write log, leading this function call to be essentially a
     // no-op)
     shell_params.state.write_log_mut().commit_tx();
     let (batch_results, masp_tx_refs) = payment_result?.map_or_else(
@@ -474,12 +474,6 @@ where
             (batch, Some(MaspTxRefs(vec![masp_section_ref])))
         },
     );
-
-    // FIXME: shoudld we maybe return a DispatchError and apply the same logic
-    // we apply for raw transactions? In this case probably I would not need to
-    // commit inside these functions but only in finalize block
-    // FIXME: At that point maybe I could share functions between finalize block
-    // and prepare/process proposal
 
     // Account for gas
     tx_gas_meter

@@ -54,7 +54,6 @@ mod dry_run_tx {
         let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
-        // FIXME: can't just call dispatch_tx?
         // Wrapper dry run to allow estimating the gas cost of a transaction
         let (extended_tx_result, tx_gas_meter) = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
@@ -275,8 +274,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client()
-    -> namada_state::StorageResult<()> {
+    async fn test_shell_queries_router_with_client(
+    ) -> namada_state::StorageResult<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code
@@ -310,17 +309,15 @@ mod test {
             .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
-        assert!(
-            result
-                .data
-                .batch_results
-                .0
-                .get(&cmt.get_hash())
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .is_accepted()
-        );
+        assert!(result
+            .data
+            .batch_results
+            .0
+            .get(&cmt.get_hash())
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .is_accepted());
 
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();

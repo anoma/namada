@@ -83,6 +83,11 @@ pub(crate) struct TxWriteLog {
     // write/update/delete should ever happen on this field, this log should
     // only be populated through a dump of the `tx_write_log` and should be
     // cleaned either when committing or dumping the `tx_write_log`
+    // FIXME: remove this and use the batch for process_proposal and
+    // prepare_proposal? And what about finalize block? I need to execute the
+    // fee apyment even there, is it safe to use the batch bucket?
+    // FIXME: maybe expose a function to remove elements from the Batch write
+    // log in case we needed to delete anything in the future
     precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The events emitted by the current transaction
     events: WriteLogEvents,
