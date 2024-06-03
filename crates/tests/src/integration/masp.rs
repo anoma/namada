@@ -37,7 +37,7 @@ fn masp_incentives() -> Result<()> {
     // not invalidated.
     let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // Send 1 BTC from Albert to PA
     run(
         &node,
@@ -112,7 +112,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
 
     // sync the shielded context
     run(
@@ -159,7 +159,7 @@ fn masp_incentives() -> Result<()> {
     });
 
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.031"));
+    assert!(captured.contains("nam: 0.063"));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -179,10 +179,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.031"));
+    assert!(captured.contains("nam: 0.063"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
 
     // sync the shielded context
     run(
@@ -229,7 +229,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.09292"));
+    assert!(captured.contains("nam: 0.18887"));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
@@ -249,10 +249,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.09331"));
+    assert!(captured.contains("nam: 0.18963"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
 
     // Send 0.001 ETH from Albert to PA(B)
     run(
@@ -321,7 +321,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
 
     // sync the shielded context
     run(
@@ -368,7 +368,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.362747"));
+    assert!(captured.contains("nam: 0.725514"));
 
     // Assert NAM balance at MASP pool is an accumulation of
     // rewards from both the shielded BTC and shielded ETH
@@ -388,10 +388,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.674354"));
+    assert!(captured.contains("nam: 1.358764"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // Send 0.001 ETH from SK(B) to Christel
     run(
         &node,
@@ -441,7 +441,7 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("eth: 0"));
 
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -468,9 +468,9 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.725855"));
+    assert!(captured.contains("nam: 1.451732"));
 
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -497,10 +497,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.595775"));
+    assert!(captured.contains("nam: 3.219616"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
 
     // Send 1 BTC from SK(A) to Christel
     run(
@@ -568,7 +568,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.113911"));
+    assert!(captured.contains("nam: 2.268662"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -588,10 +588,10 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.843775"));
+    assert!(captured.contains("nam: 3.723616"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -619,7 +619,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.113911"));
+    assert!(captured.contains("nam: 2.268662"));
 
     // Assert NAM balance at VK(B) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -640,7 +640,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.725855"));
+    assert!(captured.contains("nam: 1.451732"));
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -660,11 +660,11 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1.843775"));
+    assert!(captured.contains("nam: 3.723616"));
 
     // Wait till epoch boundary to prevent conversion expiry during transaction
     // construction
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -685,7 +685,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "0.725855",
+            "1.451732",
             "--signing-keys",
             BERTHA_KEY,
             "--node",
@@ -695,7 +695,7 @@ fn masp_incentives() -> Result<()> {
     node.assert_success();
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -716,7 +716,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "1.113911",
+            "2.268662",
             "--signing-keys",
             ALBERT_KEY,
             "--node",
@@ -795,7 +795,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.004009"));
+    assert!(captured.contains("nam: 0.003222"));
 
     Ok(())
 }
@@ -1686,7 +1686,7 @@ fn dynamic_assets() -> Result<()> {
     )?;
     node.assert_success();
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // Send 1 BTC from Albert to PA
     run(
         &node,
@@ -1773,7 +1773,7 @@ fn dynamic_assets() -> Result<()> {
     }
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -1887,7 +1887,7 @@ fn dynamic_assets() -> Result<()> {
     assert!(captured.contains("nam: 0"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -1913,7 +1913,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.0303"));
+    assert!(captured.contains("nam: 0.06262"));
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -1948,7 +1948,7 @@ fn dynamic_assets() -> Result<()> {
     }
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -1993,7 +1993,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.15655"));
 
     {
         // Stop decoding and distributing shielded rewards for BTC in next epoch
@@ -2015,7 +2015,7 @@ fn dynamic_assets() -> Result<()> {
     }
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -2060,10 +2060,10 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.15655"));
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -2107,7 +2107,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.07575"));
+    assert!(captured.contains("nam: 0.15655"));
 
     {
         // Start distributing shielded rewards for NAM in next epoch
@@ -2123,7 +2123,7 @@ fn dynamic_assets() -> Result<()> {
     }
 
     // Wait till epoch boundary
-    node.next_epoch();
+    node.next_masp_epoch();
     // sync the shielded context
     run(
         &node,
@@ -2167,7 +2167,7 @@ fn dynamic_assets() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0.075825"));
+    assert!(captured.contains("nam: 0.156705"));
 
     Ok(())
 }

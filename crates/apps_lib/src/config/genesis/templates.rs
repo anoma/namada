@@ -293,6 +293,8 @@ pub struct ChainParams<T: TemplateValidation> {
     pub implicit_vp: String,
     /// Expected number of epochs per year
     pub epochs_per_year: u64,
+    /// How many epochs it takes to transition to the next masp epoch
+    pub masp_epoch_multiplier: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
     /// Max gas for block
@@ -319,6 +321,7 @@ impl ChainParams<Unvalidated> {
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
+            masp_epoch_multiplier,
             max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
@@ -364,6 +367,7 @@ impl ChainParams<Unvalidated> {
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
+            masp_epoch_multiplier,
             max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,

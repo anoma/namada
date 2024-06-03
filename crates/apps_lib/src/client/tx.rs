@@ -793,9 +793,9 @@ pub async fn submit_shielding_transfer(
                     // If a transaction is rejected by a VP
                     matches!(resp.batch_result().get(&cmt_hash), Some(InnerTxResult::VpsRejected(_))) =>
                 {
-                    let submission_epoch = rpc::query_and_print_epoch(namada).await;
+                    let submission_masp_epoch = rpc::query_and_print_masp_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
-                    if tx_epoch != submission_epoch {
+                    if tx_epoch.unwrap() != submission_masp_epoch {
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
                             "Shielding transaction rejected and this may be due to the \

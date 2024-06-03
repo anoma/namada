@@ -380,6 +380,21 @@ impl MockNode {
             .0
     }
 
+    pub fn next_masp_epoch(&mut self) -> Epoch {
+        let masp_epoch_multiplier =
+            namada::parameters::read_masp_epoch_multiplier_parameter(
+                &self.shell.lock().unwrap().state,
+            )
+            .unwrap();
+        let mut epoch = Epoch::default();
+
+        for _ in 0..masp_epoch_multiplier {
+            epoch = self.next_epoch();
+        }
+
+        epoch
+    }
+
     pub fn native_token(&self) -> Address {
         let locked = self.shell.lock().unwrap();
         locked.state.get_native_token().unwrap()

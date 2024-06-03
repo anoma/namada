@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::masp::MaspEpoch;
 use namada_core::masp_primitives::asset_type::AssetType;
 use namada_core::masp_primitives::convert::AllowedConversion;
 use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_core::masp_primitives::sapling;
-use namada_core::storage::Epoch;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -23,8 +23,8 @@ pub struct ConversionLeaf {
     pub denom: Denomination,
     /// The digit position covered by this asset type
     pub digit_pos: MaspDigitPos,
-    /// The epoch of the asset type
-    pub epoch: Epoch,
+    /// The masp epoch of the asset type
+    pub epoch: MaspEpoch,
     /// The actual conversion and generator
     pub conversion: AllowedConversion,
     /// The position of this leaf in the conversion tree

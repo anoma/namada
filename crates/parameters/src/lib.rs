@@ -74,6 +74,7 @@ where
         tx_allowlist,
         implicit_vp_code_hash,
         epochs_per_year,
+        masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
@@ -134,6 +135,9 @@ where
 
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     storage.write(&epochs_per_year_key, epochs_per_year)?;
+
+    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
+    storage.write(&masp_epoch_multiplier_key, masp_epoch_multiplier)?;
 
     let max_signatures_per_transaction_key =
         storage::get_max_signatures_per_transaction_key();
@@ -282,6 +286,21 @@ where
         .into_storage_result()
 }
 
+/// Read the the masp epoch multiplier parameter from store
+pub fn read_masp_epoch_multiplier_parameter<S>(
+    storage: &S,
+) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    // read multiplier
+    let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
+    let epoch_multiplier = storage.read(&masp_epoch_multiplier_key)?;
+    epoch_multiplier
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
 /// Read the cost per unit of gas for the provided token
 pub fn read_gas_cost<S>(
     storage: &S,
@@ -367,6 +386,9 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read masp epoch multiplier
+    let masp_epoch_multiplier = read_masp_epoch_multiplier_parameter(storage)?;
+
     // read the maximum signatures per transaction
     let max_signatures_per_transaction_key =
         storage::get_max_signatures_per_transaction_key();
@@ -407,6 +429,7 @@ where
         tx_allowlist,
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
+        masp_epoch_multiplier,
         max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
@@ -452,6 +475,7 @@ where
         tx_allowlist: vec![],
         implicit_vp_code_hash: Default::default(),
         epochs_per_year: 365,
+        masp_epoch_multiplier: 2,
         max_signatures_per_transaction: 10,
         fee_unshielding_gas_limit: 0,
         minimum_gas_price: Default::default(),
