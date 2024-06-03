@@ -162,6 +162,12 @@ impl DateTimeUtc {
         )
     }
 
+    /// Returns the unix timestamp associated with this [`DateTimeUtc`].
+    #[inline]
+    pub fn to_unix_timestamp(&self) -> i64 {
+        self.0.timestamp()
+    }
+
     /// Returns a [`DateTimeUtc`] corresponding to the provided Unix timestamp.
     #[inline]
     pub fn from_unix_timestamp(timestamp: i64) -> Option<Self> {
