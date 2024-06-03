@@ -73,6 +73,14 @@ pub fn minted_balance_key(token_addr: &Address) -> storage::Key {
         .expect("Cannot obtain a storage key")
 }
 
+/// Check if a key is part of the multitoken vp sub storage
+pub fn is_multitoken_key(key: &storage::Key) -> bool {
+    match key.fst_address() {
+        Some(addr) => addr.eq(&Address::Internal(InternalAddress::Multitoken)),
+        None => false,
+    }
+}
+
 /// Check if the given storage key is a balance key for the given token. If it
 /// is, return the owner. For minted balances, use
 /// [`is_any_minted_balance_key()`].

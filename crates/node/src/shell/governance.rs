@@ -429,12 +429,25 @@ where
                 shell.state.commit_tx();
                 Ok(true)
             }
+            Some(Err(e)) => {
+                tracing::warn!(
+                    "Error executing governance proposal {}",
+                    e.to_string()
+                );
+                shell.state.drop_tx();
+                Ok(false)
+            }
             _ => {
+                tracing::warn!("not sure what happen");
                 shell.state.drop_tx();
                 Ok(false)
             }
         },
-        Err(_) => {
+        Err(e) => {
+            tracing::warn!(
+                "Error executing governance proposal {}",
+                e.error.to_string()
+            );
             shell.state.drop_tx();
             Ok(false)
         }
