@@ -2316,3 +2316,153 @@ fn rollback() -> Result<()> {
 
     Ok(())
 }
+
+/// We test shielding, shielded to shielded and unshielding transfers:
+/// 1. Run the ledger node
+/// 2. Shield 20 BTC from Albert to PA(A)
+/// 3. Transfer 7 BTC from SK(A) to PA(B)
+/// 4. Assert BTC balance at VK(A) is 13
+/// 5. Unshield 5 BTC from SK(B) to Bertha
+/// 6. Assert BTC balance at VK(B) is 2
+///
+/// NOTE: We need this test to verify the correctness of the proofs generation
+/// and verification process because integration tests use mocks.
+#[test]
+fn masp_txs_and_queries() -> Result<()> {
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |mut genesis, base_dir| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(3600);
+            genesis.parameters.parameters.min_num_of_blocks = 1;
+            setup::set_validators(1, genesis, base_dir, default_port_offset)
+        },
+        None,
+    )?;
+    // Run all cmds on the first validator
+    let who = Who::Validator(0);
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        who,
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let rpc_address = get_actor_rpc(&test, who);
+    let _ep1 = epoch_sleep(&test, &rpc_address, 720)?;
+
+    // add necessary viewing keys to shielded context
+    let mut sync = run_as!(
+        test,
+        who,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            &rpc_address,
+        ],
+        Some(15),
+    )?;
+    sync.assert_success();
+    let txs_args = vec![
+        // 2. Shield 20 BTC from Albert to PA(A)
+        (
+            vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "20",
+            ],
+            TX_APPLIED_SUCCESS,
+        ),
+        // 3. Transfer 7 BTC from SK(A) to PA(B)
+        (
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                BTC,
+                "--amount",
+                "7",
+                "--gas-payer",
+                CHRISTEL_KEY,
+            ],
+            TX_APPLIED_SUCCESS,
+        ),
+        // 4. Assert BTC balance at VK(A) is 13
+        (
+            vec!["balance", "--owner", AA_VIEWING_KEY, "--token", BTC],
+            "btc: 13",
+        ),
+        // 5. Unshield 5 BTC from SK(B) to Bertha
+        (
+            vec![
+                "unshield",
+                "--source",
+                B_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                BTC,
+                "--amount",
+                "5",
+                "--gas-payer",
+                CHRISTEL_KEY,
+            ],
+            TX_APPLIED_SUCCESS,
+        ),
+        // 6. Assert BTC balance at VK(B) is 2
+        (
+            vec!["balance", "--owner", AB_VIEWING_KEY, "--token", BTC],
+            "btc: 2",
+        ),
+    ];
+
+    for (tx_args, tx_result) in &txs_args {
+        // sync shielded context
+        let mut sync = run_as!(
+            test,
+            who,
+            Bin::Client,
+            vec!["shielded-sync", "--node", &rpc_address],
+            Some(15),
+        )?;
+        sync.assert_success();
+        for &dry_run in &[true, false] {
+            let tx_args = if dry_run
+                && (tx_args[0] == "transfer"
+                    || tx_args[0] == "shield"
+                    || tx_args[0] == "unshield")
+            {
+                [tx_args.clone(), vec!["--dry-run"]].concat()
+            } else {
+                tx_args.clone()
+            };
+            let mut client =
+                run_as!(test, who, Bin::Client, tx_args, Some(720))?;
+
+            client.exp_string(tx_result)?;
+        }
+    }
+
+    Ok(())
+}
