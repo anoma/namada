@@ -307,11 +307,9 @@ impl TxTransparentTransfer {
     }
 }
 
-/// Shielded transfer transaction arguments
+/// Shielded transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
+pub struct TxShieldedTransferData<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key
     pub source: C::SpendingKey,
     /// Transfer target address
@@ -320,6 +318,15 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
+}
+
+/// Shielded transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer-specific data
+    pub data: Vec<TxShieldedTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -334,19 +341,26 @@ impl TxShieldedTransfer {
     }
 }
 
+/// Shielded transfer-specific arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldingTransferData<C: NamadaTypes = SdkTypes> {
+    /// Transfer source spending key
+    pub source: C::Address,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+}
+
 /// Shielding transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Transfer source address
-    pub source: C::Address,
     /// Transfer target address
     pub target: C::PaymentAddress,
-    /// Transferred token address
-    pub token: C::Address,
-    /// Transferred token amount
-    pub amount: InputAmount,
+    /// Transfer-specific data
+    pub data: Vec<TxShieldingTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -361,6 +375,17 @@ impl TxShieldingTransfer {
     }
 }
 
+/// Unshielding transfer-specific arguments
+#[derive(Clone, Debug)]
+pub struct TxUnshieldingTransferData<C: NamadaTypes = SdkTypes> {
+    /// Transfer target address
+    pub target: C::Address,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+}
+
 /// Unshielding transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
@@ -368,12 +393,8 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Transfer source spending key
     pub source: C::SpendingKey,
-    /// Transfer target address
-    pub target: C::Address,
-    /// Transferred token address
-    pub token: C::Address,
-    /// Transferred token amount
-    pub amount: InputAmount,
+    /// Transfer-specific data
+    pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }

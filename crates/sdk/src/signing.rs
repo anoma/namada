@@ -710,8 +710,8 @@ enum TransferSide<'a> {
 enum TokenTransfer<'a> {
     Transparent(&'a token::TransparentTransfer),
     Shielded,
-    Shielding(&'a token::ShieldingTransfer),
-    Unshielding(&'a token::UnshieldingTransfer),
+    Shielding(&'a token::ShieldingMultiTransfer),
+    Unshielding(&'a token::UnshieldingMultiTransfer),
 }
 
 impl TokenTransfer<'_> {
@@ -722,9 +722,12 @@ impl TokenTransfer<'_> {
                 .iter()
                 .map(|transfer| &transfer.source)
                 .collect(),
-
             TokenTransfer::Shielded => Default::default(),
-            TokenTransfer::Shielding(transfer) => vec![&transfer.source],
+            TokenTransfer::Shielding(transfers) => transfers
+                .data
+                .iter()
+                .map(|transfer| &transfer.source)
+                .collect(),
             TokenTransfer::Unshielding(_) => Default::default(),
         }
     }
@@ -739,9 +742,11 @@ impl TokenTransfer<'_> {
 
             TokenTransfer::Shielded => Default::default(),
             TokenTransfer::Shielding(_) => Default::default(),
-            TokenTransfer::Unshielding(transfer) => {
-                vec![&transfer.target]
-            }
+            TokenTransfer::Unshielding(transfers) => transfers
+                .data
+                .iter()
+                .map(|transfer| &transfer.target)
+                .collect(),
         }
     }
 
@@ -759,46 +764,20 @@ impl TokenTransfer<'_> {
                         TransferSide::Source(source)
                             if source == &transfer.source =>
                         {
-                            match map.get_mut(&transfer.token) {
-                                Some(amount) => {
-                                    *amount = amount
-                                        .checked_add(transfer.amount)
-                                        .ok_or_else(|| {
-                                            Error::Other(
-                                                "Overflow in amount"
-                                                    .to_string(),
-                                            )
-                                        })?;
-                                }
-                                None => {
-                                    map.insert(
-                                        &transfer.token,
-                                        transfer.amount,
-                                    );
-                                }
-                            }
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
                         }
                         TransferSide::Target(target)
                             if target == &transfer.target =>
                         {
-                            match map.get_mut(&transfer.token) {
-                                Some(amount) => {
-                                    *amount = amount
-                                        .checked_add(transfer.amount)
-                                        .ok_or_else(|| {
-                                            Error::Other(
-                                                "Overflow in amount"
-                                                    .to_string(),
-                                            )
-                                        })?;
-                                }
-                                None => {
-                                    map.insert(
-                                        &transfer.token,
-                                        transfer.amount,
-                                    );
-                                }
-                            }
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
                         }
                         _ => (),
                     }
@@ -807,13 +786,63 @@ impl TokenTransfer<'_> {
                 map
             }
             TokenTransfer::Shielded => Default::default(),
-            TokenTransfer::Shielding(transfer) => {
-                [(&transfer.token, transfer.amount)].into_iter().collect()
+            TokenTransfer::Shielding(transfers) => {
+                let mut map: HashMap<&Address, DenominatedAmount> =
+                    HashMap::new();
+
+                if let TransferSide::Source(source_addr) = address {
+                    for transfer in &transfers.data {
+                        if &transfer.source == source_addr {
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
+                        }
+                    }
+                }
+
+                map
             }
-            TokenTransfer::Unshielding(transfer) => {
-                [(&transfer.token, transfer.amount)].into_iter().collect()
+            TokenTransfer::Unshielding(transfers) => {
+                let mut map: HashMap<&Address, DenominatedAmount> =
+                    HashMap::new();
+
+                if let TransferSide::Target(target_addr) = address {
+                    for transfer in &transfers.data {
+                        if &transfer.target == target_addr {
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
+                        }
+                    }
+                }
+
+                map
             }
         })
+    }
+
+    fn update_token_amount_map<'a>(
+        map: &mut HashMap<&'a Address, DenominatedAmount>,
+        token: &'a Address,
+        amount: DenominatedAmount,
+    ) -> Result<(), Error> {
+        match map.get_mut(token) {
+            Some(prev_amount) => {
+                *prev_amount =
+                    prev_amount.checked_add(amount).ok_or_else(|| {
+                        Error::Other("Overflow in amount".to_string())
+                    })?;
+            }
+            None => {
+                map.insert(token, amount);
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -1438,7 +1467,7 @@ pub async fn to_ledger_vector(
             )
             .await?;
         } else if code_sec.tag == Some(TX_SHIELDING_TRANSFER_WASM.to_string()) {
-            let transfer = token::ShieldingTransfer::try_from_slice(
+            let transfer = token::ShieldingMultiTransfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
@@ -1486,7 +1515,7 @@ pub async fn to_ledger_vector(
             .await?;
         } else if code_sec.tag == Some(TX_UNSHIELDING_TRANSFER_WASM.to_string())
         {
-            let transfer = token::UnshieldingTransfer::try_from_slice(
+            let transfer = token::UnshieldingMultiTransfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
