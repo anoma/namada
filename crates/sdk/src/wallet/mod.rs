@@ -763,32 +763,22 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         rng: &mut (impl CryptoRng + RngCore),
     ) -> common::SecretKey {
-        // Create the alias
-        let mut ctr = 1;
-        let mut alias = format!("disposable_{ctr}");
+        let sk = gen_secret_key(SchemeType::Ed25519, rng);
+        let key_alias = {
+            let pkh: PublicKeyHash = (&sk.to_public()).into();
+            format!("disposable-{pkh}")
+        };
 
-        while self.store().contains_alias(&Alias::from(&alias)) {
-            ctr += 1;
-            alias = format!("disposable_{ctr}");
-        }
-        // Generate a disposable keypair to sign the wrapper if requested
-        //
+        println!("Created disposable keypair with alias {key_alias}");
+
         // TODO(namada#3239): once the wrapper transaction has been applied,
         // this key can be deleted from wallet (the transaction being
         // accepted is not enough cause we could end up doing a
         // rollback)
-        let (alias, disposable_keypair) = self
-            .gen_store_secret_key(
-                SchemeType::Ed25519,
-                Some(alias),
-                false,
-                None,
-                rng,
-            )
-            .expect("Failed to initialize disposable keypair");
+        self.insert_keypair(key_alias, false, sk.clone(), None, None, None)
+            .expect("Failed to store disposable signing key");
 
-        println!("Created disposable keypair with alias {alias}");
-        disposable_keypair
+        sk
     }
 
     /// Find the stored key by an alias, a public key hash or a public key.
