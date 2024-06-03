@@ -347,7 +347,7 @@ impl TxShieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Epoch)> {
         tx::build_shielding_transfer(context, self).await
     }
 }
@@ -374,7 +374,7 @@ impl TxUnshieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Epoch)> {
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_unshielding_transfer(context, self).await
     }
 }

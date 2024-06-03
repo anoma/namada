@@ -776,21 +776,6 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
-    let (mut tx, signing_data) = args.clone().build(namada).await?;
-
-    if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
-    } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
-    }
-    Ok(())
-}
-
-pub async fn submit_unshielding_transfer(
-    namada: &impl Namada,
-    args: args::TxUnshieldingTransfer,
-) -> Result<(), error::Error> {
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
         let (mut tx, signing_data, tx_epoch) =
@@ -813,7 +798,7 @@ pub async fn submit_unshielding_transfer(
                     if tx_epoch != submission_epoch {
                         // Then we probably straddled an epoch boundary. Let's retry...
                         edisplay_line!(namada.io(),
-                            "Unshielding transaction rejected and this may be due to the \
+                            "Shielding transaction rejected and this may be due to the \
                             epoch changing. Attempting to resubmit transaction.",
                         );
                         continue;
@@ -824,6 +809,21 @@ pub async fn submit_unshielding_transfer(
                 _ => break,
             }
         }
+    }
+    Ok(())
+}
+
+pub async fn submit_unshielding_transfer(
+    namada: &impl Namada,
+    args: args::TxUnshieldingTransfer,
+) -> Result<(), error::Error> {
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
+
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
     }
     Ok(())
 }

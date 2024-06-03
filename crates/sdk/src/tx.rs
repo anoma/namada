@@ -2989,7 +2989,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
-) -> Result<(Tx, SigningTxData)> {
+) -> Result<(Tx, SigningTxData, Epoch)> {
     let source = &args.source;
     let default_signer = Some(source.clone());
     let signing_data = signing::aux_signing_data(
@@ -3044,6 +3044,7 @@ pub async fn build_shielding_transfer<N: Namada>(
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
+    let shielded_tx_epoch = shielded_parts.0.epoch;
 
     let add_shielded_parts =
         |tx: &mut Tx, data: &mut token::ShieldingTransfer| {
@@ -3093,14 +3094,14 @@ pub async fn build_shielding_transfer<N: Namada>(
         &signing_data.fee_payer,
     )
     .await?;
-    Ok((tx, signing_data))
+    Ok((tx, signing_data, shielded_tx_epoch))
 }
 
 /// Build an unshielding transfer
 pub async fn build_unshielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxUnshieldingTransfer,
-) -> Result<(Tx, SigningTxData, Epoch)> {
+) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(MASP);
     let signing_data = signing::aux_signing_data(
         context,
@@ -3130,7 +3131,6 @@ pub async fn build_unshielding_transfer<N: Namada>(
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
-    let shielded_tx_epoch = shielded_parts.0.epoch;
 
     let add_shielded_parts =
         |tx: &mut Tx, data: &mut token::UnshieldingTransfer| {
@@ -3179,7 +3179,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         &signing_data.fee_payer,
     )
     .await?;
-    Ok((tx, signing_data, shielded_tx_epoch))
+    Ok((tx, signing_data))
 }
 
 // Construct the shielded part of the transaction, if any
