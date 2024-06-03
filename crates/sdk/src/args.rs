@@ -320,7 +320,7 @@ impl TxShieldedTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Epoch)> {
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_shielded_transfer(context, self).await
     }
 }
@@ -347,7 +347,7 @@ impl TxShieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Epoch)> {
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_shielding_transfer(context, self).await
     }
 }

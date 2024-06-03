@@ -761,39 +761,13 @@ pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
-    // Repeat once if the tx fails on a crossover of an epoch
-    for _ in 0..2 {
-        let (mut tx, signing_data, tx_epoch) =
-            args.clone().build(namada).await?;
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
 
-        if args.tx.dump_tx {
-            tx::dump_tx(namada.io(), &args.tx, tx);
-            break;
-        } else {
-            sign(namada, &mut tx, &args.tx, signing_data).await?;
-            let cmt_hash = tx.first_commitments().unwrap().get_hash();
-            let result = namada.submit(tx, &args.tx).await?;
-            match result {
-                ProcessTxResponse::Applied(resp) if
-                    // If a transaction is rejected by a VP
-                    matches!(resp.batch_result().get(&cmt_hash), Some(InnerTxResult::VpsRejected(_))) =>
-                {
-                    let submission_epoch = rpc::query_and_print_epoch(namada).await;
-                    // And its submission epoch doesn't match construction epoch
-                    if tx_epoch != submission_epoch {
-                        // Then we probably straddled an epoch boundary. Let's retry...
-                        edisplay_line!(namada.io(),
-                            "Shielded transaction rejected and this may be due to the \
-                            epoch changing. Attempting to resubmit transaction.",
-                        );
-                        continue;
-                    }
-                },
-                // Otherwise either the transaction was successful or it will not
-                // benefit from resubmission
-                _ => break,
-            }
-        }
+    if args.tx.dump_tx {
+        tx::dump_tx(namada.io(), &args.tx, tx);
+    } else {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
     }
     Ok(())
 }
@@ -802,13 +776,12 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
-    let (mut tx, signing_data, tx_epoch) = args.clone().build(namada).await?;
+    let (mut tx, signing_data) = args.clone().build(namada).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        let cmt_hash = tx.first_commitments().unwrap().get_hash();
         namada.submit(tx, &args.tx).await?;
     }
     Ok(())
