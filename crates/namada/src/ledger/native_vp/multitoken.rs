@@ -8,6 +8,9 @@ use namada_governance::is_proposal_accepted;
 use namada_parameters::storage::is_native_token_transferable;
 use namada_state::StateRead;
 use namada_token::storage_key::is_any_token_parameter_key;
+use namada_tx::action::{
+    Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
+};
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -21,6 +24,13 @@ use crate::token::storage_key::{
 };
 use crate::token::Amount;
 use crate::vm::WasmCacheAccess;
+
+/// The owner of some balance change.
+#[derive(Copy, Clone, Eq, PartialEq)]
+enum Owner<'a> {
+    Account(&'a Address),
+    Protocol,
+}
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -70,18 +80,44 @@ where
         let native_token = self.ctx.pre().ctx.get_native_token()?;
         let is_native_token_transferable =
             is_native_token_transferable(&self.ctx.pre())?;
-        // Native token can be transferred to `PoS` or `Gov` even if
-        // `is_native_token_transferable` is false
-        let is_allowed_inc = |token: &Address, target: &Address| -> bool {
+        let actions = self.ctx.read_actions()?;
+        // The native token can be transferred to and out of the `PoS` and `Gov`
+        // accounts, even if `is_native_token_transferable` is false
+        let is_allowed_inc = |token: &Address, bal_owner: &Address| -> bool {
             *token != native_token
                 || is_native_token_transferable
-                || *target == POS
-                || *target == GOV
+                || actions.iter().all(|action| {
+                    has_bal_inc_protocol_action_or_else(
+                        action,
+                        Owner::Account(bal_owner),
+                        || {
+                            (*bal_owner == POS || *bal_owner == GOV)
+                                && has_bal_dec_protocol_action_or_else(
+                                    action,
+                                    Owner::Protocol,
+                                    || false,
+                                )
+                        },
+                    )
+                })
         };
-        let is_allowed_dec = |token: &Address, target: &Address| -> bool {
+        let is_allowed_dec = |token: &Address, bal_owner: &Address| -> bool {
             *token != native_token
                 || is_native_token_transferable
-                || (*target != POS && *target != GOV)
+                || actions.iter().all(|action| {
+                    has_bal_dec_protocol_action_or_else(
+                        action,
+                        Owner::Account(bal_owner),
+                        || {
+                            (*bal_owner == POS || *bal_owner == GOV)
+                                && has_bal_inc_protocol_action_or_else(
+                                    action,
+                                    Owner::Protocol,
+                                    || false,
+                                )
+                        },
+                    )
+                })
         };
 
         let mut inc_changes: HashMap<Address, Amount> = HashMap::new();
@@ -318,6 +354,58 @@ where
     }
 }
 
+fn has_bal_inc_protocol_action_or_else<F>(
+    action: &Action,
+    owner: Owner<'_>,
+    or_else: F,
+) -> bool
+where
+    F: FnOnce() -> bool,
+{
+    match action {
+        Action::Pos(
+            PosAction::ClaimRewards(ClaimRewards { validator, source })
+            | PosAction::Withdraw(Withdraw { validator, source }),
+        ) => match owner {
+            Owner::Account(owner) => {
+                source.as_ref().unwrap_or(validator) == owner
+            }
+            // NB: pos or gov's balance can increase
+            Owner::Protocol => true,
+        },
+        _ => or_else(),
+    }
+}
+
+fn has_bal_dec_protocol_action_or_else<F>(
+    action: &Action,
+    owner: Owner<'_>,
+    or_else: F,
+) -> bool
+where
+    F: FnOnce() -> bool,
+{
+    match action {
+        Action::Pos(PosAction::Bond(Bond {
+            validator, source, ..
+        })) => match owner {
+            Owner::Account(owner) => {
+                source.as_ref().unwrap_or(validator) == owner
+            }
+            // NB: pos or gov's balance can decrease
+            Owner::Protocol => true,
+        },
+        Action::Gov(GovAction::InitProposal { author: source }) => {
+            match owner {
+                Owner::Account(owner) => source == owner,
+                // NB: pos or gov's balance can decrease
+                Owner::Protocol => true,
+            }
+        }
+        _ => or_else(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -328,6 +416,7 @@ mod tests {
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
+    use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
 
@@ -840,6 +929,13 @@ mod tests {
         let src = established_address_1();
         let dest = POS;
         let keys_changed = transfer(&mut state, &src, &dest);
+        state
+            .push_action(Action::Pos(PosAction::Bond(Bond {
+                validator: established_address_1(),
+                source: None,
+                amount: Amount::native_whole(90),
+            })))
+            .unwrap();
 
         // disable native token transfer
         let key = get_native_token_transferable_key();
@@ -876,8 +972,13 @@ mod tests {
     fn test_native_token_transferable_from_gov() {
         let mut state = init_state();
         let src = GOV;
-        let dest = POS;
+        let dest = established_address_1();
         let keys_changed = transfer(&mut state, &src, &dest);
+        state
+            .push_action(Action::Gov(GovAction::InitProposal {
+                author: established_address_1(),
+            }))
+            .unwrap();
 
         // disable native token transfer
         let key = get_native_token_transferable_key();
@@ -907,6 +1008,97 @@ mod tests {
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Err(_)
+        );
+    }
+
+    #[test]
+    fn test_native_token_transferable_to_gov() {
+        let mut state = init_state();
+        let src = established_address_1();
+        let dest = GOV;
+        let keys_changed = transfer(&mut state, &src, &dest);
+        state
+            .push_action(Action::Gov(GovAction::InitProposal {
+                author: established_address_1(),
+            }))
+            .unwrap();
+
+        // disable native token transfer
+        let key = get_native_token_transferable_key();
+        state.write(&key, false).unwrap();
+
+        let tx_index = TxIndex::default();
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        verifiers.insert(src);
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert_matches!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            Ok(_)
+        );
+    }
+
+    /// Check that even if native token transfers are disabled, we can
+    /// still claim PoS rewards.
+    #[test]
+    fn test_native_token_transferable_from_pos() {
+        let mut state = init_state();
+
+        // simulate claiming PoS rewards
+        let src = POS;
+        let dest = established_address_1();
+        let keys_changed = transfer(&mut state, &src, &dest);
+        state
+            .push_action(Action::Pos(PosAction::ClaimRewards(ClaimRewards {
+                validator: established_address_1(),
+                source: None,
+            })))
+            .unwrap();
+
+        // disable native token transfer
+        let key = get_native_token_transferable_key();
+        state.write(&key, false).unwrap();
+
+        let tx_index = TxIndex::default();
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        ));
+        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let mut verifiers = BTreeSet::new();
+        verifiers.insert(src);
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_wasm_cache,
+        );
+
+        let vp = MultitokenVp { ctx };
+        assert_matches!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            Ok(_)
         );
     }
 }
