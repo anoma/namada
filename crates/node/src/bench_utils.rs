@@ -76,8 +76,9 @@ use namada::ledger::queries::{
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
 use namada::token::{
-    Amount, DenominatedAmount, ShieldedTransfer, ShieldingTransfer,
-    ShieldingTransferData, UnshieldingTransfer, UnshieldingTransferData,
+    Amount, DenominatedAmount, ShieldedTransfer, ShieldingMultiTransfer,
+    ShieldingTransfer, ShieldingTransferData, UnshieldingMultiTransfer,
+    UnshieldingTransferData,
 };
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
@@ -1127,12 +1128,12 @@ impl BenchShieldedCtx {
         } else if target.effective_address() == MASP {
             namada.client().generate_tx(
                 TX_SHIELDING_TRANSFER_WASM,
-                ShieldingTransfer {
-                    data: ShieldingTransferData {
+                ShieldingMultiTransfer {
+                    data: vec![ShieldingTransferData {
                         source: source.effective_address(),
                         token: address::testing::nam(),
                         amount: DenominatedAmount::native(amount),
-                    },
+                    }],
                     shielded_section_hash,
                 },
                 Some(shielded),
@@ -1142,12 +1143,12 @@ impl BenchShieldedCtx {
         } else {
             namada.client().generate_tx(
                 TX_UNSHIELDING_TRANSFER_WASM,
-                UnshieldingTransfer {
-                    data: UnshieldingTransferData {
+                UnshieldingMultiTransfer {
+                    data: vec![UnshieldingTransferData {
                         target: target.effective_address(),
                         token: address::testing::nam(),
                         amount: DenominatedAmount::native(amount),
-                    },
+                    }],
                     shielded_section_hash,
                 },
                 Some(shielded),
@@ -1213,10 +1214,14 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = ShieldingTransfer::deserialize(
+        let vectorized_transfer = ShieldingMultiTransfer::deserialize(
             &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
         )
         .unwrap();
+        let transfer = ShieldingTransfer {
+            data: vectorized_transfer.data.first().unwrap().to_owned(),
+            shielded_section_hash: vectorized_transfer.shielded_section_hash,
+        };
         let masp_tx = tx
             .tx
             .get_section(&transfer.shielded_section_hash)
