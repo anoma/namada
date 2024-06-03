@@ -376,7 +376,8 @@ where
                 let new_normed_inflation = u128::try_from(new_normed_inflation)
                     .unwrap_or_else(|_| {
                         tracing::warn!(
-                            "MASP reward for {} assumed to be 0 because the \
+                            "MASP inflation for the native token {} is kept \
+                             the same as in the last epoch because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
                             token
