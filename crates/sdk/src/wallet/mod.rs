@@ -1164,6 +1164,14 @@ mod tests {
     }
 
     #[test]
+    fn test_disposable_key_alias_invalid() {
+        assert!(!check_if_disposable_key_and(
+            &Alias::from("bertha"),
+            |_h, _t| { panic!("Bertha's key is not disposable!") }
+        ));
+    }
+
+    #[test]
     fn test_disposable_key_alias_parsing() {
         let sk = keypair_1();
 
