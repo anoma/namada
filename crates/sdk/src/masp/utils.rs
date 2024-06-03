@@ -15,12 +15,12 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::collections::HashMap;
+use namada_core::masp::MaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
-use namada_core::token::Transfer;
 use namada_events::extend::{
+    MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
-use namada_ibc::IbcMessage;
 use namada_tx::{IndexedTx, Tx};
 use rand_core::{CryptoRng, RngCore};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -29,8 +29,8 @@ use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::shielded_ctx::ShieldedContext;
 use crate::masp::types::{
-    ContextSyncStatus, ExtractedMaspTxs, IndexedNoteEntry, PVKs, ScannedData,
-    TransactionDelta, Unscanned,
+    ContextSyncStatus, IndexedNoteEntry, PVKs, ScannedData, TransactionDelta,
+    Unscanned,
 };
 use crate::masp::{ENV_VAR_MASP_PARAMS_DIR, VERIFIYING_KEYS};
 use crate::queries::Client;
@@ -140,7 +140,7 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<TxIndex>>, Error> {
+) -> Result<Option<Vec<(TxIndex, MaspTxRefs)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -159,7 +159,13 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                         .ok()?;
 
                     if tx_index >= first_idx_to_query {
-                        Some(tx_index)
+                        let masp_section_refs =
+                            MaspTxBatchRefsAttr::read_from_event_attributes(
+                                &event.attributes,
+                            )
+                            .ok()?;
+
+                        Some((tx_index, masp_section_refs))
                     } else {
                         None
                     }
@@ -168,99 +174,36 @@ pub(super) async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         }))
 }
 
-/// Extract the relevant shielded portions of a [`Tx`], if any.
-pub(super) async fn extract_masp_tx(
+/// Extract the relevant shield portions of a [`Tx`], if any.
+async fn extract_masp_tx(
     tx: &Tx,
-) -> Result<ExtractedMaspTxs, Error> {
+    masp_section_refs: &MaspTxRefs,
+) -> Result<Vec<Transaction>, Error> {
     // NOTE: simply looking for masp sections attached to the tx
     // is not safe. We don't validate the sections attached to a
     // transaction se we could end up with transactions carrying
     // an unnecessary masp section. We must instead look for the
-    // required masp sections in the signed commitments (hashes)
-    // of the transactions' data sections
-    let mut txs = vec![];
+    // required masp sections coming from the events
 
-    // Expect transaction
-    for cmt in tx.commitments() {
-        let tx_data = tx
-            .data(cmt)
-            .ok_or_else(|| Error::Other("Missing data section".to_string()))?;
-        let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-            Ok(transfer) => Some(transfer),
-            Err(_) => {
-                // This should be a MASP over IBC transaction, it
-                // could be a ShieldedTransfer or an Envelope
-                // message, need to try both
-                extract_payload_from_shielded_action(&tx_data).await.ok()
-            }
-        }
-        .map(|transfer| {
-            if let Some(hash) = transfer.shielded {
-                let masp_tx = tx
-                    .get_section(&hash)
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing masp section in transaction".to_string(),
-                        )
-                    })?
-                    .masp_tx()
-                    .ok_or_else(|| {
-                        Error::Other("Missing masp transaction".to_string())
-                    })?;
-
-                Ok::<_, Error>(Some(masp_tx))
-            } else {
-                Ok(None)
+    masp_section_refs
+        .0
+        .iter()
+        .try_fold(vec![], |mut acc, hash| {
+            match tx
+                .get_section(hash)
+                .and_then(|section| section.masp_tx())
+                .ok_or_else(|| {
+                    Error::Other(
+                        "Missing expected masp transaction".to_string(),
+                    )
+                }) {
+                Ok(transaction) => {
+                    acc.push(transaction);
+                    Ok(acc)
+                }
+                Err(e) => Err(e),
             }
         })
-        .transpose()?
-        .flatten();
-
-        if let Some(transaction) = maybe_masp_tx {
-            txs.push((cmt.to_owned(), transaction));
-        }
-    }
-
-    Ok(ExtractedMaspTxs(txs))
-}
-
-/// Extract the changed keys and Transaction hash from a MASP over ibc message
-pub(super) async fn extract_payload_from_shielded_action(
-    tx_data: &[u8],
-) -> Result<Transfer, Error> {
-    let message = namada_ibc::decode_message(tx_data)
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let result = match message {
-        IbcMessage::Transfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::NftTransfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::RecvPacket(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::AckPacket(msg) => {
-            // Refund tokens by the ack message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Timeout(msg) => {
-            // Refund tokens by the timeout message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Envelope(_) => {
-            return Err(Error::Other(
-                "Unexpected ibc message for masp".to_string(),
-            ));
-        }
-    };
-
-    Ok(result)
 }
 
 /// The updates to the commitment tree and witness maps
@@ -372,35 +315,41 @@ where
                     note_map_delta: Default::default(),
                 };
                 let mut note_pos = updates.commitment_tree.size();
-                for (indexed_tx, ref shielded) in tx_receiver {
+                for (indexed_tx, ref txs) in tx_receiver {
                     updates.note_map_delta.insert(indexed_tx, note_pos);
-                    for so in shielded
-                        .sapling_bundle()
-                        .map_or(&vec![], |x| &x.shielded_outputs)
-                    {
-                        // Create merkle tree leaf node from note commitment
-                        let node = Node::new(so.cmu.to_repr());
-                        // Update each merkle tree in the witness map with the
-                        // latest addition
-                        for (_, witness) in updates.witness_map.iter_mut() {
-                            witness.append(node).map_err(|()| {
-                                Error::Other(
-                                    "note commitment tree is full".to_string(),
-                                )
-                            })?;
+                    for shielded in txs {
+                        for so in shielded
+                            .sapling_bundle()
+                            .map_or(&vec![], |x| &x.shielded_outputs)
+                        {
+                            // Create merkle tree leaf node from note commitment
+                            let node = Node::new(so.cmu.to_repr());
+                            // Update each merkle tree in the witness map with
+                            // the latest addition
+                            for (_, witness) in updates.witness_map.iter_mut() {
+                                witness.append(node).map_err(|()| {
+                                    Error::Other(
+                                        "note commitment tree is full"
+                                            .to_string(),
+                                    )
+                                })?;
+                            }
+                            updates.commitment_tree.append(node).map_err(
+                                |()| {
+                                    Error::Other(
+                                        "note commitment tree is full"
+                                            .to_string(),
+                                    )
+                                },
+                            )?;
+                            // Finally, make it easier to construct merkle paths
+                            // to this new note
+                            let witness = IncrementalWitness::<Node>::from_tree(
+                                &updates.commitment_tree,
+                            );
+                            updates.witness_map.insert(note_pos, witness);
+                            note_pos += 1;
                         }
-                        updates.commitment_tree.append(node).map_err(|()| {
-                            Error::Other(
-                                "note commitment tree is full".to_string(),
-                            )
-                        })?;
-                        // Finally, make it easier to construct merkle paths to
-                        // this new note
-                        let witness = IncrementalWitness::<Node>::from_tree(
-                            &updates.commitment_tree,
-                        );
-                        updates.witness_map.insert(note_pos, witness);
-                        note_pos += 1;
                     }
                 }
                 Ok(updates)
@@ -427,7 +376,7 @@ where
                 continue;
             }
 
-            let txs_results = match get_indexed_masp_events_at_height::<C>(
+            let txs_results = match get_indexed_masp_events_at_height(
                 self.client,
                 height.into(),
                 None,
@@ -454,20 +403,19 @@ where
                 .block
                 .data;
 
-            for idx in txs_results {
+            for (idx, masp_sections_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs = extract_masp_tx(&tx).await?;
-                for (inner_tx, transaction) in extracted_masp_txs.0 {
-                    tx_sender.send((
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            inner_tx,
-                        },
-                        transaction,
-                    ))
-                }
+                let extracted_masp_txs =
+                    extract_masp_tx(&tx, &masp_sections_refs).await?;
+
+                tx_sender.send((
+                    IndexedTx {
+                        height: height.into(),
+                        index: idx,
+                    },
+                    extracted_masp_txs,
+                ));
             }
             fetch_iter.next();
         }
@@ -698,7 +646,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskScheduler<U> {
         sync_status: ContextSyncStatus,
         indexed_tx: IndexedTx,
         tx_note_map: &BTreeMap<IndexedTx, usize>,
-        shielded: &Transaction,
+        shielded: &[Transaction],
         vk: &ViewingKey,
     ) -> Result<(ScannedData, TransactionDelta), Error> {
         let res = ShieldedContext::<U>::scan_tx(

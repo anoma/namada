@@ -18,7 +18,7 @@ use masp_primitives::transaction::{
     builder, Authorization, Authorized, Transaction, Unauthorized,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::PreparedVerifyingKey;
+use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
@@ -31,17 +31,17 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_token as token;
-use namada_tx::{IndexedTx, TxCommitments};
+use namada_tx::IndexedTx;
 use thiserror::Error;
 
 use crate::error::Error;
 use crate::masp::{ShieldedContext, ShieldedUtils};
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Transaction);
+pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 
 /// Represents the amount used of different conversions
 pub type Conversions =
@@ -101,18 +101,14 @@ pub struct MaspTokenRewardData {
     pub locked_amount_target: Uint,
 }
 
-/// The MASP transaction(s) found in a Namada tx.
-#[derive(Debug, Clone)]
-pub(crate) struct ExtractedMaspTxs(pub Vec<(TxCommitments, Transaction)>);
-
 /// MASP verifying keys
 pub struct PVKs {
     /// spend verifying key
-    pub spend_vk: PreparedVerifyingKey<Bls12>,
+    pub spend_vk: VerifyingKey<Bls12>,
     /// convert verifying key
-    pub convert_vk: PreparedVerifyingKey<Bls12>,
+    pub convert_vk: VerifyingKey<Bls12>,
     /// output verifying key
-    pub output_vk: PreparedVerifyingKey<Bls12>,
+    pub output_vk: VerifyingKey<Bls12>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Copy, Clone)]
@@ -214,7 +210,7 @@ impl ScannedData {
 /// is not parallelizable).
 pub struct DecryptedData {
     /// The actual transaction
-    pub tx: Transaction,
+    pub txs: Vec<Transaction>,
     /// balance changes from the tx
     pub delta: TransactionDelta,
 }

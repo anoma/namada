@@ -36,7 +36,7 @@ use namada_core::masp::{
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_token::{self as token, Denomination, MaspDigitPos};
-use namada_tx::{IndexedTx, TxCommitments};
+use namada_tx::IndexedTx;
 use rand_core::OsRng;
 use rayon::prelude::*;
 use ripemd::Digest as RipemdDigest;
@@ -216,7 +216,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         sync_status: ContextSyncStatus,
         indexed_tx: IndexedTx,
         tx_note_map: &BTreeMap<IndexedTx, usize>,
-        shielded: &Transaction,
+        txs: &[Transaction],
         vk: &ViewingKey,
     ) -> Result<(ScannedData, TransactionDelta), Error> {
         // For tracking the account changes caused by this Transaction
@@ -231,56 +231,64 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         indexed_tx
                     ))
                 })?;
-            // Listen for notes sent to our viewing keys, only if we are syncing
-            // (i.e. in a confirmed status)
-            for so in shielded
-                .sapling_bundle()
-                .map_or(&vec![], |x| &x.shielded_outputs)
-            {
-                // Let's try to see if this viewing key can decrypt latest
-                // note
-                let notes = scanned_data.pos_map.entry(*vk).or_default();
-                let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
-                    &NETWORK,
-                    1.into(),
-                    &PreparedIncomingViewingKey::new(&vk.ivk()),
-                    so,
-                );
-                // So this current viewing key does decrypt this current note...
-                if let Some((note, pa, memo)) = decres {
-                    // Add this note to list of notes decrypted by this viewing
-                    // key
-                    notes.insert(note_pos);
-                    // Compute the nullifier now to quickly recognize when spent
-                    let nf = note.nf(
-                        &vk.nk,
-                        note_pos.try_into().map_err(|_| {
-                            Error::Other("Can not get nullifier".to_string())
-                        })?,
-                    );
-                    scanned_data.note_map.insert(note_pos, note);
-                    scanned_data.memo_map.insert(note_pos, memo);
-                    // The payment address' diversifier is required to spend
+            for shielded in txs {
+                // Listen for notes sent to our viewing keys, only if we are
+                // syncing (i.e. in a confirmed status)
+                for so in shielded
+                    .sapling_bundle()
+                    .map_or(&vec![], |x| &x.shielded_outputs)
+                {
+                    // Let's try to see if this viewing key can decrypt latest
                     // note
-                    scanned_data.div_map.insert(note_pos, *pa.diversifier());
-                    scanned_data.nf_map.insert(nf, note_pos);
-                    // Note the account changes
-                    let balance = transaction_delta
-                        .entry(*vk)
-                        .or_insert_with(I128Sum::zero);
-                    *balance += I128Sum::from_nonnegative(
-                        note.asset_type,
-                        note.value as i128,
-                    )
-                    .map_err(|()| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
+                    let notes = scanned_data.pos_map.entry(*vk).or_default();
+                    let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+                        &NETWORK,
+                        1.into(),
+                        &PreparedIncomingViewingKey::new(&vk.ivk()),
+                        so,
+                    );
+                    // So this current viewing key does decrypt this current
+                    // note...
+                    if let Some((note, pa, memo)) = decres {
+                        // Add this note to list of notes decrypted by this
+                        // viewing key
+                        notes.insert(note_pos);
+                        // Compute the nullifier now to quickly recognize when
+                        // spent
+                        let nf = note.nf(
+                            &vk.nk,
+                            note_pos.try_into().map_err(|_| {
+                                Error::Other(
+                                    "Can not get nullifier".to_string(),
+                                )
+                            })?,
+                        );
+                        scanned_data.note_map.insert(note_pos, note);
+                        scanned_data.memo_map.insert(note_pos, memo);
+                        // The payment address' diversifier is required to spend
+                        // note
+                        scanned_data
+                            .div_map
+                            .insert(note_pos, *pa.diversifier());
+                        scanned_data.nf_map.insert(nf, note_pos);
+                        // Note the account changes
+                        let balance = transaction_delta
+                            .entry(*vk)
+                            .or_insert_with(I128Sum::zero);
+                        *balance += I128Sum::from_nonnegative(
+                            note.asset_type,
+                            note.value as i128,
                         )
-                    })?;
-                    scanned_data.vk_map.insert(note_pos, *vk);
+                        .map_err(|()| {
+                            Error::Other(
+                                "found note with invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?;
+                        scanned_data.vk_map.insert(note_pos, *vk);
+                    }
+                    note_pos += 1;
                 }
-                note_pos += 1;
             }
         }
         Ok((scanned_data, transaction_delta))
@@ -292,35 +300,37 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub(super) fn nullify_spent_notes(&mut self) -> Result<(), Error> {
         for (_, _, decrypted_data) in self.decrypted_note_cache.drain() {
             let DecryptedData {
-                tx: shielded,
+                txs,
                 delta: mut transaction_delta,
             } = decrypted_data;
 
-            // Cancel out those of our notes that have been spent
-            for ss in shielded
-                .sapling_bundle()
-                .map_or(&vec![], |x| &x.shielded_spends)
-            {
-                // If the shielded spend's nullifier is in our map, then target
-                // note is rendered unusable
-                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                    self.spents.insert(*note_pos);
-                    // Note the account changes
-                    let balance = transaction_delta
-                        .entry(self.vk_map[note_pos])
-                        .or_insert_with(I128Sum::zero);
-                    let note = self.note_map[note_pos];
+            for shielded in txs {
+                // Cancel out those of our notes that have been spent
+                for ss in shielded
+                    .sapling_bundle()
+                    .map_or(&vec![], |x| &x.shielded_spends)
+                {
+                    // If the shielded spend's nullifier is in our map, then
+                    // target note is rendered unusable
+                    if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                        self.spents.insert(*note_pos);
+                        // Note the account changes
+                        let balance = transaction_delta
+                            .entry(self.vk_map[note_pos])
+                            .or_insert_with(I128Sum::zero);
+                        let note = self.note_map[note_pos];
 
-                    *balance -= I128Sum::from_nonnegative(
-                        note.asset_type,
-                        note.value as i128,
-                    )
-                    .map_err(|_| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
+                        *balance -= I128Sum::from_nonnegative(
+                            note.asset_type,
+                            note.value as i128,
                         )
-                    })?;
+                        .map_err(|_| {
+                            Error::Other(
+                                "found note with invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?;
+                    }
                 }
             }
         }
@@ -1266,7 +1276,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .index
                         .checked_add(1)
                         .expect("Tx index shouldn't overflow"),
-                    inner_tx: TxCommitments::default(),
                 }
             });
         self.sync_status = ContextSyncStatus::Speculative;
@@ -1278,7 +1287,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 ContextSyncStatus::Speculative,
                 indexed_tx,
                 &self.tx_note_map,
-                masp_tx,
+                &[masp_tx.clone()],
                 &vk,
             )?;
             scanned_data.merge(scanned);
@@ -1286,7 +1295,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 indexed_tx,
                 vk,
                 DecryptedData {
-                    tx: masp_tx.clone(),
+                    txs: vec![masp_tx.clone()],
                     delta: tx_delta,
                 },
             );
@@ -1529,7 +1538,7 @@ where
                             indexed_tx,
                             *vk,
                             DecryptedData {
-                                tx: stx.clone(),
+                                txs: stx.clone(),
                                 delta: tx_delta,
                             },
                         );
@@ -1769,9 +1778,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
         masp_tx_sender
@@ -1779,9 +1787,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(2),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
 
@@ -1810,12 +1817,10 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(1),
-                inner_tx: Default::default(),
             },
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(2),
-                inner_tx: Default::default(),
             },
         ]);
 
@@ -1825,7 +1830,6 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(2),
-                inner_tx: Default::default(),
             }
         );
         assert_eq!(shielded_ctx.note_map.len(), 2);
@@ -1870,9 +1874,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: Default::default(),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
         masp_tx_sender.send(None).expect("Test failed");
@@ -1933,9 +1936,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 2.into(),
                     index: Default::default(),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
         masp_tx_sender
@@ -1943,9 +1945,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 3.into(),
                     index: Default::default(),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
         // this should not produce an error since we have fetched
@@ -1991,9 +1992,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
         masp_tx_sender
@@ -2001,9 +2001,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(2),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
 
@@ -2033,7 +2032,6 @@ mod shielded_ctx_tests {
         let expected = vec![IndexedTx {
             height: 1.into(),
             index: TxIndex(2),
-            inner_tx: Default::default(),
         }];
         assert_eq!(keys, expected);
     }
@@ -2062,9 +2060,8 @@ mod shielded_ctx_tests {
                     IndexedTx {
                         height: h.into(),
                         index: TxIndex(1),
-                        inner_tx: Default::default(),
                     },
-                    masp_tx.clone(),
+                    vec![masp_tx.clone()],
                 )))
                 .expect("Test failed");
         }
@@ -2101,7 +2098,6 @@ mod shielded_ctx_tests {
         shielded_ctx.tx_note_map.remove(&IndexedTx {
             height: 18.into(),
             index: TxIndex(1),
-            inner_tx: Default::default(),
         });
         shielded_ctx.save().await.expect("Test failed");
 
@@ -2112,9 +2108,8 @@ mod shielded_ctx_tests {
                     IndexedTx {
                         height: h.into(),
                         index: TxIndex(1),
-                        inner_tx: Default::default(),
                     },
-                    masp_tx.clone(),
+                    vec![masp_tx.clone()],
                 )))
                 .expect("Test failed");
         }
@@ -2176,11 +2171,10 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(1),
-                inner_tx: Default::default(),
             },
             vk,
             DecryptedData {
-                tx: masp_tx.clone(),
+                txs: vec![masp_tx.clone()],
                 delta: Default::default(),
             },
         );
@@ -2190,7 +2184,6 @@ mod shielded_ctx_tests {
             &IndexedTx {
                 height: 1.into(),
                 index: TxIndex(1),
-                inner_tx: Default::default(),
             },
             &vk
         ));
@@ -2199,9 +2192,8 @@ mod shielded_ctx_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
-                    inner_tx: Default::default(),
                 },
-                masp_tx.clone(),
+                vec![masp_tx.clone()],
             )))
             .expect("Test failed");
 
@@ -2231,7 +2223,6 @@ mod shielded_ctx_tests {
             IndexedTx {
                 height: 1.into(),
                 index: TxIndex(1),
-                inner_tx: Default::default(),
             },
         );
         assert_matches!(
