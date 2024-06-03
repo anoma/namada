@@ -14,7 +14,7 @@ use std::str::FromStr;
 use alias::Alias;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::address::Address;
+use namada_core::address::{Address, ImplicitAddress};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::ibc::is_ibc_denom;
 use namada_core::key::*;
@@ -820,6 +820,25 @@ impl<U: WalletIo> Wallet<U> {
             alias_pkh_or_pk.into(),
             password,
         )
+    }
+
+    /// Find a public key in the wallet from the given implicit address.
+    pub fn find_public_key_from_implicit_addr(
+        &self,
+        implicit_addr: &ImplicitAddress,
+    ) -> Result<common::PublicKey, FindKeyError> {
+        self.store
+            .get_public_keys()
+            .iter()
+            .find_map(|(_, pubkey)| {
+                (ImplicitAddress::from(pubkey) == *implicit_addr)
+                    .then(|| pubkey.clone())
+            })
+            .ok_or_else(|| {
+                FindKeyError::KeyNotFound(
+                    Address::Implicit(implicit_addr.clone()).to_string(),
+                )
+            })
     }
 
     /// Find the public key by an alias or a public key hash.
