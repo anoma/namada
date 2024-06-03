@@ -15,12 +15,14 @@ use alias::Alias;
 use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::ibc::is_ibc_denom;
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+use namada_core::time::DateTimeUtc;
 pub use pre_genesis::gen_key_to_store;
 use rand::CryptoRng;
 use rand_core::RngCore;
@@ -32,6 +34,8 @@ pub use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::wallet::store::{derive_hd_secret_key, derive_hd_spending_key};
+
+const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 5 * 60; // 5 minutes
 
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletIo: Sized + Clone {
@@ -763,10 +767,41 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         rng: &mut (impl CryptoRng + RngCore),
     ) -> common::SecretKey {
+        #[allow(clippy::disallowed_methods)]
+        let current_unix_timestamp = DateTimeUtc::now().to_unix_timestamp();
+
+        let disposable_keys_to_gc = self
+            .store
+            .get_public_keys()
+            .keys()
+            .filter(|key_alias| {
+                check_if_disposable_key_and(
+                    key_alias,
+                    |_pkh, key_creation_unix_timestamp| {
+                        let seconds_since_key_creation = checked!(
+                            current_unix_timestamp
+                                - key_creation_unix_timestamp
+                        )
+                        .expect(
+                            "Key should have been created before the current \
+                             time instant!",
+                        );
+                        seconds_since_key_creation
+                            > DISPOSABLE_KEY_LIFETIME_IN_SECONDS
+                    },
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        for key_alias in disposable_keys_to_gc {
+            self.store.remove_alias(&key_alias);
+        }
+
         let sk = gen_secret_key(SchemeType::Ed25519, rng);
         let key_alias = {
             let pkh: PublicKeyHash = (&sk.to_public()).into();
-            format!("disposable-{pkh}")
+            disposable_key_alias(&pkh, current_unix_timestamp)
         };
 
         println!("Created disposable keypair with alias {key_alias}");
@@ -1082,5 +1117,108 @@ impl<U: WalletIo> Wallet<U> {
     /// Remove keys and addresses associated with the given alias
     pub fn remove_all_by_alias(&mut self, alias: String) {
         self.store.remove_alias(&alias.into())
+    }
+}
+
+#[inline]
+fn disposable_key_alias(pkh: &PublicKeyHash, timestamp: i64) -> String {
+    format!("disposable-key-{pkh}-created-at-{timestamp}")
+}
+
+#[inline]
+fn check_if_disposable_key_and<F: FnOnce(&PublicKeyHash, i64) -> bool>(
+    key_alias: &Alias,
+    callback: F,
+) -> bool {
+    let Some((_, rest)) = key_alias.as_ref().split_once("disposable-key-")
+    else {
+        return false;
+    };
+    let Some((key_hash_str, timestamp_str)) = rest.split_once("-created-at-")
+    else {
+        return false;
+    };
+    let Some(key_hash): Option<PublicKeyHash> =
+        key_hash_str.to_uppercase().parse().ok()
+    else {
+        return false;
+    };
+    let Some(timestamp): Option<i64> = timestamp_str.parse().ok() else {
+        return false;
+    };
+    callback(&key_hash, timestamp)
+}
+
+#[cfg(test)]
+mod tests {
+    use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
+    use rand_core::OsRng;
+
+    use super::*;
+
+    #[derive(Clone)]
+    struct TestWalletUtils;
+
+    impl WalletIo for TestWalletUtils {
+        type Rng = OsRng;
+    }
+
+    #[test]
+    fn test_disposable_key_alias_parsing() {
+        let sk = keypair_1();
+
+        let pkh: PublicKeyHash = (&sk.to_public()).into();
+        let timestamp = 12345;
+        let alias = Alias::from(disposable_key_alias(&pkh, timestamp));
+
+        assert!(check_if_disposable_key_and(&alias, |h, t| {
+            assert_eq!(pkh, *h);
+            assert_eq!(timestamp, t);
+            true
+        }));
+    }
+
+    #[test]
+    fn test_disposable_keys_are_garbage_collected() {
+        let mut wallet = Wallet {
+            utils: TestWalletUtils,
+            store: Default::default(),
+            decrypted_key_cache: Default::default(),
+            decrypted_spendkey_cache: Default::default(),
+        };
+
+        #[allow(clippy::disallowed_methods)]
+        let keys = [
+            (keypair_1(), DateTimeUtc::now().to_unix_timestamp()),
+            // NB: these keys should be deleted
+            (keypair_2(), 0),
+            (keypair_3(), 0),
+        ];
+
+        for (sk, timestamp) in keys {
+            let pkh: PublicKeyHash = (&sk.to_public()).into();
+            wallet.insert_keypair(
+                disposable_key_alias(&pkh, timestamp),
+                true,
+                sk,
+                None,
+                None,
+                None,
+            );
+        }
+
+        // add a new key - length should be 2 now
+        _ = wallet.gen_disposable_signing_key(&mut OsRng);
+        assert_eq!(wallet.store.get_public_keys().len(), 2);
+
+        // check that indeed the first keypair was not gc'd
+        let keypair_1_pk = keypair_1().to_public();
+        assert!(
+            wallet
+                .store
+                .get_public_keys()
+                .values()
+                .any(|pk| *pk == keypair_1_pk)
+        );
     }
 }
