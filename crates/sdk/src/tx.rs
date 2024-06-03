@@ -2989,7 +2989,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
-) -> Result<(Tx, SigningTxData, Epoch)> {
+) -> Result<(Tx, SigningTxData, MaspEpoch)> {
     let source = &args.source;
     let default_signer = Some(source.clone());
     let signing_data = signing::aux_signing_data(
