@@ -10,7 +10,7 @@ use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -650,20 +650,14 @@ pub struct BenchShieldedCtx {
     pub wallet: Wallet<CliWalletUtils>,
 }
 
-#[derive(Debug)]
-struct WrapperTempDir(TempDir);
+#[derive(Debug, Clone)]
+struct WrapperTempDir(Arc<TempDir>);
 
 // Mock the required traits for ShieldedUtils
 
 impl Default for WrapperTempDir {
     fn default() -> Self {
-        Self(TempDir::new().unwrap())
-    }
-}
-
-impl Clone for WrapperTempDir {
-    fn clone(&self) -> Self {
-        Self(TempDir::new().unwrap())
+        Self(Arc::new(TempDir::new().unwrap()))
     }
 }
 
