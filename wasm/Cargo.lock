@@ -5987,16 +5987,16 @@ checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
 
 [[package]]
 name = "smooth-operator"
-version = "0.6.0"
-source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+version = "0.7.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.7.0#0e182707f5e5bb9c6e0efa2d235dc9efd715d0a1"
 dependencies = [
  "smooth-operator-impl",
 ]
 
 [[package]]
 name = "smooth-operator-impl"
-version = "0.6.0"
-source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.6.0#1e9e2382dd6c053f54418db836f7f03143fcd2f3"
+version = "0.7.0"
+source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.7.0#0e182707f5e5bb9c6e0efa2d235dc9efd715d0a1"
 dependencies = [
  "proc-macro2",
  "quote",
