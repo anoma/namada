@@ -5281,9 +5281,9 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(
-                SHELL.def().help(wrap!(
-                    "Which shell to generate the completions for."
-                )),
+                SHELL
+                    .def()
+                    .help(wrap!("The shell to generate the completions for.")),
             )
         }
     }

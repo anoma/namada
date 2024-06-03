@@ -1197,12 +1197,7 @@ pub enum Shell {
 
 impl Display for Shell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use clap::ValueEnum;
-
-        self.to_possible_value()
-            .expect("no values are skipped")
-            .get_name()
-            .fmt(f)
+        self.possible_value().get_name().fmt(f)
     }
 }
 
@@ -1213,11 +1208,25 @@ impl FromStr for Shell {
         use clap::ValueEnum;
 
         for variant in Self::value_variants() {
-            if variant.to_possible_value().unwrap().matches(s, false) {
+            if variant.possible_value().matches(s, false) {
                 return Ok(*variant);
             }
         }
         Err(format!("invalid variant: {s}"))
+    }
+}
+
+impl Shell {
+    fn possible_value(&self) -> clap::builder::PossibleValue {
+        use clap::builder::PossibleValue;
+        match self {
+            Shell::Bash => PossibleValue::new("bash"),
+            Shell::Elvish => PossibleValue::new("elvish"),
+            Shell::Fish => PossibleValue::new("fish"),
+            Shell::PowerShell => PossibleValue::new("powershell"),
+            Shell::Zsh => PossibleValue::new("zsh"),
+            Shell::Nushell => PossibleValue::new("nushell"),
+        }
     }
 }
 
@@ -1234,15 +1243,7 @@ impl clap::ValueEnum for Shell {
     }
 
     fn to_possible_value<'a>(&self) -> Option<clap::builder::PossibleValue> {
-        use clap::builder::PossibleValue;
-        Some(match self {
-            Shell::Bash => PossibleValue::new("bash"),
-            Shell::Elvish => PossibleValue::new("elvish"),
-            Shell::Fish => PossibleValue::new("fish"),
-            Shell::PowerShell => PossibleValue::new("powershell"),
-            Shell::Zsh => PossibleValue::new("zsh"),
-            Shell::Nushell => PossibleValue::new("nushell"),
-        })
+        Some(self.possible_value())
     }
 }
 
