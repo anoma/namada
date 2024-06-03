@@ -1216,7 +1216,7 @@ mod tests {
         }
 
         // add a new key - length should be 2 now
-        _ = wallet.gen_disposable_signing_key(&mut OsRng);
+        let new_key = wallet.gen_disposable_signing_key(&mut OsRng);
         assert_eq!(wallet.store.get_public_keys().len(), 2);
 
         // check that indeed the first keypair was not gc'd
@@ -1227,6 +1227,16 @@ mod tests {
                 .get_public_keys()
                 .values()
                 .any(|pk| *pk == keypair_1_pk)
+        );
+
+        // check that the only other present key is the newly generated sk
+        let new_key_pk = new_key.to_public();
+        assert!(
+            wallet
+                .store
+                .get_public_keys()
+                .values()
+                .any(|pk| *pk == new_key_pk)
         );
     }
 }
