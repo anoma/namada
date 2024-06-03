@@ -4188,11 +4188,15 @@ dependencies = [
 name = "namada_token"
 version = "0.38.1"
 dependencies = [
+ "borsh 1.2.1",
  "namada_core",
  "namada_events",
+ "namada_macros",
  "namada_shielded_token",
  "namada_storage",
  "namada_trans_token",
+ "proptest",
+ "serde",
 ]
 
 [[package]]

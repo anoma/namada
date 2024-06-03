@@ -4,8 +4,8 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use namada_core::ibc::apps::nft_transfer::context::NftTransferValidationContext;
-use namada_core::ibc::apps::nft_transfer::module::{
+use ibc::apps::nft_transfer::context::NftTransferValidationContext;
+use ibc::apps::nft_transfer::module::{
     on_acknowledgement_packet_execute, on_acknowledgement_packet_validate,
     on_chan_close_confirm_execute, on_chan_close_confirm_validate,
     on_chan_close_init_execute, on_chan_close_init_validate,
@@ -16,21 +16,17 @@ use namada_core::ibc::apps::nft_transfer::module::{
     on_recv_packet_execute, on_timeout_packet_execute,
     on_timeout_packet_validate,
 };
-use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
-use namada_core::ibc::apps::nft_transfer::types::MODULE_ID_STR;
-use namada_core::ibc::core::channel::types::acknowledgement::Acknowledgement;
-use namada_core::ibc::core::channel::types::channel::{Counterparty, Order};
-use namada_core::ibc::core::channel::types::error::{
-    ChannelError, PacketError,
-};
-use namada_core::ibc::core::channel::types::packet::Packet;
-use namada_core::ibc::core::channel::types::Version;
-use namada_core::ibc::core::host::types::identifiers::{
-    ChannelId, ConnectionId, PortId,
-};
-use namada_core::ibc::core::router::module::Module;
-use namada_core::ibc::core::router::types::module::{ModuleExtras, ModuleId};
-use namada_core::ibc::primitives::Signer;
+use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::MODULE_ID_STR;
+use ibc::core::channel::types::acknowledgement::Acknowledgement;
+use ibc::core::channel::types::channel::{Counterparty, Order};
+use ibc::core::channel::types::error::{ChannelError, PacketError};
+use ibc::core::channel::types::packet::Packet;
+use ibc::core::channel::types::Version;
+use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
+use ibc::core::router::module::Module;
+use ibc::core::router::types::module::{ModuleExtras, ModuleId};
+use ibc::primitives::Signer;
 
 use super::common::IbcCommonContext;
 use super::nft_transfer::NftTransferContext;
@@ -332,10 +328,8 @@ fn into_packet_error(error: NftTransferError) -> PacketError {
 pub mod testing {
     use std::str::FromStr;
 
-    use namada_core::ibc::apps::nft_transfer::types::{
-        ack_success_b64, PORT_ID_STR,
-    };
-    use namada_core::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
+    use ibc::apps::nft_transfer::types::{ack_success_b64, PORT_ID_STR};
+    use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 
     use super::*;
 

@@ -168,7 +168,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
 
     // 3. Submit a valid token transfer tx
     let tx_args = [
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -852,7 +852,7 @@ fn pos_init_validator() -> Result<()> {
     // 3. Submit a delegation to the new validator First, transfer some tokens
     //    to the validator's key for fees:
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -892,7 +892,7 @@ fn pos_init_validator() -> Result<()> {
     // 4. Transfer some NAM to the new validator
     let validator_stake_str = &validator_stake.to_string_native();
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -994,7 +994,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
 
     // A token transfer tx args
     let tx_args = Arc::new(vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -1223,7 +1223,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     // 5. Submit a valid token transfer tx to validator 0
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
     let tx_args = [
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -2264,7 +2264,7 @@ fn rollback() -> Result<()> {
 
     // send a few transactions
     let txs_args = vec![vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",

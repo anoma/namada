@@ -4,13 +4,12 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use ibc::apps::transfer::types::packet::PacketData;
+use ibc::apps::transfer::types::PrefixedCoin;
+use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::ibc::apps::transfer::types::PrefixedCoin;
-use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::MsgTransfer;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -26,6 +25,7 @@ use token::DenominatedAmount;
 use crate::event::IbcEvent;
 use crate::{
     storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
+    MsgTransfer,
 };
 
 /// IBC protocol context
