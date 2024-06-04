@@ -10,7 +10,10 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::{arith, storage};
 use namada_events::{Event, EventToEmit, EventType};
-use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
+use namada_gas::{
+    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_DELETE_GAS_PER_BYTE,
+    STORAGE_WRITE_GAS_PER_BYTE,
+};
 use patricia_tree::map::StringPatriciaMap;
 use thiserror::Error;
 
@@ -426,7 +429,7 @@ impl WriteLog {
             .ok()
             .and_then(i64::checked_neg)
             .ok_or(Error::SizeDiffOverflow)?;
-        Ok((checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?, size_diff))
+        Ok((checked!(gas * STORAGE_DELETE_GAS_PER_BYTE)?, size_diff))
     }
 
     /// Delete a key and its value.

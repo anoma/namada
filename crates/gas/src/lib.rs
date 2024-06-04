@@ -74,6 +74,9 @@ pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
 /// The cost of writing data to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
     MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + STORAGE_OCCUPATION_GAS_PER_BYTE;
+/// The cost of removing data from storage, per byte
+pub const STORAGE_DELETE_GAS_PER_BYTE: u64 =
+    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
 /// The cost of verifying a single signature of a transaction
 pub const VERIFY_TX_SIG_GAS: u64 = 594_290;
 /// The cost for requesting one more page in wasm (64KiB)
