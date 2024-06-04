@@ -126,7 +126,8 @@ where
             .filter_map(|(tx_index, tx_bytes)| {
                 match validate_wrapper_bytes(tx_bytes, &TxIndex::must_from_usize(tx_index),block_time, block_proposer, proposer_local_config, &mut temp_state, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
                     Ok(gas) => {
-                        temp_state.write_log_mut().commit_tx();
+                        temp_state.write_log_mut().commit_tx_to_batch();
+                        temp_state.write_log_mut().commit_batch();
                         Some((tx_bytes.to_owned(), gas))
                     },
                     Err(()) => {

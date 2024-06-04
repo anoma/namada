@@ -456,11 +456,13 @@ where
         None => check_fees(shell_params, tx, wrapper),
     };
 
-    // Commit tx write log even in case of subsequent errors (if the fee payment
+    // Commit tx and batch write log even in case of subsequent errors (if the fee payment
     // failed instead, than the previous two functions must have already
     // dropped the write log, leading this function call to be essentially a
     // no-op)
-    shell_params.state.write_log_mut().commit_tx();
+    shell_params.state.write_log_mut().commit_tx_to_batch();
+    shell_params.state.write_log_mut().commit_batch();
+
     let (batch_results, masp_tx_refs) = payment_result?.map_or_else(
         || (BatchResults::default(), None),
         |(batched_result, masp_section_ref)| {
@@ -700,13 +702,10 @@ where
 
     let valid_batched_tx_result = {
         // NOTE: A clean tx write log must be provided to this call
-        // for a correct vp validation. Block write log, instead,
+        // for a correct vp validation. Block and batch write logs, instead,
         // should contain any prior changes (if any). This is to simulate
-        // the unshielding tx (to prevent the already written
-        // keys from being passed/triggering VPs) but we cannot
-        // commit the tx write log yet cause the tx could still
-        // be invalid.
-        state.write_log_mut().precommit_tx();
+        // the fee-paying tx (to prevent the already written keys from being passed/triggering VPs) but we cannot commit the tx write log yet cause the tx could still be invalid. So we use the batch write log to dump the current modifications.
+        state.write_log_mut().commit_tx_to_batch();
         match apply_wasm_tx(
             tx.batch_ref_first_tx()
                 .ok_or_else(|| Error::MissingInnerTxs)?,
@@ -721,12 +720,12 @@ where
             Ok(result) => {
                 // NOTE: do not commit yet cause this could be exploited to get
                 // free masp operations. We can commit only after the entire fee
-                // payment has been deemed valid. Also, do not precommit cause
+                // payment has been deemed valid. Also, do not commit to batch cause
                 // we might need to discard the effects of this valid unshield
                 // (e.g. if it unshield an amount which is not enough to pay the
                 // fees)
                 if !result.is_accepted() {
-                    state.write_log_mut().drop_tx_keep_precommit();
+                    state.write_log_mut().drop_tx();
                     tracing::error!(
                         "The fee unshielding tx is invalid, some VPs rejected \
                          it: {:#?}",
@@ -746,7 +745,7 @@ where
                     .flatten()
             }
             Err(e) => {
-                state.write_log_mut().drop_tx_keep_precommit();
+                state.write_log_mut().drop_tx();
                 tracing::error!(
                     "The fee unshielding tx is invalid, wasm run failed: {}",
                     e

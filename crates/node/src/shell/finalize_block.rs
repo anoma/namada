@@ -357,7 +357,9 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
-                    self.state.write_log_mut().commit_tx();
+                    self.state.write_log_mut().commit_tx_to_batch();
+                    self.state.write_log_mut().commit_batch();
+
                     // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
@@ -392,7 +394,9 @@ where
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
                 // Make sure to clean the write logs for the next transaction
+                //FIXME: can we commit everything to batch when executing the wrapper?
                 self.state.write_log_mut().drop_tx();
+                self.state.write_log_mut().drop_batch();
             }
             Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
