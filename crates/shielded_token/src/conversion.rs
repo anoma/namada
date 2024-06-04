@@ -2,7 +2,7 @@
 
 use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
-use namada_core::arith::{checked, CheckedAdd};
+use namada_core::arith::checked;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
@@ -249,6 +249,7 @@ where
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
+    use namada_core::arith::CheckedAdd;
     use namada_core::masp::{encode_asset_type, MaspEpoch};
     use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
